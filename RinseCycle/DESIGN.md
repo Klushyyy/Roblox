@@ -52,7 +52,7 @@ The folders mirror Studio. File names follow **Studio Script Sync**:
 - `X.luau` is a ModuleScript
 - a directory is a Folder
 
-`_tools/build.ps1` packs everything into `RinseCycle.rbxlx`.
+`_tools/build.ps1` (or its Python port `_tools/build.py`) packs everything into `RinseCycle.rbxlx`.
 
 ```
 ReplicatedStorage/Shared/          (Folder, sync root)

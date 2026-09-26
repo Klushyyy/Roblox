@@ -219,7 +219,7 @@ local function buildTub(model: Model, origin: CFrame, theme): number
 		NumberSequenceKeypoint.new(0, 0.6),
 		NumberSequenceKeypoint.new(1, 1),
 	})
-	emitter.VelocitySpread = 40
+	emitter.SpreadAngle = Vector2.new(40, 40)
 	emitter.Parent = attach
 	bubbleAnchor.Parent = model
 	count += 1

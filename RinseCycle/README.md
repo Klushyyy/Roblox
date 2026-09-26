@@ -94,4 +94,6 @@ After editing the files you can repack them into a fresh `RinseCycle.rbxlx`:
 powershell -NoProfile -ExecutionPolicy Bypass -File _tools\build.ps1
 ```
 
+On Mac or Linux (or anywhere with Python 3), `python3 _tools/build.py` does the same thing.
+
 (Only do this for a fresh start. Anything you built by hand in Studio isn't in these files.)
