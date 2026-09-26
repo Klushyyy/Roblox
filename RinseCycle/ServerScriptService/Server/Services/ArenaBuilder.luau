@@ -445,9 +445,12 @@ local function buildDoor(b: Builder, theme)
 	end
 
 	-- Detergent dispenser and rinse-aid cap on the inner panel.
-	span(b, "Dispenser", 10, 26, 0, 1.2, zMid - 6, zMid + 6, Color3.fromRGB(215, 220, 228), Enum.Material.SmoothPlastic)
-	span(b, "DispenserLid", 10.5, 25.5, 1.2, 1.5, zMid - 5.5, zMid + 5.5, theme.Accent, nil, noCollide())
-	cyl(b, "RinseAid", 1.4, 6, 32, 0.7, zMid, Color3.fromRGB(215, 220, 228), nil, noCollide())
+	span(b, "Dispenser", 12, 22, 0, 0.9, zMid - 4, zMid + 4, Color3.fromRGB(220, 224, 230), Enum.Material.SmoothPlastic)
+	span(b, "DispenserLid", 12.4, 21.6, 0.9, 1.2, zMid - 3.6, zMid + 3.6, Color3.fromRGB(245, 247, 250), nil, noCollide())
+	span(b, "DispenserHinge", 12.4, 21.6, 0.9, 1.5, zMid - 3.9, zMid - 3.3, Color3.fromRGB(180, 185, 192), nil, noCollide())
+	cyl(b, "DispenserButton", 0.3, 1.4, 17, 1.35, zMid + 2, theme.Accent, Enum.Material.Neon, noCollide())
+	cyl(b, "RinseAid", 1, 4.5, 28, 0.5, zMid, Color3.fromRGB(220, 224, 230), nil, noCollide())
+	cyl(b, "RinseAidCap", 0.3, 3.2, 28, 1.15, zMid, theme.Accent, nil, noCollide())
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -658,8 +661,11 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 	local x0, x1 = SHOP_X - depth / 2, SHOP_X + depth / 2 -- x1 is the front, facing the players
 	local toPlayers = b.origin.RightVector
 	local chrome = Color3.fromRGB(215, 220, 228)
-	local shelfYs = { 3, 9.5, 16 } -- bottom, middle (tools), top (tools)
+	-- Two display shelves at waist and head height for a ~5 stud character (anything higher can't be
+	-- seen from the floor).
+	local shelfYs = { 4, 12.5 }
 	local topY = 21
+	local TOOL_SCALE = 1.45
 
 	-- Four corner posts plus a middle pair, floor to top, with little feet.
 	for _, x in { x0, x1 } do
@@ -684,20 +690,14 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 	local _, headerGui = signBoard(b, "ShopSign", Vector3.new(z1 - z0 - 4, 4, 0.5), worldPoint(b.origin, x1 - 0.5, topY + 2.6, (z0 + z1) / 2), toPlayers, theme.Accent)
 	guiText(headerGui, "Title", "🧽 TOOL SHOP  •  any tool, any order", UDim2.fromScale(0.03, 0.1), UDim2.fromScale(0.94, 0.8), Color3.new(1, 1, 1))
 
-	-- Spare sponges and bottles on the bottom shelf, for looks.
-	for i, z in { z0 + 6, z0 + 16, z1 - 16, z1 - 6 } do
-		local color = ({ Color3.fromRGB(255, 214, 80), Color3.fromRGB(120, 200, 255), Color3.fromRGB(255, 150, 200), Color3.fromRGB(120, 220, 140) })[i]
-		cyl(b, "Bottle", 4, 1.8, SHOP_X, shelfYs[1] + 2, z, color, Enum.Material.Glass, { CanCollide = false, Transparency = 0.15 })
-		cyl(b, "BottleCap", 0.8, 0.9, SHOP_X, shelfYs[1] + 4.4, z, Color3.new(1, 1, 1), nil, noCollide())
-	end
-
 	-- Tools 2..6: the tall ones (sponge, nozzle, washer) on the middle shelf, the short ones on top.
+	local third = (z1 - z0) / 3
 	local spots = {
-		[2] = { y = shelfYs[2], z = z1 - 8 },
-		[3] = { y = shelfYs[3], z = z1 - 13 },
-		[4] = { y = shelfYs[2], z = (z0 + z1) / 2 + 0.5 },
-		[5] = { y = shelfYs[2], z = z0 + 8 },
-		[6] = { y = shelfYs[3], z = z0 + 13 },
+		[2] = { y = shelfYs[1], z = z1 - third / 2 },
+		[4] = { y = shelfYs[1], z = (z0 + z1) / 2 - 3 },
+		[5] = { y = shelfYs[1], z = z0 + third / 2 },
+		[3] = { y = shelfYs[2], z = z1 - third * 0.8 },
+		[6] = { y = shelfYs[2], z = z0 + third * 0.8 },
 	}
 	for i = 2, #Config.Tools do
 		local tool = Config.Tools[i]
@@ -705,19 +705,26 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 		if not spot then
 			break
 		end
-		local pedestal = cyl(b, "Pedestal", 0.4, 4.4, SHOP_X, spot.y + 0.2, spot.z, Color3.new(1, 1, 1), nil, noCollide())
+		-- Upper-shelf tools stand on tall risers so they show above the shelf lip from the floor.
+		local riser = if spot.y > shelfYs[1] then 2.6 else 0.4
+		local pedestal = cyl(b, "Pedestal", riser, 6.4, SHOP_X - 0.5, spot.y + riser / 2, spot.z, Color3.new(1, 1, 1), nil, noCollide())
 		pedestal.Name = "ToolDisplay_" .. i
-		cyl(b, "PedestalGlow", 0.12, 4.8, SHOP_X, spot.y + 0.06, spot.z, tool.Color, Enum.Material.Neon, noCollide())
-		local okModel, model = pcall(ToolModels.Build, i, 1.05)
+		cyl(b, "PedestalGlow", 0.12, 7, SHOP_X - 0.5, spot.y + 0.06, spot.z, tool.Color, Enum.Material.Neon, noCollide())
+		local okModel, model = pcall(ToolModels.Build, i, TOOL_SCALE)
 		if okModel and model then
-			local basePos = worldPoint(b.origin, SHOP_X, spot.y + 0.4, spot.z)
+			local basePos = worldPoint(b.origin, SHOP_X - 0.5, spot.y + riser, spot.z)
 			model:PivotTo(CFrame.lookAt(basePos, basePos + toPlayers) * CFrame.Angles(0, math.rad(25), 0))
 			model.Parent = b.model
 			b.count += #model:GetChildren()
 		end
 
 		local cost = Config.ToolCost(i, levelIndex) or 0
-		local tag, tagGui = signBoard(b, "PriceTag_" .. i, Vector3.new(5.6, 1.6, 0.2), worldPoint(b.origin, x1 + 0.35, spot.y - 0.5, spot.z), toPlayers, Color3.fromRGB(255, 250, 235))
+		-- Lower shelf: the tag stands on the front edge. Upper shelf: it hangs under the lip, so it
+		-- doesn't hide the tool from someone looking up at it.
+		local tagY = if spot.y > shelfYs[1] then spot.y - 1.4 else spot.y + 1.1
+		local tagPos = worldPoint(b.origin, x1 - 0.5, tagY, spot.z)
+		local tag, tagGui = signBoard(b, "PriceTag_" .. i, Vector3.new(6, 2, 0.2), tagPos, toPlayers, Color3.fromRGB(255, 250, 235))
+		tag.CFrame = tag.CFrame * CFrame.Angles(math.rad(if spot.y > shelfYs[1] then 12 else -12), 0, 0)
 		tag:SetAttribute("ToolIndex", i)
 		guiText(tagGui, "Title", tool.Icon .. " " .. tool.Name, UDim2.fromScale(0.03, 0.02), UDim2.fromScale(0.94, 0.5), Color3.new(1, 1, 1))
 		guiText(tagGui, "Price", "💰 " .. Format.Short(cost), UDim2.fromScale(0.03, 0.52), UDim2.fromScale(0.94, 0.46), Color3.fromRGB(255, 210, 60))

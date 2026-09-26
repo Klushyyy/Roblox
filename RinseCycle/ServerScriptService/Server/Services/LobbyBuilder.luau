@@ -64,7 +64,6 @@ local PAD_X = 60
 local PAD_Z = { -34, -6, 22 }
 local PAD_WALL_HEIGHT = 8
 
-local BOARD_Z = 56 -- behind the spawn, facing into the plaza, so they never hide the shops
 local HATCHERY_Z = -76 -- front face of the dishwasher building (it faces +Z, toward the spawn)
 local EGG_Z = -66
 local SHOP_X = -40
@@ -565,7 +564,22 @@ local function buildDishwasherBuilding(parent: Instance)
 	mkPart("Part", { Name = "Body", Size = Vector3.new(w, h, d), CFrame = at(0, h / 2, z), Color = STEEL, Material = Enum.Material.Metal }, parent)
 	-- Door panel with a recessed window and handle.
 	mkPart("Part", decor({ Name = "Door", Size = Vector3.new(w - 6, h - 16, 1), CFrame = at(0, (h - 16) / 2 + 3, HATCHERY_Z + 0.5), Color = Color3.fromRGB(225, 229, 234), Material = Enum.Material.Metal }), parent)
-	local window = mkPart("Part", decor({ Name = "Window", Size = Vector3.new(w - 26, h - 30, 0.6), CFrame = at(0, (h - 16) / 2 + 3, HATCHERY_Z + 1.1), Color = Color3.fromRGB(120, 200, 245), Material = Enum.Material.Glass, Transparency = 0.2 }), parent)
+	-- The window shows a rack of plates behind the glass, like a real dishwasher.
+	local winW, winH, winY = w - 26, h - 30, (h - 16) / 2 + 3
+	mkPart("Part", decor({ Name = "WindowBack", Size = Vector3.new(winW, winH, 0.4), CFrame = at(0, winY, HATCHERY_Z + 1.2), Color = Color3.fromRGB(60, 80, 105), Material = Enum.Material.Metal }), parent)
+	for i = 0, 4 do
+		local px = -winW / 2 + 6 + i * ((winW - 12) / 4)
+		mkPart("Part", decor({ Name = "WindowPlate", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.4, 13, 13), CFrame = at(px, winY - 1, HATCHERY_Z + 2.2) * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(110, 170, 230), Material = Enum.Material.SmoothPlastic }), parent)
+		mkPart("Part", decor({ Name = "WindowPlateFace", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.5, 11, 11), CFrame = at(px, winY - 1, HATCHERY_Z + 2.25) * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(250, 250, 248), Material = Enum.Material.SmoothPlastic }), parent)
+	end
+	mkPart("Part", decor({ Name = "WindowRack", Size = Vector3.new(winW - 2, 0.6, 2), CFrame = at(0, winY - 8, HATCHERY_Z + 2.3), Color = Color3.fromRGB(220, 225, 230), Material = Enum.Material.Metal }), parent)
+	local window = mkPart("Part", decor({ Name = "Window", Size = Vector3.new(winW, winH, 0.3), CFrame = at(0, winY, HATCHERY_Z + 3.2), Color = Color3.fromRGB(150, 215, 250), Material = Enum.Material.Glass, Transparency = 0.55 }), parent)
+	for _, side in { -1, 1 } do
+		mkPart("Part", decor({ Name = "WindowFrame", Size = Vector3.new(1.2, winH + 1.2, 3), CFrame = at(side * (winW / 2 + 0.6), winY, HATCHERY_Z + 2), Color = Color3.fromRGB(200, 205, 212), Material = Enum.Material.Metal }), parent)
+	end
+	for _, side in { -1, 1 } do
+		mkPart("Part", decor({ Name = "WindowFrame", Size = Vector3.new(winW + 2.4, 1.2, 3), CFrame = at(0, winY + side * (winH / 2 + 0.6), HATCHERY_Z + 2), Color = Color3.fromRGB(200, 205, 212), Material = Enum.Material.Metal }), parent)
+	end
 	-- Suds sloshing behind the window.
 	mk("ParticleEmitter", {
 		Texture = "rbxasset://textures/particles/forcefield_glow_main.dds",
@@ -603,6 +617,14 @@ local function buildDishwasherBuilding(parent: Instance)
 			Color = if i == 0 then Color3.fromRGB(80, 230, 140) else Color3.fromRGB(120, 200, 255),
 			Material = Enum.Material.Neon,
 		}), parent)
+	end
+	-- Roof sign.
+	local roofSign = mkPart("Part", { Name = "RoofSign", Size = Vector3.new(44, 9, 1), CFrame = at(0, h + 5.5, HATCHERY_Z - 4) * CFrame.Angles(0, math.pi, 0), Color = Color3.fromRGB(255, 120, 180), Material = Enum.Material.SmoothPlastic }, parent)
+	local signGui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(880, 180), LightInfluence = 0 }, roofSign)
+	local signText = mk("TextLabel", { Size = UDim2.fromScale(0.94, 0.86), Position = UDim2.fromScale(0.03, 0.07), BackgroundTransparency = 1, Text = "🐾 PETS & EGGS 🥚", Font = Enum.Font.FredokaOne, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, signGui)
+	mk("UIStroke", { Thickness = 5, Color = Color3.fromRGB(140, 40, 90) }, signText)
+	for _, x in { -18, 18 } do
+		mkPart("Part", { Name = "SignPost", Size = Vector3.new(1, 3, 1), CFrame = at(x, h + 0.5, HATCHERY_Z - 4), Color = Color3.fromRGB(200, 205, 212), Material = Enum.Material.Metal }, parent)
 	end
 	-- Feet.
 	for _, x in { -w / 2 + 4, w / 2 - 4 } do
@@ -771,24 +793,27 @@ end
 ----------------------------------------------------------------------------------------------------
 -- Boards: two leaderboards and How to Play, facing the spawn (+Z).
 ----------------------------------------------------------------------------------------------------
-local function boardShell(parent: Instance, x: number, z: number, w: number, h: number, name: string): BasePart
-	-- An unrotated part's Front face points -Z: toward the plaza from here.
+-- A board on legs at (x, z), its front (the side with the SurfaceGui, the part's Front face) turned
+-- toward (faceX, faceZ). Trim and legs follow the rotation.
+local function boardShell(parent: Instance, x: number, z: number, w: number, h: number, name: string, faceX: number, faceZ: number): BasePart
+	local centre = at(x, h / 2 + 3, z).Position
+	local facing = CFrame.lookAt(centre, Vector3.new(ORIGIN.X + faceX, centre.Y, ORIGIN.Z + faceZ))
 	local boardPart = mkPart("Part", {
 		Name = name,
 		Size = Vector3.new(w, h, 1),
-		CFrame = at(x, h / 2 + 3, z),
+		CFrame = facing,
 		Color = NAVY,
 		Material = Enum.Material.SmoothPlastic,
 	}, parent)
-	mkPart("Part", decor({ Name = "Trim", Size = Vector3.new(w + 1.4, h + 1.4, 0.6), CFrame = at(x, h / 2 + 3, z + 0.7), Color = Color3.new(1, 1, 1) }), parent)
+	mkPart("Part", decor({ Name = "Trim", Size = Vector3.new(w + 1.4, h + 1.4, 0.6), CFrame = facing * CFrame.new(0, 0, 0.7), Color = Color3.fromRGB(40, 90, 150) }), parent)
 	for _, dx in { -w / 2 + 2, w / 2 - 2 } do
-		mkPart("Part", { Name = "Leg", Size = Vector3.new(1.2, 3.2, 1.2), CFrame = at(x + dx, 1.6, z), Color = Color3.fromRGB(150, 155, 160), Material = Enum.Material.Metal }, parent)
+		mkPart("Part", { Name = "Leg", Size = Vector3.new(1.2, 3.2, 1.2), CFrame = facing * CFrame.new(dx, -h / 2 - 1.4, 0.3), Color = Color3.fromRGB(150, 155, 160), Material = Enum.Material.Metal }, parent)
 	end
 	return boardPart
 end
 
-local function buildBoard(parent: Instance, x: number, z: number, titleText: string): BoardInfo
-	local boardPart = boardShell(parent, x, z, 22, 15, "Board")
+local function buildBoard(parent: Instance, x: number, z: number, titleText: string, faceX: number, faceZ: number): BoardInfo
+	local boardPart = boardShell(parent, x, z, 22, 15, "Board", faceX, faceZ)
 	local gui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(700, 480), LightInfluence = 0 }, boardPart)
 	mk("UIPadding", {
 		PaddingTop = UDim.new(0, 10),
@@ -816,8 +841,8 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 	return { Part = boardPart, Title = titleLbl, List = list }
 end
 
-local function buildHowToPlay(parent: Instance, x: number, z: number)
-	local boardPart = boardShell(parent, x, z, 24, 15, "HowToPlayBoard")
+local function buildHowToPlay(parent: Instance, x: number, z: number, faceX: number, faceZ: number)
+	local boardPart = boardShell(parent, x, z, 24, 15, "HowToPlayBoard", faceX, faceZ)
 	boardPart.Color = Color3.fromRGB(255, 255, 255)
 	local gui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(760, 480), LightInfluence = 0 }, boardPart)
 	mk("UIPadding", {
@@ -883,7 +908,7 @@ end
 
 -- Rank Shrine: a floating, spinning crystal over a pedestal. Opens the Ranks window.
 local function buildRankShrine(parent: Instance)
-	local x, z = -30, 30
+	local x, z = -32, 40
 	local base = mkPart("Part", { Name = "ShrineBase", Shape = Enum.PartType.Cylinder, Size = Vector3.new(1.6, 12, 12), CFrame = upright(x, 1, z), Color = Color3.fromRGB(60, 40, 110), Material = Enum.Material.SmoothPlastic }, parent)
 	mkPart("Part", { Name = "ShrinePillar", Shape = Enum.PartType.Cylinder, Size = Vector3.new(4, 5, 5), CFrame = upright(x, 3.8, z), Color = Color3.fromRGB(235, 225, 250), Material = Enum.Material.Marble }, parent)
 	mkPart("Part", decor({ Name = "ShrineRing", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.3, 13, 13), CFrame = upright(x, 1.65, z), Color = Color3.fromRGB(255, 120, 200), Material = Enum.Material.Neon }), parent)
@@ -920,8 +945,26 @@ local function buildRankShrine(parent: Instance)
 	prompt:SetAttribute("OpenWindow", "Ranks")
 end
 
+-- Bubble lamps and bushy planters along the central path.
+local function buildPathDressing(parent: Instance)
+	for _, z in { -52, -22, 8 } do
+		for _, side in { -1, 1 } do
+			local x = side * 11
+			mkPart("Part", { Name = "PathLampPost", Shape = Enum.PartType.Cylinder, Size = Vector3.new(7, 0.8, 0.8), CFrame = upright(x, 3.7, z), Color = Color3.fromRGB(230, 234, 240), Material = Enum.Material.Metal }, parent)
+			local bulb = mkPart("Part", decor({ Name = "PathLamp", Shape = Enum.PartType.Ball, Size = Vector3.new(2.2, 2.2, 2.2), CFrame = at(x, 8.3, z), Color = if (z / 30) % 2 < 1 then Color3.fromRGB(150, 220, 255) else Color3.fromRGB(255, 180, 220), Material = Enum.Material.Neon, Transparency = 0.15 }), parent)
+			mk("PointLight", { Range = 14, Brightness = 0.7, Color = bulb.Color }, bulb)
+			mkPart("Part", { Name = "Planter", Size = Vector3.new(4, 2, 8), CFrame = at(x + side * 4, 1.2, z + 7), Color = Color3.fromRGB(230, 234, 240), Material = Enum.Material.SmoothPlastic }, parent)
+			for k = -1, 1 do
+				local d = 3 + (k + 1) % 2
+				local bush = mkPart("Part", decor({ Name = "Bush", Shape = Enum.PartType.Ball, Size = Vector3.new(d, d, d), CFrame = at(x + side * 4, 2.6, z + 7 + k * 2.4), Color = Color3.fromRGB(80 + k * 10, 160, 80), Material = Enum.Material.Grass }), parent)
+				bush.CastShadow = true
+			end
+		end
+	end
+end
+
 local function buildDecorations(parent: Instance)
-	for _, spot in { { -85, -90, 1.3 }, { 85, -90, 1.3 }, { -88, 52, 1 }, { 88, 52, 1 }, { -130, -30, 1.6 }, { 130, -30, 1.6 }, { -120, 70, 1.4 }, { 120, 70, 1.4 }, { 0, -140, 1.8 } } do
+	for _, spot in { { -91, -97, 1.2 }, { 91, -97, 1.2 }, { -88, 52, 1 }, { 88, 52, 1 }, { -130, -30, 1.6 }, { 130, -30, 1.6 }, { -120, 70, 1.4 }, { 120, 70, 1.4 }, { 0, -140, 1.8 } } do
 		tree(parent, spot[1], spot[2], spot[3])
 	end
 	-- Hedges along the back fence, either side of the building.
@@ -931,8 +974,8 @@ local function buildDecorations(parent: Instance)
 	-- Giant sponge and soap bars around the spawn.
 	mkPart("Part", { Name = "GiantSponge", Size = Vector3.new(12, 5, 8), CFrame = at(-80, 2.7, 46) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(255, 215, 90), Material = Enum.Material.Sand }, parent)
 	mkPart("Part", decor({ Name = "SpongeScrub", Size = Vector3.new(12.2, 1.6, 8.2), CFrame = at(-80, 5.9, 46) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(80, 180, 100), Material = Enum.Material.Fabric }), parent)
-	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(10, 3.5, 6), CFrame = at(30, 2, 30) * CFrame.Angles(0, math.rad(-15), 0), Color = Color3.fromRGB(190, 230, 255), Material = Enum.Material.SmoothPlastic }, parent)
-	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(8, 3, 5), CFrame = at(31, 5.3, 30) * CFrame.Angles(0, math.rad(10), 0), Color = Color3.fromRGB(255, 190, 220), Material = Enum.Material.SmoothPlastic }, parent)
+	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(10, 3.5, 6), CFrame = at(80, 2, 46) * CFrame.Angles(0, math.rad(-15), 0), Color = Color3.fromRGB(190, 230, 255), Material = Enum.Material.SmoothPlastic }, parent)
+	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(8, 3, 5), CFrame = at(81, 5.3, 46) * CFrame.Angles(0, math.rad(10), 0), Color = Color3.fromRGB(255, 190, 220), Material = Enum.Material.SmoothPlastic }, parent)
 
 	-- Floating soap bubbles bobbing on cheap tween loops.
 	local bubbleFolder = mk("Folder", { Name = "Bubbles" }, parent)
@@ -1043,11 +1086,14 @@ function LobbyBuilder.Build(): Lobby
 	buildSoapShop(model)
 	buildPetStand(model)
 
-	local timesBoard = buildBoard(model, -28, BOARD_Z, "Fastest Clean")
-	local dishesBoard = buildBoard(model, 28, BOARD_Z, "Most Dishes Cleaned")
-	buildHowToPlay(model, 0, BOARD_Z + 3)
+	-- Leaderboards in the back corners, angled at the middle of the plaza; How to Play beside the
+	-- spawn, facing it. Nothing stands behind the spawn, so the default camera has a clear view.
+	local timesBoard = buildBoard(model, -80, -74, "Fastest Clean", 0, 0)
+	local dishesBoard = buildBoard(model, 80, -74, "Most Dishes Cleaned", 0, 0)
+	buildHowToPlay(model, 34, 44, SPAWN.X, SPAWN.Z)
 
 	buildRankShrine(model)
+	buildPathDressing(model)
 	buildDecorations(model)
 	setupLighting()
 
