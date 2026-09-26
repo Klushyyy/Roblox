@@ -1,0 +1,122 @@
+-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
+-- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
+-- Changed instead of each hooking the remotes themselves.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared:WaitForChild("Remotes"))
+local Util = require(Shared:WaitForChild("Util"))
+local Types = require(Shared:WaitForChild("Types"))
+
+local ClientState = {}
+
+ClientState.Meta = nil :: Types.MetaState?
+ClientState.Party = nil :: Types.PartyState?
+ClientState.Run = nil :: Types.RunState?
+
+-- Fired with "Meta", "Party" or "Run" after that field is replaced.
+ClientState.Changed = Util.Signal.new()
+-- Fired with (kind: string, data: table) for every RunFX message.
+ClientState.FX = Util.Signal.new()
+-- Fired with (text: string, kind: string) for every Notify message.
+ClientState.Notified = Util.Signal.new()
+
+local initialized = false
+
+function ClientState.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+
+	Remotes.Event("MetaState").OnClientEvent:Connect(function(state)
+		ClientState.Meta = state
+		ClientState.Changed:Fire("Meta")
+	end)
+	Remotes.Event("PartyState").OnClientEvent:Connect(function(state)
+		ClientState.Party = state
+		ClientState.Changed:Fire("Party")
+	end)
+	Remotes.Event("RunState").OnClientEvent:Connect(function(state)
+		ClientState.Run = state
+		ClientState.Changed:Fire("Run")
+	end)
+	Remotes.Event("RunFX").OnClientEvent:Connect(function(kind, data)
+		ClientState.FX:Fire(kind, data)
+	end)
+	Remotes.Event("Notify").OnClientEvent:Connect(function(text, kind)
+		ClientState.Notified:Fire(text, kind or "Info")
+	end)
+
+	-- Ask for the first snapshot in case the server pushed it before we were listening.
+	task.spawn(function()
+		for _ = 1, 10 do
+			local ok, state = pcall(function()
+				return Remotes.Function("GetMeta"):InvokeServer()
+			end)
+			if ok and state then
+				if not ClientState.Meta then
+					ClientState.Meta = state
+					ClientState.Changed:Fire("Meta")
+				end
+				return
+			end
+			task.wait(1)
+		end
+	end)
+end
+
+-- Wraps a RemoteFunction call so UI code never errors: always returns a RequestResult.
+local function request(remoteName: string, action: string, value: any): Types.RequestResult
+	local ok, result = pcall(function()
+		return Remotes.Function(remoteName):InvokeServer(action, value)
+	end)
+	if not ok then
+		return { Ok = false, Error = "Couldn't reach the server. Try again." }
+	end
+	if type(result) ~= "table" then
+		return { Ok = false, Error = "Something went wrong." }
+	end
+	return result
+end
+
+-- In-run purchases and leaving: "BuyUpgrade" (id), "BuyTool" (index), "Leave", "ReturnToLobby".
+function ClientState.RunRequest(action: string, value: any?): Types.RequestResult
+	return request("RunRequest", action, value)
+end
+
+-- Permanent actions: "BuyPerk" (id), "Hatch" ({ Egg = id, Count = 1 | 3 }), "Equip" (uid),
+-- "Unequip" (uid), "EquipBest", "Delete" (uid).
+function ClientState.MetaRequest(action: string, value: any?): Types.RequestResult
+	return request("MetaRequest", action, value)
+end
+
+function ClientState.InRun(): boolean
+	return ClientState.Run ~= nil
+end
+
+function ClientState.InParty(): boolean
+	return ClientState.Party ~= nil
+end
+
+-- The dishwasher model the local player is playing in, if it has replicated.
+function ClientState.GetArena(): Model?
+	local run = ClientState.Run
+	if not run then
+		return nil
+	end
+	local arenas = workspace:FindFirstChild("Arenas")
+	local arena = arenas and arenas:FindFirstChild(run.ArenaName)
+	if arena and arena:IsA("Model") then
+		return arena
+	end
+	return nil
+end
+
+function ClientState.LocalPlayer(): Player
+	return Players.LocalPlayer
+end
+
+return ClientState
