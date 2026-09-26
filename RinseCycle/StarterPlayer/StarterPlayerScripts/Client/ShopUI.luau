@@ -92,7 +92,7 @@ local function buildPerkRow(def: any): Frame
 		})
 	else
 		UIKit.Button({
-			Text = "🫧 " .. UIKit.Short(cost),
+			Text = "🧼 " .. UIKit.Short(cost),
 			Size = UDim2.fromOffset(130, 46),
 			AnchorPoint = Vector2.new(1, 0.5),
 			Position = UDim2.new(1, -14, 0.5, 0),
@@ -279,7 +279,7 @@ function ShopUI.Init()
 	tabsLayout.Parent = tabsRow
 
 	perksTabButton = UIKit.Button({
-		Text = "🫧 Perks",
+		Text = "🧼 Perks",
 		Size = UDim2.fromOffset(160, 44),
 		CornerRadius = 10,
 		Parent = tabsRow,

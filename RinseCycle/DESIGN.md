@@ -14,23 +14,26 @@ of them. Don't let them drift apart.
 
 ## 1. Game flow
 
-1. **Lobby.** Players spawn on a giant kitchen floor. It has party pads, a Soap Shop (perks), an Egg
-   Hatchery (pets), leaderboards and a how-to-play board.
-2. **Party pads** (6 of them). Walk into an empty pad and you become host. The pad shows `1/4`, and the
-   host gets a settings panel with max players (1–4), Public or Friends Only, and level. A **30 second**
-   countdown starts as soon as the party is created, and the host can press **Start Now**. Others
-   walk in to join, or get pushed out with a toast if the pad is full or friends-only. **Leave**
-   teleports you out. If the host leaves, the longest-waiting member becomes host. The last person
-   leaving resets the pad to `0/4`.
+1. **Lobby.** A compact, fenced plaza you can cross in seconds. It has six party pads (three each
+   side), a giant dishwasher building with the Egg Hatchery in front, the Soap Shop (perks), a Pet
+   Stand, two leaderboards and a How to Play board.
+2. **Party pads.** Step onto an empty pad and you become host. You get the **Create Party** screen:
+   pick a dishwasher, Public or Friends, and party size, then press **CREATE** (or **BACK** to
+   leave). While you pick, the pad reads "Name is picking a dishwasher..." and nobody else can join.
+   After CREATE a **15 second** countdown starts ("Teleporting in 12"); the host can press
+   **Start**. Others walk in to join, or get pushed out with a toast if the pad is full or
+   friends-only. **Leave** teleports you out. If the host leaves, the longest-waiting member becomes
+   host. The last person leaving resets the pad to `0/4`.
 3. **Launch.** At 0 the server builds that party's dishwasher (an "arena") far from the lobby in the
    **same server** and teleports the members onto the open dishwasher door.
 4. **Run.** Everyone starts with **Bare Hands, 0 upgrades, and Head Start coins**.
-   - Aim at grime and click to scrub. The first purchase is usually "Hold to Scrub", after which you
-     hold the button.
-   - Cleaned grime goes into your **tank**. When it's full you can't scrub until you stand in the
+   - Aim at the dirt and **hold** to scrub (a single tap also works). Players never see the word
+     "grime": the code calls the spots Grime, every piece of text calls them dirt.
+   - Cleaned dirt goes into your **tank**. When it's full you can't scrub until you stand in the
      **drain** at the front of the tub, which sells the tank for **coins**.
-   - Coins buy in-run upgrades (Hand Size, Scrub Power, Tank Size, Sneakers, Hold) and tools, in
-     order: Sponge, Brush, Nozzle, Washer, Cannon. Tougher grime needs a minimum tool (`MinTool`).
+   - Coins buy in-run upgrades (Hand Size, Scrub Power, Tank Size, Sneakers) in the Upgrade Book,
+     and tools, in order: Sponge, Brush, Nozzle, Washer, Cannon, at the Tool Shop on the door or in
+     the book. Tougher grime needs a minimum tool (`MinTool`).
    - Equipped pets fly to grime near you and clean it into your tank.
 5. **Finish.** When every grime spot is gone the run is **complete**: a celebration, then a results
    screen showing time, par, each player's share and the Bubbles earned. First clear of a level
@@ -192,7 +195,12 @@ All remotes live in `ReplicatedStorage.Remotes`. Get them with `Remotes.Event(na
 - `"SetMax"` (1–4, never below the current member count)
 - `"SetPrivacy"` (`"Public"` / `"Friends"`)
 - `"SetLevel"` (1..HostUnlocked)
-- `"StartNow"`
+- `"StartNow"` (only while Waiting)
+- `"Create"` (`{ Level, MaxPlayers, Privacy }`, host only, only while Status is `"Picking"`): confirms
+  the Create Party screen and starts the countdown
+
+`PartyState.Status` is `"Picking"` (host on the Create Party screen, nobody can join), `"Waiting"`
+(counting down) or `"Launching"`.
 
 `RunRequest` actions:
 - `"BuyUpgrade"` (upgradeId)
@@ -411,21 +419,25 @@ Pad state machine. One party per pad:
   - all parts are Anchored, `CanQuery = true`, `CanTouch = false`
   - bowls, pots and pans are `CanCollide = true`, so players can stand in and on them
   - plates, cups, glasses and cutlery are `CanCollide = true` too; they're solid obstacles
-- Sizes, relative to a ~5 stud tall character:
-  - Plate: 11 studs across, 0.6 thick, standing upright in the rack, with a visible rim ring.
-  - Bowl: 9 across, 4.5 deep, open side up.
-  - Cup / mug: 5 across, 6 tall, upside down, with a handle.
-  - Glass: 4.5 across, 8 tall, upside down, Glass material.
-  - Fork / Knife / Spoon: ~12–14 tall, handle down, standing in the cutlery basket.
-  - Pan: 16 across, 3 deep, with a handle.
-  - Pot: 14 across, 10 tall.
+- Sizes, relative to a ~5 stud tall character (a real dishwasher load, seen from very small):
+  - Plate: 20 across, 1 thick, standing upright: coloured edge band, white rim, recessed well.
+  - Bowl: 15 across, 7 deep (CSG shell), leaned toward the door.
+  - Mug: 8 across, 10 tall, upside down (CSG, open at the bottom), with a handle.
+  - Glass: 7 across, 12 tall, upside down, see-through.
+  - Fork / Knife / Spoon: 18 tall, handle down in the cutlery basket.
+  - Pan: 22 across, 4 deep (CSG), leaned toward the door, handle up. Pot: 18 across, 14 tall (CSG).
+  - Hollow shapes are cut once in `Init()` with `GeometryService:SubtractAsync` (in pcall) and
+    cloned; if that fails each kind falls back to primitive parts.
+- `DishFactory.Size(kind)` returns the size table above (ArenaBuilder uses it for tilting).
 - `ApplyGrime(dish: Model, dishId: number, count: number, levelIndex: number, rng: Random,
   goldenChance: number, folder: Folder) -> { BasePart }` puts grime on the dish's **visible,
   reachable surfaces**:
   - Raycast from outside the dish toward its surface, against the dish's parts only.
   - Plates: both faces. Bowls: the inside. Cups/glasses: the outside and bottom. Cutlery: blade,
     tines and bowl.
-  - Each spot is ONE BasePart in `folder`:
+  - Each spot is ONE BasePart (a flat disc) in `folder`, plus decoration children: sauce splats and
+    droplets, smears that thin out, chunky crumbs, or frosting with sprinkles. Sizes are
+    `Config.GrimeTypes[...].Size` × 1.6. Spots keep 1.2 studs apart on a dish.
     - Anchored, `CanCollide = false`, `CanTouch = false`, `CanQuery = true`, `CastShadow = false`,
       `CollisionGroup = "NoCollide"`
     - its **XVector is the outward surface normal**, sitting ~0.05 studs proud of the surface
@@ -464,34 +476,34 @@ Arena = {
 }
 ```
 
-Layout, in arena-local studs (Origin at the tub floor centre, +Z toward the back):
-- Tub interior: X ±60, Z −50..+50, height 80. Stainless steel (Metal material, `theme.Tub`),
-  with ribbed walls and a ceiling.
-- The door is open, lying flat in front: Z −50 to −120, top at Y = 0, with a lip, invisible safety
-  walls and a detergent cup. Spawns are near Z −95. Beyond the door there's a giant-kitchen backdrop
-  (tiled floor far below, cabinet fronts, window light) so it reads as "inside a dishwasher".
-- Drain: tub floor, front centre (0, 0, −38), radius `Config.Round.DrainRadius`.
-  - Visual: round grate with a spinning whirlpool ring (tag `SpinY`), labelled "DRAIN — stand here
-    to sell".
-  - The Upgrade Station is a small glowing kiosk beside it, with a ProximityPrompt that has
-    attribute `OpenWindow = "Upgrades"`.
-- Bottom rack:
-  - walkable floor at Y = 3 (an invisible collidable plate plus visible thin wire grid, colour
-    `theme.Rack`)
-  - covers X ±56, Z −28..+46, with a ramp up from the tub floor at the front edge
-  - holds plates in lines along Z (faces pointing ±Z), line spacing ≥ 16 in X and plate spacing ≥ 8
-    in Z so players fit between them
-  - also holds pans/pots and a cutlery basket (front right, open top, rim at Y ≈ 10) with cutlery
-    standing in it
-- Top rack:
-  - walkable floor at Y = 34, same XZ extent
-  - bowls (open side up), cups and glasses (upside down)
-  - reached by TrussParts on both side walls and two **bubble lifts**: transparent columns near
-    the front corners from Y = 0 to Y = 38, tagged `BubbleLift` with attribute `LiftSpeed = 45`.
-    The client lifts the local character while inside.
-- Spray arms: under each rack (Y ≈ 1.5 and Y ≈ 31), long bars, CanCollide false, tagged `SpinY`
-  with attribute `SpinSpeed` (radians/s). Clients spin them locally.
-- Interior PointLights/SurfaceLights in `theme.Light`, plus floating bubble ParticleEmitters for mood.
+Layout, in arena-local studs (Origin at the tub floor centre, +Z toward the back). The machine is
+sized so the player is a tiny person in a real dishwasher: plates are about four characters tall.
+- **Kitchen around it.** The kitchen floor is 24 studs below the tub. The dishwasher is built into a
+  run of base cabinets with a marble countertop, backsplash, upper cabinets, a window over the sink,
+  a fridge, and a table with chairs behind the players. Walls and ceiling don't cast shadows so
+  daylight fills the room. `KillY = origin.Y - 14`: falling off the door teleports you back.
+- **Tub:** interior X ±56, Z −50..+62, height 100. Stainless steel (`theme.Tub`), ribs, rack rails,
+  filter, heating element, and seven interior PointLights.
+- **Door:** open, lying flat in front, Z −50 to −121, top at Y = 0, with raised edges, invisible
+  safety walls, a control strip with buttons and a detergent dispenser. Spawns are at Z −100.
+- **Tool Shop** (left of the door): a counter with one pedestal per tool (a little model of it, a
+  world-sized price sign, and a ProximityPrompt with attribute `BuyTool = index`). The client sends
+  `RunRequest("BuyTool", index)` and updates the signs (owned / next / locked). **Upgrade Book**
+  (right of the door): a lectern with prompt `OpenWindow = "Upgrades"`; `StationPosition` points here.
+- **Drain:** tub floor, front centre (0, 0, −47), radius `Config.Round.DrainRadius`, spinning swirl
+  (tag `SpinY`) and a world-sized "DRAIN" sign.
+- **Bottom rack** (walkable floor at Y = 4, X ±54, Z −36..+60, ramp up from the tub floor): three rows
+  of plates (X −34/0/+34, every 7 studs in Z) facing the door, standing in tines, with room to walk
+  between them. At the back: two pans (tilted toward the door, handles up), two pots and a cutlery
+  basket (forks, knives, spoons mixed).
+- **Top rack** (walkable floor at Y = 50, Z −40..+60): bowls tilted toward the door, upturned mugs
+  and upturned glasses.
+- **Getting up and down:** two **Bubble Lift** pads on the tub floor's front corners and a **Chute**
+  pad on the top rack's front edge (it drops you on the drain). Pads are tagged `LiftPad` with a
+  Vector3 attribute `LiftTo`; the client teleports its own character when it steps on one.
+- Spray arms under each rack (tag `SpinY`).
+- Everything aimable lives in two folders on the arena Model, `Dishes` and `Grime`; the spray only
+  raycasts those, so walls, rack floors and safety walls never block a scrub.
 - Load size:
   - dish counts come from `level.Dishes`
   - spots per dish = `round(level.Spots[kind] * options.GrimeScale)`, at least 1
@@ -692,44 +704,40 @@ UIKit.Viewport(props) -> ViewportFrame     -- props: Model (cloned in), Size, Po
 - The HUD is legible at 0.46 scale: minimum TextSize 18 for anything important.
 
 ### HUD (always on screen)
-- **Left-centre column** (x = 16, vertically centred):
-  - currency pill: lobby shows 🫧 Bubbles; in-run shows 🪙 Coins big and 🫧 small
-  - in-run tank bar: "💧 12/25", flashing red with "FULL!" when full
-  - buttons: lobby [🐾 Pets] [🛒 Shop]; in-run [⬆️ Upgrades] [🐾 Pets] [🚪 Leave]
+Laid out like the big round-based simulators:
+- **Top centre:** the 🧼 Bubbles pill with a green **+** (opens the Shop in the lobby, Upgrades in a run).
+- **Right column** (vertically centred): big square buttons. Lobby [🛒 Shop] [🐾 Pets]; in-run
+  [📖 Upgrades] [🐾 Pets] [🚪 Leave]. Each has a key hint badge: Tab / G / P on keyboard, Y / LB on
+  gamepad, hidden on touch.
+- **In a run:** big green 💰 coins and the tank bar ("💧 12 / 25", flashing red "FULL!") bottom-left;
+  the timer (hh:mm:ss) bottom-right; dishwasher name and "Dishwasher 42% clean" top-centre.
+- On touch the coins/tank move above the thumbstick zone, the timer moves top-right, and the right
+  column stays above the jump button.
 - Leave asks for confirmation ("Leave the run? You'll get no Bubbles.").
-- **Top-centre, in-run** (below TopInset):
-  - level icon and name
-  - "Dishwasher 42% clean" progress bar (arena `Cleaned` / `Total` attributes, or RunState)
-  - run timer (mm:ss from StartedAt)
 - **Results screen** (in-run, Phase Complete): "✨ SPARKLING CLEAN! ✨", time vs par, "NEW BEST!",
-  Bubbles earned (count-up), level unlocked, a table of players (name, spots, share %), a
+  Bubbles earned (count-up), level unlocked, a table of players (name, cleaned, share %), a
   countdown to return, and a [Back to Lobby] button (`RunRequest("ReturnToLobby")`).
-- Coin and bubble counters animate (count up, `UIKit.Bounce`) when they increase.
-- Keyboard: `Q` or `Tab` toggles Upgrades in a run. `P` toggles Pets. `G` toggles Shop in the lobby.
+- Keyboard: `Q` or `Tab` toggles Upgrades in a run, `P` Pets, `G` Shop in the lobby. Gamepad: `Y`
+  toggles Upgrades (run) or Shop (lobby), `LB` Pets, `B` closes windows, `R2` sprays.
 
 ### PartyUI
-Shown when `ClientState.Party ~= nil`. It's a bottom-centre panel (~560×210, clear of the touch
-zones).
-- Title "Party (2/4)" and a countdown "Starting in 17s" computed from `EndsAt` and
-  `workspace:GetServerTimeNow()`.
-- Member avatars/names. Use `Players:GetUserThumbnailAsync` in pcall; the host is marked 👑.
-- **Host controls:**
-  - Max players segmented buttons 1–4 (disabled below the member count)
-  - Public / Friends Only toggle
-  - Level picker (◀ ▶ with icon, name and subtitle; locked levels greyed with 🔒)
-  - a big green [Start Now]
-  - [Leave]
-- **Members:** read-only settings and [Leave].
-- Sends `PartyAction`. When Status is "Launching", show "Launching! 🫧" and disable buttons.
+Shown when `ClientState.Party ~= nil`.
+- **Create Party** (host, Status `"Picking"`): a big card for the selected dishwasher (theme-coloured
+  art with its icon, name, "CREATE PARTY"), 🌐 PUBLIC / 👥 FRIENDS, "Party Size:" with −/+, and a
+  green CREATE; the dishwasher list on the right (locked ones say what to clear); red BACK below.
+  Scaled to fit any screen. Gamepad selects CREATE; B backs out. Sends `PartyAction("Create", {...})`.
+- **Waiting card** (everyone, Status `"Waiting"`/`"Launching"`): top right, left of the HUD buttons:
+  dishwasher art, "2/4", "Teleporting in 12", member avatars (host ringed gold), [START] for the host
+  and [LEAVE].
 
 ### UpgradesUI (window "Upgrades", in-run only)
-- Top row: tool ladder cards. Owned = ✅, next = buy button with cost, later = locked.
-- List of upgrades from `Config.Upgrades`:
-  - icon, name, description, "Lv 3/15", and a **current → next** stat preview computed with
-    `Config.GetRunStats`
-  - buy button with cost (`Config.UpgradeCost`), disabled/grey when unaffordable, "MAX" when maxed
-- Coins shown at the top. Calls `ClientState.RunRequest`, shows a toast on error, and bounces the
-  row on success.
+Drawn as an open book.
+- **Left page ("Hand"):** the current tool (icon, name, power/size/reach) and the four upgrades as
+  cards: icon, name, "Lv 3/15", a pip bar, the **current → next** stat preview (`Config.GetRunStats`),
+  and a buy button with cost (grey when unaffordable, "MAX" when maxed).
+- **Right page ("Tools"):** the tool ladder. Owned = ✅, the next tool has a buy button, later tools
+  show "???" and a lock. "your money: 💰 N" at the bottom.
+- Calls `ClientState.RunRequest`, shows a toast on error, and bounces the card on success.
 
 ### ShopUI (window "Shop", lobby)
 - Tabs: **Perks** (from `Config.Perks`, bought with Bubbles via `MetaRequest("BuyPerk")`) and
@@ -747,7 +755,7 @@ zones).
   - [Equip Best] button
   - inventory count "12/60"
 - **Eggs** (opened with arg = EggId from a prompt; can switch between eggs):
-  - egg preview, cost in 🫧
+  - egg preview, cost in 🧼
   - the full **odds list** (pet viewport, name, rarity, `Format.Chance`) that must always be visible
     before buying
   - [Hatch 1] and [Hatch 3]
@@ -775,8 +783,8 @@ zones).
     `Stats.Radius` at the hit, facing the normal, in the tool colour
   - else show it red at 50% transparency and don't send
 - Sending:
-  - With `Stats.Hold`, send `Scrub(aim, true)` every `ScrubSendInterval` while held.
-  - Without it, send one `Scrub(aim, false)` per press, and show a hint "Tip: buy ✊ Hold to Scrub!"
+  - `Stats.Hold` is always true now: send `Scrub(aim, true)` every `ScrubSendInterval` while held.
+  - The aim ray only includes the arena's `Dishes` and `Grime` folders.
     after ~10 clicks.
 - Spray visuals while sending:
   - a Beam from an attachment at the character's right hand (or root) to the hit, width by tool
@@ -803,16 +811,17 @@ zones).
 - `RunFX "Cleaned"`:
   - a pop burst (small bubble balls or an emitter) at Position in Color, plus a pop sound with a
     combo pitch rise
-  - if `By == LocalPlayer.UserId`: a floating "+Units 💧" (and "+N 🫧" for golden) BillboardGui
+  - if `By == LocalPlayer.UserId`: a floating "+Units 💧" (and "+N 🧼" for golden) BillboardGui
     rising 3 studs and fading over 0.7 s
-- `"DishDone"`: a sparkle burst and a "✨ Sparkling!" label, plus "+Bonus 🪙" if By is the local
-  player. `"Sold"`: a coin sound and a big "+1,234 🪙" popup near the coin counter (via `UIKit.Toast`
+- `"DishDone"`: a sparkle burst and a "✨ Sparkling!" label, plus "+Bonus 💰" if By is the local
+  player. `"Sold"`: a coin sound and a big "+1,234 💰" popup near the coin counter (via `UIKit.Toast`
   or its own label). `"TankFull"`: an error sound.
 - `SpinY` tag (CollectionService): rotate those parts locally about their Y axis at attribute
   `SpinSpeed`.
-- `BubbleLift` tag: while the local root is inside such a part, set the root's
-  `AssemblyLinearVelocity.Y` to the attribute `LiftSpeed` (default 45). Spawn a few rising bubbles
-  around the character.
+- `LiftPad` tag: when the local root is on a pad (within ~4 studs horizontally), teleport the
+  character to the pad's `LiftTo` attribute with a puff of bubbles (1.2 s cooldown).
+- Tool Shop prompts (`BuyTool` attribute) send `RunRequest("BuyTool", index)` and toast the result;
+  the pedestal signs are refreshed on every RunState.
 - Drain guide: while tank is full (or ≥ 95%), show a Beam from the local root to
   `RunState.DrainPosition` with an arrow-ish animated texture offset.
 - Remaining markers: when ≤ `Config.Round.MarkerThreshold` grime parts are left in the arena's

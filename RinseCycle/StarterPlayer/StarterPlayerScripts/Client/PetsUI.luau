@@ -579,7 +579,7 @@ local function selectEgg(eggId: string)
 
 	UIKit.SetViewportModel(eggViewport, PetModels.Egg(eggId), true)
 	eggNameLabel.Text = egg.Name
-	eggCostLabel.Text = "🫧 " .. Format.Commas(egg.Cost)
+	eggCostLabel.Text = "🧼 " .. Format.Commas(egg.Cost)
 
 	for _, child in oddsScroll:GetChildren() do
 		if child:IsA("Frame") then
@@ -614,8 +614,8 @@ function PetsUI._refreshEggButtons()
 
 	hatch1Button:SetAttribute("Disabled", locked or not eggAffordable(egg, 1, meta))
 	hatch3Button:SetAttribute("Disabled", locked or not eggAffordable(egg, 3, meta))
-	hatch1Button.Text = "Hatch 1 (🫧 " .. Format.Commas(egg.Cost) .. ")"
-	hatch3Button.Text = "Hatch 3 (🫧 " .. Format.Commas(egg.Cost * 3) .. ")"
+	hatch1Button.Text = "Hatch 1 (🧼 " .. Format.Commas(egg.Cost) .. ")"
+	hatch3Button.Text = "Hatch 3 (🧼 " .. Format.Commas(egg.Cost * 3) .. ")"
 end
 
 local function doHatch(count: number)

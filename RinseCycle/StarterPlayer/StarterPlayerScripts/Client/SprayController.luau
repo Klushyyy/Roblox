@@ -37,7 +37,6 @@ local ScrubEvent = Remotes.Event("Scrub")
 local MAX_AIM_DISTANCE = 250
 local RING_TRANSPARENCY = 0.35
 local RING_THICKNESS = 0.15
-local HOLD_TIP_AFTER_CLICKS = 10
 local TANK_FULL_TOAST_GAP = 1.5 -- don't spam the toast every frame while stuck at a full tank
 local SPLASH_EMIT_COUNT = 6
 local TOUCH_BUTTON_SIZE = 132
@@ -61,7 +60,6 @@ local r2Held = false
 local touchHeld = false
 
 local clickCount = 0
-local holdTipShown = false
 local lastSendAt = 0
 local lastClickPulseUntil = 0 -- visuals stay on this long after a single (non-Hold) click
 local lastTankFullToastAt = 0
@@ -327,6 +325,22 @@ end
 -- Aiming
 ----------------------------------------------------------------------------------------------------
 
+-- Only dishes and dirt can be aimed at, so walls, rack floors and invisible safety walls never
+-- swallow the aim ray. Falls back to the whole arena for arenas built without those folders.
+local function aimTargets(arena: Model): { Instance }
+	local targets: { Instance } = {}
+	for _, name in { "Dishes", "Grime" } do
+		local folder = arena:FindFirstChild(name)
+		if folder then
+			table.insert(targets, folder)
+		end
+	end
+	if #targets == 0 then
+		table.insert(targets, arena)
+	end
+	return targets
+end
+
 local function aimRay(camera: Camera): Ray
 	local touchOrGamepad = UIKit.IsTouch() or UIKit.IsGamepad()
 	if touchOrGamepad then
@@ -377,7 +391,7 @@ local function onHeartbeat(dt: number)
 	ensureRing()
 	ensureHint()
 
-	raycastParams.FilterDescendantsInstances = { arenaModel }
+	raycastParams.FilterDescendantsInstances = aimTargets(arenaModel :: Model)
 	local ray = aimRay(camera)
 	local result = workspace:Raycast(ray.Origin, ray.Direction.Unit * MAX_AIM_DISTANCE, raycastParams)
 
@@ -439,7 +453,7 @@ local function onHeartbeat(dt: number)
 	elseif tankFull and pressed then
 		if now - lastTankFullToastAt > TANK_FULL_TOAST_GAP then
 			lastTankFullToastAt = now
-			UIKit.Toast("TANK FULL — go to the drain!", "Bad")
+			UIKit.Toast("TANK FULL! Go sell at the drain!", "Bad")
 		end
 	end
 
@@ -470,7 +484,7 @@ local function onPressBegan()
 	if not camera or not root or not root:IsA("BasePart") or not arenaModel or not arenaModel.Parent then
 		return
 	end
-	raycastParams.FilterDescendantsInstances = { arenaModel }
+	raycastParams.FilterDescendantsInstances = aimTargets(arenaModel :: Model)
 	local ray = aimRay(camera)
 	local result = workspace:Raycast(ray.Origin, ray.Direction.Unit * MAX_AIM_DISTANCE, raycastParams)
 	if not result then
@@ -488,10 +502,6 @@ local function onPressBegan()
 	sendScrub(result.Position, false, math.random())
 
 	clickCount += 1
-	if not holdTipShown and clickCount >= HOLD_TIP_AFTER_CLICKS then
-		holdTipShown = true
-		UIKit.Toast("Tip: buy ✊ Hold to Scrub!", "Info")
-	end
 end
 
 ----------------------------------------------------------------------------------------------------

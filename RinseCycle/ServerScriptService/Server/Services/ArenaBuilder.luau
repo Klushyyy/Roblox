@@ -1,68 +1,111 @@
--- ArenaBuilder: builds one dishwasher ("arena") for a run, entirely out of primitive parts, and
--- lays out the load of dirty dishes inside it. RoundService calls Build(slot, levelIndex, options)
--- once per run and Destroy(arena) when the run ends; nothing else touches workspace.Arenas directly.
+-- ArenaBuilder: builds one dishwasher ("arena") for a run, sitting in a family kitchen, and lays out
+-- the load of dirty dishes inside it. RoundService calls Build(slot, levelIndex, options) once per
+-- run and Destroy(arena) when the run ends; nothing else touches workspace.Arenas directly.
 --
 -- Coordinate convention ("arena space"): every builder helper below works in local offsets
 -- (x = sideways, y = up, z = depth) measured from `origin` (the tub floor centre, see SlotOrigin).
--- `origin.LookVector` is defined to point from the door toward the back wall (DESIGN.md section 5),
--- so +z is "into the tub". `worldPoint`/`worldCFrame` convert those offsets to world space.
+-- `origin.LookVector` points from the door toward the back wall, so +z is "into the tub" and the
+-- open door and the rest of the kitchen are at -z.
 --
--- Performance: the whole build (static geometry + every dish + every grime spot) yields with
--- task.wait() every ~200 parts, per DESIGN.md section 3, so a big load never hitches the server.
+-- The dishwasher is sized so a ~5 stud character is a tiny person inside a real machine:
+--   * tub interior X +-56, Z -50..62, 100 tall; the open door lies flat in front (Z -50..-121)
+--   * bottom rack floor at Y 4: three rows of standing plates, pans/pots and a cutlery basket
+--   * top rack floor at Y 50: tilted bowls, upturned mugs and glasses
+--   * bubble-lift pads (tag "LiftPad", attribute LiftTo) carry you up; a chute on the top rack
+--     drops you straight onto the drain. The client does the teleport (Effects).
+--   * the kitchen floor is 24 studs below the tub; falling off the door teleports you back.
+--
+-- Everything the spray can hit lives in two folders on the arena Model: "Dishes" and "Grime" (dirt).
+-- Nothing else is aimable (SprayController only raycasts those), so walls never block a scrub.
+--
+-- Performance: the build yields with task.wait() every ~200 parts.
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
+local Format = require(Shared:WaitForChild("Format"))
 
 local DishFactory = require(script.Parent:WaitForChild("DishFactory"))
 
 local ArenaBuilder = {}
 
 ----------------------------------------------------------------------------------------------------
--- Layout numbers (DESIGN.md section 5, ArenaBuilder). Arena-space units unless noted.
+-- Layout numbers (arena space).
 ----------------------------------------------------------------------------------------------------
-local TUB_HALF_X = 60
-local TUB_Z_MIN, TUB_Z_MAX = -50, 50
-local TUB_HEIGHT = 80
+local TUB_HALF_X = 56
+local TUB_Z_MIN, TUB_Z_MAX = -50, 62
+local TUB_HEIGHT = 100
 
-local DOOR_Z_FAR, DOOR_Z_NEAR = -120, -50 -- door spans this Z range, top at Y = 0
-local SPAWN_Z = -95
+local DOOR_Z_NEAR, DOOR_Z_FAR = -50, -121 -- the open door lies flat over this Z range, top at Y = 0
+local DOOR_THICK = 4
+local SPAWN_Z = -100
 
-local DRAIN_POS = Vector3.new(0, 0, -38)
-local STATION_OFFSET = Vector3.new(14, 0, -38)
+local KITCHEN_FLOOR_Y = -24
+local COUNTER_TOP_Y = 112
+local ROOM_HALF_X = 420
+local ROOM_Z_FRONT, ROOM_Z_BACK = -520, 76
+local ROOM_HEIGHT = 520
 
-local RACK_HALF_X = 56
-local RACK_Z_MIN, RACK_Z_MAX = -28, 46
-local BOTTOM_RACK_Y = 3
-local TOP_RACK_Y = 34
+local DRAIN_POS = Vector3.new(0, 0, -47)
 
-local PLATE_LINE_X = { -48, -32, -16, 0, 16, 32, 48 } -- spacing 16, matches "line spacing >= 16"
-local PLATE_SLOT_Z = { -20, -12, -4, 4, 12, 20, 28, 36 } -- spacing 8, matches "plate spacing >= 8"
+local BOTTOM_RACK_Y = 4
+local TOP_RACK_Y = 50
+local RACK_HALF_X = 54
+local BOTTOM_RACK_Z = { -36, 60 }
+local TOP_RACK_Z = { -40, 60 }
 
-local PANPOT_X = { -40, -20, 0, 20, 40 }
-local PANPOT_Z = 44
+-- Bottom rack: three rows of plates facing the door, spaced so a character fits between them.
+local PLATE_ROW_X = { -34, 0, 34 }
+local PLATE_Z = { -28, -21, -14, -7, 0, 7, 14, 21, 28 }
+local PAN_SLOTS = { { x = -43, z = 47 }, { x = 43, z = 47 } }
+local POT_SLOTS = { { x = -22, z = 47 }, { x = 22, z = 47 } }
+local BASKET_CENTER = Vector3.new(0, 0, 47)
+local BASKET_HALF = Vector3.new(10, 8, 9)
+local BASKET_X = { -7.5, -2.5, 2.5, 7.5 }
+local BASKET_Z = { 40.5, 44, 47.5, 51, 54.5 }
 
-local BASKET_POS = Vector3.new(48, 0, -16) -- front-right, per DESIGN.md
-local BASKET_HALF = Vector3.new(7, 5, 7)
-local BASKET_RIM_Y = 10
-local BASKET_DX = { -5, -2.5, 0, 2.5, 5 }
-local BASKET_DZ = { -5, -1.7, 1.7, 5 }
+-- Top rack.
+local BOWL_X = { -30, -15, 0, 15, 30 }
+local BOWL_Z = { -24, -6 }
+local CUP_X = { -40, -24, -8, 8, 24, 40 }
+local CUP_Z = { 10, 24 }
+local GLASS_X = { -42, -30, -18, -6, 6, 18, 30, 42 }
+local GLASS_Z = { 38, 52 }
 
-local BOWL_X = { -48, -32, -16, 0, 16, 32, 48 }
-local BOWL_Z = { -26, -18, -10, -2 }
-local CUP_X = { -48, -24, 0, 24, 48 }
-local CUP_Z = { 6, 14 }
-local GLASS_X = { -48, -24, 0, 24, 48 }
-local GLASS_Z = { 22, 30, 38 }
+local BOWL_TILT = math.rad(50)
+local PAN_TILT = math.rad(55)
 
-local TRUSS_X = { -TUB_HALF_X + 2, TUB_HALF_X - 2 }
-local TRUSS_Z = -30
-local LIFT_X = { -50, 50 }
-local LIFT_Z = -34
+-- Lifts (tub floor front corners -> top rack) and the chute (top rack -> drain).
+local LIFTS = {
+	{ from = Vector3.new(-47, 0, -45), to = Vector3.new(-47, TOP_RACK_Y, -34) },
+	{ from = Vector3.new(47, 0, -45), to = Vector3.new(47, TOP_RACK_Y, -34) },
+}
+local CHUTE = { from = Vector3.new(0, TOP_RACK_Y, -36), to = Vector3.new(0, 0, -47) }
+
+-- Tool shop counter on the left of the open door.
+local SHOP_X = -44
+local SHOP_Z = { -112, -60 }
+local SHOP_HEIGHT = 5
+local BOOK_POS = Vector3.new(44, 0, -72)
 
 local YIELD_EVERY = 200
+
+-- Kitchen palette (theme-independent: every level is the same family kitchen).
+local K = {
+	Floor = Color3.fromRGB(196, 158, 116),
+	Wall = Color3.fromRGB(214, 230, 238),
+	Cabinet = Color3.fromRGB(244, 241, 234),
+	CabinetDoor = Color3.fromRGB(236, 232, 224),
+	Counter = Color3.fromRGB(235, 235, 238),
+	Tile = Color3.fromRGB(250, 250, 250),
+	Handle = Color3.fromRGB(170, 175, 182),
+	Kick = Color3.fromRGB(70, 66, 62),
+	Wood = Color3.fromRGB(150, 105, 70),
+	Steel = Color3.fromRGB(200, 205, 212),
+	Frame = Color3.fromRGB(230, 232, 235),
+}
 
 ----------------------------------------------------------------------------------------------------
 -- Small helpers
@@ -83,8 +126,8 @@ local function worldPoint(origin: CFrame, x: number, y: number, z: number): Vect
 	return origin.Position + origin.RightVector * x + Vector3.new(0, y, 0) + origin.LookVector * z
 end
 
--- A footprint CFrame usable as DishFactory.BuildDish's `cf`: Position is the contact point,
--- LookVector is the "face" direction (defaults to the arena's own forward), UpVector is world up.
+-- A CFrame at local (x, y, z), axis-aligned with the arena (LookVector = into the tub), optionally
+-- facing `lookDir` instead. Used both for plain parts and as DishFactory's footprint.
 local function footprint(origin: CFrame, x: number, y: number, z: number, lookDir: Vector3?): CFrame
 	local pos = worldPoint(origin, x, y, z)
 	local look = (lookDir or origin.LookVector)
@@ -94,573 +137,517 @@ local function footprint(origin: CFrame, x: number, y: number, z: number, lookDi
 	return CFrame.lookAt(pos, pos + look, Vector3.new(0, 1, 0))
 end
 
-local function newPart(props: { [string]: any }): BasePart
+type Builder = {
+	model: Model,
+	origin: CFrame,
+	count: number,
+}
+
+-- A decoration/structure part in arena space. Static, no touch, not aimable. Box centred at (x,y,z).
+local function box(b: Builder, name: string, size: Vector3, x: number, y: number, z: number, color: Color3, material: Enum.Material?, props: { [string]: any }?): Part
 	local p = Instance.new("Part")
-	for k, v in props do
-		(p :: any)[k] = v
-	end
+	p.Name = name
+	p.Size = size
+	p.CFrame = footprint(b.origin, x, y, z)
+	p.Color = color
+	p.Material = material or Enum.Material.SmoothPlastic
 	p.Anchored = true
+	p.CanTouch = false
+	p.CanQuery = false
+	p.CanCollide = true
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	if props then
+		for k, v in props do
+			(p :: any)[k] = v
+		end
+	end
+	p.Parent = b.model
+	b.count += 1
 	return p
 end
 
-----------------------------------------------------------------------------------------------------
--- Static geometry builders. Each takes (model, origin, theme) and parents its parts into `model`
--- (which is already live under workspace.Arenas, so raycasts against dishes work once they're
--- parented too). They return how many parts they added, for the yield budget.
-----------------------------------------------------------------------------------------------------
-
-local function buildTub(model: Model, origin: CFrame, theme): number
-	local depth = TUB_Z_MAX - TUB_Z_MIN
-	local floor = newPart({
-		Size = Vector3.new(TUB_HALF_X * 2 + 4, 2, depth),
-		CFrame = footprint(origin, 0, -1, (TUB_Z_MIN + TUB_Z_MAX) / 2),
-		Color = theme.Tub,
-		Material = Enum.Material.Metal,
-		CanCollide = true,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	floor.Parent = model
-
-	local count = 1
-	for _, side in { -1, 1 } do
-		local wall = newPart({
-			Size = Vector3.new(2, TUB_HEIGHT, depth),
-			CFrame = footprint(origin, side * (TUB_HALF_X + 1), TUB_HEIGHT / 2, (TUB_Z_MIN + TUB_Z_MAX) / 2),
-			Color = theme.Tub,
-			Material = Enum.Material.Metal,
-			CanCollide = true,
-			CanQuery = false,
-			CanTouch = false,
-		})
-		wall.Parent = model
-		count += 1
-		-- A few horizontal ribs for a stainless-steel look.
-		for i = 1, 5 do
-			local ry = i * (TUB_HEIGHT / 6)
-			local rib = newPart({
-				Size = Vector3.new(0.4, 0.6, depth),
-				CFrame = footprint(origin, side * (TUB_HALF_X + 2.1), ry, (TUB_Z_MIN + TUB_Z_MAX) / 2),
-				Color = theme.Metal,
-				Material = Enum.Material.Metal,
-				CanCollide = false,
-				CanQuery = false,
-				CanTouch = false,
-			})
-			rib.Parent = model
-			count += 1
-		end
-	end
-
-	local back = newPart({
-		Size = Vector3.new(TUB_HALF_X * 2 + 4, TUB_HEIGHT, 2),
-		CFrame = footprint(origin, 0, TUB_HEIGHT / 2, TUB_Z_MAX + 1),
-		Color = theme.Tub,
-		Material = Enum.Material.Metal,
-		CanCollide = true,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	back.Parent = model
-	count += 1
-
-	local ceiling = newPart({
-		Size = Vector3.new(TUB_HALF_X * 2 + 4, 2, depth + (DOOR_Z_NEAR - DOOR_Z_FAR)),
-		CFrame = footprint(origin, 0, TUB_HEIGHT, (TUB_Z_MIN + DOOR_Z_FAR) / 2),
-		Color = theme.Tub,
-		Material = Enum.Material.Metal,
-		CanCollide = false,
-		CanQuery = false,
-		CanTouch = false,
-		Transparency = 0.15,
-	})
-	ceiling.Parent = model
-	count += 1
-
-	-- Interior mood lighting.
-	for _, z in { -10, 30 } do
-		local fixture = newPart({
-			Size = Vector3.new(6, 1, 2),
-			CFrame = footprint(origin, 0, TUB_HEIGHT - 3, z),
-			Color = theme.Light,
-			Material = Enum.Material.Neon,
-			CanCollide = false,
-			CanQuery = false,
-			CanTouch = false,
-		})
-		local light = Instance.new("PointLight")
-		light.Color = theme.Light
-		light.Brightness = 2
-		light.Range = 45
-		light.Parent = fixture
-		fixture.Parent = model
-		count += 1
-	end
-
-	-- A little floating-bubble mood ambience.
-	local bubbleAnchor = newPart({
-		Size = Vector3.new(1, 1, 1),
-		CFrame = footprint(origin, 0, TUB_HEIGHT / 2, 10),
-		Transparency = 1,
-		CanCollide = false,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	local attach = Instance.new("Attachment")
-	attach.Parent = bubbleAnchor
-	local emitter = Instance.new("ParticleEmitter")
-	emitter.Texture = "rbxasset://textures/particles/forcefield_glow_main.dds"
-	emitter.Color = ColorSequence.new(theme.Accent)
-	emitter.Lifetime = NumberRange.new(4, 7)
-	emitter.Speed = NumberRange.new(2, 4)
-	emitter.Rate = 1.5
-	emitter.Size = NumberSequence.new(0.6, 0.1)
-	emitter.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.6),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	emitter.SpreadAngle = Vector2.new(40, 40)
-	emitter.Parent = attach
-	bubbleAnchor.Parent = model
-	count += 1
-
-	return count
+-- Box from min/max corners (arena space). Handy for walls and cabinets.
+local function span(b: Builder, name: string, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, color: Color3, material: Enum.Material?, props: { [string]: any }?): Part
+	return box(b, name, Vector3.new(math.abs(x1 - x0), math.abs(y1 - y0), math.abs(z1 - z0)), (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, color, material, props)
 end
 
-local function buildDoorAndBackdrop(model: Model, origin: CFrame, theme): number
-	local count = 0
-	local doorLen = DOOR_Z_NEAR - DOOR_Z_FAR
-	local doorFloor = newPart({
-		Size = Vector3.new(TUB_HALF_X * 2, 2, doorLen),
-		CFrame = footprint(origin, 0, -1, (DOOR_Z_FAR + DOOR_Z_NEAR) / 2),
-		Color = theme.Rack,
-		Material = Enum.Material.Metal,
-		CanCollide = true,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	doorFloor.Parent = model
-	count += 1
-
-	-- Inner panel details: a detergent cup, the rim, and a hinge line at the tub edge.
-	local cup = newPart({
-		Shape = Enum.PartType.Cylinder,
-		Size = Vector3.new(1.5, 5, 5),
-		CFrame = footprint(origin, -20, 0.8, DOOR_Z_NEAR - 12) * CFrame.Angles(0, 0, math.rad(90)),
-		Color = theme.Accent,
-		Material = Enum.Material.Plastic,
-		CanCollide = false,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	cup.Parent = model
-	count += 1
-
-	local rim = newPart({
-		Size = Vector3.new(TUB_HALF_X * 2, 0.4, 1.2),
-		CFrame = footprint(origin, 0, 0.2, DOOR_Z_NEAR),
-		Color = theme.Metal,
-		Material = Enum.Material.Metal,
-		CanCollide = false,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	rim.Parent = model
-	count += 1
-
-	for _, x in { -TUB_HALF_X + 6, TUB_HALF_X - 6 } do
-		local hinge = newPart({
-			Shape = Enum.PartType.Cylinder,
-			Size = Vector3.new(4, 1, 1),
-			CFrame = footprint(origin, x, 0.5, DOOR_Z_NEAR) * CFrame.Angles(0, math.rad(90), 0),
-			Color = theme.Metal,
-			Material = Enum.Material.Metal,
-			CanCollide = false,
-			CanQuery = false,
-			CanTouch = false,
-		})
-		hinge.Parent = model
-		count += 1
-	end
-
-	-- A low lip at the far end plus invisible safety walls down both sides of the door.
-	local lip = newPart({
-		Size = Vector3.new(TUB_HALF_X * 2, 3, 2),
-		CFrame = footprint(origin, 0, 1.5, DOOR_Z_FAR),
-		Color = theme.Rack,
-		Material = Enum.Material.Metal,
-		CanCollide = true,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	lip.Parent = model
-	count += 1
-
-	for _, side in { -1, 1 } do
-		local wall = newPart({
-			Size = Vector3.new(1, 10, doorLen),
-			CFrame = footprint(origin, side * TUB_HALF_X, 5, (DOOR_Z_FAR + DOOR_Z_NEAR) / 2),
-			Transparency = 1,
-			CanCollide = true,
-			CanQuery = false,
-			CanTouch = false,
-		})
-		wall.Parent = model
-		count += 1
-	end
-
-	-- Giant-kitchen backdrop beyond the door, so there's no void: a tiled floor far below,
-	-- cabinet-front wall, and a bright window. Pure decoration, kept far from any collidable area.
-	local farZ = DOOR_Z_FAR - 45
-	local tiles = newPart({
-		Size = Vector3.new(400, 2, 300),
-		CFrame = footprint(origin, 0, -140, farZ - 80),
-		Color = Color3.fromRGB(225, 225, 230),
-		Material = Enum.Material.Concrete,
-		CanCollide = false,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	tiles.Parent = model
-	count += 1
-
-	local cabinets = newPart({
-		Size = Vector3.new(400, 260, 6),
-		CFrame = footprint(origin, 0, -10, farZ - 20),
-		Color = Color3.fromRGB(120, 82, 55),
-		Material = Enum.Material.Wood,
-		CanCollide = false,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	cabinets.Parent = model
-	count += 1
-
-	for i = -3, 3 do
-		local seam = newPart({
-			Size = Vector3.new(0.6, 260, 6.2),
-			CFrame = footprint(origin, i * 55, -10, farZ - 20),
-			Color = Color3.fromRGB(90, 60, 40),
-			Material = Enum.Material.Wood,
-			CanCollide = false,
-			CanQuery = false,
-			CanTouch = false,
-		})
-		seam.Parent = model
-		count += 1
-	end
-
-	local window = newPart({
-		Size = Vector3.new(90, 60, 2),
-		CFrame = footprint(origin, 120, 80, farZ - 17),
-		Color = Color3.fromRGB(255, 250, 210),
-		Material = Enum.Material.Neon,
-		CanCollide = false,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	local windowLight = Instance.new("SurfaceLight")
-	windowLight.Face = Enum.NormalId.Front
-	windowLight.Color = Color3.fromRGB(255, 250, 220)
-	windowLight.Brightness = 3
-	windowLight.Range = 200
-	windowLight.Parent = window
-	window.Parent = model
-	count += 1
-
-	return count
+-- Upright cylinder (axis = world Y) centred at (x, y, z).
+local function cyl(b: Builder, name: string, height: number, diameter: number, x: number, y: number, z: number, color: Color3, material: Enum.Material?, props: { [string]: any }?): Part
+	local p = box(b, name, Vector3.new(height, diameter, diameter), x, y, z, color, material, props)
+	p.Shape = Enum.PartType.Cylinder
+	p.CFrame = footprint(b.origin, x, y, z) * CFrame.Angles(0, 0, math.rad(90))
+	return p
 end
 
-local function buildDrainAndStation(model: Model, origin: CFrame, theme): (number, Vector3, Vector3)
-	local count = 0
-	local radius = Config.Round.DrainRadius
+local function noCollide(): { [string]: any }
+	return { CanCollide = false, CastShadow = false }
+end
 
-	local grate = newPart({
-		Shape = Enum.PartType.Cylinder,
-		Size = Vector3.new(0.6, radius * 2, radius * 2),
-		CFrame = footprint(origin, DRAIN_POS.X, 0.3, DRAIN_POS.Z) * CFrame.Angles(0, 0, math.rad(90)),
-		Color = Color3.fromRGB(70, 75, 80),
-		Material = Enum.Material.DiamondPlate,
-		CanCollide = true,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	grate.Parent = model
-	count += 1
-
-	local ring = newPart({
-		Shape = Enum.PartType.Cylinder,
-		Size = Vector3.new(0.2, radius * 1.6, radius * 1.6),
-		CFrame = footprint(origin, DRAIN_POS.X, 0.65, DRAIN_POS.Z) * CFrame.Angles(0, 0, math.rad(90)),
-		Color = theme.Accent,
-		Material = Enum.Material.ForceField,
-		CanCollide = false,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	ring.Parent = model
-	ring:SetAttribute("SpinSpeed", 2.4)
-	CollectionService:AddTag(ring, "SpinY")
-	count += 1
-
-	local signPost = newPart({
-		Size = Vector3.new(0.6, 6, 0.6),
-		CFrame = footprint(origin, DRAIN_POS.X, 3, DRAIN_POS.Z - radius - 1),
-		Color = theme.Metal,
-		Material = Enum.Material.Metal,
-		CanCollide = false,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	local billboard = Instance.new("BillboardGui")
-	billboard.Size = UDim2.fromOffset(220, 44)
-	billboard.StudsOffset = Vector3.new(0, 3.4, 0)
-	billboard.AlwaysOnTop = true
+-- A world-sized sign (it scales with distance like a real object, so it never fills the screen).
+local function sign(parent: BasePart, text: string, widthStuds: number, heightStuds: number, offsetY: number, color: Color3?): TextLabel
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "Sign"
+	gui.Size = UDim2.fromScale(widthStuds, heightStuds)
+	gui.StudsOffsetWorldSpace = Vector3.new(0, offsetY, 0)
+	gui.LightInfluence = 0
+	gui.MaxDistance = 160
+	gui.AlwaysOnTop = false
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
 	label.Size = UDim2.fromScale(1, 1)
 	label.Font = Enum.Font.FredokaOne
-	label.TextColor3 = Color3.new(1, 1, 1)
-	label.TextStrokeTransparency = 0
 	label.TextScaled = true
-	label.Text = "🌀 DRAIN — stand here to sell"
-	label.Parent = billboard
-	billboard.Parent = signPost
-	signPost.Parent = model
-	count += 1
-
-	local stationPos = DRAIN_POS + STATION_OFFSET
-	local kioskBase = newPart({
-		Size = Vector3.new(4, 4, 4),
-		CFrame = footprint(origin, stationPos.X, 2, stationPos.Z),
-		Color = theme.Rack,
-		Material = Enum.Material.SmoothPlastic,
-		CanCollide = true,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	local kioskTop = newPart({
-		Shape = Enum.PartType.Cylinder,
-		Size = Vector3.new(0.6, 3.2, 3.2),
-		CFrame = footprint(origin, stationPos.X, 4.3, stationPos.Z) * CFrame.Angles(0, 0, math.rad(90)),
-		Color = theme.Accent,
-		Material = Enum.Material.Neon,
-		CanCollide = false,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	kioskTop.Parent = model
-	count += 1
-
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.ObjectText = "Upgrade Station"
-	prompt.ActionText = "Open"
-	prompt.RequiresLineOfSight = false
-	prompt.HoldDuration = 0
-	prompt.MaxActivationDistance = 12
-	prompt:SetAttribute("OpenWindow", "Upgrades")
-	prompt.Parent = kioskBase
-	kioskBase.Parent = model
-	count += 1
-
-	return count, worldPoint(origin, DRAIN_POS.X, 0, DRAIN_POS.Z), worldPoint(origin, stationPos.X, 0, stationPos.Z)
-end
-
--- A walkable rack floor (invisible collidable plate + a visible thin wire grid) at height `y`.
-local function buildRackFloor(model: Model, origin: CFrame, theme, y: number): number
-	local width = RACK_HALF_X * 2
-	local depth = RACK_Z_MAX - RACK_Z_MIN
-	local plate = newPart({
-		Size = Vector3.new(width, 1, depth),
-		CFrame = footprint(origin, 0, y - 0.5, (RACK_Z_MIN + RACK_Z_MAX) / 2),
-		Transparency = 1,
-		CanCollide = true,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	plate.Parent = model
-	local count = 1
-
-	for _, x in { -48, -32, -16, 0, 16, 32, 48 } do
-		local bar = newPart({
-			Size = Vector3.new(0.3, 0.3, depth),
-			CFrame = footprint(origin, x, y, (RACK_Z_MIN + RACK_Z_MAX) / 2),
-			Color = theme.Rack,
-			Material = Enum.Material.Metal,
-			CanCollide = false,
-			CanQuery = false,
-			CanTouch = false,
-		})
-		bar.Parent = model
-		count += 1
-	end
-	for i = 0, 6 do
-		local z = RACK_Z_MIN + (depth / 6) * i
-		local bar = newPart({
-			Size = Vector3.new(width, 0.3, 0.3),
-			CFrame = footprint(origin, 0, y, z),
-			Color = theme.Rack,
-			Material = Enum.Material.Metal,
-			CanCollide = false,
-			CanQuery = false,
-			CanTouch = false,
-		})
-		bar.Parent = model
-		count += 1
-	end
-
-	return count
-end
-
-local function buildRamp(model: Model, origin: CFrame, theme): number
-	local ramp = newPart({
-		Size = Vector3.new(RACK_HALF_X * 2, 1, 8),
-		CFrame = footprint(origin, 0, BOTTOM_RACK_Y / 2 - 0.3, RACK_Z_MIN - 3) * CFrame.Angles(math.rad(-19), 0, 0),
-		Color = theme.Rack,
-		Material = Enum.Material.Metal,
-		CanCollide = true,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	ramp.Parent = model
-	return 1
-end
-
-local function buildCutleryBasket(model: Model, origin: CFrame, theme): number
-	local count = 0
-	local wallColor = theme.Metal
-	local base = newPart({
-		Size = Vector3.new(BASKET_HALF.X * 2, 1, BASKET_HALF.Z * 2),
-		CFrame = footprint(origin, BASKET_POS.X, BOTTOM_RACK_Y + 0.5, BASKET_POS.Z),
-		Color = wallColor,
-		Material = Enum.Material.Metal,
-		CanCollide = true,
-		CanQuery = false,
-		CanTouch = false,
-	})
-	base.Parent = model
-	count += 1
-
-	local wallY = BASKET_RIM_Y - BOTTOM_RACK_Y
-	for _, offset in {
-		{ dx = -BASKET_HALF.X, dz = 0, size = Vector3.new(0.4, wallY, BASKET_HALF.Z * 2) },
-		{ dx = BASKET_HALF.X, dz = 0, size = Vector3.new(0.4, wallY, BASKET_HALF.Z * 2) },
-		{ dx = 0, dz = -BASKET_HALF.Z, size = Vector3.new(BASKET_HALF.X * 2, wallY, 0.4) },
-		{ dx = 0, dz = BASKET_HALF.Z, size = Vector3.new(BASKET_HALF.X * 2, wallY, 0.4) },
-	} do
-		local wall = newPart({
-			Size = offset.size,
-			CFrame = footprint(origin, BASKET_POS.X + offset.dx, BOTTOM_RACK_Y + wallY / 2, BASKET_POS.Z + offset.dz),
-			Color = wallColor,
-			Material = Enum.Material.DiamondPlate,
-			Transparency = 0.35,
-			CanCollide = true,
-			CanQuery = false,
-			CanTouch = false,
-		})
-		wall.Parent = model
-		count += 1
-	end
-
-	return count
-end
-
-local function buildTrussAndLifts(model: Model, origin: CFrame, theme): number
-	local count = 0
-	for _, x in TRUSS_X do
-		local segments = 3
-		local segHeight = TOP_RACK_Y / segments
-		for i = 1, segments do
-			local truss = Instance.new("TrussPart")
-			truss.Size = Vector3.new(2, segHeight, 2)
-			truss.CFrame = footprint(origin, x, segHeight * (i - 0.5), TRUSS_Z)
-			truss.Anchored = true
-			truss.Color = theme.Metal
-			truss.Material = Enum.Material.Metal
-			truss.Parent = model
-			count += 1
-		end
-	end
-
-	for _, x in LIFT_X do
-		local lift = newPart({
-			Size = Vector3.new(6, TOP_RACK_Y + 2, 6),
-			CFrame = footprint(origin, x, (TOP_RACK_Y + 2) / 2, LIFT_Z),
-			Color = theme.Accent,
-			Material = Enum.Material.ForceField,
-			Transparency = 0.75,
-			CanCollide = false,
-			CanQuery = false,
-			CanTouch = false,
-		})
-		lift:SetAttribute("LiftSpeed", 45)
-		CollectionService:AddTag(lift, "BubbleLift")
-
-		local attach = Instance.new("Attachment")
-		attach.Position = Vector3.new(0, -(TOP_RACK_Y + 2) / 2 + 1, 0)
-		attach.Parent = lift
-		local emitter = Instance.new("ParticleEmitter")
-		emitter.Texture = "rbxasset://textures/particles/forcefield_glow_main.dds"
-		emitter.Color = ColorSequence.new(Color3.new(1, 1, 1))
-		emitter.Lifetime = NumberRange.new(1.4, 2.2)
-		emitter.Speed = NumberRange.new(6, 10)
-		emitter.Rate = 8
-		emitter.Size = NumberSequence.new(0.9, 0.2)
-		emitter.SpreadAngle = Vector2.new(8, 8)
-		emitter.Parent = attach
-
-		lift.Parent = model
-		count += 1
-	end
-
-	return count
-end
-
-local function buildSprayArms(model: Model, origin: CFrame, theme): number
-	local count = 0
-	for _, y in { 1.5, 31 } do
-		local speed = 0.8 + (y > 20 and 0.3 or 0)
-		for _, axis in { "X", "Z" } do
-			local size = if axis == "X" then Vector3.new(RACK_HALF_X * 2 - 4, 0.8, 0.8) else Vector3.new(0.8, 0.8, RACK_Z_MAX - RACK_Z_MIN - 4)
-			local arm = newPart({
-				Size = size,
-				CFrame = footprint(origin, 0, y, (RACK_Z_MIN + RACK_Z_MAX) / 2),
-				Color = theme.Metal,
-				Material = Enum.Material.Metal,
-				CanCollide = false,
-				CanQuery = false,
-				CanTouch = false,
-			})
-			arm:SetAttribute("SpinSpeed", speed)
-			CollectionService:AddTag(arm, "SpinY")
-			arm.Parent = model
-			count += 1
-
-			-- Nozzle holes along the arm.
-			local length = if axis == "X" then size.X else size.Z
-			for i = 1, 5 do
-				local t = (i - 3) * (length / 6)
-				local nozzlePos = if axis == "X" then footprint(origin, t, y + 0.5, (RACK_Z_MIN + RACK_Z_MAX) / 2) else footprint(origin, 0, y + 0.5, (RACK_Z_MIN + RACK_Z_MAX) / 2 + t)
-				local nozzle = newPart({
-					Shape = Enum.PartType.Cylinder,
-					Size = Vector3.new(0.5, 0.3, 0.3),
-					CFrame = nozzlePos * CFrame.Angles(0, 0, math.rad(90)),
-					Color = theme.Metal,
-					Material = Enum.Material.Metal,
-					CanCollide = false,
-					CanQuery = false,
-					CanTouch = false,
-				})
-				nozzle.Parent = model
-				count += 1
-			end
-		end
-	end
-	return count
+	label.TextColor3 = color or Color3.new(1, 1, 1)
+	label.Text = text
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 3
+	stroke.Color = Color3.fromRGB(12, 30, 60)
+	stroke.Parent = label
+	label.Parent = gui
+	gui.Parent = parent
+	return label
 end
 
 ----------------------------------------------------------------------------------------------------
--- Dish layout: turns level.Dishes / level.Spots into placed dishes + grime.
+-- The kitchen around the dishwasher
+----------------------------------------------------------------------------------------------------
+
+local function buildKitchen(b: Builder)
+	local fy = KITCHEN_FLOOR_Y
+	local shadowless = { CastShadow = false }
+
+	-- Floor, walls, ceiling. Walls and ceiling don't cast shadows so daylight still fills the room.
+	span(b, "KitchenFloor", -ROOM_HALF_X, ROOM_HALF_X, fy - 4, fy, ROOM_Z_FRONT, ROOM_Z_BACK, K.Floor, Enum.Material.WoodPlanks)
+	span(b, "BackWall", -ROOM_HALF_X, ROOM_HALF_X, fy, fy + ROOM_HEIGHT, ROOM_Z_BACK, ROOM_Z_BACK + 4, K.Wall, nil, shadowless)
+	span(b, "FrontWall", -ROOM_HALF_X, ROOM_HALF_X, fy, fy + ROOM_HEIGHT, ROOM_Z_FRONT - 4, ROOM_Z_FRONT, K.Wall, nil, shadowless)
+	for _, side in { -1, 1 } do
+		span(b, "SideWall", side * ROOM_HALF_X, side * (ROOM_HALF_X + 4), fy, fy + ROOM_HEIGHT, ROOM_Z_FRONT, ROOM_Z_BACK, K.Wall, nil, shadowless)
+		-- Skirting board.
+		span(b, "Skirting", side * (ROOM_HALF_X - 2), side * ROOM_HALF_X, fy, fy + 10, ROOM_Z_FRONT, ROOM_Z_BACK, Color3.new(1, 1, 1), nil, noCollide())
+	end
+	span(b, "Ceiling", -ROOM_HALF_X, ROOM_HALF_X, fy + ROOM_HEIGHT, fy + ROOM_HEIGHT + 4, ROOM_Z_FRONT, ROOM_Z_BACK, Color3.fromRGB(248, 248, 246), nil, shadowless)
+	-- Ceiling lamp.
+	local lamp = cyl(b, "CeilingLamp", 4, 70, 0, fy + ROOM_HEIGHT - 4, -200, Color3.fromRGB(255, 248, 225), Enum.Material.Neon, noCollide())
+	lamp.CastShadow = false
+
+	-- Base cabinets either side of the dishwasher, with doors, handles and a toe kick.
+	local cabFront = -54
+	for _, side in { -1, 1 } do
+		local x0, x1 = side * 62, side * ROOM_HALF_X
+		span(b, "Cabinets", x0, x1, fy + 12, COUNTER_TOP_Y - 6, cabFront, ROOM_Z_BACK, K.Cabinet)
+		span(b, "ToeKick", x0, x1, fy, fy + 12, cabFront + 8, ROOM_Z_BACK, K.Kick)
+		local width = math.abs(x1 - x0)
+		local doors = math.floor(width / 80)
+		local doorW = width / doors
+		for i = 0, doors - 1 do
+			local cx = side * (62 + doorW * (i + 0.5))
+			-- Drawer on top, door below.
+			box(b, "Drawer", Vector3.new(doorW - 6, 26, 1.5), cx, COUNTER_TOP_Y - 24, cabFront - 0.75, K.CabinetDoor)
+			box(b, "DrawerHandle", Vector3.new(24, 2.5, 2.5), cx, COUNTER_TOP_Y - 24, cabFront - 2.5, K.Handle, Enum.Material.Metal, noCollide())
+			box(b, "Door", Vector3.new(doorW - 6, 66, 1.5), cx, fy + 12 + 38, cabFront - 0.75, K.CabinetDoor)
+			box(b, "DoorHandle", Vector3.new(2.5, 20, 2.5), cx + side * -(doorW / 2 - 12), fy + 12 + 55, cabFront - 2.5, K.Handle, Enum.Material.Metal, noCollide())
+		end
+	end
+
+	-- Countertop across the whole run (including over the dishwasher) with a tiled backsplash.
+	span(b, "Countertop", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, ROOM_Z_BACK, K.Counter, Enum.Material.Marble, shadowless)
+	span(b, "Backsplash", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y, COUNTER_TOP_Y + 70, ROOM_Z_BACK - 1, ROOM_Z_BACK, K.Tile, Enum.Material.CeramicTiles, noCollide())
+
+	-- Upper cabinets, leaving a gap for the window over the sink.
+	local upperY0, upperY1 = COUNTER_TOP_Y + 120, COUNTER_TOP_Y + 270
+	for _, seg in { { -ROOM_HALF_X, -220 }, { -40, ROOM_HALF_X } } do
+		span(b, "UpperCabinets", seg[1], seg[2], upperY0, upperY1, ROOM_Z_BACK - 40, ROOM_Z_BACK, K.Cabinet, nil, shadowless)
+		local w = seg[2] - seg[1]
+		local n = math.floor(w / 70)
+		for i = 0, n - 1 do
+			local cx = seg[1] + w / n * (i + 0.5)
+			box(b, "UpperDoor", Vector3.new(w / n - 5, upperY1 - upperY0 - 8, 1.2), cx, (upperY0 + upperY1) / 2, ROOM_Z_BACK - 40.6, K.CabinetDoor, nil, noCollide())
+			box(b, "UpperHandle", Vector3.new(2.5, 16, 2.5), cx + (w / n / 2 - 10), upperY0 + 16, ROOM_Z_BACK - 42, K.Handle, Enum.Material.Metal, noCollide())
+		end
+	end
+
+	-- Window over the sink: frame, glowing sky panel, and cross bars.
+	local wx0, wx1 = -210, -50
+	local wy0, wy1 = COUNTER_TOP_Y + 90, COUNTER_TOP_Y + 260
+	local sky = span(b, "WindowSky", wx0, wx1, wy0, wy1, ROOM_Z_BACK - 0.5, ROOM_Z_BACK + 0.5, Color3.fromRGB(190, 225, 255), Enum.Material.Neon, noCollide())
+	sky.CastShadow = false
+	span(b, "WindowSill", wx0 - 8, wx1 + 8, wy0 - 6, wy0, ROOM_Z_BACK - 10, ROOM_Z_BACK, Color3.new(1, 1, 1), nil, noCollide())
+	for _, x in { wx0, (wx0 + wx1) / 2, wx1 } do
+		span(b, "WindowBar", x - 3, x + 3, wy0, wy1, ROOM_Z_BACK - 3, ROOM_Z_BACK, Color3.new(1, 1, 1), nil, noCollide())
+	end
+	for _, y in { wy0, (wy0 + wy1) / 2, wy1 } do
+		span(b, "WindowBar", wx0, wx1, y - 3, y + 3, ROOM_Z_BACK - 3, ROOM_Z_BACK, Color3.new(1, 1, 1), nil, noCollide())
+	end
+
+	-- Sink in the counter under the window, and a tall faucet.
+	local sinkX = (wx0 + wx1) / 2
+	span(b, "Sink", sinkX - 60, sinkX + 60, COUNTER_TOP_Y - 0.4, COUNTER_TOP_Y + 0.2, -10, 50, K.Steel, Enum.Material.Metal, noCollide())
+	span(b, "SinkBasin", sinkX - 54, sinkX + 54, COUNTER_TOP_Y - 0.2, COUNTER_TOP_Y + 0.4, -4, 44, Color3.fromRGB(120, 125, 132), Enum.Material.Metal, noCollide())
+	cyl(b, "FaucetBase", 6, 10, sinkX, COUNTER_TOP_Y + 3, 60, K.Steel, Enum.Material.Metal, noCollide())
+	cyl(b, "FaucetPipe", 60, 5, sinkX, COUNTER_TOP_Y + 33, 60, K.Steel, Enum.Material.Metal, noCollide())
+	box(b, "FaucetSpout", Vector3.new(5, 5, 40), sinkX, COUNTER_TOP_Y + 62, 42, K.Steel, Enum.Material.Metal, noCollide())
+	-- Dish soap bottle next to the sink.
+	cyl(b, "SoapBottle", 40, 16, sinkX + 90, COUNTER_TOP_Y + 20, 40, Color3.fromRGB(80, 200, 120), Enum.Material.Glass, { CanCollide = false, Transparency = 0.15 })
+	cyl(b, "SoapCap", 8, 9, sinkX + 90, COUNTER_TOP_Y + 44, 40, Color3.new(1, 1, 1), nil, noCollide())
+
+	-- A kettle and a fruit bowl on the counter to the right.
+	cyl(b, "Kettle", 40, 34, 230, COUNTER_TOP_Y + 20, 30, K.Steel, Enum.Material.Metal, noCollide())
+	box(b, "KettleHandle", Vector3.new(26, 5, 5), 230, COUNTER_TOP_Y + 44, 30, Color3.fromRGB(40, 40, 44), nil, noCollide())
+	cyl(b, "FruitBowl", 14, 60, 330, COUNTER_TOP_Y + 7, 20, Color3.fromRGB(230, 120, 80), nil, noCollide())
+	for i, c in { Color3.fromRGB(230, 50, 50), Color3.fromRGB(255, 200, 40), Color3.fromRGB(120, 200, 60) } do
+		local ball = box(b, "Fruit", Vector3.new(18, 18, 18), 318 + i * 7, COUNTER_TOP_Y + 20, 14 + (i % 2) * 10, c, nil, noCollide())
+		ball.Shape = Enum.PartType.Ball
+	end
+
+	-- Fridge on the right wall.
+	span(b, "Fridge", 300, ROOM_HALF_X, fy, fy + 380, -260, -120, Color3.fromRGB(235, 238, 242), Enum.Material.SmoothPlastic)
+	box(b, "FridgeHandle", Vector3.new(3, 90, 3), 297, fy + 230, -150, K.Handle, Enum.Material.Metal, noCollide())
+	box(b, "FridgeHandle", Vector3.new(3, 60, 3), 297, fy + 110, -150, K.Handle, Enum.Material.Metal, noCollide())
+	box(b, "FridgeSeam", Vector3.new(1, 2, 140), 299.8, fy + 170, -190, Color3.fromRGB(180, 185, 190), nil, noCollide())
+
+	-- Kitchen table with chairs out in the room, behind the players.
+	local tz, tyTop = -330, fy + 150
+	span(b, "TableTop", -150, 150, tyTop - 8, tyTop, tz - 90, tz + 90, K.Wood, Enum.Material.Wood)
+	for _, lx in { -135, 135 } do
+		for _, lz in { tz - 75, tz + 75 } do
+			span(b, "TableLeg", lx - 6, lx + 6, fy, tyTop - 8, lz - 6, lz + 6, K.Wood, Enum.Material.Wood)
+		end
+	end
+	for _, cx in { -80, 80 } do
+		for _, dir in { -1, 1 } do
+			local cz = tz + dir * 125
+			span(b, "ChairSeat", cx - 40, cx + 40, fy + 90, fy + 98, cz - 35, cz + 35, K.Wood, Enum.Material.Wood)
+			span(b, "ChairBack", cx - 40, cx + 40, fy + 98, fy + 200, cz + dir * 30, cz + dir * 36, K.Wood, Enum.Material.Wood)
+			for _, lx in { cx - 34, cx + 34 } do
+				for _, lz in { cz - 29, cz + 29 } do
+					span(b, "ChairLeg", lx - 4, lx + 4, fy, fy + 90, lz - 4, lz + 4, K.Wood, Enum.Material.Wood)
+				end
+			end
+		end
+	end
+	-- Plates waiting on the table, for flavour.
+	for i = 0, 2 do
+		cyl(b, "TablePlate", 2, 60, -80 + i * 80, tyTop + 1, tz, Color3.new(1, 1, 1), nil, noCollide())
+	end
+end
+
+----------------------------------------------------------------------------------------------------
+-- The dishwasher body, tub and door
+----------------------------------------------------------------------------------------------------
+
+local function buildTub(b: Builder, theme)
+	local steel = theme.Tub
+	local shadowless = { CastShadow = false }
+	local zMid = (TUB_Z_MIN + TUB_Z_MAX) / 2
+
+	-- Tub floor and walls. They don't cast shadows, so the room's daylight still reaches inside.
+	span(b, "TubFloor", -TUB_HALF_X - 2, TUB_HALF_X + 2, -2, 0, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal)
+	for _, side in { -1, 1 } do
+		span(b, "TubWall", side * TUB_HALF_X, side * (TUB_HALF_X + 2), 0, TUB_HEIGHT, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal, shadowless)
+		-- Pressed ribs and rack rails on the side walls.
+		for i = 1, 6 do
+			local y = i * (TUB_HEIGHT / 7)
+			span(b, "Rib", side * (TUB_HALF_X - 0.3), side * TUB_HALF_X, y - 0.4, y + 0.4, TUB_Z_MIN + 4, TUB_Z_MAX - 4, theme.Metal, Enum.Material.Metal, noCollide())
+		end
+		for _, y in { BOTTOM_RACK_Y - 1, TOP_RACK_Y - 1 } do
+			span(b, "RackRail", side * (TUB_HALF_X - 1.6), side * TUB_HALF_X, y - 0.8, y + 0.8, TUB_Z_MIN + 2, TUB_Z_MAX - 2, theme.Rack, Enum.Material.Metal, noCollide())
+		end
+	end
+	span(b, "TubBack", -TUB_HALF_X - 2, TUB_HALF_X + 2, 0, TUB_HEIGHT, TUB_Z_MAX, TUB_Z_MAX + 2, steel, Enum.Material.Metal, shadowless)
+	span(b, "TubCeiling", -TUB_HALF_X - 2, TUB_HALF_X + 2, TUB_HEIGHT, TUB_HEIGHT + 2, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal, shadowless)
+
+	-- Filter cup in the floor at the back, heating element loop.
+	cyl(b, "Filter", 0.4, 14, 0, 0.2, 30, Color3.fromRGB(120, 125, 130), Enum.Material.DiamondPlate, noCollide())
+	for _, x in { -40, 40 } do
+		span(b, "Heater", x - 0.6, x + 0.6, 0.4, 1.4, -10, 50, Color3.fromRGB(90, 90, 95), Enum.Material.Metal, noCollide())
+	end
+	span(b, "Heater", -40, 40, 0.4, 1.4, 49.4, 50.6, Color3.fromRGB(90, 90, 95), Enum.Material.Metal, noCollide())
+
+	-- Front frame around the opening, the machine's side panels, and the toe kick under the door.
+	span(b, "FrameTop", -TUB_HALF_X - 6, TUB_HALF_X + 6, TUB_HEIGHT, COUNTER_TOP_Y - 6, TUB_Z_MIN - 3, TUB_Z_MIN + 2, K.Frame, Enum.Material.Metal)
+	for _, side in { -1, 1 } do
+		span(b, "FrameSide", side * TUB_HALF_X, side * (TUB_HALF_X + 6), KITCHEN_FLOOR_Y, TUB_HEIGHT, TUB_Z_MIN - 3, TUB_Z_MIN + 2, K.Frame, Enum.Material.Metal)
+		span(b, "Gasket", side * TUB_HALF_X, side * (TUB_HALF_X + 1), 0, TUB_HEIGHT, TUB_Z_MIN - 0.5, TUB_Z_MIN + 1, Color3.fromRGB(50, 50, 55), nil, noCollide())
+	end
+	span(b, "UnderTub", -TUB_HALF_X - 6, TUB_HALF_X + 6, KITCHEN_FLOOR_Y + 12, -2, TUB_Z_MIN, TUB_Z_MAX, Color3.fromRGB(90, 90, 95), Enum.Material.Metal)
+	span(b, "ToeKick", -TUB_HALF_X, TUB_HALF_X, KITCHEN_FLOOR_Y, KITCHEN_FLOOR_Y + 12, TUB_Z_MIN + 6, TUB_Z_MAX, K.Kick)
+
+	-- Interior lights so the load is easy to see (PointLight range tops out at 60 studs).
+	for _, spot in { { -30, 90, -20 }, { 30, 90, -20 }, { -30, 90, 35 }, { 30, 90, 35 }, { -30, 44, 0 }, { 30, 44, 0 }, { 0, 44, 40 } } do
+		local lightPart = box(b, "InteriorLight", Vector3.new(1, 1, 1), spot[1], spot[2], spot[3], theme.Light, nil, { Transparency = 1, CanCollide = false, CastShadow = false })
+		local light = Instance.new("PointLight")
+		light.Color = theme.Light
+		light.Brightness = 1.1
+		light.Range = 60
+		light.Shadows = false
+		light.Parent = lightPart
+	end
+
+	-- Drifting bubbles for mood.
+	local bubbleAnchor = box(b, "BubbleAnchor", Vector3.new(80, 1, 80), 0, 30, zMid, theme.Accent, nil, { Transparency = 1, CanCollide = false })
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Texture = "rbxasset://textures/particles/forcefield_glow_main.dds"
+	emitter.Color = ColorSequence.new(Color3.new(1, 1, 1))
+	emitter.LightEmission = 0.3
+	emitter.Lifetime = NumberRange.new(5, 8)
+	emitter.Speed = NumberRange.new(1, 3)
+	emitter.Rate = 3
+	emitter.Size = NumberSequence.new(0.8, 0.3)
+	emitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.2, 0.6),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	emitter.SpreadAngle = Vector2.new(30, 30)
+	emitter.EmissionDirection = Enum.NormalId.Top
+	emitter.Parent = bubbleAnchor
+end
+
+local function buildDoor(b: Builder, theme)
+	local zMid = (DOOR_Z_NEAR + DOOR_Z_FAR) / 2
+
+	-- Inner panel (the floor you stand on) and the outer skin below it.
+	span(b, "DoorInner", -TUB_HALF_X, TUB_HALF_X, -1, 0, DOOR_Z_FAR, DOOR_Z_NEAR, theme.Tub, Enum.Material.Metal)
+	span(b, "DoorOuter", -TUB_HALF_X - 4, TUB_HALF_X + 4, -DOOR_THICK, -1, DOOR_Z_FAR - 6, DOOR_Z_NEAR, K.Frame, Enum.Material.Metal)
+	-- Raised edges down the sides of the inner panel.
+	for _, side in { -1, 1 } do
+		span(b, "DoorEdge", side * (TUB_HALF_X - 2), side * TUB_HALF_X, 0, 2, DOOR_Z_FAR, DOOR_Z_NEAR, theme.Metal, Enum.Material.Metal)
+		-- Invisible safety wall so nobody walks off the side.
+		span(b, "SafetyWall", side * TUB_HALF_X, side * (TUB_HALF_X + 1), 0, 14, DOOR_Z_FAR - 6, DOOR_Z_NEAR, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
+		-- Hinge.
+		cyl(b, "Hinge", 6, 5, side * (TUB_HALF_X - 6), -2, DOOR_Z_NEAR + 1, K.Steel, Enum.Material.Metal, noCollide())
+	end
+	span(b, "SafetyWall", -TUB_HALF_X, TUB_HALF_X, 0, 14, DOOR_Z_FAR - 7, DOOR_Z_FAR - 6, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
+
+	-- Control strip along the far edge (the top of the door when it's closed), with buttons.
+	span(b, "ControlStrip", -TUB_HALF_X - 4, TUB_HALF_X + 4, -DOOR_THICK, 3, DOOR_Z_FAR - 6, DOOR_Z_FAR, Color3.fromRGB(40, 44, 52), Enum.Material.SmoothPlastic)
+	for i = -3, 3 do
+		local lit = i == 0
+		box(b, "Button", Vector3.new(4, 0.6, 3), i * 9, 3.3, DOOR_Z_FAR - 3, if lit then theme.Accent else Color3.fromRGB(90, 95, 105), if lit then Enum.Material.Neon else nil, noCollide())
+	end
+
+	-- Detergent dispenser and rinse-aid cap on the inner panel.
+	span(b, "Dispenser", 10, 26, 0, 1.2, zMid - 6, zMid + 6, Color3.fromRGB(215, 220, 228), Enum.Material.SmoothPlastic)
+	span(b, "DispenserLid", 10.5, 25.5, 1.2, 1.5, zMid - 5.5, zMid + 5.5, theme.Accent, nil, noCollide())
+	cyl(b, "RinseAid", 1.4, 6, 32, 0.7, zMid, Color3.fromRGB(215, 220, 228), nil, noCollide())
+end
+
+----------------------------------------------------------------------------------------------------
+-- Racks
+----------------------------------------------------------------------------------------------------
+
+-- A walkable rack floor: invisible collidable plate + a visible wire grid, frame and wheels.
+local function buildRack(b: Builder, theme, y: number, zRange: { number }, wheels: boolean)
+	local z0, z1 = zRange[1], zRange[2]
+	local width = RACK_HALF_X * 2
+	local depth = z1 - z0
+	span(b, "RackFloor", -RACK_HALF_X, RACK_HALF_X, y - 1, y, z0, z1, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
+
+	local wire = { CanCollide = false }
+	for x = -RACK_HALF_X, RACK_HALF_X, 4 do
+		box(b, "Wire", Vector3.new(0.3, 0.3, depth), x, y - 0.15, (z0 + z1) / 2, theme.Rack, Enum.Material.SmoothPlastic, wire)
+	end
+	for z = z0, z1, 4 do
+		box(b, "Wire", Vector3.new(width, 0.3, 0.3), 0, y - 0.45, z, theme.Rack, Enum.Material.SmoothPlastic, wire)
+	end
+	-- Chunky frame around the edge.
+	for _, side in { -1, 1 } do
+		box(b, "RackFrame", Vector3.new(0.9, 2.4, depth), side * RACK_HALF_X, y + 0.6, (z0 + z1) / 2, theme.Rack, nil, wire)
+		if wheels then
+			for _, z in { z0 + 8, z1 - 8 } do
+				cyl(b, "Wheel", 3, 1, side * (RACK_HALF_X + 0.8), y - 1.2, z, Color3.fromRGB(60, 60, 64), nil, noCollide()).CFrame = footprint(b.origin, side * (RACK_HALF_X + 0.8), y - 1.2, z)
+			end
+		end
+	end
+	for _, z in { z0, z1 } do
+		box(b, "RackFrame", Vector3.new(width, 2.4, 0.9), 0, y + 0.6, z, theme.Rack, nil, wire)
+	end
+end
+
+-- Tines: the rows of little prongs plates stand in. Pure decoration.
+local function buildTines(b: Builder, theme)
+	local props = { CanCollide = false, CastShadow = false }
+	for _, x in PLATE_ROW_X do
+		for _, dx in { -9, 9 } do
+			for _, z in PLATE_Z do
+				box(b, "Tine", Vector3.new(0.35, 5, 0.35), x + dx, BOTTOM_RACK_Y + 2.5, z + 3.5, theme.Rack, nil, props)
+			end
+		end
+	end
+end
+
+-- Ramp from the tub floor up onto the bottom rack.
+local function buildRamp(b: Builder, theme)
+	local z0, z1 = BOTTOM_RACK_Z[1] - 5, BOTTOM_RACK_Z[1]
+	local wedge = Instance.new("WedgePart")
+	wedge.Name = "Ramp"
+	wedge.Size = Vector3.new(RACK_HALF_X * 2 - 20, BOTTOM_RACK_Y, z1 - z0)
+	-- A wedge slopes down toward its LookVector, so point that at the door: low end by the drain,
+	-- high end at the rack.
+	wedge.CFrame = footprint(b.origin, 0, BOTTOM_RACK_Y / 2, (z0 + z1) / 2, -b.origin.LookVector)
+	wedge.Color = theme.Rack
+	wedge.Material = Enum.Material.DiamondPlate
+	wedge.Anchored = true
+	wedge.CanTouch = false
+	wedge.CanQuery = false
+	wedge.Parent = b.model
+	b.count += 1
+end
+
+local function buildCutleryBasket(b: Builder, theme)
+	local c, h = BASKET_CENTER, BASKET_HALF
+	local y0 = BOTTOM_RACK_Y
+	span(b, "BasketBase", c.X - h.X, c.X + h.X, y0, y0 + 0.6, c.Z - h.Z, c.Z + h.Z, theme.Rack)
+	local props = { CanCollide = true, Transparency = 0.2 }
+	span(b, "BasketWall", c.X - h.X - 0.5, c.X - h.X, y0, y0 + h.Y, c.Z - h.Z, c.Z + h.Z, theme.Rack, Enum.Material.DiamondPlate, props)
+	span(b, "BasketWall", c.X + h.X, c.X + h.X + 0.5, y0, y0 + h.Y, c.Z - h.Z, c.Z + h.Z, theme.Rack, Enum.Material.DiamondPlate, props)
+	span(b, "BasketWall", c.X - h.X, c.X + h.X, y0, y0 + h.Y, c.Z - h.Z - 0.5, c.Z - h.Z, theme.Rack, Enum.Material.DiamondPlate, props)
+	span(b, "BasketWall", c.X - h.X, c.X + h.X, y0, y0 + h.Y, c.Z + h.Z, c.Z + h.Z + 0.5, theme.Rack, Enum.Material.DiamondPlate, props)
+	-- Handle arching over the middle.
+	span(b, "BasketHandle", c.X - 0.4, c.X + 0.4, y0 + h.Y, y0 + h.Y + 5, c.Z - h.Z, c.Z - h.Z + 0.8, theme.Rack, nil, noCollide())
+	span(b, "BasketHandle", c.X - 0.4, c.X + 0.4, y0 + h.Y, y0 + h.Y + 5, c.Z + h.Z - 0.8, c.Z + h.Z, theme.Rack, nil, noCollide())
+	span(b, "BasketHandle", c.X - 0.4, c.X + 0.4, y0 + h.Y + 4.2, y0 + h.Y + 5, c.Z - h.Z, c.Z + h.Z, theme.Rack, nil, noCollide())
+end
+
+local function buildSprayArms(b: Builder, theme)
+	for _, y in { 2, TOP_RACK_Y - 3 } do
+		cyl(b, "ArmHub", 1.5, 5, 0, y, 10, theme.Metal, Enum.Material.Metal, noCollide())
+		local arm = box(b, "SprayArm", Vector3.new(RACK_HALF_X * 1.6, 0.9, 3), 0, y, 10, theme.Metal, Enum.Material.Metal, noCollide())
+		arm:SetAttribute("SpinSpeed", if y > 10 then 1.1 else 0.8)
+		CollectionService:AddTag(arm, "SpinY")
+	end
+end
+
+-- Bubble lifts and the drain chute. The client teleports whoever steps on a pad (Effects).
+local function buildLifts(b: Builder, theme)
+	local function pad(name: string, from: Vector3, to: Vector3, label: string, columnHeight: number)
+		local p = cyl(b, name, 0.4, 8, from.X, from.Y + 0.2, from.Z, theme.Accent, Enum.Material.Neon, noCollide())
+		p:SetAttribute("LiftTo", worldPoint(b.origin, to.X, to.Y + 3, to.Z))
+		CollectionService:AddTag(p, "LiftPad")
+		local ring = cyl(b, name .. "Ring", 0.2, 10, from.X, from.Y + 0.1, from.Z, Color3.new(1, 1, 1), Enum.Material.Neon, noCollide())
+		ring.Transparency = 0.4
+		if columnHeight > 0 then
+			local column = cyl(b, name .. "Column", columnHeight, 7, from.X, from.Y + columnHeight / 2, from.Z, theme.Accent, Enum.Material.ForceField, noCollide())
+			column.Transparency = 0.6
+		end
+		local emitter = Instance.new("ParticleEmitter")
+		emitter.Texture = "rbxasset://textures/particles/forcefield_glow_main.dds"
+		emitter.Color = ColorSequence.new(Color3.new(1, 1, 1))
+		emitter.Lifetime = NumberRange.new(1.2, 2)
+		emitter.Speed = NumberRange.new(8, 14)
+		emitter.Rate = 10
+		emitter.Size = NumberSequence.new(0.9, 0.3)
+		emitter.SpreadAngle = Vector2.new(10, 10)
+		emitter.EmissionDirection = if to.Y > from.Y then Enum.NormalId.Right else Enum.NormalId.Left
+		emitter.Parent = p
+		sign(p, label, 12, 2.6, 7)
+	end
+	for _, lift in LIFTS do
+		pad("BubbleLift", lift.from, lift.to, "⬆️ Bubble Lift", TOP_RACK_Y)
+	end
+	pad("DrainChute", CHUTE.from, CHUTE.to, "⬇️ Chute to the drain", 0)
+end
+
+local function buildDrain(b: Builder, theme): Vector3
+	local radius = Config.Round.DrainRadius
+	cyl(b, "DrainGrate", 0.5, radius * 2, DRAIN_POS.X, 0.25, DRAIN_POS.Z, Color3.fromRGB(70, 75, 80), Enum.Material.DiamondPlate)
+	local ring = cyl(b, "DrainSwirl", 0.2, radius * 1.7, DRAIN_POS.X, 0.6, DRAIN_POS.Z, theme.Accent, Enum.Material.ForceField, noCollide())
+	ring:SetAttribute("SpinSpeed", 2.4)
+	CollectionService:AddTag(ring, "SpinY")
+	local post = box(b, "DrainSign", Vector3.new(0.6, 0.6, 0.6), DRAIN_POS.X, 1, DRAIN_POS.Z, Color3.new(1, 1, 1), nil, { Transparency = 1, CanCollide = false })
+	sign(post, "🌀 DRAIN\nstand here to sell", 16, 5, 8, Color3.fromRGB(150, 230, 255))
+	return worldPoint(b.origin, DRAIN_POS.X, 0, DRAIN_POS.Z)
+end
+
+----------------------------------------------------------------------------------------------------
+-- Tool shop on the door (walk up to a tool and press the prompt to buy it) and the upgrade book.
+----------------------------------------------------------------------------------------------------
+
+-- Little display models for each tool, built around `at` (the pedestal top centre).
+local function toolModel(b: Builder, index: number, x: number, y: number, z: number, color: Color3)
+	local props = noCollide()
+	if index == 2 then -- Sponge
+		box(b, "Sponge", Vector3.new(3.4, 1.6, 2.2), x, y + 0.8, z, Color3.fromRGB(255, 221, 87), Enum.Material.Sand, props)
+		box(b, "SpongeScrub", Vector3.new(3.4, 0.6, 2.2), x, y + 1.9, z, Color3.fromRGB(80, 170, 80), Enum.Material.Fabric, props)
+	elseif index == 3 then -- Brush
+		box(b, "BrushHandle", Vector3.new(0.6, 3.6, 0.6), x, y + 2.4, z, Color3.fromRGB(150, 105, 70), Enum.Material.Wood, props)
+		box(b, "BrushHead", Vector3.new(3, 0.8, 1.6), x, y + 0.9, z, color, nil, props)
+		box(b, "Bristles", Vector3.new(2.8, 0.5, 1.4), x, y + 0.25, z, Color3.new(1, 1, 1), Enum.Material.Fabric, props)
+	elseif index == 4 then -- Nozzle
+		box(b, "NozzleGrip", Vector3.new(0.8, 2, 1), x, y + 1, z, Color3.fromRGB(50, 50, 55), nil, props)
+		box(b, "NozzleBody", Vector3.new(0.9, 0.9, 3.4), x, y + 2.3, z - 0.8, color, nil, props)
+		cyl(b, "NozzleTip", 0.8, 0.6, x, y + 2.3, z - 2.8, Color3.fromRGB(200, 205, 212), Enum.Material.Metal, props).CFrame = footprint(b.origin, x, y + 2.3, z - 2.8) * CFrame.Angles(0, math.rad(90), 0)
+	elseif index == 5 then -- Pressure washer
+		box(b, "WasherBody", Vector3.new(2.6, 2.4, 3), x, y + 1.2, z, color, nil, props)
+		box(b, "WasherWand", Vector3.new(0.4, 0.4, 4), x + 1.6, y + 2.6, z - 1, Color3.fromRGB(60, 60, 65), Enum.Material.Metal, props)
+		cyl(b, "WasherWheel", 0.5, 1.4, x - 1.4, y + 0.7, z + 1, Color3.fromRGB(40, 40, 44), nil, props).CFrame = footprint(b.origin, x - 1.4, y + 0.7, z + 1)
+	else -- Foam cannon
+		cyl(b, "CannonTank", 2.4, 2.4, x, y + 1.2, z, color, nil, props)
+		box(b, "CannonBarrel", Vector3.new(1, 1, 4), x, y + 2.6, z - 1.2, Color3.fromRGB(230, 230, 235), nil, props)
+		local foam = box(b, "CannonFoam", Vector3.new(1.6, 1.6, 1.6), x, y + 2.6, z - 3.6, Color3.new(1, 1, 1), Enum.Material.SmoothPlastic, props)
+		foam.Shape = Enum.PartType.Ball
+	end
+end
+
+local function buildShop(b: Builder, theme, levelIndex: number): Vector3
+	local z0, z1 = SHOP_Z[1], SHOP_Z[2]
+	local x0, x1 = SHOP_X - 7, SHOP_X + 7
+	-- Wooden counter with a front lip and a striped awning sign.
+	span(b, "ShopCounter", x0, x1, 0, SHOP_HEIGHT, z0, z1, Color3.fromRGB(165, 112, 70), Enum.Material.Wood)
+	span(b, "ShopCounterTop", x0 - 0.5, x1 + 0.5, SHOP_HEIGHT, SHOP_HEIGHT + 0.5, z0 - 0.5, z1 + 0.5, Color3.fromRGB(120, 78, 48), Enum.Material.Wood)
+	span(b, "ShopBackboard", x0 - 1, x0, SHOP_HEIGHT, SHOP_HEIGHT + 14, z0, z1, Color3.fromRGB(150, 100, 62), Enum.Material.WoodPlanks)
+	for i = 0, 7 do
+		local zz = z0 + (z1 - z0) / 8 * (i + 0.5)
+		span(b, "Awning", x0 - 1, x1 + 1, SHOP_HEIGHT + 14, SHOP_HEIGHT + 15.5, zz - (z1 - z0) / 16, zz + (z1 - z0) / 16, if i % 2 == 0 then theme.Accent else Color3.new(1, 1, 1), nil, noCollide())
+	end
+	local header = box(b, "ShopHeader", Vector3.new(1, 1, 1), SHOP_X, SHOP_HEIGHT + 17, (z0 + z1) / 2, Color3.new(1, 1, 1), nil, { Transparency = 1, CanCollide = false })
+	sign(header, "🧽 TOOL SHOP", 22, 4, 2, Color3.fromRGB(255, 230, 120))
+
+	local count = #Config.Tools - 1
+	for i = 2, #Config.Tools do
+		local tool = Config.Tools[i]
+		local z = z1 - 6 - (i - 2) * ((z1 - z0 - 12) / math.max(1, count - 1))
+		local y = SHOP_HEIGHT + 0.5
+		local pedestal = cyl(b, "Pedestal", 0.8, 5, SHOP_X, y + 0.4, z, Color3.new(1, 1, 1), nil, noCollide())
+		pedestal.Name = "ToolDisplay_" .. i
+		toolModel(b, i, SHOP_X, y + 0.8, z, tool.Color)
+
+		local cost = Config.ToolCost(i, levelIndex) or 0
+		local prompt = Instance.new("ProximityPrompt")
+		prompt.ActionText = "Buy"
+		prompt.ObjectText = string.format("%s  💰%s", tool.Name, Format.Short(cost))
+		prompt.HoldDuration = 0
+		prompt.RequiresLineOfSight = false
+		prompt.MaxActivationDistance = 11
+		prompt.Style = Enum.ProximityPromptStyle.Default
+		prompt:SetAttribute("BuyTool", i)
+		prompt.Parent = pedestal
+		local label = sign(pedestal, string.format("%s %s\n💰 %s", tool.Icon, tool.Name, Format.Short(cost)), 9, 3, 6.5)
+		label.Name = "PriceLabel"
+		label:SetAttribute("ToolIndex", i)
+		label:SetAttribute("Price", cost)
+	end
+
+	-- Upgrade book on a lectern across the door.
+	local lectern = span(b, "Lectern", BOOK_POS.X - 2, BOOK_POS.X + 2, 0, 5, BOOK_POS.Z - 2, BOOK_POS.Z + 2, Color3.fromRGB(150, 100, 62), Enum.Material.Wood)
+	box(b, "BookCover", Vector3.new(4.6, 0.5, 3.4), BOOK_POS.X, 5.4, BOOK_POS.Z, Color3.fromRGB(40, 90, 180), nil, noCollide())
+	box(b, "BookPages", Vector3.new(4.2, 0.4, 3), BOOK_POS.X, 5.8, BOOK_POS.Z, Color3.fromRGB(250, 244, 225), nil, noCollide())
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Open"
+	prompt.ObjectText = "Upgrade Book"
+	prompt.HoldDuration = 0
+	prompt.RequiresLineOfSight = false
+	prompt.MaxActivationDistance = 12
+	prompt:SetAttribute("OpenWindow", "Upgrades")
+	prompt.Parent = lectern
+	sign(lectern, "📖 UPGRADES", 12, 2.6, 7, Color3.fromRGB(255, 230, 120))
+
+	return worldPoint(b.origin, BOOK_POS.X, 0, BOOK_POS.Z)
+end
+
+----------------------------------------------------------------------------------------------------
+-- Dish layout
 ----------------------------------------------------------------------------------------------------
 
 type PlacedDish = {
@@ -671,133 +658,95 @@ type PlacedDish = {
 	Center: Vector3,
 }
 
--- Builds a flat list of footprint specs { x, y, z, look } for a kind, capped to however many fit.
-local function plateSlots(): { { x: number, y: number, z: number, look: string } }
-	local slots = {}
-	for li, x in PLATE_LINE_X do
-		local look = if li % 2 == 0 then "forward" else "backward"
-		for _, z in PLATE_SLOT_Z do
-			table.insert(slots, { x = x, y = BOTTOM_RACK_Y, z = z, look = look })
-		end
-	end
-	return slots
-end
+type Slot = { x: number, y: number, z: number }
 
-local function gridSlots(xs: { number }, zs: { number }, y: number): { { x: number, y: number, z: number } }
+local function grid(xs: { number }, zs: { number }, y: number): { Slot }
 	local slots = {}
-	for _, x in xs do
-		for _, z in zs do
+	for _, z in zs do
+		for _, x in xs do
 			table.insert(slots, { x = x, y = y, z = z })
 		end
 	end
 	return slots
 end
 
-local function panPotSlots(): { { x: number, y: number, z: number } }
+-- Front-to-back, filling every row a little before moving back, so small loads still look spread out.
+local function plateSlots(): { Slot }
 	local slots = {}
-	for _, x in PANPOT_X do
-		table.insert(slots, { x = x, y = BOTTOM_RACK_Y, z = PANPOT_Z })
-	end
-	return slots
-end
-
-local function basketSlots(): { { x: number, y: number, z: number } }
-	local slots = {}
-	for _, dx in BASKET_DX do
-		for _, dz in BASKET_DZ do
-			table.insert(slots, { x = BASKET_POS.X + dx, y = BOTTOM_RACK_Y, z = BASKET_POS.Z + dz })
+	for _, z in PLATE_Z do
+		for _, x in PLATE_ROW_X do
+			table.insert(slots, { x = x, y = BOTTOM_RACK_Y, z = z })
 		end
 	end
 	return slots
 end
 
-local KIND_SLOTS = {
+local function listSlots(list: { { x: number, z: number } }): { Slot }
+	local slots = {}
+	for _, s in list do
+		table.insert(slots, { x = s.x, y = BOTTOM_RACK_Y, z = s.z })
+	end
+	return slots
+end
+
+-- Cutlery shares one basket: each kind takes every third slot so the basket looks mixed.
+local function basketSlots(offset: number): { Slot }
+	local all = grid(BASKET_X, BASKET_Z, BOTTOM_RACK_Y + 0.6)
+	local slots = {}
+	for i = offset, #all, 3 do
+		table.insert(slots, all[i])
+	end
+	return slots
+end
+
+local KIND_SLOTS: { [string]: () -> { Slot } } = {
 	Plate = plateSlots,
 	Bowl = function()
-		return gridSlots(BOWL_X, BOWL_Z, TOP_RACK_Y)
+		return grid(BOWL_X, BOWL_Z, TOP_RACK_Y)
 	end,
 	Cup = function()
-		return gridSlots(CUP_X, CUP_Z, TOP_RACK_Y)
+		return grid(CUP_X, CUP_Z, TOP_RACK_Y)
 	end,
 	Glass = function()
-		return gridSlots(GLASS_X, GLASS_Z, TOP_RACK_Y)
+		return grid(GLASS_X, GLASS_Z, TOP_RACK_Y)
 	end,
-	Pan = panPotSlots,
-	Pot = panPotSlots,
-	Fork = basketSlots,
-	Knife = basketSlots,
-	Spoon = basketSlots,
+	Pan = function()
+		return listSlots(PAN_SLOTS)
+	end,
+	Pot = function()
+		return listSlots(POT_SLOTS)
+	end,
+	Fork = function()
+		return basketSlots(1)
+	end,
+	Knife = function()
+		return basketSlots(2)
+	end,
+	Spoon = function()
+		return basketSlots(3)
+	end,
 }
 
--- Builds every dish of one kind, applies grime, and appends to `dishes`/yield bookkeeping.
-local function buildKind(
-	model: Model,
-	origin: CFrame,
-	theme,
-	kind: string,
-	wantCount: number,
-	spotsPerDish: number,
-	levelIndex: number,
-	rng: Random,
-	grimeFolder: Folder,
-	dishes: { [number]: PlacedDish },
-	nextId: () -> number,
-	yieldTick: (number) -> ()
-): number
-	if wantCount <= 0 then
-		return 0
+-- The CFrame DishFactory builds a dish at: contact point + orientation for that kind.
+local function dishFrame(origin: CFrame, kind: string, slot: Slot, rng: Random): CFrame
+	local toDoor = -origin.LookVector
+	if kind == "Plate" then
+		-- Plates face the door, with a tiny random lean so the rows don't look copy-pasted.
+		return footprint(origin, slot.x, slot.y, slot.z, toDoor) * CFrame.Angles(math.rad(rng:NextNumber(-4, 4)), 0, 0)
+	elseif kind == "Bowl" then
+		-- Lean the opening toward the door so the inside is visible and reachable.
+		local r = DishFactory.Size("Bowl").Diameter / 2
+		local lift = r * (1 - math.cos(BOWL_TILT)) + 0.2
+		return footprint(origin, slot.x, slot.y + lift, slot.z) * CFrame.Angles(BOWL_TILT, 0, 0)
+	elseif kind == "Pan" then
+		local r = DishFactory.Size("Pan").Diameter / 2
+		local lift = r * math.sin(PAN_TILT) + 0.2
+		-- Spin about the pan's own axis so the handle points up and back, away from the pots.
+		return footprint(origin, slot.x, slot.y + lift, slot.z) * CFrame.Angles(PAN_TILT, 0, 0) * CFrame.Angles(0, math.pi / 2, 0)
+	elseif kind == "Fork" or kind == "Knife" or kind == "Spoon" then
+		return footprint(origin, slot.x, slot.y, slot.z, toDoor) * CFrame.Angles(0, math.rad(rng:NextNumber(-20, 20)), math.rad(rng:NextNumber(-6, 6)))
 	end
-	local slotsFn = KIND_SLOTS[kind]
-	if not slotsFn then
-		warn("[ArenaBuilder] No layout for dish kind " .. tostring(kind))
-		return 0
-	end
-	local slots = slotsFn()
-	-- Shared slot pools (Pan/Pot share panPotSlots, Fork/Knife/Spoon share basketSlots): offset by
-	-- kind so different kinds sharing a pool don't stack on the same spots.
-	local shift = 0
-	if kind == "Pot" then
-		shift = 2 -- Pan takes the first slots, Pot continues after (both counts are small)
-	elseif kind == "Knife" then
-		shift = 6
-	elseif kind == "Spoon" then
-		shift = 12
-	end
-
-	local placed = 0
-	local totalGrime = 0
-	for i = 1, wantCount do
-		local slot = slots[i + shift]
-		if not slot then
-			warn(string.format("[ArenaBuilder] Only %d/%d slots available for %s; skipping the rest", math.max(0, #slots - shift), wantCount, kind))
-			break
-		end
-		local lookDir = nil
-		if slot.look == "backward" then
-			lookDir = -origin.LookVector
-		elseif slot.look == "forward" then
-			lookDir = origin.LookVector
-		end
-		local cf = footprint(origin, slot.x, slot.y, slot.z, lookDir)
-		local dish = DishFactory.BuildDish(kind, cf, theme, rng)
-		dish.Parent = model -- must be live under workspace before ApplyGrime raycasts against it
-
-		local id = nextId()
-		local grime = DishFactory.ApplyGrime(dish, id, spotsPerDish, levelIndex, rng, 0, grimeFolder)
-		-- Golden chance is applied per-arena by the caller via `spotsPerDish`'s sibling call below;
-		-- see Build(), which passes the real GoldenChance through a closure-captured value instead.
-		dishes[id] = {
-			Id = id,
-			Kind = kind,
-			Model = dish,
-			Grime = grime,
-			Center = dish:GetPivot().Position,
-		}
-		placed += 1
-		totalGrime += #grime
-		yieldTick(1 + #dish:GetChildren() + #grime)
-	end
-	return totalGrime
+	return footprint(origin, slot.x, slot.y, slot.z, toDoor) * CFrame.Angles(0, rng:NextNumber() * math.pi * 2, 0)
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -834,83 +783,70 @@ function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeSc
 	model.Name = name
 	model.Parent = arenasFolder -- live in workspace now, so dish raycasts work as we build
 
+	local dishesFolder = Instance.new("Folder")
+	dishesFolder.Name = "Dishes"
+	dishesFolder.Parent = model
+
 	local grimeFolder = Instance.new("Folder")
 	grimeFolder.Name = "Grime"
 	grimeFolder.Parent = model
 
+	local b: Builder = { model = model, origin = origin, count = 0 }
 	local pending = 0
-	local function yieldTick(n: number)
-		pending += n
-		if pending >= YIELD_EVERY then
-			pending = 0
+	local function yieldTick()
+		if b.count - pending >= YIELD_EVERY then
+			pending = b.count
 			task.wait()
 		end
 	end
 
-	yieldTick(buildTub(model, origin, theme))
-	yieldTick(buildDoorAndBackdrop(model, origin, theme))
-	local drainCount, drainPos, stationPos = buildDrainAndStation(model, origin, theme)
-	yieldTick(drainCount)
-	yieldTick(buildRackFloor(model, origin, theme, BOTTOM_RACK_Y))
-	yieldTick(buildRackFloor(model, origin, theme, TOP_RACK_Y))
-	yieldTick(buildRamp(model, origin, theme))
-	yieldTick(buildCutleryBasket(model, origin, theme))
-	yieldTick(buildTrussAndLifts(model, origin, theme))
-	yieldTick(buildSprayArms(model, origin, theme))
+	buildKitchen(b)
+	yieldTick()
+	buildTub(b, theme)
+	buildDoor(b, theme)
+	yieldTick()
+	buildRack(b, theme, BOTTOM_RACK_Y, BOTTOM_RACK_Z, true)
+	yieldTick()
+	buildRack(b, theme, TOP_RACK_Y, TOP_RACK_Z, true)
+	yieldTick()
+	buildTines(b, theme)
+	buildRamp(b, theme)
+	buildCutleryBasket(b, theme)
+	buildSprayArms(b, theme)
+	buildLifts(b, theme)
+	local drainPos = buildDrain(b, theme)
+	local stationPos = buildShop(b, theme, levelIndex)
+	yieldTick()
 
 	local dishes: { [number]: PlacedDish } = {}
-	local dishIdCounter = 0
-	local function nextId(): number
-		dishIdCounter += 1
-		return dishIdCounter
-	end
-
-	-- ApplyGrime takes a single goldenChance; wrap it so buildKind's call site stays simple while
-	-- still using the real per-run chance computed above.
+	local nextId = 0
 	local totalGrime = 0
 	for _, kind in Config.DishKinds do
 		local wantCount = level.Dishes[kind] or 0
-		if wantCount > 0 then
+		local slotsFn = KIND_SLOTS[kind]
+		if wantCount > 0 and slotsFn then
 			local spotsPerDish = math.max(1, math.floor((level.Spots[kind] or 1) * grimeScale + 0.5))
-			local slotsFn = KIND_SLOTS[kind]
-			if slotsFn then
-				local shift = 0
-				if kind == "Pot" then
-					shift = 2
-				elseif kind == "Knife" then
-					shift = 6
-				elseif kind == "Spoon" then
-					shift = 12
-				end
-				local slots = slotsFn()
-				for i = 1, wantCount do
-					local slotSpec = slots[i + shift]
-					if not slotSpec then
-						warn(string.format("[ArenaBuilder] Only %d slots available for %s; filling what fits", math.max(0, #slots - shift), kind))
-						break
-					end
-					local lookDir = nil
-					if slotSpec.look == "backward" then
-						lookDir = -origin.LookVector
-					elseif slotSpec.look == "forward" then
-						lookDir = origin.LookVector
-					end
-					local cf = footprint(origin, slotSpec.x, slotSpec.y, slotSpec.z, lookDir)
-					local dish = DishFactory.BuildDish(kind, cf, theme, rng)
-					dish.Parent = model
+			local slots = slotsFn()
+			if wantCount > #slots then
+				warn(string.format("[ArenaBuilder] Only %d slots for %d %s; filling what fits", #slots, wantCount, kind))
+			end
+			for i = 1, math.min(wantCount, #slots) do
+				local cf = dishFrame(origin, kind, slots[i], rng)
+				local dish = DishFactory.BuildDish(kind, cf, theme, rng)
+				dish.Parent = dishesFolder
 
-					local id = nextId()
-					local grime = DishFactory.ApplyGrime(dish, id, spotsPerDish, levelIndex, rng, goldenChance, grimeFolder)
-					dishes[id] = {
-						Id = id,
-						Kind = kind,
-						Model = dish,
-						Grime = grime,
-						Center = dish:GetPivot().Position,
-					}
-					totalGrime += #grime
-					yieldTick(1 + #dish:GetChildren() + #grime)
-				end
+				nextId += 1
+				local grime = DishFactory.ApplyGrime(dish, nextId, spotsPerDish, levelIndex, rng, goldenChance, grimeFolder)
+				dishes[nextId] = {
+					Id = nextId,
+					Kind = kind,
+					Model = dish,
+					Grime = grime,
+					Center = dish:GetPivot().Position,
+				}
+				totalGrime += #grime
+				b.count += #dish:GetChildren() + #grime * 5
+				yieldTick()
 			end
 		end
 	end
@@ -936,7 +872,7 @@ function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeSc
 		GrimeFolder = grimeFolder,
 		Dishes = dishes,
 		TotalGrime = totalGrime,
-		KillY = origin.Position.Y - 60,
+		KillY = origin.Position.Y - 14, -- the kitchen floor is at -24
 	}
 	return arena
 end

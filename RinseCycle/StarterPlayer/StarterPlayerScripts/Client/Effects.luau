@@ -1,10 +1,10 @@
 -- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
--- numbers, dish/sale celebrations), CollectionService-driven decoration (spinning arms, bubble
--- lifts), the drain guide beam, remaining-grime sparkle markers, prompt -> window routing, and a
--- little lobby ambience.
+-- numbers, dish/sale celebrations), CollectionService-driven decoration (spinning arms, lift
+-- pads), the drain guide beam, remaining-dirt sparkle markers, prompt routing (windows and the
+-- in-arena tool shop), and a little lobby ambience.
 --
--- Everything here is purely cosmetic and purely local: nothing changes server state, nothing is
--- authoritative, and every part/emitter this module creates is either pooled (reused) or handed to
+-- Everything here is local: the only server calls are the tool shop's BuyTool requests (validated
+-- by the server like any other purchase). Nothing here is authoritative, and every part/emitter this module creates is either pooled (reused) or handed to
 -- Debris so a long session never accumulates instances.
 
 local CollectionService = game:GetService("CollectionService")
@@ -36,7 +36,6 @@ local FLOATER_RISE = 3 -- studs
 local FLOATER_TIME = 0.7
 local MAX_LOBBY_BUBBLES = 10
 local DRAIN_FULL_FRACTION = 0.95
-local BANNER_TIME = 2.6
 
 -- Floating "+N" labels currently alive, oldest first (capped, so a spam of Cleaned FX can't leak).
 local floaters: { Instance } = {}
@@ -171,7 +170,7 @@ local function onCleaned(data: Types.FXCleaned)
 	if data.By == LocalPlayer.UserId then
 		billboardNumber(data.Position, "+" .. UIKit.Short(data.Units) .. " 💧", UIKit.Theme.Colors.Primary)
 		if data.Golden and data.Bubbles > 0 then
-			billboardNumber(data.Position, "+" .. UIKit.Short(data.Bubbles) .. " 🫧", UIKit.Theme.Colors.Bubble, FLOATER_RISE + 1)
+			billboardNumber(data.Position, "+" .. UIKit.Short(data.Bubbles) .. " 🧼", UIKit.Theme.Colors.Bubble, FLOATER_RISE + 1)
 		end
 	end
 end
@@ -182,13 +181,13 @@ local function onDishDone(data: Types.FXDishDone)
 	UIKit.PlaySound("Sparkle")
 	billboardNumber(data.Position, "✨ Sparkling!", UIKit.Theme.Colors.Text, FLOATER_RISE + 1)
 	if data.By == LocalPlayer.UserId and data.Bonus > 0 then
-		billboardNumber(data.Position + Vector3.new(0, 1.4, 0), "+" .. UIKit.Short(data.Bonus) .. " 🪙", UIKit.Theme.Colors.Coin, FLOATER_RISE + 1.6)
+		billboardNumber(data.Position + Vector3.new(0, 1.4, 0), "+" .. UIKit.Short(data.Bonus) .. " 💰", UIKit.Theme.Colors.Coin, FLOATER_RISE + 1.6)
 	end
 end
 
 local function onSold(data: Types.FXSold)
 	UIKit.PlaySound("Coins")
-	UIKit.Toast("+" .. UIKit.Commas(data.Coins) .. " 🪙", "Good")
+	UIKit.Toast("+" .. UIKit.Commas(data.Coins) .. " 💰", "Good")
 end
 
 local function onTankFull()
@@ -239,60 +238,60 @@ local function stepSpin(dt: number)
 end
 
 ----------------------------------------------------------------------------------------------------
--- BubbleLift (CollectionService): while the local root is inside the tagged part's box, lift it.
+-- Lift pads (CollectionService tag "LiftPad", attribute LiftTo = world Vector3): step on one and
+-- you're carried to LiftTo in a puff of bubbles. The local client owns its character, so moving it
+-- here replicates. A short cooldown stops you bouncing straight back.
 ----------------------------------------------------------------------------------------------------
 
-local liftParts: { [BasePart]: boolean } = {}
-local lastLobbyBubbleAt = 0
+local LIFT_RADIUS = 4.2
+local LIFT_COOLDOWN = 1.2
+
+local liftPads: { [BasePart]: boolean } = {}
+local lastLiftAt = 0
 
 local function addLiftPart(inst: Instance)
 	if inst:IsA("BasePart") then
-		liftParts[inst] = true
+		liftPads[inst] = true
 	end
 end
 
 local function removeLiftPart(inst: Instance)
-	liftParts[inst :: BasePart] = nil
+	liftPads[inst :: BasePart] = nil
 end
 
--- Point-in-box test in the part's own local space (handles rotated lift columns too).
-local function insideBox(part: BasePart, worldPos: Vector3): boolean
-	local local_ = part.CFrame:PointToObjectSpace(worldPos)
-	local half = part.Size * 0.5
-	return math.abs(local_.X) <= half.X and math.abs(local_.Y) <= half.Y and math.abs(local_.Z) <= half.Z
-end
-
-local function stepLift(dt: number)
+local function stepLift(_dt: number)
+	local now = os.clock()
+	if now - lastLiftAt < LIFT_COOLDOWN then
+		return
+	end
 	local character = LocalPlayer.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not root or not root:IsA("BasePart") then
+	if not character or not root or not root:IsA("BasePart") then
 		return
 	end
 	local rootPart = root :: BasePart
+	local pos = rootPart.Position
 
-	local lifted = false
-	for part in liftParts do
-		if not part.Parent then
-			liftParts[part] = nil
+	for pad in liftPads do
+		if not pad.Parent then
+			liftPads[pad] = nil
 			continue
 		end
-		if insideBox(part, rootPart.Position) then
-			local speed = part:GetAttribute("LiftSpeed")
-			local lift = if type(speed) == "number" then speed else 45
-			local v = rootPart.AssemblyLinearVelocity
-			rootPart.AssemblyLinearVelocity = Vector3.new(v.X, lift, v.Z)
-			lifted = true
-
-			local now = os.clock()
-			if now - lastLobbyBubbleAt > 0.15 then
-				lastLobbyBubbleAt = now
-				popBubbles(rootPart.Position - Vector3.new(0, 2, 0), 1, 1.5)
-			end
+		local target = pad:GetAttribute("LiftTo")
+		if typeof(target) ~= "Vector3" then
+			continue
+		end
+		local d = pos - pad.Position
+		if Vector3.new(d.X, 0, d.Z).Magnitude <= LIFT_RADIUS and d.Y > -1 and d.Y < 7 then
+			lastLiftAt = now
+			popBubbles(pad.Position + Vector3.new(0, 2, 0), 8, 3)
+			UIKit.PlaySound("Splash", 1.3)
+			local facing = rootPart.CFrame.Rotation
+			character:PivotTo(CFrame.new(target) * facing)
+			rootPart.AssemblyLinearVelocity = Vector3.zero
+			popBubbles(target, 8, 3)
 			break
 		end
-	end
-	if not lifted then
-		-- nothing to do; other systems (walking/jumping) own vertical velocity outside a lift.
 	end
 end
 
@@ -480,6 +479,25 @@ end
 -- Prompts: route to UIKit windows using the attributes LobbyBuilder/ArenaBuilder set.
 ----------------------------------------------------------------------------------------------------
 
+local buyingTool = false
+
+local function buyTool(index: number)
+	if buyingTool then
+		return
+	end
+	buyingTool = true
+	local result = ClientState.RunRequest("BuyTool", index)
+	buyingTool = false
+	local tool = Config.Tools[index]
+	if result.Ok then
+		UIKit.PlaySound("Coins")
+		UIKit.Toast(string.format("%s %s bought!", tool and tool.Icon or "", tool and tool.Name or "Tool"), "Good")
+	else
+		UIKit.PlaySound("Error")
+		UIKit.Toast(result.Error or "Can't buy that yet.", "Bad")
+	end
+end
+
 local function onPromptTriggered(prompt: ProximityPrompt, player: Player)
 	if player ~= LocalPlayer then
 		return
@@ -487,11 +505,59 @@ local function onPromptTriggered(prompt: ProximityPrompt, player: Player)
 	local windowName = prompt:GetAttribute("OpenWindow")
 	if type(windowName) == "string" then
 		UIKit.OpenWindow(windowName, prompt:GetAttribute("EggId"))
+		return
+	end
+	local toolIndex = prompt:GetAttribute("BuyTool")
+	if type(toolIndex) == "number" then
+		task.spawn(buyTool, toolIndex)
 	end
 end
 
 ----------------------------------------------------------------------------------------------------
--- Lobby ambience: a handful of floating bubbles drifting near the camera, and a run-start banner.
+-- Tool shop displays in the arena: owned / next (buyable) / locked, refreshed on every RunState.
+----------------------------------------------------------------------------------------------------
+
+local function updateShopDisplays()
+	local run = ClientState.Run :: Types.RunState?
+	local arena = ClientState.GetArena()
+	if not run or not arena then
+		return
+	end
+	for _, inst in arena:GetChildren() do
+		if not inst:IsA("BasePart") or string.sub(inst.Name, 1, 12) ~= "ToolDisplay_" then
+			continue
+		end
+		local index = tonumber(string.sub(inst.Name, 13))
+		local tool = index and Config.Tools[index]
+		if not index or not tool then
+			continue
+		end
+		local sign = inst:FindFirstChild("Sign")
+		local label = sign and sign:FindFirstChildOfClass("TextLabel")
+		local prompt = inst:FindFirstChildOfClass("ProximityPrompt")
+		local price = Config.ToolCost(index, run.Level) or 0
+		local owned = run.ToolIndex >= index
+		local isNext = index == run.ToolIndex + 1
+		if prompt then
+			prompt.Enabled = isNext
+		end
+		if label then
+			if owned then
+				label.Text = string.format("%s %s\n✅ Owned", tool.Icon, tool.Name)
+				label.TextColor3 = UIKit.Theme.Colors.Good
+			elseif isNext then
+				label.Text = string.format("%s %s\n💰 %s", tool.Icon, tool.Name, UIKit.Short(price))
+				label.TextColor3 = if run.Coins >= price then UIKit.Theme.Colors.Coin else UIKit.Theme.Colors.Bad
+			else
+				label.Text = string.format("🔒 %s\n💰 %s", tool.Name, UIKit.Short(price))
+				label.TextColor3 = UIKit.Theme.Colors.TextDim
+			end
+		end
+	end
+end
+
+----------------------------------------------------------------------------------------------------
+-- Lobby ambience: a handful of floating bubbles drifting near the camera.
 ----------------------------------------------------------------------------------------------------
 
 local lobbyBubbles: { BasePart } = {}
@@ -539,60 +605,16 @@ local function stepLobbyAmbience()
 	end)
 end
 
-local bannerGui: ScreenGui? = nil
-local bannerLabel: TextLabel? = nil
-local bannerToken = 0
-
-local function showRunStartBanner()
-	if not bannerGui or not bannerGui.Parent then
-		local gui, root = UIKit.CreateScreen("RunBanner", 15)
-		bannerGui = gui
-		bannerLabel = UIKit.Label({
-			Text = "",
-			AnchorPoint = Vector2.new(0.5, 0),
-			Position = UDim2.new(0.5, 0, 0, 0),
-			Size = UDim2.fromOffset(700, 60),
-			TextSize = 40,
-			TextColor3 = UIKit.Theme.Colors.Text,
-			TextTransparency = 1,
-			Parent = root,
-		})
-		local function reposition()
-			(bannerLabel :: TextLabel).Position = UDim2.new(0.5, 0, 0, UIKit.TopInset() + 24)
-		end
-		reposition()
-		UIKit.LayoutChanged:Connect(reposition)
-	end
-	local label = bannerLabel :: TextLabel
-	bannerToken += 1
-	local token = bannerToken
-	label.Text = "🧽 Clean every dish! 🧽"
-	label.TextTransparency = 1
-	UIKit.Tween(label, { TextTransparency = 0 }, 0.35)
-	task.delay(BANNER_TIME, function()
-		if bannerToken == token then
-			UIKit.Tween(label, { TextTransparency = 1 }, 0.5)
-		end
-	end)
-end
-
 ----------------------------------------------------------------------------------------------------
--- Run lifecycle: fire the banner exactly once per fresh run start.
+-- Run lifecycle (the run-start banner itself lives in the HUD).
 ----------------------------------------------------------------------------------------------------
-
-local wasInRun = false
 
 local function onStateChanged(kind: string)
 	if kind ~= "Run" then
 		return
 	end
-	local run = ClientState.Run :: Types.RunState?
-	local inRun = run ~= nil and run.Phase == "Playing"
-	if inRun and not wasInRun then
-		showRunStartBanner()
-	end
-	wasInRun = inRun
 	updateRemainingMarkers()
+	updateShopDisplays()
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -614,11 +636,11 @@ function Effects.Init()
 	CollectionService:GetInstanceAddedSignal("SpinY"):Connect(addSpinPart)
 	CollectionService:GetInstanceRemovedSignal("SpinY"):Connect(removeSpinPart)
 
-	for _, inst in CollectionService:GetTagged("BubbleLift") do
+	for _, inst in CollectionService:GetTagged("LiftPad") do
 		addLiftPart(inst)
 	end
-	CollectionService:GetInstanceAddedSignal("BubbleLift"):Connect(addLiftPart)
-	CollectionService:GetInstanceRemovedSignal("BubbleLift"):Connect(removeLiftPart)
+	CollectionService:GetInstanceAddedSignal("LiftPad"):Connect(addLiftPart)
+	CollectionService:GetInstanceRemovedSignal("LiftPad"):Connect(removeLiftPart)
 
 	ProximityPromptService.PromptTriggered:Connect(onPromptTriggered)
 

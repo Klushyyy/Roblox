@@ -23,7 +23,7 @@ export type PartyState = {
 	Level: number, -- index into Config.Levels
 	HostUnlocked: number, -- highest level the host may pick
 	EndsAt: number, -- workspace:GetServerTimeNow() when the countdown hits 0
-	Status: "Waiting" | "Launching",
+	Status: "Picking" | "Waiting" | "Launching", -- Picking = the host is on the Create Party screen
 }
 
 -- Upgrade levels bought inside a run (keys = Config.Upgrades[i].Id).

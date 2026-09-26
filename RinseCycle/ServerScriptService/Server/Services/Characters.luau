@@ -163,13 +163,14 @@ function Characters.Teleport(player: Player, cframe: CFrame): boolean
 	return true
 end
 
--- Walk speed that is re-applied after every respawn. nil resets to the default 16.
+-- Walk speed that is re-applied after every respawn. nil resets to the lobby default
+-- (StarterPlayer.CharacterWalkSpeed, which Main sets from Config.World.LobbyWalkSpeed).
 function Characters.SetWalkSpeed(player: Player, speed: number?)
 	walkSpeedOf[player] = speed
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
-		humanoid.WalkSpeed = speed or 16
+		humanoid.WalkSpeed = speed or game:GetService("StarterPlayer").CharacterWalkSpeed
 	end
 end
 

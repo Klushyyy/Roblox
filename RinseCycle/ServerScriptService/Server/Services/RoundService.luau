@@ -425,7 +425,7 @@ local function retireGrime(run: Run, part: BasePart, entry: GrimeEntry, cleaner:
 			local range = R.GoldenBubbles
 			bubbles = rng:NextInteger(range[1], range[2]) * run.Level
 			safe(DataService.AddBubbles, rewardPlayer, bubbles, "GoldenGrime")
-			local text = if fromPet then "✨ Your pet found golden grime! +%d 🫧" else "✨ Golden grime! +%d 🫧"
+			local text = if fromPet then "✨ Your pet found golden dirt! +%d 🧼" else "✨ Golden dirt! +%d 🧼"
 			notify(rewardPlayer, string.format(text, bubbles), "Good")
 		end
 	end
@@ -584,7 +584,7 @@ local function popRemaining(run: Run)
 		table.insert(entries, entry)
 	end
 	for member in run.Players do
-		notify(member, "🫧 The last few spots washed away on their own!", "Info")
+		notify(member, "🧼 The last few spots washed away on their own!", "Info")
 	end
 	for i, entry in entries do
 		if not entry.Dead and run.Phase == "Playing" and not run.Ended then

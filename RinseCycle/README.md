@@ -1,6 +1,6 @@
 # Rinse Cycle 🫧
 
-You're a tiny water-person inside a giant dishwasher. Scrub the grime off the plates, fill your tank,
+You're a tiny water-person inside a giant dishwasher. Scrub the dirt off the plates, fill your tank,
 sell it at the drain, buy bigger hands and better tools, and clean the whole load with your party.
 Every finished run pays **Bubbles**, which buy pets that scrub for you.
 

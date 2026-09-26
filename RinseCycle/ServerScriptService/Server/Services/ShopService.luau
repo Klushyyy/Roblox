@@ -127,7 +127,7 @@ local function buyPerk(player: Player, value: any): Types.RequestResult
 		return fail(perk.Name .. " is maxed out!")
 	end
 	if profile.Bubbles < cost then
-		return fail("You need " .. Format.Short(cost - profile.Bubbles) .. " more 🫧")
+		return fail("You need " .. Format.Short(cost - profile.Bubbles) .. " more 🧼")
 	end
 	if not DataService.SpendBubbles(player, cost) then
 		return fail("Not enough Bubbles!")

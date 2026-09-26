@@ -1,6 +1,10 @@
--- Always-on heads-up display: currency pill(s), the in-run tank bar, the top progress/timer bar,
--- HUD buttons (Pets/Shop lobby, Upgrades/Pets/Leave in-run), the run-start banner and the results
--- screen. See DESIGN.md section 6 "HUD". Everything here is built once in Init() and then only
+-- Always-on heads-up display, laid out like the big round-based simulators:
+--   * top centre: the Bubbles pill with a green "+" (opens the Shop)
+--   * right side: big square buttons (Shop/Pets in the lobby, Upgrades/Pets/Leave in a run) with
+--     key hints for keyboard (Tab/G/P) or gamepad (Y/LB)
+--   * in a run: coins + tank bottom-left, the timer bottom-right, dishwasher progress top-centre
+--   * the run-start banner, the results screen and the Leave confirmation
+-- On touch the corner widgets move clear of the thumbstick and jump button. See DESIGN.md section 6 "HUD". Everything here is built once in Init() and then only
 -- shown/hidden/updated, so there's nothing to leak: no per-run instances, no per-run connections
 -- besides the ones this module owns for its whole lifetime.
 
@@ -26,89 +30,6 @@ local HUD = {}
 local initialized = false
 
 ----------------------------------------------------------------------------------------------------
--- Small helpers
-----------------------------------------------------------------------------------------------------
-
--- A currency pill: icon + a number that tweens toward new values and bounces when it goes up.
--- `big` toggles between the large in-run Coins size and the small Bubbles-next-to-it size; the
--- lobby Bubbles pill is switched back to "big" with setBig(true) when there's no run.
-local function createPill(icon: string, color: Color3, parent: Instance, big: boolean)
-	local height = if big then 54 else 40
-	local frame = Instance.new("Frame")
-	frame.Name = "Pill"
-	frame.Size = UDim2.new(0, if big then 190 else 150, 0, height)
-	frame.BackgroundColor3 = Colors.PanelLight
-	frame.BorderSizePixel = 0
-	UIKit.Corner(frame, 999)
-	UIKit.Stroke(frame, Colors.Ink, 2, 0.15)
-
-	local iconSize = if big then 30 else 22
-	local iconLabel = UIKit.Label({
-		Name = "Icon",
-		Text = icon,
-		Size = UDim2.fromOffset(iconSize + 16, height),
-		Position = UDim2.fromOffset(8, 0),
-		TextSize = iconSize,
-		Parent = frame,
-	})
-	local textLabel = UIKit.Label({
-		Name = "Value",
-		Text = "0",
-		Size = UDim2.new(1, -(iconSize + 30), 1, 0),
-		Position = UDim2.fromOffset(iconSize + 20, 0),
-		TextXAlignment = Enum.TextXAlignment.Left,
-		TextSize = if big then 28 else 20,
-		TextColor3 = color,
-		Parent = frame,
-	})
-
-	-- A NumberValue drives the count-up tween; its Changed signal keeps the label text in sync.
-	local nv = Instance.new("NumberValue")
-	nv.Name = "Shown"
-	nv.Parent = frame
-	nv:GetPropertyChangedSignal("Value"):Connect(function()
-		textLabel.Text = UIKit.Short(math.floor(nv.Value + 0.5))
-	end)
-
-	local shown = -1 -- -1 = nothing set yet, so the very first value never bounces
-	local function setValue(value: number)
-		value = math.max(0, math.floor((tonumber(value) or 0) + 0.5))
-		if value == shown then
-			return
-		end
-		local increased = shown >= 0 and value > shown
-		shown = value
-		if shown < 0 then
-			nv.Value = value
-			textLabel.Text = UIKit.Short(value)
-		else
-			UIKit.Tween(nv, { Value = value }, 0.4)
-		end
-		if increased then
-			UIKit.Bounce(frame)
-		end
-	end
-
-	local function setBig(isBig: boolean)
-		if isBig == big then
-			return
-		end
-		big = isBig
-		local h = if isBig then 54 else 40
-		local is_ = if isBig then 30 else 22
-		frame.Size = UDim2.new(0, if isBig then 190 else 150, 0, h)
-		iconLabel.Size = UDim2.fromOffset(is_ + 16, h)
-		iconLabel.TextSize = is_
-		textLabel.Size = UDim2.new(1, -(is_ + 30), 1, 0)
-		textLabel.Position = UDim2.fromOffset(is_ + 20, 0)
-		textLabel.TextSize = if isBig then 28 else 20
-	end
-
-	frame.Parent = parent
-	return frame, setValue, setBig
-end
-
-----------------------------------------------------------------------------------------------------
 -- Init
 ----------------------------------------------------------------------------------------------------
 
@@ -121,51 +42,205 @@ function HUD.Init()
 	local _gui, root = UIKit.CreateScreen("HUD", 5)
 
 	--------------------------------------------------------------------------------------------------
-	-- Left-centre column: currency, tank bar, buttons.
+	-- Top centre: the Bubbles pill with a green "+" (opens the shop), like every simulator's.
 	--------------------------------------------------------------------------------------------------
-	local leftColumn = Instance.new("Frame")
-	leftColumn.Name = "LeftColumn"
-	leftColumn.AnchorPoint = Vector2.new(0, 0.5)
-	leftColumn.Position = UDim2.new(0, 16, 0.5, 0)
-	leftColumn.Size = UDim2.new(0, 210, 0, 0)
-	leftColumn.AutomaticSize = Enum.AutomaticSize.Y
-	leftColumn.BackgroundTransparency = 1
-	leftColumn.Parent = root
+	local topCurrency = Instance.new("Frame")
+	topCurrency.Name = "TopCurrency"
+	topCurrency.AnchorPoint = Vector2.new(0.5, 0)
+	topCurrency.Size = UDim2.fromOffset(250, 58)
+	topCurrency.BackgroundColor3 = Color3.new(1, 1, 1)
+	topCurrency.BorderSizePixel = 0
+	UIKit.Corner(topCurrency, 16)
+	UIKit.Gradient(topCurrency, Color3.fromRGB(120, 130, 145), Color3.fromRGB(70, 78, 92))
+	UIKit.Stroke(topCurrency, Colors.Ink, 3)
+	topCurrency.Parent = root
 
-	local columnLayout = Instance.new("UIListLayout")
-	columnLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	columnLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-	columnLayout.Padding = UDim.new(0, 10)
-	columnLayout.Parent = leftColumn
+	UIKit.Label({
+		Text = "🧼",
+		TextSize = 38,
+		Position = UDim2.fromOffset(8, 0),
+		Size = UDim2.fromOffset(50, 58),
+		Stroke = false,
+		Parent = topCurrency,
+	})
+	local bubblesValue = UIKit.Label({
+		Name = "Value",
+		Text = "0",
+		TextSize = 38,
+		Position = UDim2.fromOffset(58, 0),
+		Size = UDim2.new(1, -120, 1, 0),
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Parent = topCurrency,
+	})
+	local plusButton = UIKit.Button({
+		Name = "Plus",
+		Text = "+",
+		Size = UDim2.fromOffset(46, 46),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -6, 0.5, 0),
+		Color = Colors.Good,
+		TextSize = 34,
+		CornerRadius = 10,
+		Parent = topCurrency,
+		OnClick = function()
+			if ClientState.Run then
+				UIKit.ToggleWindow("Upgrades")
+			else
+				UIKit.ToggleWindow("Shop")
+			end
+		end,
+	})
 
-	-- Currency row (Coins big + Bubbles small in-run; Bubbles alone, big, in the lobby).
-	local currencyRow = Instance.new("Frame")
-	currencyRow.Name = "Currency"
-	currencyRow.BackgroundTransparency = 1
-	currencyRow.Size = UDim2.new(0, 210, 0, 54)
-	currencyRow.AutomaticSize = Enum.AutomaticSize.X
-	currencyRow.LayoutOrder = 1
-	currencyRow.Parent = leftColumn
-	local currencyLayout = Instance.new("UIListLayout")
-	currencyLayout.FillDirection = Enum.FillDirection.Horizontal
-	currencyLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	currencyLayout.Padding = UDim.new(0, 8)
-	currencyLayout.Parent = currencyRow
+	-- Count-up animation for the Bubbles number.
+	local bubblesNV = Instance.new("NumberValue")
+	bubblesNV.Parent = topCurrency
+	bubblesNV:GetPropertyChangedSignal("Value"):Connect(function()
+		bubblesValue.Text = UIKit.Commas(math.floor(bubblesNV.Value + 0.5))
+	end)
+	local bubblesShown = -1
+	local function setBubbles(value: number)
+		value = math.max(0, math.floor((tonumber(value) or 0) + 0.5))
+		if value == bubblesShown then
+			return
+		end
+		local increased = bubblesShown >= 0 and value > bubblesShown
+		if bubblesShown < 0 then
+			bubblesNV.Value = value
+			bubblesValue.Text = UIKit.Commas(value)
+		else
+			UIKit.Tween(bubblesNV, { Value = value }, 0.4)
+		end
+		bubblesShown = value
+		if increased then
+			UIKit.Bounce(topCurrency)
+		end
+	end
 
-	local coinsFrame, setCoins = createPill("🪙", Colors.Coin, currencyRow, true)
-	coinsFrame.LayoutOrder = 1
-	local bubblesFrame, setBubbles, setBubblesBig = createPill("🫧", Colors.Bubble, currencyRow, false)
-	bubblesFrame.LayoutOrder = 2
+	--------------------------------------------------------------------------------------------------
+	-- Right column: big square buttons (Shop/Pets in the lobby; Upgrades/Pets/Leave in a run), each
+	-- with a small key hint for keyboard or gamepad.
+	--------------------------------------------------------------------------------------------------
+	local rightColumn = Instance.new("Frame")
+	rightColumn.Name = "RightColumn"
+	rightColumn.AnchorPoint = Vector2.new(1, 0.5)
+	rightColumn.Size = UDim2.fromOffset(104, 0)
+	rightColumn.AutomaticSize = Enum.AutomaticSize.Y
+	rightColumn.BackgroundTransparency = 1
+	rightColumn.Parent = root
+	local rightLayout = Instance.new("UIListLayout")
+	rightLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	rightLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+	rightLayout.Padding = UDim.new(0, 12)
+	rightLayout.Parent = rightColumn
 
-	-- Tank bar (in-run only). Flashes red with "FULL!" at capacity.
+	local hints: { [TextButton]: { Key: string, Pad: string } } = {}
+	local function sideButton(icon: string, label: string, color: Color3, keyHint: string, padHint: string, onClick: () -> ()): TextButton
+		local b = UIKit.IconButton({
+			Icon = icon,
+			Label = label,
+			Color = color,
+			Size = UDim2.fromOffset(100, 100),
+			Parent = rightColumn,
+			OnClick = onClick,
+		})
+		local badge = Instance.new("Frame")
+		badge.Name = "KeyHint"
+		badge.AnchorPoint = Vector2.new(0, 0)
+		badge.Position = UDim2.fromOffset(-8, -8)
+		badge.Size = UDim2.fromOffset(34, 28)
+		badge.BackgroundColor3 = Colors.PanelDark
+		badge.ZIndex = 6
+		UIKit.Corner(badge, 8)
+		UIKit.Stroke(badge, Colors.Ink, 2)
+		UIKit.Label({ Name = "Text", Text = keyHint, TextSize = 16, Size = UDim2.fromScale(1, 1), ZIndex = 7, Parent = badge })
+		badge.Parent = b
+		hints[b] = { Key = keyHint, Pad = padHint }
+		return b
+	end
+
+	local upgradesButton = sideButton("📖", "Upgrades", Colors.Good, "Tab", "Y", function()
+		UIKit.ToggleWindow("Upgrades")
+	end)
+	local shopButton = sideButton("🛒", "Shop", Colors.Bad, "G", "Y", function()
+		UIKit.ToggleWindow("Shop")
+	end)
+	local petsButton = sideButton("🐾", "Pets", Colors.Warning, "P", "LB", function()
+		UIKit.ToggleWindow("Pets")
+	end)
+	local leaveButton = sideButton("🚪", "Leave", Colors.PanelLight, "", "", function()
+		UIKit.OpenWindow("LeaveConfirm")
+	end)
+
+	local function refreshHints()
+		local touch = UIKit.IsTouch()
+		local pad = UIKit.IsGamepad()
+		for button, hint in hints do
+			local badge = button:FindFirstChild("KeyHint") :: Frame?
+			if badge then
+				local text = if pad then hint.Pad else hint.Key
+				badge.Visible = not touch and text ~= ""
+				local lbl = badge:FindFirstChild("Text") :: TextLabel?
+				if lbl then
+					lbl.Text = text
+				end
+				badge.Size = UDim2.fromOffset(math.max(28, 12 + #text * 10), 28)
+			end
+		end
+	end
+
+	--------------------------------------------------------------------------------------------------
+	-- In-run corner widgets: money + tank bottom-left, timer bottom-right.
+	--------------------------------------------------------------------------------------------------
+	local moneyBlock = Instance.new("Frame")
+	moneyBlock.Name = "Money"
+	moneyBlock.AnchorPoint = Vector2.new(0, 1)
+	moneyBlock.Size = UDim2.fromOffset(300, 130)
+	moneyBlock.BackgroundTransparency = 1
+	moneyBlock.Visible = false
+	moneyBlock.Parent = root
+
+	local coinsLabel = UIKit.Label({
+		Name = "Coins",
+		Text = "💰 0",
+		TextSize = 54,
+		Size = UDim2.new(1, 0, 0, 62),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextColor3 = Color3.fromRGB(90, 235, 110),
+		StrokeThickness = 3,
+		Parent = moneyBlock,
+	})
+	local coinsNV = Instance.new("NumberValue")
+	coinsNV.Parent = moneyBlock
+	coinsNV:GetPropertyChangedSignal("Value"):Connect(function()
+		coinsLabel.Text = "💰 " .. UIKit.Commas(math.floor(coinsNV.Value + 0.5))
+	end)
+	local coinsShown = -1
+	local function setCoins(value: number)
+		value = math.max(0, math.floor((tonumber(value) or 0) + 0.5))
+		if value == coinsShown then
+			return
+		end
+		local increased = coinsShown >= 0 and value > coinsShown
+		if coinsShown < 0 then
+			coinsNV.Value = value
+		else
+			UIKit.Tween(coinsNV, { Value = value }, 0.4)
+		end
+		coinsShown = value
+		if increased then
+			UIKit.Bounce(coinsLabel)
+		end
+	end
+
 	local tankBar = UIKit.ProgressBar({
-		Size = UDim2.new(0, 210, 0, 34),
+		Size = UDim2.new(0, 280, 0, 44),
+		Position = UDim2.fromOffset(0, 70),
 		Color = Colors.Primary,
 		Text = "💧 0/0",
-		Parent = leftColumn,
+		TextSize = 24,
+		Parent = moneyBlock,
 	})
 	tankBar.Frame.Name = "Tank"
-	tankBar.Frame.LayoutOrder = 2
 
 	local tankFlash: Tween? = nil
 	local function setTankFull(isFull: boolean)
@@ -183,115 +258,84 @@ function HUD.Init()
 		end
 	end
 
-	-- HUD buttons. All four exist all the time; visibility and LayoutOrder change with the mode so
-	-- the row reflows instead of being rebuilt.
-	local buttonsRow = Instance.new("Frame")
-	buttonsRow.Name = "Buttons"
-	buttonsRow.BackgroundTransparency = 1
-	buttonsRow.Size = UDim2.new(0, 210, 0, 84)
-	buttonsRow.AutomaticSize = Enum.AutomaticSize.X
-	buttonsRow.LayoutOrder = 3
-	buttonsRow.Parent = leftColumn
-	local buttonsLayout = Instance.new("UIListLayout")
-	buttonsLayout.FillDirection = Enum.FillDirection.Horizontal
-	buttonsLayout.Padding = UDim.new(0, 10)
-	buttonsLayout.Parent = buttonsRow
-
-	local petsButton = UIKit.IconButton({
-		Icon = "🐾",
-		Label = "Pets",
-		Color = Colors.Accent,
-		Parent = buttonsRow,
-		OnClick = function()
-			UIKit.ToggleWindow("Pets")
-		end,
+	local timerLabel = UIKit.Label({
+		Name = "Timer",
+		Text = "00:00:00",
+		TextSize = 48,
+		AnchorPoint = Vector2.new(1, 1),
+		Size = UDim2.fromOffset(260, 56),
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Visible = false,
+		Parent = root,
 	})
-	local shopButton = UIKit.IconButton({
-		Icon = "🛒",
-		Label = "Shop",
-		Color = Colors.Primary,
-		Parent = buttonsRow,
-		OnClick = function()
-			UIKit.ToggleWindow("Shop")
-		end,
-	})
-	local upgradesButton = UIKit.IconButton({
-		Icon = "⬆️",
-		Label = "Upgrades",
-		Color = Colors.Good,
-		Parent = buttonsRow,
-		OnClick = function()
-			UIKit.ToggleWindow("Upgrades")
-		end,
-	})
-	local leaveButton = UIKit.IconButton({
-		Icon = "🚪",
-		Label = "Leave",
-		Color = Colors.Bad,
-		Parent = buttonsRow,
-		OnClick = function()
-			UIKit.OpenWindow("LeaveConfirm")
-		end,
-	})
-
-	-- Keep the column clear of the touch thumbstick (bottom-left) and the topbar, on any device.
-	local function relayoutLeftColumn()
-		local canvas = UIKit.CanvasSize()
-		local half = leftColumn.AbsoluteSize.Y / 2
-		local centerY = canvas.Y / 2
-		local yOffset = 0
-		if UIKit.IsTouch() then
-			local maxCenterY = canvas.Y - (320 + 24) - half
-			if centerY > maxCenterY then
-				yOffset = maxCenterY - centerY
-			end
-		end
-		local minCenterY = UIKit.TopInset() + 16 + half
-		if centerY + yOffset < minCenterY then
-			yOffset = minCenterY - centerY
-		end
-		local safe = UIKit.SafeInsets()
-		leftColumn.Position = UDim2.new(0, 16 + safe.Left, 0.5, math.floor(yOffset))
-	end
-	leftColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutLeftColumn)
 
 	--------------------------------------------------------------------------------------------------
-	-- Top-centre, in-run: level, cleaning progress, timer.
+	-- Top centre, in-run: dishwasher name and cleaning progress (under the currency pill).
 	--------------------------------------------------------------------------------------------------
 	local topBar = Instance.new("Frame")
 	topBar.Name = "TopBar"
 	topBar.AnchorPoint = Vector2.new(0.5, 0)
-	topBar.Size = UDim2.new(0, 460, 0, 96)
+	topBar.Size = UDim2.new(0, 460, 0, 70)
 	topBar.BackgroundTransparency = 1
 	topBar.Visible = false
 	topBar.Parent = root
 
 	local levelLabel = UIKit.Label({
 		Text = "",
-		Size = UDim2.new(1, 0, 0, 32),
-		TextSize = 24,
+		Size = UDim2.new(1, 0, 0, 28),
+		TextSize = 22,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Parent = topBar,
 	})
 	local progressBar = UIKit.ProgressBar({
-		Size = UDim2.new(0, 400, 0, 30),
-		Position = UDim2.new(0.5, 0, 0, 36),
+		Size = UDim2.new(0, 400, 0, 32),
+		Position = UDim2.new(0.5, 0, 0, 32),
 		AnchorPoint = Vector2.new(0.5, 0),
 		Color = Colors.Good,
 		Parent = topBar,
 	})
-	local timerLabel = UIKit.Label({
-		Text = "0:00",
-		Size = UDim2.new(1, 0, 0, 26),
-		Position = UDim2.new(0, 0, 0, 70),
-		TextSize = 20,
-		TextColor3 = Colors.TextDim,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Parent = topBar,
-	})
+
+	--------------------------------------------------------------------------------------------------
+	-- Layout: keeps everything inside the safe area and clear of the touch thumbstick/jump zones.
+	--------------------------------------------------------------------------------------------------
+	local function relayoutHud()
+		local canvas = UIKit.CanvasSize()
+		local inset = UIKit.TopInset()
+		local safe = UIKit.SafeInsets()
+		local touch = UIKit.IsTouch()
+
+		topCurrency.Position = UDim2.new(0.5, 0, 0, math.floor(inset + 8))
+		topBar.Position = UDim2.new(0.5, 0, 0, math.floor(inset + 74))
+
+		-- Right column: vertically centred, but on touch kept above the jump button.
+		local colH = rightColumn.AbsoluteSize.Y / UIKit.GetScale()
+		local centerY = canvas.Y / 2
+		if touch then
+			centerY = math.min(centerY, canvas.Y - 300 - colH / 2)
+		end
+		centerY = math.max(centerY, inset + 80 + colH / 2)
+		rightColumn.Position = UDim2.new(1, -(16 + safe.Right), 0, math.floor(centerY))
+
+		-- Money block: bottom-left on desktop/console; above the thumbstick on touch.
+		local bottom = if touch then canvas.Y - 330 else canvas.Y - 16 - safe.Bottom
+		moneyBlock.Position = UDim2.new(0, 20 + safe.Left, 0, math.floor(bottom))
+
+		-- Timer: bottom-right on desktop/console; top-right under the topbar on touch.
+		if touch then
+			timerLabel.AnchorPoint = Vector2.new(1, 0)
+			timerLabel.TextSize = 34
+			timerLabel.Position = UDim2.new(1, -(16 + safe.Right), 0, math.floor(inset + 10))
+		else
+			timerLabel.AnchorPoint = Vector2.new(1, 1)
+			timerLabel.TextSize = 48
+			timerLabel.Position = UDim2.new(1, -(20 + safe.Right), 1, -(12 + safe.Bottom))
+		end
+		refreshHints()
+	end
+	rightColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 
 	local function relayoutTopBar()
-		topBar.Position = UDim2.new(0.5, 0, 0, math.floor(UIKit.TopInset() + 10))
+		relayoutHud()
 	end
 
 	--------------------------------------------------------------------------------------------------
@@ -410,7 +454,7 @@ function HUD.Init()
 	bubblesRowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 	bubblesRowLayout.Padding = UDim.new(0, 8)
 	bubblesRowLayout.Parent = bubblesRow
-	UIKit.Label({ Text = "🫧", TextSize = 34, Size = UDim2.fromOffset(40, 40), Parent = bubblesRow })
+	UIKit.Label({ Text = "🧼", TextSize = 34, Size = UDim2.fromOffset(40, 40), Parent = bubblesRow })
 	local resultsBubblesLabel = UIKit.Label({
 		Text = "+0",
 		TextSize = 34,
@@ -451,7 +495,7 @@ function HUD.Init()
 		Parent = headerRow,
 	})
 	UIKit.Label({
-		Text = "SPOTS",
+		Text = "CLEANED",
 		Size = UDim2.new(0.25, 0, 1, 0),
 		Position = UDim2.new(0.5, 0, 0, 0),
 		TextSize = 16,
@@ -726,18 +770,18 @@ function HUD.Init()
 		local playing = run ~= nil and run.Phase == "Playing"
 		local complete = run ~= nil and run.Phase == "Complete"
 
-		coinsFrame.Visible = inRun
-		setBubblesBig(not inRun)
-		tankBar.Frame.Visible = playing
+		moneyBlock.Visible = playing
+		timerLabel.Visible = playing
 		topBar.Visible = playing
 
 		shopButton.Visible = not inRun
 		upgradesButton.Visible = inRun
 		leaveButton.Visible = inRun
 		upgradesButton.LayoutOrder = 1
-		petsButton.LayoutOrder = if inRun then 2 else 1
-		shopButton.LayoutOrder = 2
+		shopButton.LayoutOrder = 1
+		petsButton.LayoutOrder = 2
 		leaveButton.LayoutOrder = 3
+		plusButton.Visible = not inRun
 
 		if playing and run then
 			local level = Config.GetLevel(run.Level)
@@ -746,7 +790,7 @@ function HUD.Init()
 			setTankFull(full)
 			tankBar.Set(
 				if run.TankMax > 0 then run.Tank / run.TankMax else 0,
-				if full then "💧 FULL!" else string.format("💧 %d/%d", run.Tank, run.TankMax)
+				if full then "💧 FULL! Sell at the drain" else string.format("💧 %s / %s", UIKit.Short(run.Tank), UIKit.Short(run.TankMax))
 			)
 			updateProgress()
 		else
@@ -764,6 +808,7 @@ function HUD.Init()
 		if not run then
 			lastBannerStartedAt = nil
 			resultsBubblesShown = -1
+			coinsShown = -1
 		end
 	end
 
@@ -798,7 +843,6 @@ function HUD.Init()
 	end)
 
 	UIKit.LayoutChanged:Connect(function()
-		relayoutLeftColumn()
 		relayoutTopBar()
 		relayoutBanner()
 		if resultsFrame.Visible then
@@ -812,7 +856,8 @@ function HUD.Init()
 			local run = ClientState.Run :: Types.RunState?
 			if run then
 				if run.Phase == "Playing" then
-					timerLabel.Text = UIKit.Time(Util.Now() - run.StartedAt)
+					local t = math.max(0, math.floor(Util.Now() - run.StartedAt))
+					timerLabel.Text = string.format("%02d:%02d:%02d", t // 3600, (t % 3600) // 60, t % 60)
 				elseif run.Phase == "Complete" and run.Results then
 					local remaining = math.max(0, run.Results.ReturnAt - Util.Now())
 					countdownLabel.Text = string.format("Returning to lobby in %ds", math.ceil(remaining))
@@ -830,14 +875,15 @@ function HUD.Init()
 		local inRun = ClientState.Run ~= nil
 		if (key == Enum.KeyCode.Q or key == Enum.KeyCode.Tab) and inRun then
 			UIKit.ToggleWindow("Upgrades")
-		elseif key == Enum.KeyCode.P then
+		elseif key == Enum.KeyCode.P or key == Enum.KeyCode.ButtonL1 then
 			UIKit.ToggleWindow("Pets")
 		elseif key == Enum.KeyCode.G and not inRun then
 			UIKit.ToggleWindow("Shop")
+		elseif key == Enum.KeyCode.ButtonY then
+			UIKit.ToggleWindow(if inRun then "Upgrades" else "Shop")
 		end
 	end)
 
-	relayoutLeftColumn()
 	relayoutTopBar()
 	relayoutBanner()
 	refreshMode()

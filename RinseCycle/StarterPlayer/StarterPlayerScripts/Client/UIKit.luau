@@ -1730,7 +1730,7 @@ type ToastRecord = {
 }
 
 local TOAST_STYLES = {
-	Info = { Color = Colors.Primary, Icon = "🫧" },
+	Info = { Color = Colors.Primary, Icon = "🧼" },
 	Good = { Color = Colors.Good, Icon = "✨" },
 	Bad = { Color = Colors.Bad, Icon = "⚠️" },
 	Warning = { Color = Colors.Warning, Icon = "⚠️" },

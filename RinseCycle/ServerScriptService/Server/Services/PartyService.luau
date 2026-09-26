@@ -36,6 +36,7 @@ local PARTY = Config.Party
 local MAX_PLAYERS = PARTY.MaxPlayers
 local LABEL_INTERVAL = 0.25 -- how often pad billboards are rewritten (the countdown text)
 local RETRY_DELAY = 10 -- seconds added to the countdown when every dishwasher is busy
+local PICK_SECONDS = 60 -- a host who hasn't pressed Create by then is walked out of the pad
 local ACTIONS_PER_SECOND = 5 -- PartyAction rate limit per player
 local FRIEND_CACHE_TTL = 300 -- seconds a friends answer is trusted
 local FRIEND_FAIL_TTL = 5 -- a failed friends lookup counts as "no" for this long, then it retries
@@ -57,7 +58,7 @@ local PRIVACY_TEXT = {
 	Friends = "👥 Friends Only",
 }
 local IDLE_TITLE = "Party Pad"
-local IDLE_STATUS = "Walk in to start a party!"
+local IDLE_STATUS = "Touch to create a party"
 local LAUNCH_STATUS = "Launching!"
 
 local FLOOR_TWEEN = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -81,7 +82,9 @@ type PadInfo = {
 }
 
 type Privacy = "Public" | "Friends"
-type Status = "Waiting" | "Launching"
+-- Picking: the host is choosing a dishwasher and party size; nobody else can join yet.
+-- Waiting: created, counting down, open to joiners. Launching: handed to RoundService.
+type Status = "Picking" | "Waiting" | "Launching"
 
 type Party = {
 	PadId: number,
@@ -92,7 +95,7 @@ type Party = {
 	Privacy: Privacy,
 	Level: number,
 	LevelChosen: boolean, -- the host picked a level, so don't overwrite it when their profile loads
-	EndsAt: number, -- server time (Util.Now) when the countdown hits 0
+	EndsAt: number, -- server time (Util.Now) when the countdown hits 0 (Picking: when it's cancelled)
 	Status: Status,
 	Slots: { [Player]: number }, -- standing spot per member (see slotCFrame)
 	Dead: boolean, -- dissolved or launched: anything still holding this table must stop using it
@@ -255,7 +258,7 @@ local function floorColorFor(party: Party?): Color3
 	if not party then
 		return FLOOR_COLORS.Idle
 	end
-	if party.Status == "Launching" or #party.Members >= party.MaxPlayers then
+	if party.Status ~= "Waiting" or #party.Members >= party.MaxPlayers then
 		return FLOOR_COLORS.Full
 	end
 	if party.Privacy == "Friends" then
@@ -270,6 +273,9 @@ local function statusText(party: Party?, now: number): string
 	end
 	if party.Status == "Launching" then
 		return LAUNCH_STATUS
+	end
+	if party.Status == "Picking" then
+		return party.Host.DisplayName .. " is picking a dishwasher..."
 	end
 	local left = math.ceil(party.EndsAt - now)
 	if left <= 0 then
@@ -534,8 +540,8 @@ local function createParty(pad: Pad, host: Player)
 		Privacy = "Public",
 		Level = unlockedOf(host), -- default to their best dishwasher
 		LevelChosen = false,
-		EndsAt = Util.Now() + PARTY.Countdown, -- set once; joins never reset it
-		Status = "Waiting",
+		EndsAt = Util.Now() + PICK_SECONDS, -- replaced by the real countdown when they press Create
+		Status = "Picking",
 		Slots = {},
 		Dead = false,
 		FlushQueued = false,
@@ -550,6 +556,9 @@ end
 
 -- Joins and leaves are refused this close to launch (and while launching).
 local function inLockWindow(party: Party): boolean
+	if party.Status == "Picking" then
+		return false
+	end
 	return party.Status ~= "Waiting" or Util.Now() >= party.EndsAt - PARTY.LockSeconds
 end
 
@@ -639,6 +648,10 @@ function admit(player: Player, pad: Pad)
 	local party = pad.Party
 	if not party then
 		createParty(pad, player)
+		return
+	end
+	if party.Status == "Picking" then
+		eject(player, pad, party.Host.DisplayName .. " is picking a dishwasher. Try another pad!")
 		return
 	end
 	if inLockWindow(party) then
@@ -811,12 +824,14 @@ local function tick()
 	--    Members of a launching party are left alone: RoundService is busy moving them.
 	for _, pad in pads do
 		local party = pad.Party
-		if party and party.Status == "Waiting" then
+		if party and (party.Status == "Waiting" or party.Status == "Picking") then
 			for _, member in table.clone(party.Members) do
 				validateMember(party, member, clock)
 			end
 			if not party.Dead and party.Status == "Waiting" and now >= party.EndsAt then
 				launch(party)
+			elseif not party.Dead and party.Status == "Picking" and now >= party.EndsAt then
+				removeMember(party.Host, "Exit", "Party cancelled: you didn't pick a dishwasher in time.")
 			end
 		end
 	end
@@ -866,7 +881,38 @@ local function onPartyAction(player: Player, action: any, value: any)
 		notify(player, "Only the host can change that.", "Bad")
 		return
 	end
-	if party.Status ~= "Waiting" then
+	if party.Status == "Launching" then
+		return
+	end
+
+	if action == "Create" then
+		-- The host confirms the Create Party screen: { Level, MaxPlayers, Privacy }.
+		if party.Status ~= "Picking" or type(value) ~= "table" then
+			return
+		end
+		local level, max, privacy = value.Level, value.MaxPlayers, value.Privacy
+		if not isInteger(level) or level < 1 or level > #Config.Levels then
+			return
+		end
+		if level > unlockedOf(player) then
+			notify(player, "🔒 That dishwasher is still locked!", "Bad")
+			return
+		end
+		if not isInteger(max) or max < 1 or max > MAX_PLAYERS then
+			return
+		end
+		if privacy ~= "Public" and privacy ~= "Friends" then
+			return
+		end
+		party.Level = level
+		party.LevelChosen = true
+		party.MaxPlayers = max
+		party.Privacy = privacy
+		party.Status = "Waiting"
+		party.EndsAt = Util.Now() + PARTY.Countdown
+		markDirty(party)
+		refreshPad(party.Pad, true)
+		playPadSound(party.Pad, "Pop")
 		return
 	end
 
@@ -895,6 +941,9 @@ local function onPartyAction(player: Player, action: any, value: any)
 		party.Level = value
 		party.LevelChosen = true
 	elseif action == "StartNow" then
+		if party.Status ~= "Waiting" then
+			return
+		end
 		party.EndsAt = math.min(party.EndsAt, Util.Now()) -- the poll loop launches it next tick
 	else
 		return
@@ -929,7 +978,7 @@ local function onProfileLoaded(player: Player)
 	if not party or party.Dead then
 		return
 	end
-	if party.Host == player and not party.LevelChosen and party.Status == "Waiting" then
+	if party.Host == player and not party.LevelChosen and party.Status ~= "Launching" then
 		party.Level = unlockedOf(player)
 	end
 	markDirty(party)

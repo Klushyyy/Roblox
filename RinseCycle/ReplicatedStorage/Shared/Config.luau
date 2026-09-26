@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "0.1.0"
+Config.Version = "0.2.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -23,6 +23,7 @@ Config.World = {
 	ArenaRowStart = Vector3.new(-3500, 0, 3000),
 	ArenaSpacing = Vector3.new(1000, 0, 0),
 	MaxArenas = 8,
+	LobbyWalkSpeed = 22, -- the lobby is small; this keeps walking between pads and shops snappy
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -31,7 +32,7 @@ Config.World = {
 Config.Party = {
 	PadCount = 6,
 	MaxPlayers = 4,
-	Countdown = 30, -- seconds from when the party is created
+	Countdown = 15, -- seconds from when the host presses Create until the party teleports
 	LockSeconds = 1.5, -- joins and leaves are refused this close to launch
 	RejoinCooldown = 3, -- seconds before a player who left/was ejected can re-enter a pad
 	PollInterval = 0.2,
@@ -43,7 +44,7 @@ Config.Party = {
 Config.Round = {
 	ResultsSeconds = 20, -- results screen time before everyone is sent back to the lobby
 	ScrubSendInterval = 0.1, -- client send rate while holding spray
-	ClickPulseSeconds = 0.25, -- before "Hold to Scrub" is bought, each click deals this many seconds of power
+	ClickPulseSeconds = 0.25, -- a single tap (not held) deals this many seconds of power
 	MinClickInterval = 0.11, -- server ignores clicks faster than this (about 9 per second)
 	MaxScrubDt = 0.25, -- cap on the damage window of a single held scrub packet
 	ReachSlack = 6, -- extra studs the server allows over reach (latency)
@@ -65,32 +66,31 @@ Config.Round = {
 Config.Base = {
 	Radius = 1.6, -- studs
 	RadiusPerLevel = 0.3,
-	Power = 2, -- grime HP removed per second
+	Power = 2.5, -- dirt HP removed per second
 	PowerGrowth = 1.3, -- per Scrub Power level
-	Tank = 20, -- units
+	Tank = 15, -- units
 	TankGrowth = 1.35, -- per Tank Size level
-	WalkSpeed = 16,
+	WalkSpeed = 20,
 	WalkSpeedPerLevel = 1.5,
 }
 
 -- In-run upgrades bought with Coins. Price = Base * Growth^level * level Mult (2 significant figures).
 Config.Upgrades = {
-	{ Id = "Hold", Name = "Hold to Scrub", Icon = "✊", Desc = "Hold the button instead of clicking.", Base = 12, Growth = 1, Max = 1 },
 	{ Id = "HandSize", Name = "Hand Size", Icon = "🖐️", Desc = "Clean a bigger area.", Base = 8, Growth = 1.55, Max = 12 },
-	{ Id = "ScrubPower", Name = "Scrub Power", Icon = "💪", Desc = "Grime comes off faster.", Base = 6, Growth = 1.5, Max = 15 },
-	{ Id = "TankSize", Name = "Tank Size", Icon = "🫙", Desc = "Carry more grime per trip.", Base = 5, Growth = 1.5, Max = 15 },
+	{ Id = "ScrubPower", Name = "Scrub Power", Icon = "💪", Desc = "Dirt comes off faster.", Base = 6, Growth = 1.5, Max = 15 },
+	{ Id = "TankSize", Name = "Tank Size", Icon = "🛢️", Desc = "Carry more dirt per trip.", Base = 5, Growth = 1.5, Max = 15 },
 	{ Id = "Sneakers", Name = "Sneakers", Icon = "👟", Desc = "Run to the drain faster.", Base = 10, Growth = 1.6, Max = 8 },
 }
 
 -- Tools, bought in order with Coins inside a run (the "rake" tier). Cost is times level Mult.
 -- Radius and Power multiply the upgraded base stats. Reach is in studs from your character.
 Config.Tools = {
-	{ Id = "Hands", Name = "Bare Hands", Icon = "🖐️", Cost = 0, Radius = 1.0, Power = 1.0, Reach = 12, Color = Color3.fromRGB(150, 210, 255), Desc = "Just you and some water." },
-	{ Id = "Sponge", Name = "Sponge", Icon = "🧽", Cost = 50, Radius = 1.3, Power = 2.0, Reach = 13, Color = Color3.fromRGB(255, 221, 87), Desc = "Soft, squishy, twice as strong." },
-	{ Id = "Brush", Name = "Scrub Brush", Icon = "🪥", Cost = 200, Radius = 1.5, Power = 3.5, Reach = 14, Color = Color3.fromRGB(120, 230, 160), Desc = "Bristles for burnt-on bits." },
-	{ Id = "Nozzle", Name = "Spray Nozzle", Icon = "🚿", Cost = 700, Radius = 1.8, Power = 6.0, Reach = 24, Color = Color3.fromRGB(90, 200, 255), Desc = "Clean from a distance." },
-	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Cost = 2500, Radius = 2.2, Power = 10.0, Reach = 32, Color = Color3.fromRGB(60, 140, 255), Desc = "Blasts through anything." },
-	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🫧", Cost = 9000, Radius = 2.8, Power = 16.0, Reach = 40, Color = Color3.fromRGB(200, 150, 255), Desc = "A tidal wave of suds." },
+	{ Id = "Hands", Name = "Bare Hands", Icon = "🖐️", Cost = 0, Radius = 1.0, Power = 1.0, Reach = 16, Color = Color3.fromRGB(150, 210, 255), Desc = "Just you and some water." },
+	{ Id = "Sponge", Name = "Sponge", Icon = "🧽", Cost = 50, Radius = 1.3, Power = 2.0, Reach = 17, Color = Color3.fromRGB(255, 221, 87), Desc = "Soft, squishy, twice as strong." },
+	{ Id = "Brush", Name = "Scrub Brush", Icon = "🧹", Cost = 200, Radius = 1.5, Power = 3.5, Reach = 18, Color = Color3.fromRGB(120, 230, 160), Desc = "Bristles for burnt-on bits." },
+	{ Id = "Nozzle", Name = "Spray Nozzle", Icon = "🚿", Cost = 700, Radius = 1.8, Power = 6.0, Reach = 26, Color = Color3.fromRGB(90, 200, 255), Desc = "Clean from a distance." },
+	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Cost = 2500, Radius = 2.2, Power = 10.0, Reach = 34, Color = Color3.fromRGB(60, 140, 255), Desc = "Blasts through anything." },
+	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Cost = 9000, Radius = 2.8, Power = 16.0, Reach = 42, Color = Color3.fromRGB(200, 150, 255), Desc = "A tidal wave of suds." },
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -260,10 +260,10 @@ Config.Levels = {
 -- Cost = Base * Growth^level (2 significant figures), or Costs[level + 1] when Costs is given.
 ----------------------------------------------------------------------------------------------------
 Config.Perks = {
-	{ Id = "HeadStart", Name = "Head Start", Icon = "🪙", Desc = "Start every run with +15 coins per level (times the dishwasher's multiplier).", Base = 30, Growth = 1.6, Max = 10, PerLevel = 15 },
+	{ Id = "HeadStart", Name = "Head Start", Icon = "💰", Desc = "Start every run with +15 coins per level (times the dishwasher's multiplier).", Base = 30, Growth = 1.6, Max = 10, PerLevel = 15 },
 	{ Id = "CoinSoap", Name = "Coin Soap", Icon = "💰", Desc = "+10% coins from the drain per level.", Base = 50, Growth = 1.6, Max = 10, PerLevel = 0.10 },
-	{ Id = "DeepTank", Name = "Deep Tank", Icon = "🫙", Desc = "+15% tank size per level.", Base = 40, Growth = 1.6, Max = 10, PerLevel = 0.15 },
-	{ Id = "LuckySuds", Name = "Lucky Suds", Icon = "🍀", Desc = "+1% golden grime per level (best in the party counts).", Base = 60, Growth = 1.8, Max = 5, PerLevel = 0.01 },
+	{ Id = "DeepTank", Name = "Deep Tank", Icon = "🛢️", Desc = "+15% tank size per level.", Base = 40, Growth = 1.6, Max = 10, PerLevel = 0.15 },
+	{ Id = "LuckySuds", Name = "Lucky Suds", Icon = "🍀", Desc = "+1% golden dirt per level (best in the party counts).", Base = 60, Growth = 1.8, Max = 5, PerLevel = 0.01 },
 	{ Id = "PetSlot", Name = "Pet Slot", Icon = "🐾", Desc = "Equip one more pet.", Costs = { 300, 1500 }, Max = 2, PerLevel = 1 },
 }
 
@@ -344,10 +344,10 @@ Config.Eggs = {
 ----------------------------------------------------------------------------------------------------
 Config.GamePasses = {
 	{ Key = "DoubleCoins", Id = 0, Name = "2x Coins", Icon = "💰", Desc = "Double coins from the drain in every run." },
-	{ Key = "MegaTank", Id = 0, Name = "Mega Tank", Icon = "🫙", Desc = "Your tank holds twice as much." },
+	{ Key = "MegaTank", Id = 0, Name = "Mega Tank", Icon = "🛢️", Desc = "Your tank holds twice as much." },
 	{ Key = "AutoDrain", Id = 0, Name = "Auto Drain", Icon = "🌀", Desc = "Your tank sells itself the moment it's full." },
 	{ Key = "PetSlots", Id = 0, Name = "+2 Pet Slots", Icon = "🐾", Desc = "Equip two more pets." },
-	{ Key = "DoubleBubbles", Id = 0, Name = "2x Bubbles", Icon = "🫧", Desc = "Double Bubbles from every finished run." },
+	{ Key = "DoubleBubbles", Id = 0, Name = "2x Bubbles", Icon = "🧼", Desc = "Double Bubbles from every finished run." },
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -470,7 +470,7 @@ end
 --[[
 	All stats a player has inside a run.
 	  levelIndex : which dishwasher
-	  upgrades   : { Hold = n, HandSize = n, ScrubPower = n, TankSize = n, Sneakers = n }
+	  upgrades   : { HandSize = n, ScrubPower = n, TankSize = n, Sneakers = n }
 	  toolIndex  : index into Config.Tools
 	  perks      : { HeadStart = n, CoinSoap = n, DeepTank = n, ... } (from the profile)
 	  passes     : { DoubleCoins = bool, MegaTank = bool, ... }
@@ -502,7 +502,7 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 		TankMax = math.floor(tank),
 		Reach = tool.Reach,
 		WalkSpeed = b.WalkSpeed + b.WalkSpeedPerLevel * (upgrades.Sneakers or 0),
-		Hold = (upgrades.Hold or 0) >= 1,
+		Hold = true, -- holding always scrubs (the old "Hold to Scrub" upgrade confused new players)
 		CoinMult = coinMult,
 		ToolIndex = toolIndex,
 	}
