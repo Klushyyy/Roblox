@@ -204,7 +204,8 @@ All remotes live in `ReplicatedStorage.Remotes`. Get them with `Remotes.Event(na
 
 `RunRequest` actions:
 - `"BuyUpgrade"` (upgradeId)
-- `"BuyTool"` (toolIndex, must be exactly current + 1)
+- `"BuyTool"` (toolIndex, any tool not owned yet; it goes straight into your hand)
+- `"EquipTool"` (toolIndex, an owned tool)
 - `"Leave"` (leave the run now, no rewards)
 - `"ReturnToLobby"` (only while Phase == "Complete")
 
@@ -486,10 +487,10 @@ sized so the player is a tiny person in a real dishwasher: plates are about four
   filter, heating element, and seven interior PointLights.
 - **Door:** open, lying flat in front, Z −50 to −121, top at Y = 0, with raised edges, invisible
   safety walls, a control strip with buttons and a detergent dispenser. Spawns are at Z −100.
-- **Tool Shop** (left of the door): a counter with one pedestal per tool (a little model of it, a
-  world-sized price sign, and a ProximityPrompt with attribute `BuyTool = index`). The client sends
-  `RunRequest("BuyTool", index)` and updates the signs (owned / next / locked). **Upgrade Book**
-  (right of the door): a lectern with prompt `OpenWindow = "Upgrades"`; `StationPosition` points here.
+- **Tool Shop** (left of the door): a chrome wire shelving unit (matches the racks) with two display
+  shelves at waist and head height. Each tool (built by `ToolModels`) stands on a pedestal (risers on
+  the upper shelf) with a SurfaceGui price tag and a ProximityPrompt with attribute `BuyTool = index`.
+  The client sends `RunRequest("BuyTool", index)` and shows owned / price on the tags.
 - **Drain:** tub floor, front centre (0, 0, −47), radius `Config.Round.DrainRadius`, spinning swirl
   (tag `SpinY`) and a world-sized "DRAIN" sign.
 - **Bottom rack** (walkable floor at Y = 4, X ±54, Z −36..+60, ramp up from the tub floor): three rows
@@ -832,6 +833,36 @@ Drawn as an open book.
   "🧽 Clean every dish! 🧽".
 
 ---
+
+## 6b. Tools, Ranks, Gems and Robux items (v0.3)
+
+**Tools.** `Config.Tools` entries have a `Tier` and an `UpgradeMult`. In a run you own Bare Hands
+and buy any other tool in any order (`BuyTool`), then pick the one in your hand from the HUD hotbar
+(keys 1-6, click/tap, gamepad D-pad) or the Upgrade Book (`EquipTool`). `Config.Upgrades` entries
+with `PerTool = true` (Power, Size) are bought separately for every tool and cost `x UpgradeMult`;
+Tank and Sneakers are global. RunState carries `OwnedTools`, `ToolUpgrades` (per tool) and
+`Upgrades` (the effective levels for the tool in hand). Dirt with `MinTool` above your tool's Tier
+still cleans at `Config.Round.UnderTierMult` (20%), so nobody can get stuck. The tool in hand is
+welded into the character's right hand (`ToolModels.Build(index, 0.42)`), re-attached after
+respawns by the watchdog.
+
+**Gems.** Premium currency on the profile (`Gems`). Drops: `Config.Gems.DropChance` per spot you
+clean, `GoldenDrop` from golden dirt, `PerClear x level` per finished run. Also sold as developer
+products.
+
+**Ranks.** `Config.Ranks` (11 ranks, Common to Mythic, chances add to 100). `MetaRequest
+"RollRank"` spends `Config.RankRoll.Cost` gems, rolls with `Config.RankWeights` (the x2 Luck pass
+multiplies Rare+ weights), adds the rank to `profile.Ranks` and equips it if rarer than the current
+one. `"EquipRank"` equips an owned rank. The equipped rank's `Effects` apply through
+`Config.GetRunStats(..., rankId)` (PowerAll, ToolPower, Coins, Tank, Speed) and `Golden` doubles the
+party's golden chance at `StartRound`. Odds are always shown in the Ranks window (gems can be bought
+with Robux, so rolls are paid random items).
+
+**Robux.** `Config.GamePasses` (all with a Price; Id 0 = test mode) and `Config.DevProducts`
+(Bubbles, Gems and in-run Coins packs; Coins are x the level multiplier and turn into Bubbles if the
+buyer isn't in a run). `MarketService.GrantProduct` gives a product's goods for both real receipts
+and Studio test purchases (`MetaRequest "TestPass"` / `"TestProduct"`, allowed per
+`Config.TestPasses`). A newly owned pass triggers confetti on the client.
 
 ## 7. Balance knobs (all in Config)
 

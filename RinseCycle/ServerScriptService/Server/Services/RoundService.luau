@@ -288,10 +288,11 @@ local function attachHeldTool(player: Player, toolIndex: number)
 	if old then
 		old:Destroy()
 	end
-	character:SetAttribute("HeldToolIndex", toolIndex)
 	if toolIndex <= 1 then
+		character:SetAttribute("HeldToolIndex", toolIndex)
 		return
 	end
+	-- Only mark it attached once it really is, so the watchdog retries while the character loads.
 	local hand = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
 	if not hand or not hand:IsA("BasePart") then
 		return
@@ -300,6 +301,7 @@ local function attachHeldTool(player: Player, toolIndex: number)
 	if not ok or not model then
 		return
 	end
+	character:SetAttribute("HeldToolIndex", toolIndex)
 	model.Name = "HeldTool"
 	local grip = model.PrimaryPart :: BasePart
 	local offset = ToolModels.HoldOffset(toolIndex)
