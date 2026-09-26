@@ -84,11 +84,7 @@ function HUD.Init()
 		CornerRadius = 10,
 		Parent = topCurrency,
 		OnClick = function()
-			if ClientState.Run then
-				UIKit.ToggleWindow("Upgrades")
-			else
-				UIKit.ToggleWindow("Shop")
-			end
+			UIKit.ToggleWindow("Shop")
 		end,
 	})
 
@@ -114,6 +110,38 @@ function HUD.Init()
 		bubblesShown = value
 		if increased then
 			UIKit.Bounce(topCurrency)
+		end
+	end
+
+	-- Gems pill, to the right of the Bubbles pill.
+	local gemsPill = Instance.new("Frame")
+	gemsPill.Name = "Gems"
+	gemsPill.AnchorPoint = Vector2.new(0, 0)
+	gemsPill.Size = UDim2.fromOffset(130, 44)
+	gemsPill.BackgroundColor3 = Color3.new(1, 1, 1)
+	gemsPill.BorderSizePixel = 0
+	UIKit.Corner(gemsPill, 14)
+	UIKit.Gradient(gemsPill, Color3.fromRGB(150, 100, 200), Color3.fromRGB(90, 55, 140))
+	UIKit.Stroke(gemsPill, Colors.Ink, 3)
+	gemsPill.Parent = root
+	UIKit.Label({ Text = "💎", TextSize = 28, Position = UDim2.fromOffset(6, 0), Size = UDim2.fromOffset(38, 44), Stroke = false, Parent = gemsPill })
+	local gemsValue = UIKit.Label({
+		Text = "0",
+		TextSize = 28,
+		Position = UDim2.fromOffset(44, 0),
+		Size = UDim2.new(1, -52, 1, 0),
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Parent = gemsPill,
+	})
+	local gemsShown = -1
+	local function setGems(value: number)
+		value = math.max(0, math.floor(tonumber(value) or 0))
+		if value ~= gemsShown then
+			if gemsShown >= 0 and value > gemsShown then
+				UIKit.Bounce(gemsPill)
+			end
+			gemsShown = value
+			gemsValue.Text = UIKit.Commas(value)
 		end
 	end
 
@@ -168,9 +196,95 @@ function HUD.Init()
 	local petsButton = sideButton("🐾", "Pets", Colors.Warning, "P", "LB", function()
 		UIKit.ToggleWindow("Pets")
 	end)
+	local ranksButton = sideButton("💎", "Ranks", Colors.Accent, "R", "RB", function()
+		UIKit.ToggleWindow("Ranks")
+	end)
 	local leaveButton = sideButton("🚪", "Leave", Colors.PanelLight, "", "", function()
 		UIKit.OpenWindow("LeaveConfirm")
 	end)
+
+	--------------------------------------------------------------------------------------------------
+	-- Hotbar (in a run): one slot per tool. Owned tools can be put in your hand (click / tap, keys
+	-- 1-6, gamepad D-pad left/right); locked ones show a lock and open the Upgrade Book.
+	--------------------------------------------------------------------------------------------------
+	local SLOT = 68
+	local hotbar = Instance.new("Frame")
+	hotbar.Name = "Hotbar"
+	hotbar.AnchorPoint = Vector2.new(0.5, 1)
+	hotbar.Size = UDim2.fromOffset(#Config.Tools * (SLOT + 8), SLOT + 18)
+	hotbar.BackgroundTransparency = 1
+	hotbar.Visible = false
+	hotbar.Parent = root
+	local hotbarLayout = Instance.new("UIListLayout")
+	hotbarLayout.FillDirection = Enum.FillDirection.Horizontal
+	hotbarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	hotbarLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	hotbarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	hotbarLayout.Padding = UDim.new(0, 8)
+	hotbarLayout.Parent = hotbar
+
+	local equipping = false
+	local function equipTool(index: number)
+		local run = ClientState.Run :: Types.RunState?
+		if not run or equipping then
+			return
+		end
+		if not (run.OwnedTools and run.OwnedTools[index]) then
+			UIKit.OpenWindow("Upgrades")
+			return
+		end
+		if run.ToolIndex == index then
+			return
+		end
+		equipping = true
+		local result = ClientState.RunRequest("EquipTool", index)
+		equipping = false
+		if not result.Ok then
+			UIKit.Toast(result.Error or "Can't use that yet.", "Bad")
+		end
+	end
+
+	local slots: { TextButton } = {}
+	for i, tool in Config.Tools do
+		local slot = UIKit.IconButton({
+			Name = "Slot" .. i,
+			Icon = tool.Icon,
+			Label = "",
+			Color = Colors.PanelLight,
+			Size = UDim2.fromOffset(SLOT, SLOT),
+			LayoutOrder = i,
+			Parent = hotbar,
+			OnClick = function()
+				task.spawn(equipTool, i)
+			end,
+		})
+		local num = UIKit.Label({ Name = "Key", Text = tostring(i), TextSize = 16, Position = UDim2.fromOffset(6, 2), Size = UDim2.fromOffset(16, 18), ZIndex = 8, Parent = slot })
+		num.TextXAlignment = Enum.TextXAlignment.Left
+		slots[i] = slot
+	end
+
+	local function refreshHotbar()
+		local run = ClientState.Run :: Types.RunState?
+		for i, slot in slots do
+			local owned = run ~= nil and run.OwnedTools ~= nil and run.OwnedTools[i] == true
+			local inHand = run ~= nil and run.ToolIndex == i
+			slot.BackgroundColor3 = if inHand then Colors.Good elseif owned then Colors.Primary else Colors.PanelDark
+			slot:SetAttribute("Icon", if owned then Config.Tools[i].Icon else "🔒")
+			UIKit.Bounce(slot)
+		end
+	end
+	local lastHotbarKey = ""
+	local function hotbarKey(): string
+		local run = ClientState.Run :: Types.RunState?
+		if not run then
+			return ""
+		end
+		local parts = { tostring(run.ToolIndex) }
+		for i in Config.Tools do
+			table.insert(parts, if run.OwnedTools and run.OwnedTools[i] then "1" else "0")
+		end
+		return table.concat(parts)
+	end
 
 	local function refreshHints()
 		local touch = UIKit.IsTouch()
@@ -308,6 +422,8 @@ function HUD.Init()
 		-- The pill sits in the topbar row itself (the middle of Roblox's topbar is empty), like the
 		-- big simulators do; the run's progress bar goes right under it.
 		topCurrency.Position = UDim2.new(0.5, 0, 0, 2)
+		gemsPill.Position = UDim2.new(0.5, 133, 0, 7)
+		hotbar.Position = UDim2.new(0.5, 0, 1, -(if touch then 24 else 12) - safe.Bottom)
 		topBar.Position = UDim2.new(0.5, 0, 0, 66)
 
 		-- Right column: vertically centred, but on touch kept above the jump button.
@@ -768,6 +884,7 @@ function HUD.Init()
 		local meta = ClientState.Meta :: Types.MetaState?
 		local bubbles = if meta then meta.Bubbles else (LocalPlayer:GetAttribute("Bubbles") :: number?) or 0
 		setBubbles(bubbles)
+		setGems(if meta then meta.Gems or 0 else 0)
 	end
 
 	local function refreshMode()
@@ -780,14 +897,23 @@ function HUD.Init()
 		timerLabel.Visible = playing
 		topBar.Visible = playing
 
-		shopButton.Visible = not inRun
+		-- The Shop is always there (Robux items work in a run too); Ranks only in the lobby.
+		shopButton.Visible = true
 		upgradesButton.Visible = inRun
 		leaveButton.Visible = inRun
+		ranksButton.Visible = not inRun
 		upgradesButton.LayoutOrder = 1
-		shopButton.LayoutOrder = 1
-		petsButton.LayoutOrder = 2
-		leaveButton.LayoutOrder = 3
-		plusButton.Visible = not inRun
+		shopButton.LayoutOrder = 2
+		petsButton.LayoutOrder = 3
+		ranksButton.LayoutOrder = 4
+		leaveButton.LayoutOrder = 5
+		plusButton.Visible = true
+		hotbar.Visible = playing
+		local key = hotbarKey()
+		if key ~= lastHotbarKey then
+			lastHotbarKey = key
+			refreshHotbar()
+		end
 		-- In a run Tab opens the Upgrade Book, so the player list (also on Tab) steps aside.
 		pcall(function()
 			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not inRun)
@@ -895,6 +1021,28 @@ function HUD.Init()
 			UIKit.ToggleWindow("Shop")
 		elseif key == Enum.KeyCode.ButtonY then
 			UIKit.ToggleWindow(if inRun then "Upgrades" else "Shop")
+		elseif (key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonR1) and not inRun then
+			UIKit.ToggleWindow("Ranks")
+		elseif inRun and (key == Enum.KeyCode.DPadLeft or key == Enum.KeyCode.DPadRight) then
+			local run = ClientState.Run :: Types.RunState?
+			if run and run.OwnedTools then
+				local step = if key == Enum.KeyCode.DPadRight then 1 else -1
+				local n = #Config.Tools
+				local i = run.ToolIndex
+				for _ = 1, n do
+					i = ((i - 1 + step) % n) + 1
+					if run.OwnedTools[i] then
+						task.spawn(equipTool, i)
+						break
+					end
+				end
+			end
+		elseif inRun then
+			local numbers = { Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four, Enum.KeyCode.Five, Enum.KeyCode.Six }
+			local index = table.find(numbers, key)
+			if index and Config.Tools[index] then
+				task.spawn(equipTool, index)
+			end
 		end
 	end)
 

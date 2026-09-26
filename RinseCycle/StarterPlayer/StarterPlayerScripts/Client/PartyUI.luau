@@ -150,7 +150,9 @@ local function listLayout(parent: Instance, dir: Enum.FillDirection, pad: number
 	l.FillDirection = dir
 	l.Padding = UDim.new(0, pad)
 	l.HorizontalAlignment = hAlign or Enum.HorizontalAlignment.Center
-	l.VerticalAlignment = Enum.VerticalAlignment.Center
+	-- Scrolling lists must be top-aligned: a centred list taller than its frame spills above the
+	-- top, where it can't be scrolled to (that's what cut off the first dishwasher card).
+	l.VerticalAlignment = if parent:IsA("ScrollingFrame") then Enum.VerticalAlignment.Top else Enum.VerticalAlignment.Center
 	l.Parent = parent
 	return l
 end

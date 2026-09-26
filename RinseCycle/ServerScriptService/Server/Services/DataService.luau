@@ -74,6 +74,9 @@ local MSG_LOCK_LOST = "Your save was opened on another server - progress here wo
 export type Profile = {
 	Version: number,
 	Bubbles: number,
+	Gems: number, -- premium currency
+	Rank: string, -- equipped rank id ("" = none)
+	Ranks: { string }, -- owned rank ids
 	Perks: { [string]: number }, -- Config.Perks[i].Id -> level
 	Pets: { Types.PetEntry },
 	Equipped: { string }, -- Uids, slot order
@@ -123,6 +126,9 @@ type Session = {
 local TEMPLATE: Profile = {
 	Version = PROFILE_VERSION,
 	Bubbles = 0,
+	Gems = 0,
+	Rank = "",
+	Ranks = {},
 	Perks = {},
 	Pets = {},
 	Equipped = {},
@@ -316,6 +322,18 @@ local function sanitizeProfile(profile: Profile, player: Player)
 
 	p.Version = if isFinite(p.Version) then math.max(p.Version, PROFILE_VERSION) else PROFILE_VERSION
 	p.Bubbles = toCount(p.Bubbles, 0)
+	p.Gems = toCount(p.Gems, 0)
+	local ranks, seenRank = {}, {}
+	for _, id in (if type(p.Ranks) == "table" then p.Ranks else {}) do
+		if type(id) == "string" and Config.GetRank(id) and not seenRank[id] then
+			seenRank[id] = true
+			table.insert(ranks, id)
+		end
+	end
+	p.Ranks = ranks
+	if type(p.Rank) ~= "string" or not seenRank[p.Rank] then
+		p.Rank = ""
+	end
 
 	if type(p.Perks) ~= "table" then
 		p.Perks = Util.DeepCopy(TEMPLATE.Perks)
@@ -492,6 +510,9 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 	local stats = profile.Stats
 	local state: Types.MetaState = {
 		Bubbles = profile.Bubbles,
+		Gems = profile.Gems,
+		Rank = profile.Rank,
+		Ranks = table.clone(profile.Ranks),
 		Perks = perks,
 		Pets = pets,
 		Equipped = equipped,
@@ -1073,6 +1094,53 @@ function DataService.SpendBubbles(player: Player, amount: number): boolean
 	end
 	profile.Bubbles -= cost
 	DataService.PushMeta(player)
+	return true
+end
+
+-- Gems (premium currency). Returns true when applied.
+function DataService.AddGems(player: Player, amount: number): boolean
+	local profile = DataService.Get(player)
+	if not profile or not isFinite(amount) or amount <= 0 then
+		return false
+	end
+	profile.Gems += math.floor(amount + 0.5)
+	DataService.PushMeta(player)
+	return true
+end
+
+function DataService.SpendGems(player: Player, amount: number): boolean
+	local profile = DataService.Get(player)
+	if not profile or not isFinite(amount) or amount < 0 then
+		return false
+	end
+	local cost = math.ceil(amount)
+	if profile.Gems < cost then
+		return false
+	end
+	profile.Gems -= cost
+	DataService.PushMeta(player)
+	return true
+end
+
+-- Adds a rank to the collection (no-op if owned). Returns true if it was new.
+function DataService.AddRank(player: Player, rankId: string): boolean
+	local profile = DataService.Get(player)
+	if not profile or not Config.GetRank(rankId) or table.find(profile.Ranks, rankId) then
+		return false
+	end
+	table.insert(profile.Ranks, rankId)
+	DataService.PushMeta(player)
+	return true
+end
+
+function DataService.SetRank(player: Player, rankId: string): boolean
+	local profile = DataService.Get(player)
+	if not profile or (rankId ~= "" and not table.find(profile.Ranks, rankId)) then
+		return false
+	end
+	profile.Rank = rankId
+	DataService.PushMeta(player)
+	DataService.PassesChanged:Fire(player) -- same effect as a pass change: run stats recompute
 	return true
 end
 

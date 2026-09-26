@@ -26,6 +26,7 @@ local ArenaBuilder = require(script.Parent:WaitForChild("ArenaBuilder"))
 local DishFactory = require(script.Parent:WaitForChild("DishFactory"))
 local LobbyBuilder = require(script.Parent:WaitForChild("LobbyBuilder"))
 local Characters = require(script.Parent:WaitForChild("Characters"))
+local ToolModels = require(Shared:WaitForChild("ToolModels"))
 
 local RoundService = {}
 
@@ -75,8 +76,10 @@ type DishState = {
 type PlayerRun = {
 	Coins: number,
 	Tank: number,
-	Upgrades: Types.RunUpgrades,
-	ToolIndex: number,
+	Upgrades: Types.RunUpgrades, -- global upgrades (TankSize, Sneakers); per-tool ones live in ToolUpgrades
+	ToolIndex: number, -- the tool in hand
+	OwnedTools: { boolean },
+	ToolUpgrades: { Types.RunUpgrades }, -- [toolIndex] = that tool's HandSize / ScrubPower levels
 	Stats: Types.RunStats,
 	GrimeCleaned: number,
 	LastScrubAt: number, -- os.clock() of the last accepted Scrub packet
@@ -254,6 +257,87 @@ local function newUpgrades(): Types.RunUpgrades
 	return upgrades
 end
 
+-- The upgrade levels that apply right now: the global ones plus the tool-in-hand's own.
+local function effectiveUpgrades(pr: PlayerRun): Types.RunUpgrades
+	local merged = table.clone(pr.Upgrades) :: any
+	local own = pr.ToolUpgrades[pr.ToolIndex] :: any
+	for _, def in Config.Upgrades do
+		if def.PerTool then
+			merged[def.Id] = (own and own[def.Id]) or 0
+		end
+	end
+	return merged
+end
+
+local function newToolState(): ({ boolean }, { Types.RunUpgrades })
+	local owned, ups = {}, {}
+	for i in Config.Tools do
+		owned[i] = i == 1 -- everyone starts with Bare Hands
+		ups[i] = newUpgrades()
+	end
+	return owned, ups
+end
+
+-- Puts a model of the tool in hand into the character's right hand (everyone can see it).
+local function attachHeldTool(player: Player, toolIndex: number)
+	local character = player.Character
+	if not character then
+		return
+	end
+	local old = character:FindFirstChild("HeldTool")
+	if old then
+		old:Destroy()
+	end
+	character:SetAttribute("HeldToolIndex", toolIndex)
+	if toolIndex <= 1 then
+		return
+	end
+	local hand = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
+	if not hand or not hand:IsA("BasePart") then
+		return
+	end
+	local ok, model = pcall(ToolModels.Build, toolIndex, 0.42)
+	if not ok or not model then
+		return
+	end
+	model.Name = "HeldTool"
+	local grip = model.PrimaryPart :: BasePart
+	local offset = ToolModels.HoldOffset(toolIndex)
+	if hand.Name == "Right Arm" then
+		offset = CFrame.new(0, -1, 0) * offset
+	end
+	model:PivotTo(hand.CFrame * offset)
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") then
+			d.Anchored = false
+			d.Massless = true
+			if d ~= grip then
+				local weld = Instance.new("WeldConstraint")
+				weld.Part0 = grip
+				weld.Part1 = d
+				weld.Parent = d
+			end
+		end
+	end
+	local weld = Instance.new("Weld")
+	weld.Part0 = hand
+	weld.Part1 = grip
+	weld.C0 = offset
+	weld.Parent = grip
+	model.Parent = character
+end
+
+local function detachHeldTool(player: Player)
+	local character = player.Character
+	local old = character and character:FindFirstChild("HeldTool")
+	if old then
+		old:Destroy()
+	end
+	if character then
+		character:SetAttribute("HeldToolIndex", nil)
+	end
+end
+
 local function rebuildMemberIds(run: Run)
 	table.clear(run.MemberIds)
 	for _, member in run.Order do
@@ -275,7 +359,9 @@ local function buildState(run: Run, pr: PlayerRun): Types.RunState
 		Tank = pr.Tank,
 		TankMax = pr.Stats.TankMax,
 		ToolIndex = pr.ToolIndex,
-		Upgrades = pr.Upgrades,
+		OwnedTools = pr.OwnedTools,
+		ToolUpgrades = pr.ToolUpgrades,
+		Upgrades = effectiveUpgrades(pr),
 		Stats = pr.Stats,
 		DrainPosition = run.Arena.DrainPosition,
 		StationPosition = run.Arena.StationPosition or run.Arena.DrainPosition,
@@ -344,7 +430,8 @@ local function computeStats(levelIndex: number, player: Player, pr: PlayerRun): 
 		local ok, bonus = safe(Config.PetCoinBonus, profile.Pets, profile.Equipped)
 		petBonus = (ok and positive(bonus)) or 0
 	end
-	return Config.GetRunStats(levelIndex, pr.Upgrades, pr.ToolIndex, perks, getPasses(player), petBonus)
+	local rank = profile and profile.Rank or nil
+	return Config.GetRunStats(levelIndex, effectiveUpgrades(pr), pr.ToolIndex, perks, getPasses(player), petBonus, rank)
 end
 
 -- Recomputes a member's stats from their upgrades, tool, perks, passes and pets, and re-applies
@@ -420,6 +507,12 @@ local function retireGrime(run: Run, part: BasePart, entry: GrimeEntry, cleaner:
 		gained = math.min(entry.Units, math.max(0, pr.Stats.TankMax - pr.Tank))
 		pr.Tank += gained
 		pr.GrimeCleaned += 1
+
+		local gems = if entry.Golden then Config.Gems.GoldenDrop elseif rng:NextNumber() < Config.Gems.DropChance then 1 else 0
+		if gems > 0 then
+			safe(DataService.AddGems, rewardPlayer, gems)
+			notify(rewardPlayer, string.format("💎 You found %d Gem%s!", gems, if gems == 1 then "" else "s"), "Good")
+		end
 
 		if entry.Golden then
 			local range = R.GoldenBubbles
@@ -499,8 +592,10 @@ local function damageEntry(run: Run, player: Player, pr: PlayerRun, part: BasePa
 	if pr.Tank >= pr.Stats.TankMax then
 		return true -- tank full: the player (or pet) has to go sell first
 	end
-	if not fromPet and pr.ToolIndex < entry.MinTool then
-		return true -- too tough for this tool (pets ignore MinTool)
+	if not fromPet and (pr.Stats.Tier or pr.ToolIndex) < entry.MinTool then
+		-- Too tough for this tool: it still works, just slowly (so nobody can get stuck without the
+		-- coins for a better tool). Pets ignore MinTool.
+		amount *= R.UnderTierMult
 	end
 
 	run.LastDamageAt = os.clock()
@@ -643,6 +738,7 @@ local function rewardRun(run: Run, members: { Player }, seconds: number, returnA
 			bubbles = math.floor(bubbles)
 
 			safe(DataService.AddBubbles, p, bubbles, "RunClear")
+			safe(DataService.AddGems, p, Config.Gems.PerClear * run.Level)
 			safe(DataService.AddStat, p, "GrimeCleaned", pr.GrimeCleaned)
 			safe(DataService.PushMeta, p)
 
@@ -823,12 +919,15 @@ local function joinRun(run: Run, player: Player, index: number)
 		Tank = 0,
 		Upgrades = newUpgrades(),
 		ToolIndex = 1,
+		OwnedTools = {},
+		ToolUpgrades = {},
 		Stats = nil :: any,
 		GrimeCleaned = 0,
 		LastScrubAt = 0,
 		LastFullFX = 0,
 		Results = nil,
 	}
+	pr.OwnedTools, pr.ToolUpgrades = newToolState()
 	pr.Stats = computeStats(run.Level, player, pr)
 
 	run.Players[player] = pr
@@ -882,6 +981,10 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 		local lucky = profile and profile.Perks and positive(profile.Perks.LuckySuds) or 0
 		bestLucky = math.max(bestLucky, lucky)
 		charm = charm or getPasses(p).LuckyCharm == true
+		local rank = profile and Config.GetRank(profile.Rank)
+		if rank and rank.Effects.Golden then
+			charm = true
+		end
 	end
 	local luckyPerk = Config.GetPerk("LuckySuds")
 	local goldenChance = level.GoldenChance + bestLucky * (if luckyPerk then luckyPerk.PerLevel else 0.01)
@@ -1011,6 +1114,7 @@ function RoundService.RemoveFromRun(player: Player, reason: string?)
 	rebuildMemberIds(run)
 
 	if reason ~= LEFT_GAME and isHere(player) then
+		detachHeldTool(player)
 		player:SetAttribute("InRun", false)
 		player:SetAttribute("RunArena", "")
 		Characters.SetWalkSpeed(player, nil)
@@ -1074,6 +1178,18 @@ end
 
 -- Recomputes a player's run stats (perks, passes, pets). Called after pet equip changes, perk
 -- purchases and pass grants; harmless when the player isn't in a run.
+-- Coin packs (MarketService): adds coins to the player's current run. False if not in a run.
+function RoundService.AddCoins(player: Player, amount: number): boolean
+	local run = runOf[player]
+	local pr = run and run.Players[player]
+	if not run or not pr or run.Ended or type(amount) ~= "number" or amount ~= amount or amount <= 0 then
+		return false
+	end
+	pr.Coins += math.floor(amount * Config.GetLevel(run.Level).Mult + 0.5)
+	queuePush(player)
+	return true
+end
+
 function RoundService.RefreshStats(player: Player)
 	local run = runOf[player]
 	local pr = run and run.Players[player]
@@ -1188,12 +1304,14 @@ local function handleRunRequest(player: Player, action: any, value: any): Types.
 		if run.Phase ~= "Playing" then
 			return fail("The dishwasher is already sparkling clean!")
 		end
-		if type(value) ~= "string" or not Config.GetUpgrade(value) then
+		local def = if type(value) == "string" then Config.GetUpgrade(value) else nil
+		if not def then
 			return fail("That upgrade doesn't exist.")
 		end
-		local upgrades = pr.Upgrades :: any
-		local current = upgrades[value] or 0
-		local cost = Config.UpgradeCost(value, current, run.Level)
+		-- Per-tool upgrades belong to the tool in hand; the rest are global.
+		local upgrades = (if def.PerTool then pr.ToolUpgrades[pr.ToolIndex] else pr.Upgrades) :: any
+		local current = upgrades[def.Id] or 0
+		local cost = Config.UpgradeCost(def.Id, current, run.Level, pr.ToolIndex)
 		if not cost then
 			return fail("Already maxed!")
 		end
@@ -1201,7 +1319,7 @@ local function handleRunRequest(player: Player, action: any, value: any): Types.
 			return fail("Not enough coins!")
 		end
 		pr.Coins -= cost
-		upgrades[value] = current + 1
+		upgrades[def.Id] = current + 1
 		recomputeStats(run, player, pr)
 		queuePush(player)
 		return OK
@@ -1212,11 +1330,8 @@ local function handleRunRequest(player: Player, action: any, value: any): Types.
 		if type(value) ~= "number" or value % 1 ~= 0 or not Config.Tools[value] then
 			return fail("That tool doesn't exist.")
 		end
-		if value <= pr.ToolIndex then
+		if pr.OwnedTools[value] then
 			return fail("You already have that tool!")
-		end
-		if value ~= pr.ToolIndex + 1 then
-			return fail("Buy the tools in order!")
 		end
 		local cost = Config.ToolCost(value, run.Level)
 		if not cost then
@@ -1226,9 +1341,22 @@ local function handleRunRequest(player: Player, action: any, value: any): Types.
 			return fail("Not enough coins!")
 		end
 		pr.Coins -= cost
-		pr.ToolIndex = value
+		pr.OwnedTools[value] = true
+		pr.ToolIndex = value -- a new tool goes straight into your hand
 		recomputeStats(run, player, pr)
+		attachHeldTool(player, value)
 		queuePush(player)
+		return OK
+	elseif action == "EquipTool" then
+		if type(value) ~= "number" or value % 1 ~= 0 or not pr.OwnedTools[value] then
+			return fail("You don't have that tool yet.")
+		end
+		if pr.ToolIndex ~= value then
+			pr.ToolIndex = value
+			recomputeStats(run, player, pr)
+			attachHeldTool(player, value)
+			queuePush(player)
+		end
 		return OK
 	elseif action == "Leave" then
 		RoundService.RemoveFromRun(player, "Leave")
@@ -1274,10 +1402,15 @@ local function watchdogStep()
 	local now = os.clock()
 	for _, run in runs do
 		if not run.Ended then
-			for player in run.Players do
+			for player, pr in run.Players do
 				local root = Characters.GetRoot(player)
 				if root and root.Position.Y < run.KillY then
 					Characters.Teleport(player, randomSpawn(run))
+				end
+				-- Re-attach the tool in hand after a respawn (a new character has none).
+				local character = player.Character
+				if root and character and character:GetAttribute("HeldToolIndex") ~= pr.ToolIndex then
+					attachHeldTool(player, pr.ToolIndex)
 				end
 			end
 			if

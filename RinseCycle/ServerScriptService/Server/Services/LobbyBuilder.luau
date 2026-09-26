@@ -71,8 +71,8 @@ local SHOP_X = -40
 local PETSTAND_X = 40
 
 -- Colors
-local TILE_A = Color3.fromRGB(246, 244, 238)
-local TILE_B = Color3.fromRGB(218, 234, 240)
+local TILE_A = Color3.fromRGB(226, 218, 204)
+local TILE_B = Color3.fromRGB(182, 206, 222)
 local GRASS = Color3.fromRGB(116, 170, 86)
 local FENCE = Color3.fromRGB(252, 252, 250)
 local STEEL = Color3.fromRGB(205, 210, 216)
@@ -182,12 +182,14 @@ end
 -- Ground: a lawn, the tiled plaza, a white picket fence and invisible walls.
 ----------------------------------------------------------------------------------------------------
 local function buildGround(parent: Instance)
+	-- Safety floor under everything (the real ground is Terrain, see buildTerrain).
 	mkPart("Part", {
-		Name = "Lawn",
+		Name = "SafetyFloor",
 		Size = Vector3.new(700, 2, 700),
-		CFrame = at(0, -1, -20),
+		CFrame = at(0, -3, -20),
 		Color = GRASS,
-		Material = Enum.Material.Grass,
+		Transparency = 1,
+		CastShadow = false,
 	}, parent)
 
 	-- Plaza: large two-tone tiles (few parts, still reads as a tiled floor).
@@ -210,7 +212,7 @@ local function buildGround(parent: Instance)
 		Name = "Path",
 		Size = Vector3.new(14, 0.1, 110),
 		CFrame = at(0, FLOOR_Y + 0.05, -30),
-		Color = Color3.fromRGB(190, 220, 240),
+		Color = Color3.fromRGB(150, 188, 212),
 		Material = Enum.Material.SmoothPlastic,
 		CanCollide = false,
 		CastShadow = false,
@@ -266,30 +268,67 @@ end
 -- Spawn: built FIRST so a player who spawns mid-build has a floor.
 ----------------------------------------------------------------------------------------------------
 local function buildSpawn(parent: Instance)
+	-- A stepped round platform: navy base, marble top, the game's emblem on it, and four bubble
+	-- lamps around the edge. No two faces share a plane.
 	mkPart("Part", {
-		Name = "SpawnPad",
+		Name = "SpawnBase",
 		Shape = Enum.PartType.Cylinder,
-		Size = Vector3.new(1, 26, 26),
-		CFrame = upright(SPAWN.X, 0.5, SPAWN.Z),
-		Color = Color3.fromRGB(255, 255, 255),
-		Material = Enum.Material.SmoothPlastic,
-	}, parent)
-	mkPart("Part", {
-		Name = "SpawnRing",
-		Shape = Enum.PartType.Cylinder,
-		Size = Vector3.new(0.9, 27.5, 27.5),
+		Size = Vector3.new(0.7, 28, 28),
 		CFrame = upright(SPAWN.X, 0.45, SPAWN.Z),
-		Color = Color3.fromRGB(120, 200, 250),
+		Color = Color3.fromRGB(38, 78, 128),
 		Material = Enum.Material.SmoothPlastic,
-		CanCollide = false,
 	}, parent)
+	mkPart("Part", {
+		Name = "SpawnTop",
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(0.5, 24, 24),
+		CFrame = upright(SPAWN.X, 0.9, SPAWN.Z),
+		Color = Color3.fromRGB(236, 240, 244),
+		Material = Enum.Material.Marble,
+	}, parent)
+	local emblem = mkPart("Part", {
+		Name = "SpawnEmblem",
+		Size = Vector3.new(18, 0.05, 18),
+		CFrame = at(SPAWN.X, 1.2, SPAWN.Z),
+		Transparency = 1,
+		CanCollide = false,
+		CastShadow = false,
+	}, parent)
+	local gui = mk("SurfaceGui", { Face = Enum.NormalId.Top, CanvasSize = Vector2.new(600, 600), LightInfluence = 0.3 }, emblem)
+	local circle = mk("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromScale(0.96, 0.96),
+		BackgroundColor3 = Color3.fromRGB(120, 200, 250),
+		BackgroundTransparency = 0.35,
+	}, gui)
+	mk("UICorner", { CornerRadius = UDim.new(0.5, 0) }, circle)
+	mk("UIStroke", { Thickness = 10, Color = Color3.fromRGB(255, 255, 255) }, circle)
+	local title = mk("TextLabel", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromScale(0.8, 0.36),
+		BackgroundTransparency = 1,
+		Text = "🧼\n" .. string.upper(Config.GameName),
+		Font = Enum.Font.FredokaOne,
+		TextScaled = true,
+		TextColor3 = Color3.new(1, 1, 1),
+	}, gui)
+	mk("UIStroke", { Thickness = 6, Color = Color3.fromRGB(20, 60, 110) }, title)
+	for i = 1, 4 do
+		local a = (i - 0.5) / 4 * math.pi * 2
+		local px, pz = SPAWN.X + math.cos(a) * 12.5, SPAWN.Z + math.sin(a) * 12.5
+		mkPart("Part", { Name = "LampPost", Shape = Enum.PartType.Cylinder, Size = Vector3.new(3, 0.8, 0.8), CFrame = upright(px, 2.3, pz), Color = Color3.fromRGB(230, 234, 240), Material = Enum.Material.Metal }, parent)
+		local bulb = mkPart("Part", decor({ Name = "Bubble", Shape = Enum.PartType.Ball, Size = Vector3.new(2, 2, 2), CFrame = at(px, 4.6, pz), Color = if i % 2 == 0 then Color3.fromRGB(150, 220, 255) else Color3.fromRGB(255, 170, 215), Material = Enum.Material.Neon, Transparency = 0.2 }), parent)
+		mk("PointLight", { Range = 12, Brightness = 0.8, Color = bulb.Color }, bulb)
+	end
 	for i = 1, 4 do
 		local angle = (i - 1) / 4 * math.pi * 2 + math.pi / 4
-		local pos = Vector3.new(SPAWN.X + math.cos(angle) * 6, 1.5, SPAWN.Z + math.sin(angle) * 6)
+		local pos = Vector3.new(SPAWN.X + math.cos(angle) * 6, 1.8, SPAWN.Z + math.sin(angle) * 6)
 		mkPart("SpawnLocation", {
 			Name = "Spawn" .. i,
 			Size = Vector3.new(5, 1, 5),
-			CFrame = at(pos.X, pos.Y, pos.Z) * CFrame.Angles(0, 0, 0),
+			CFrame = at(pos.X, pos.Y, pos.Z),
 			Neutral = true,
 			Duration = 0,
 			Transparency = 1,
@@ -297,6 +336,47 @@ local function buildSpawn(parent: Instance)
 		}, parent)
 	end
 end
+
+-- Terrain around the plaza: rolling grass, hills, and a ring of snowy mountains on the horizon.
+-- Built in the background after the lobby (it's a lot of voxels), with small yields.
+local function buildTerrain()
+	local terrain = workspace.Terrain
+	pcall(function()
+		terrain:Clear()
+	end)
+	local o = ORIGIN
+	-- Grass ground, top at Y = 0 (a voxel boundary).
+	terrain:FillBlock(CFrame.new(o.X, o.Y - 8, o.Z - 20), Vector3.new(1600, 16, 1600), Enum.Material.Grass)
+	task.wait()
+	local rng = Random.new(7)
+	-- Rolling hills just outside the fence.
+	for i = 1, 22 do
+		local a = i / 22 * math.pi * 2 + rng:NextNumber(-0.1, 0.1)
+		local dist = rng:NextNumber(180, 290)
+		local r = rng:NextNumber(35, 70)
+		terrain:FillBall(Vector3.new(o.X + math.cos(a) * dist, o.Y - r * 0.55, o.Z - 20 + math.sin(a) * dist), r, Enum.Material.Grass)
+		if i % 4 == 0 then
+			task.wait()
+		end
+	end
+	-- Mountains: rock bodies with snow on top, two ranges deep so the horizon has layers.
+	for i = 1, 16 do
+		local a = i / 16 * math.pi * 2 + rng:NextNumber(-0.08, 0.08)
+		local dist = rng:NextNumber(520, 640)
+		local r = rng:NextNumber(110, 170)
+		local c = Vector3.new(o.X + math.cos(a) * dist, o.Y - r * 0.25, o.Z - 20 + math.sin(a) * dist)
+		terrain:FillBall(c, r, Enum.Material.Rock)
+		terrain:FillBall(c + Vector3.new(rng:NextNumber(-60, 60), -r * 0.2, rng:NextNumber(-60, 60)), r * 0.8, Enum.Material.Rock)
+		terrain:FillBall(c + Vector3.new(0, r * 0.62, 0), r * 0.42, Enum.Material.Snow)
+		-- Grassy foothill in front of it.
+		terrain:FillBall(c - (c - Vector3.new(o.X, c.Y, o.Z)).Unit * r * 0.8 - Vector3.new(0, r * 0.3, 0), r * 0.6, Enum.Material.Grass)
+		task.wait()
+	end
+	pcall(function()
+		(terrain :: any).Decoration = true
+	end)
+end
+
 
 ----------------------------------------------------------------------------------------------------
 -- Party pads: flat circles with a low see-through ring (it only blocks party members, so they stay
@@ -801,6 +881,45 @@ local function tree(parent: Instance, x: number, z: number, scale: number)
 	end
 end
 
+-- Rank Shrine: a floating, spinning crystal over a pedestal. Opens the Ranks window.
+local function buildRankShrine(parent: Instance)
+	local x, z = -30, 30
+	local base = mkPart("Part", { Name = "ShrineBase", Shape = Enum.PartType.Cylinder, Size = Vector3.new(1.6, 12, 12), CFrame = upright(x, 1, z), Color = Color3.fromRGB(60, 40, 110), Material = Enum.Material.SmoothPlastic }, parent)
+	mkPart("Part", { Name = "ShrinePillar", Shape = Enum.PartType.Cylinder, Size = Vector3.new(4, 5, 5), CFrame = upright(x, 3.8, z), Color = Color3.fromRGB(235, 225, 250), Material = Enum.Material.Marble }, parent)
+	mkPart("Part", decor({ Name = "ShrineRing", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.3, 13, 13), CFrame = upright(x, 1.65, z), Color = Color3.fromRGB(255, 120, 200), Material = Enum.Material.Neon }), parent)
+	local crystal = mkPart("Part", decor({
+		Name = "Crystal",
+		Size = Vector3.new(4, 4, 4),
+		CFrame = at(x, 10, z) * CFrame.Angles(math.rad(45), 0, math.rad(45)),
+		Color = Color3.fromRGB(190, 120, 255),
+		Material = Enum.Material.Glass,
+		Transparency = 0.15,
+		CastShadow = false,
+	}), parent)
+	crystal:SetAttribute("SpinSpeed", 0.8)
+	CollectionService:AddTag(crystal, "SpinY")
+	mk("PointLight", { Range = 16, Brightness = 1, Color = Color3.fromRGB(200, 140, 255) }, crystal)
+	mk("ParticleEmitter", {
+		Texture = "rbxasset://textures/particles/sparkles_main.dds",
+		Color = ColorSequence.new(Color3.fromRGB(230, 190, 255)),
+		Size = NumberSequence.new(0.6, 0),
+		Lifetime = NumberRange.new(0.8, 1.4),
+		Rate = 8,
+		Speed = NumberRange.new(1, 3),
+		SpreadAngle = Vector2.new(180, 180),
+	}, crystal)
+	worldSign(base, "💎 RANKS", 10, 2.6, 15.5, Color3.fromRGB(230, 190, 255))
+	worldSign(base, string.format("Roll for %d 💎", Config.RankRoll.Cost), 8, 1.6, 13.4, Color3.fromRGB(255, 255, 255))
+	local prompt = mk("ProximityPrompt", {
+		ActionText = "Roll Ranks",
+		ObjectText = "Rank Shrine",
+		RequiresLineOfSight = false,
+		HoldDuration = 0,
+		MaxActivationDistance = 12,
+	}, base) :: ProximityPrompt
+	prompt:SetAttribute("OpenWindow", "Ranks")
+end
+
 local function buildDecorations(parent: Instance)
 	for _, spot in { { -85, -90, 1.3 }, { 85, -90, 1.3 }, { -88, 52, 1 }, { 88, 52, 1 }, { -130, -30, 1.6 }, { 130, -30, 1.6 }, { -120, 70, 1.4 }, { 120, 70, 1.4 }, { 0, -140, 1.8 } } do
 		tree(parent, spot[1], spot[2], spot[3])
@@ -810,8 +929,8 @@ local function buildDecorations(parent: Instance)
 		mkPart("Part", decor({ Name = "Hedge", Size = Vector3.new(40, 5, 5), CFrame = at(x, 2.5, PLAZA_Z0 + 3), Color = Color3.fromRGB(80, 150, 70), Material = Enum.Material.Grass }), parent)
 	end
 	-- Giant sponge and soap bars around the spawn.
-	mkPart("Part", { Name = "GiantSponge", Size = Vector3.new(12, 5, 8), CFrame = at(-30, 2.7, 30) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(255, 215, 90), Material = Enum.Material.Sand }, parent)
-	mkPart("Part", decor({ Name = "SpongeScrub", Size = Vector3.new(12.2, 1.6, 8.2), CFrame = at(-30, 5.9, 30) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(80, 180, 100), Material = Enum.Material.Fabric }), parent)
+	mkPart("Part", { Name = "GiantSponge", Size = Vector3.new(12, 5, 8), CFrame = at(-80, 2.7, 46) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(255, 215, 90), Material = Enum.Material.Sand }, parent)
+	mkPart("Part", decor({ Name = "SpongeScrub", Size = Vector3.new(12.2, 1.6, 8.2), CFrame = at(-80, 5.9, 46) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(80, 180, 100), Material = Enum.Material.Fabric }), parent)
 	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(10, 3.5, 6), CFrame = at(30, 2, 30) * CFrame.Angles(0, math.rad(-15), 0), Color = Color3.fromRGB(190, 230, 255), Material = Enum.Material.SmoothPlastic }, parent)
 	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(8, 3, 5), CFrame = at(31, 5.3, 30) * CFrame.Angles(0, math.rad(10), 0), Color = Color3.fromRGB(255, 190, 220), Material = Enum.Material.SmoothPlastic }, parent)
 
@@ -854,17 +973,17 @@ local function getOrMake(className: string): Instance
 end
 
 local function setupLighting()
-	Lighting.ClockTime = 14.5
-	Lighting.Brightness = 1.8
-	Lighting.ExposureCompensation = -0.2
-	Lighting.Ambient = Color3.fromRGB(95, 100, 112)
-	Lighting.OutdoorAmbient = Color3.fromRGB(120, 125, 138)
+	Lighting.ClockTime = 15
+	Lighting.Brightness = 1.3
+	Lighting.ExposureCompensation = -0.35
+	Lighting.Ambient = Color3.fromRGB(80, 84, 94)
+	Lighting.OutdoorAmbient = Color3.fromRGB(100, 104, 116)
 	Lighting.GlobalShadows = true
-	Lighting.EnvironmentDiffuseScale = 0.6
-	Lighting.EnvironmentSpecularScale = 0.5
+	Lighting.EnvironmentDiffuseScale = 0.45
+	Lighting.EnvironmentSpecularScale = 0.35
 
 	local atmo = getOrMake("Atmosphere") :: Atmosphere
-	atmo.Density = 0.25
+	atmo.Density = 0.3
 	atmo.Offset = 0.1
 	atmo.Color = Color3.fromRGB(199, 218, 240)
 	atmo.Decay = Color3.fromRGB(120, 150, 190)
@@ -877,9 +996,9 @@ local function setupLighting()
 	bloom.Threshold = 2
 
 	local cc = getOrMake("ColorCorrectionEffect") :: ColorCorrectionEffect
-	cc.Saturation = 0.08
-	cc.Contrast = 0.06
-	cc.Brightness = 0
+	cc.Saturation = 0.1
+	cc.Contrast = 0.08
+	cc.Brightness = -0.02
 
 	local rays = getOrMake("SunRaysEffect") :: SunRaysEffect
 	rays.Intensity = 0.03
@@ -928,6 +1047,7 @@ function LobbyBuilder.Build(): Lobby
 	local dishesBoard = buildBoard(model, 28, BOARD_Z, "Most Dishes Cleaned")
 	buildHowToPlay(model, 0, BOARD_Z + 3)
 
+	buildRankShrine(model)
 	buildDecorations(model)
 	setupLighting()
 
@@ -937,6 +1057,12 @@ function LobbyBuilder.Build(): Lobby
 		Boards = { Times = timesBoard, Dishes = dishesBoard },
 	}
 	lobby = built
+	task.spawn(function()
+		local ok, err = pcall(buildTerrain)
+		if not ok then
+			warn("[LobbyBuilder] terrain failed: " .. tostring(err))
+		end
+	end)
 	return built
 end
 

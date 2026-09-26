@@ -421,9 +421,14 @@ end
 -- Sending
 ----------------------------------------------------------------------------------------------------
 
-local function toolName(index: number): string
-	local tool = Config.Tools[index]
-	return if tool then tool.Name else "a bigger tool"
+-- The cheapest tool that can clean dirt needing `tier`.
+local function toolName(tier: number): string
+	for _, tool in Config.Tools do
+		if (tool.Tier or 1) >= tier then
+			return tool.Name
+		end
+	end
+	return "a bigger tool"
 end
 
 local function sendScrub(hitPosition: Vector3, holding: boolean, pitchJitter: number)
@@ -492,17 +497,17 @@ local function onHeartbeat(dt: number)
 
 	-- MinTool lock hint: shown whenever the aimed part needs a tool we don't have yet.
 	local minTool = hitPart:GetAttribute("MinTool")
-	local needsTool = type(minTool) == "number" and minTool > stats.ToolIndex
+	local needsTool = type(minTool) == "number" and minTool > (stats.Tier or stats.ToolIndex)
 	if needsTool and hintAnchor and hintBillboard and hintLabel then
 		hintAnchor.CFrame = CFrame.new(hitPos)
-		hintLabel.Text = "🔒 Needs " .. toolName(minTool :: number)
+		hintLabel.Text = "🐢 A " .. toolName(minTool :: number) .. " cleans this much faster"
 		hintBillboard.Enabled = true
 	elseif hintBillboard then
 		hintBillboard.Enabled = false
 	end
 
 	local tankFull = run.Tank >= run.TankMax
-	local canSend = pressed and inReach and not needsTool and not tankFull
+	local canSend = pressed and inReach and not tankFull
 
 	local now = os.clock()
 	local sending = false
@@ -560,9 +565,7 @@ local function onPressBegan()
 		return
 	end
 	local distance = (result.Position - (root :: BasePart).Position).Magnitude
-	local minTool = result.Instance:GetAttribute("MinTool")
-	local needsTool = type(minTool) == "number" and (minTool :: number) > run.Stats.ToolIndex
-	if distance > run.Stats.Reach or needsTool or run.Tank >= run.TankMax then
+	if distance > run.Stats.Reach or run.Tank >= run.TankMax then
 		return
 	end
 

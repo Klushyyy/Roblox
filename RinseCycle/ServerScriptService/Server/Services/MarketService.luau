@@ -8,8 +8,9 @@
 --     PetService (slot count) listen to. We can't call RoundService from here: it requires
 --     DataService, and MarketService may only require DataService.
 --
--- Developer products: none exist yet (Bubbles are never sold for Robux, see DESIGN.md section 7).
--- ProcessReceipt already implements the idempotent pattern so adding one later is one table entry:
+-- Developer products (Config.DevProducts, entries with Id ~= 0): Bubbles, Gems and in-run Coins packs.
+-- MarketService.GrantProduct gives the goods; ShopService also uses it for Studio test purchases.
+-- ProcessReceipt implements the idempotent pattern:
 --   1. unknown product / player not here / save not writable  -> NotProcessedYet (Roblox retries)
 --   2. PurchaseId already in profile.Receipts (and saved)      -> PurchaseGranted, grant nothing
 --   3. otherwise grant, append PurchaseId to Receipts, save now; PurchaseGranted only once saved
@@ -23,6 +24,7 @@ local Config = require(Shared:WaitForChild("Config"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 
 local DataService = require(script.Parent:WaitForChild("DataService"))
+local RoundService = require(script.Parent:WaitForChild("RoundService"))
 
 local MarketService = {}
 
@@ -46,6 +48,35 @@ type Receipt = {
 --       -- give the item here
 --   end,
 local PRODUCTS: { [number]: (Player, any, Receipt) -> () } = {}
+
+-- Gives a developer product's goods. Never yields. Coins only make sense inside a run; bought
+-- anywhere else (e.g. the run ended while the prompt was open) they turn into Bubbles instead.
+function MarketService.GrantProduct(player: Player, product: any): boolean
+	if type(product) ~= "table" or type(product.Amount) ~= "number" then
+		return false
+	end
+	if product.Kind == "Bubbles" then
+		return DataService.AddBubbles(player, product.Amount, "Product")
+	elseif product.Kind == "Gems" then
+		return DataService.AddGems(player, product.Amount)
+	elseif product.Kind == "Coins" then
+		if RoundService.AddCoins(player, product.Amount) then
+			return true
+		end
+		return DataService.AddBubbles(player, math.floor(product.Amount / 2), "ProductCoinsFallback")
+	end
+	return false
+end
+
+for _, product in Config.DevProducts or {} do
+	if type(product.Id) == "number" and product.Id ~= 0 then
+		PRODUCTS[product.Id] = function(player: Player, _profile: any, _receipt: Receipt)
+			if not MarketService.GrantProduct(player, product) then
+				error("grant failed")
+			end
+		end
+	end
+end
 
 local checked: { [Player]: boolean } = {}
 local boughtThisSession: { [Player]: { [string]: boolean } } = {} -- never downgraded by a stale check

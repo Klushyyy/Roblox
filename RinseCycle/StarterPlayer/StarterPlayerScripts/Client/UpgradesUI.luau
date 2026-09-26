@@ -2,12 +2,12 @@
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button
-	  * right page: the tool ladder (Sponge -> Cannon). Owned tools are ticked, the next one has a buy
-	    button, later ones are "???" until they're next, and "your money" sits at the bottom
+	  * right page: every tool. Buy any of them in any order; owned ones go in your hand with Equip
+	    (or the hotbar, keys 1-6). Power and Size are per tool; Tank and Sneakers count for all.
 
 	Only meaningful inside a run, so it closes itself the moment ClientState.Run goes nil. Everything it
 	shows comes from ClientState.Run (server-authoritative) and Config's pure helpers.
-	Open it with the HUD button, Tab/Q, gamepad Y, or the Upgrade Book on the dishwasher door.
+	Open it with the HUD button, Tab/Q, or gamepad Y.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -128,7 +128,7 @@ local function upgradeCard(parent: Instance, def: any, run: Types.RunState, orde
 		Parent = card,
 	})
 	ink({
-		Text = string.format("Lv %d/%d", level, def.Max),
+		Text = string.format("Lv %d/%d  •  %s", level, def.Max, if def.PerTool then "this tool" else "all tools"),
 		TextSize = 15,
 		TextColor3 = INK_DIM,
 		Position = UDim2.fromOffset(52, 28),
@@ -176,7 +176,7 @@ local function upgradeCard(parent: Instance, def: any, run: Types.RunState, orde
 		Parent = card,
 	})
 
-	local cost = Config.UpgradeCost(def.Id, level, run.Level)
+	local cost = Config.UpgradeCost(def.Id, level, run.Level, run.ToolIndex)
 	UIKit.Button({
 		Text = if cost then "💰 " .. UIKit.Short(cost) else "MAX",
 		Size = UDim2.new(1, -20, 0, 42),
@@ -198,7 +198,7 @@ end
 local function renderLeft(run: Types.RunState)
 	clear(leftPage)
 	local tool = Config.Tools[run.ToolIndex] or Config.Tools[1]
-	ink({ Text = "Hand", TextSize = 34, Size = UDim2.new(1, 0, 0, 38), Parent = leftPage })
+	ink({ Text = "In your hand", TextSize = 34, Size = UDim2.new(1, 0, 0, 38), Parent = leftPage })
 
 	-- Current tool banner.
 	local banner = tile(leftPage, UDim2.new(1, 0, 0, 92), UDim2.fromOffset(0, 42), Color3.fromRGB(255, 252, 240))
@@ -256,19 +256,18 @@ end
 
 local function toolCard(parent: Instance, index: number, run: Types.RunState): Frame
 	local tool = Config.Tools[index]
-	local owned = index <= run.ToolIndex
-	local isNext = index == run.ToolIndex + 1
-	local revealed = owned or isNext
+	local owned = run.OwnedTools ~= nil and run.OwnedTools[index] == true
+	local inHand = index == run.ToolIndex
 	local card = tile(parent, UDim2.fromOffset(120, 140), UDim2.new(), if owned then Color3.fromRGB(225, 250, 230) else Color3.fromRGB(255, 252, 240))
 	card.LayoutOrder = index
-	if index == run.ToolIndex then
+	if inHand then
 		UIKit.Stroke(card, Colors.Good, 3)
 	end
 
-	local iconTile = tile(card, UDim2.fromOffset(72, 58), UDim2.new(0.5, -36, 0, 8), if revealed then tool.Color else Color3.fromRGB(80, 84, 96))
-	UIKit.Label({ Text = if revealed then tool.Icon else "🔒", TextSize = 38, Size = UDim2.fromScale(1, 1), Stroke = false, Parent = iconTile })
+	local iconTile = tile(card, UDim2.fromOffset(72, 58), UDim2.new(0.5, -36, 0, 8), tool.Color)
+	UIKit.Label({ Text = tool.Icon, TextSize = 38, Size = UDim2.fromScale(1, 1), Stroke = false, Parent = iconTile })
 	ink({
-		Text = if revealed then tool.Name else "???",
+		Text = tool.Name,
 		TextSize = 16,
 		Position = UDim2.fromOffset(4, 68),
 		Size = UDim2.new(1, -8, 0, 20),
@@ -276,9 +275,9 @@ local function toolCard(parent: Instance, index: number, run: Types.RunState): F
 		Parent = card,
 	})
 
-	if owned then
+	if inHand then
 		ink({
-			Text = if index == run.ToolIndex then "✅ Using" else "✅ Owned",
+			Text = "✅ In hand",
 			TextSize = 16,
 			TextColor3 = Color3.fromRGB(40, 150, 80),
 			AnchorPoint = Vector2.new(0.5, 1),
@@ -286,7 +285,19 @@ local function toolCard(parent: Instance, index: number, run: Types.RunState): F
 			Size = UDim2.new(1, -8, 0, 22),
 			Parent = card,
 		})
-	elseif isNext then
+	elseif owned then
+		UIKit.Button({
+			Text = "Equip",
+			Size = UDim2.new(1, -14, 0, 40),
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.new(0.5, 0, 1, -6),
+			Color = Colors.Primary,
+			Parent = card,
+			OnClick = function()
+				buy("EquipTool", index, card)
+			end,
+		})
+	else
 		local cost = Config.ToolCost(index, run.Level) or 0
 		UIKit.Button({
 			Text = "💰 " .. UIKit.Short(cost),
@@ -301,23 +312,13 @@ local function toolCard(parent: Instance, index: number, run: Types.RunState): F
 				buy("BuyTool", index, card)
 			end,
 		})
-	else
-		ink({
-			Text = "?",
-			TextSize = 28,
-			TextColor3 = INK_DIM,
-			AnchorPoint = Vector2.new(0.5, 1),
-			Position = UDim2.new(0.5, 0, 1, -10),
-			Size = UDim2.fromOffset(40, 30),
-			Parent = card,
-		})
 	end
 	return card
 end
 
 local function renderRight(run: Types.RunState)
 	clear(rightPage)
-	ink({ Text = "Tools", TextSize = 34, Size = UDim2.new(1, 0, 0, 38), Parent = rightPage })
+	ink({ Text = "Tools (any order!)", TextSize = 30, Size = UDim2.new(1, 0, 0, 38), Parent = rightPage })
 
 	local grid = Instance.new("Frame")
 	grid.BackgroundTransparency = 1

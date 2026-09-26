@@ -23,16 +23,23 @@ local LocalPlayer = Players.LocalPlayer
 
 local ShopUI = {}
 
-local WINDOW_SIZE = Vector2.new(820, 540)
+local WINDOW_SIZE = Vector2.new(880, 560)
 
 local initialized = false
-local activeTab: "Perks" | "Robux" = "Perks"
+type Tab = "Perks" | "Passes" | "Bubbles" | "Gems" | "Coins"
+local activeTab: Tab = "Perks"
+local TABS: { { Key: Tab, Text: string, Color: Color3 } } = {
+	{ Key = "Perks", Text = "🧼 Perks", Color = Colors.Bubble },
+	{ Key = "Passes", Text = "👑 Passes", Color = Colors.Good },
+	{ Key = "Bubbles", Text = "🧼 Bubbles", Color = Colors.Primary },
+	{ Key = "Gems", Text = "💎 Gems", Color = Colors.Accent },
+	{ Key = "Coins", Text = "💰 Coins", Color = Colors.Coin },
+}
+local tabButtons: { [string]: TextButton } = {}
 
 local content: Frame
 local tabsRow: Frame
 local list: ScrollingFrame
-local perksTabButton: TextButton
-local robuxTabButton: TextButton
 
 ----------------------------------------------------------------------------------------------------
 -- Perks tab
@@ -198,16 +205,88 @@ local function buildPassRow(def: any): Frame
 end
 
 ----------------------------------------------------------------------------------------------------
+-- Developer products (Bubbles / Gems / Coins packs)
+----------------------------------------------------------------------------------------------------
+
+local function buildProductRow(def: any): Frame
+	local run = ClientState.Run
+	local row = UIKit.Card({ Size = UDim2.new(1, 0, 0, 84), Name = def.Key })
+	UIKit.Label({
+		Text = def.Icon,
+		TextSize = 32,
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 12, 0.5, 0),
+		Size = UDim2.fromOffset(44, 44),
+		Parent = row,
+	})
+	local amount = def.Amount
+	local unit = if def.Kind == "Gems" then "💎" elseif def.Kind == "Coins" then "💰" else "🧼"
+	local note = ""
+	if def.Kind == "Coins" then
+		if run then
+			amount = math.floor(def.Amount * Config.GetLevel(run.Level).Mult + 0.5)
+			note = "  (added to this run)"
+		else
+			note = "  (buy inside a dishwasher)"
+		end
+	end
+	UIKit.Label({
+		Text = def.Name,
+		TextSize = 18,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Position = UDim2.fromOffset(66, 10),
+		Size = UDim2.new(1, -226, 0, 22),
+		Parent = row,
+	})
+	UIKit.Label({
+		Text = string.format("+%s %s%s", UIKit.Commas(amount), unit, note),
+		TextSize = 20,
+		TextColor3 = if def.Kind == "Gems" then Color3.fromRGB(220, 180, 255) elseif def.Kind == "Coins" then Colors.Coin else Colors.Bubble,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Position = UDim2.fromOffset(66, 40),
+		Size = UDim2.new(1, -226, 0, 26),
+		Parent = row,
+	})
+	UIKit.Button({
+		Text = "R$ " .. tostring(def.Price),
+		Size = UDim2.fromOffset(130, 46),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -14, 0.5, 0),
+		Color = Colors.Good,
+		Disabled = def.Kind == "Coins" and not run,
+		Parent = row,
+		OnClick = function()
+			if type(def.Id) == "number" and def.Id ~= 0 then
+				pcall(function()
+					MarketplaceService:PromptProductPurchase(LocalPlayer, def.Id)
+				end)
+				return
+			end
+			-- No Id yet: test mode (Studio only by default). See Config.DevProducts.
+			local result = ClientState.MetaRequest("TestProduct", def.Key)
+			if result.Ok then
+				UIKit.Confetti(50)
+				UIKit.Toast(string.format("+%s %s!", UIKit.Commas(amount), unit), "Good")
+				UIKit.Bounce(row)
+			else
+				UIKit.Toast(result.Error or "Coming soon!", "Info")
+			end
+		end,
+	})
+	return row
+end
+
+----------------------------------------------------------------------------------------------------
 -- Render
 ----------------------------------------------------------------------------------------------------
 
-local function styleTab(button: TextButton, active: boolean)
-	UIKit.SetButtonColor(button, if active then Colors.Primary else Colors.PanelLight)
-end
-
 local function render()
-	styleTab(perksTabButton, activeTab == "Perks")
-	styleTab(robuxTabButton, activeTab == "Robux")
+	for _, tab in TABS do
+		local button = tabButtons[tab.Key]
+		if button then
+			UIKit.SetButtonColor(button, if activeTab == tab.Key then tab.Color else Colors.PanelLight)
+		end
+	end
 
 	list:ClearAllChildren()
 	local layout = Instance.new("UIListLayout")
@@ -230,6 +309,14 @@ local function render()
 		for _, def in Config.Perks do
 			buildPerkRow(def).Parent = list
 		end
+	elseif activeTab ~= "Passes" then
+		for i, def in Config.DevProducts or {} do
+			if def.Kind == activeTab then
+				local row = buildProductRow(def)
+				row.LayoutOrder = i
+				row.Parent = list
+			end
+		end
 	else
 		local shown = 0
 		for i, def in Config.GamePasses do
@@ -251,7 +338,7 @@ local function render()
 	end
 end
 
-local function setTab(tab: "Perks" | "Robux")
+local function setTab(tab: Tab)
 	if activeTab == tab then
 		return
 	end
@@ -269,7 +356,7 @@ function ShopUI.Init()
 
 	local _window, windowContent = UIKit.Window({
 		Name = "Shop",
-		Title = "Soap Shop",
+		Title = "Shop",
 		Icon = "🛒",
 		Size = WINDOW_SIZE,
 		Parent = screenRoot,
@@ -287,24 +374,19 @@ function ShopUI.Init()
 	tabsLayout.Padding = UDim.new(0, 10)
 	tabsLayout.Parent = tabsRow
 
-	perksTabButton = UIKit.Button({
-		Text = "🧼 Perks",
-		Size = UDim2.fromOffset(160, 44),
-		CornerRadius = 10,
-		Parent = tabsRow,
-		OnClick = function()
-			setTab("Perks")
-		end,
-	})
-	robuxTabButton = UIKit.Button({
-		Text = "💎 Robux",
-		Size = UDim2.fromOffset(160, 44),
-		CornerRadius = 10,
-		Parent = tabsRow,
-		OnClick = function()
-			setTab("Robux")
-		end,
-	})
+	for i, tab in TABS do
+		tabButtons[tab.Key] = UIKit.Button({
+			Text = tab.Text,
+			Size = UDim2.fromOffset(146, 44),
+			CornerRadius = 10,
+			TextSize = 20,
+			LayoutOrder = i,
+			Parent = tabsRow,
+			OnClick = function()
+				setTab(tab.Key)
+			end,
+		})
+	end
 
 	list = Instance.new("ScrollingFrame")
 	list.Name = "List"
@@ -318,11 +400,22 @@ function ShopUI.Init()
 	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	list.Parent = content
 
+	-- The Shop opens on the tab that's most useful where you are: Coins in a run, Perks outside.
 	UIKit.RegisterWindow("Shop", {
-		Open = function()
+		Open = function(arg)
+			if type(arg) == "string" then
+				activeTab = arg :: Tab
+			elseif ClientState.Run then
+				activeTab = "Coins"
+			end
 			render()
 		end,
 	})
+	ClientState.Changed:Connect(function(kind)
+		if kind == "Run" and UIKit.IsWindowOpen("Shop") then
+			render()
+		end
+	end)
 
 	-- Celebrate a pass the moment it becomes owned (a real purchase or a test grant).
 	local ownedBefore: { [string]: boolean }? = nil

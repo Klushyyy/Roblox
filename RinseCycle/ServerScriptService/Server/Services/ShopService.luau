@@ -82,6 +82,10 @@ local function normalize(result: any): Types.RequestResult
 	if type(result.Pets) == "table" then
 		out.Pets = result.Pets
 	end
+	if type(result.Rank) == "string" then
+		out.Rank = result.Rank
+		out.Equipped = result.Equipped == true
+	end
 	return out
 end
 
@@ -159,6 +163,12 @@ local function petAction(name: string): (Player, any) -> Types.RequestResult
 	end
 end
 
+-- Free "test purchases" of passes/products without an Id: Studio only, unless Config says otherwise.
+local function testAllowed(): boolean
+	local rules = Config.TestPasses or {}
+	return if RunService:IsStudio() then rules.AllowInStudio == true else rules.AllowInLiveGame == true
+end
+
 -- Test mode for game passes that don't have an Id yet (see Config.GamePasses): grants the pass for
 -- this session only, and only in Studio unless Config.TestPasses.AllowInLiveGame is on.
 local function testPass(player: Player, value: any): Types.RequestResult
@@ -172,18 +182,82 @@ local function testPass(player: Player, value: any): Types.RequestResult
 	if type(pass.Id) == "number" and pass.Id ~= 0 then
 		return fail("This pass is on sale for real. Use the purchase prompt!")
 	end
-	local rules = Config.TestPasses or {}
-	local allowed = if RunService:IsStudio() then rules.AllowInStudio == true else rules.AllowInLiveGame == true
-	if not allowed then
+	if not testAllowed() then
 		return fail("Coming soon!")
 	end
 	DataService.SetPass(player, pass.Key, true)
 	return { Ok = true }
 end
 
+-- Test mode for developer products without an Id: gives the goods for free (Studio only).
+local function testProduct(player: Player, value: any): Types.RequestResult
+	local product = if type(value) == "string" then Config.GetProduct(value) else nil
+	if not product then
+		return fail("That item doesn't exist.")
+	end
+	if type(product.Id) == "number" and product.Id ~= 0 then
+		return fail("This is on sale for real. Use the purchase prompt!")
+	end
+	if not testAllowed() then
+		return fail("Coming soon!")
+	end
+	local MarketService = require(script.Parent:WaitForChild("MarketService")) :: any
+	if not MarketService.GrantProduct(player, product) then
+		return fail("Couldn't give that right now.")
+	end
+	return { Ok = true }
+end
+
+-- Rank roll: spend gems, pick a weighted random rank (x2 Luck pass boosts Rare+), keep it, and
+-- equip it if it's rarer than the one you have on.
+local rankRng = Random.new()
+local function rollRank(player: Player, _value: any): Types.RequestResult
+	local cost = Config.RankRoll.Cost
+	local profile = DataService.Get(player)
+	if not profile then
+		return fail(ERR_LOADING)
+	end
+	if profile.Gems < cost then
+		return fail(string.format("You need %d 💎 to roll!", cost))
+	end
+	if not DataService.SpendGems(player, cost) then
+		return fail(ERR_GENERIC)
+	end
+	local weights, total = Config.RankWeights(DataService.GetPasses(player).DoubleLuck == true)
+	local r = rankRng:NextNumber() * total
+	local picked = weights[#weights].Rank
+	for _, entry in weights do
+		r -= entry.Weight
+		if r <= 0 then
+			picked = entry.Rank
+			break
+		end
+	end
+	DataService.AddRank(player, picked.Id)
+	local current = Config.GetRank(profile.Rank)
+	local better = not current or Config.RankRarities[picked.Rarity].Order > Config.RankRarities[current.Rarity].Order
+	if better then
+		DataService.SetRank(player, picked.Id)
+	end
+	return { Ok = true, Rank = picked.Id, Equipped = better }
+end
+
+local function equipRank(player: Player, value: any): Types.RequestResult
+	if type(value) ~= "string" then
+		return fail(ERR_UNKNOWN)
+	end
+	if not DataService.SetRank(player, value) then
+		return fail("You don't have that rank yet.")
+	end
+	return { Ok = true }
+end
+
 local HANDLERS: { [string]: (Player, any) -> Types.RequestResult } = {
 	BuyPerk = buyPerk,
 	TestPass = testPass,
+	TestProduct = testProduct,
+	RollRank = rollRank,
+	EquipRank = equipRank,
 	Hatch = hatch,
 	Equip = petAction("Equip"),
 	Unequip = petAction("Unequip"),

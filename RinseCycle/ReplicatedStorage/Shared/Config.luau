@@ -55,6 +55,7 @@ Config.Round = {
 	StuckMaxRemaining = 3, -- ...and this few spots are left, they pop on their own
 	DishBonusShare = 0.25, -- cleaning the last spot on a dish pays 25% of the dish's units as coins
 	GoldenUnitsMult = 5,
+	UnderTierMult = 0.2, -- a tool below a spot's MinTool still cleans it, at this fraction of its power
 	GoldenBubbles = { 1, 3 }, -- min/max Bubbles for a golden spot (times the level index)
 	UnderParBonus = 0.25, -- +25% Bubbles for finishing under par time
 	FirstClearMult = 2,
@@ -75,26 +76,30 @@ Config.Base = {
 }
 
 -- In-run upgrades bought with Coins. Price = Base * Growth^level * level Mult (2 significant figures).
+-- PerTool upgrades are bought separately for every tool (and cost more on better tools: x UpgradeMult);
+-- the others (Tank, Sneakers) are yours whatever you're holding.
 Config.Upgrades = {
-	{ Id = "HandSize", Name = "Hand Size", Icon = "🖐️", Desc = "Clean a bigger area.", Base = 8, Growth = 1.55, Max = 12 },
-	{ Id = "ScrubPower", Name = "Scrub Power", Icon = "💪", Desc = "Dirt comes off faster.", Base = 6, Growth = 1.5, Max = 15 },
+	{ Id = "ScrubPower", Name = "Power", Icon = "💪", Desc = "This tool cleans faster.", Base = 6, Growth = 1.5, Max = 15, PerTool = true },
+	{ Id = "HandSize", Name = "Size", Icon = "🖐️", Desc = "This tool cleans a bigger area.", Base = 8, Growth = 1.55, Max = 12, PerTool = true },
 	{ Id = "TankSize", Name = "Tank Size", Icon = "🛢️", Desc = "Carry more dirt per trip.", Base = 5, Growth = 1.5, Max = 15 },
 	{ Id = "Sneakers", Name = "Sneakers", Icon = "👟", Desc = "Run to the drain faster.", Base = 10, Growth = 1.6, Max = 8 },
 }
 
--- Tools, bought in order with Coins inside a run (the "rake" tier). Cost is times level Mult.
--- Radius and Power multiply the upgraded base stats. Reach is in studs from your character.
+-- Tools, bought with Coins inside a run in ANY order, then picked from the hotbar (keys 1-6). Each
+-- one plays differently. Tier decides which dirt it can shift: dirt with MinTool 2 needs a Tier 2+
+-- tool. Radius and Power multiply the (per-tool) upgraded base stats. Reach is in studs.
 Config.Tools = {
-	{ Id = "Hands", Name = "Bare Hands", Icon = "🖐️", Cost = 0, Radius = 1.0, Power = 1.0, Reach = 16, Color = Color3.fromRGB(150, 210, 255), Desc = "Just you and some water." },
-	{ Id = "Sponge", Name = "Sponge", Icon = "🧽", Cost = 50, Radius = 1.3, Power = 2.0, Reach = 17, Color = Color3.fromRGB(255, 221, 87), Desc = "Soft, squishy, twice as strong." },
-	{ Id = "Brush", Name = "Scrub Brush", Icon = "🧹", Cost = 200, Radius = 1.5, Power = 3.5, Reach = 18, Color = Color3.fromRGB(120, 230, 160), Desc = "Bristles for burnt-on bits." },
-	{ Id = "Nozzle", Name = "Spray Nozzle", Icon = "🚿", Cost = 700, Radius = 1.8, Power = 6.0, Reach = 26, Color = Color3.fromRGB(90, 200, 255), Desc = "Clean from a distance." },
-	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Cost = 2500, Radius = 2.2, Power = 10.0, Reach = 34, Color = Color3.fromRGB(60, 140, 255), Desc = "Blasts through anything." },
-	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Cost = 9000, Radius = 2.8, Power = 16.0, Reach = 42, Color = Color3.fromRGB(200, 150, 255), Desc = "A tidal wave of suds." },
+	{ Id = "Hands", Name = "Bare Hands", Icon = "🖐️", Tier = 1, Cost = 0, Radius = 1.0, Power = 1.0, Reach = 16, UpgradeMult = 1, Color = Color3.fromRGB(150, 210, 255), Desc = "Free, but slow." },
+	{ Id = "Sponge", Name = "Sponge", Icon = "🧽", Tier = 1, Cost = 50, Radius = 1.3, Power = 2.0, Reach = 16, UpgradeMult = 1.5, Color = Color3.fromRGB(255, 221, 87), Desc = "Soft and quick on sauces." },
+	{ Id = "Brush", Name = "Scrub Brush", Icon = "🧹", Tier = 2, Cost = 200, Radius = 1.0, Power = 3.4, Reach = 15, UpgradeMult = 2, Color = Color3.fromRGB(120, 230, 160), Desc = "Small but tough: shifts burnt-on bits." },
+	{ Id = "Nozzle", Name = "Spray Nozzle", Icon = "🚿", Tier = 2, Cost = 600, Radius = 1.5, Power = 2.8, Reach = 30, UpgradeMult = 3, Color = Color3.fromRGB(90, 200, 255), Desc = "Cleans from far away." },
+	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Tier = 3, Cost = 2200, Radius = 1.9, Power = 7.0, Reach = 30, UpgradeMult = 5, Color = Color3.fromRGB(60, 140, 255), Desc = "Blasts through anything." },
+	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Tier = 3, Cost = 8000, Radius = 3.2, Power = 9.0, Reach = 36, UpgradeMult = 8, Color = Color3.fromRGB(200, 150, 255), Desc = "A huge wave of foam." },
 }
 
 ----------------------------------------------------------------------------------------------------
--- Grime. HP and Units are multiplied by the level Mult. MinTool = lowest tool index that can clean it.
+-- Grime (players see "dirt"). HP and Units are multiplied by the level Mult. MinTool = the lowest tool
+-- Tier that can clean it.
 -- Shape: "Blob" (flat ellipsoid), "Crumbs" (disc + little bits), "Streak" (long smear), "Sprinkles".
 ----------------------------------------------------------------------------------------------------
 Config.GrimeTypes = {
@@ -108,16 +113,16 @@ Config.GrimeTypes = {
 
 	Grease = { Name = "Grease", HP = 9, Units = 3, Color = Color3.fromRGB(235, 205, 110), Material = Enum.Material.Glass, Size = { 1.6, 2.6 }, Shape = "Streak", MinTool = 1 },
 	Mustard = { Name = "Mustard", HP = 6, Units = 2, Color = Color3.fromRGB(240, 190, 20), Material = Enum.Material.SmoothPlastic, Size = { 1.0, 1.8 }, Shape = "Streak", MinTool = 1 },
-	Char = { Name = "Char", HP = 16, Units = 4, Color = Color3.fromRGB(30, 26, 24), Material = Enum.Material.Basalt, Size = { 1.2, 2.0 }, Shape = "Crumbs", MinTool = 3 },
+	Char = { Name = "Char", HP = 16, Units = 4, Color = Color3.fromRGB(30, 26, 24), Material = Enum.Material.Basalt, Size = { 1.2, 2.0 }, Shape = "Crumbs", MinTool = 2 },
 
 	Frosting = { Name = "Frosting", HP = 8, Units = 3, Color = Color3.fromRGB(255, 150, 200), Material = Enum.Material.SmoothPlastic, Size = { 1.4, 2.4 }, Shape = "Blob", MinTool = 1 },
 	Sprinkles = { Name = "Sprinkles", HP = 3, Units = 1, Color = Color3.fromRGB(255, 255, 255), Material = Enum.Material.SmoothPlastic, Size = { 1.0, 1.6 }, Shape = "Sprinkles", MinTool = 1 },
 	Chocolate = { Name = "Chocolate", HP = 11, Units = 3, Color = Color3.fromRGB(80, 45, 25), Material = Enum.Material.SmoothPlastic, Size = { 1.4, 2.4 }, Shape = "Blob", MinTool = 1 },
-	BurntSugar = { Name = "Burnt Sugar", HP = 18, Units = 5, Color = Color3.fromRGB(120, 60, 10), Material = Enum.Material.Glass, Size = { 1.0, 1.8 }, Shape = "Crumbs", MinTool = 3 },
+	BurntSugar = { Name = "Burnt Sugar", HP = 18, Units = 5, Color = Color3.fromRGB(120, 60, 10), Material = Enum.Material.Glass, Size = { 1.0, 1.8 }, Shape = "Crumbs", MinTool = 2 },
 
 	TruffleGunk = { Name = "Truffle Gunk", HP = 10, Units = 3, Color = Color3.fromRGB(70, 60, 50), Material = Enum.Material.Mud, Size = { 1.4, 2.4 }, Shape = "Blob", MinTool = 1 },
 	CaviarSmear = { Name = "Caviar Smear", HP = 8, Units = 3, Color = Color3.fromRGB(25, 25, 35), Material = Enum.Material.Pebble, Size = { 1.2, 2.0 }, Shape = "Crumbs", MinTool = 1 },
-	AncientGravy = { Name = "Ancient Gravy", HP = 22, Units = 6, Color = Color3.fromRGB(90, 110, 50), Material = Enum.Material.Mud, Size = { 1.6, 2.6 }, Shape = "Streak", MinTool = 4 },
+	AncientGravy = { Name = "Ancient Gravy", HP = 22, Units = 6, Color = Color3.fromRGB(90, 110, 50), Material = Enum.Material.Mud, Size = { 1.6, 2.6 }, Shape = "Streak", MinTool = 2 },
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -134,14 +139,14 @@ Config.Levels = {
 		Subtitle = "Crumbs, ketchup and a whole lot of gravy.",
 		Icon = "🍝",
 		Mult = 1,
-		ParTime = 300,
+		ParTime = 330,
 		Bubbles = 40,
 		GoldenChance = 0.02,
 		Dishes = { Plate = 14, Bowl = 5, Cup = 5, Glass = 0, Fork = 4, Knife = 3, Spoon = 3, Pan = 0, Pot = 0 },
 		Spots = { Plate = 6, Bowl = 6, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16 },
 		Grime = { { Type = "Crumbs", Weight = 45 }, { Type = "Ketchup", Weight = 35 }, { Type = "Gravy", Weight = 20 } },
 		Theme = {
-			Tub = Color3.fromRGB(205, 211, 218),
+			Tub = Color3.fromRGB(172, 178, 187),
 			Rack = Color3.fromRGB(235, 240, 245),
 			Accent = Color3.fromRGB(80, 170, 255),
 			Plate = Color3.fromRGB(250, 250, 248),
@@ -159,11 +164,11 @@ Config.Levels = {
 		Subtitle = "Sauce everywhere. Watch out for burnt crust.",
 		Icon = "🍕",
 		Mult = 3,
-		ParTime = 420,
+		ParTime = 540,
 		Bubbles = 90,
 		GoldenChance = 0.02,
 		Dishes = { Plate = 16, Bowl = 6, Cup = 6, Glass = 2, Fork = 5, Knife = 4, Spoon = 3, Pan = 1, Pot = 0 },
-		Spots = { Plate = 7, Bowl = 7, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 16, Pot = 18 },
+		Spots = { Plate = 5, Bowl = 5, Cup = 3, Glass = 2, Fork = 2, Knife = 2, Spoon = 2, Pan = 11, Pot = 13 },
 		Grime = { { Type = "TomatoSauce", Weight = 40 }, { Type = "MeltedCheese", Weight = 30 }, { Type = "Crumbs", Weight = 15 }, { Type = "BurntCrust", Weight = 15 } },
 		Theme = {
 			Tub = Color3.fromRGB(200, 205, 210),
@@ -184,11 +189,11 @@ Config.Levels = {
 		Subtitle = "Grease, mustard, and char that needs a brush.",
 		Icon = "🍔",
 		Mult = 10,
-		ParTime = 540,
+		ParTime = 600,
 		Bubbles = 200,
 		GoldenChance = 0.025,
 		Dishes = { Plate = 18, Bowl = 6, Cup = 6, Glass = 4, Fork = 5, Knife = 5, Spoon = 4, Pan = 2, Pot = 0 },
-		Spots = { Plate = 8, Bowl = 8, Cup = 5, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 18, Pot = 20 },
+		Spots = { Plate = 5, Bowl = 5, Cup = 3, Glass = 2, Fork = 2, Knife = 2, Spoon = 2, Pan = 11, Pot = 13 },
 		Grime = { { Type = "Grease", Weight = 35 }, { Type = "Mustard", Weight = 25 }, { Type = "Ketchup", Weight = 25 }, { Type = "Char", Weight = 15 } },
 		Theme = {
 			Tub = Color3.fromRGB(190, 196, 202),
@@ -213,7 +218,7 @@ Config.Levels = {
 		Bubbles = 450,
 		GoldenChance = 0.03,
 		Dishes = { Plate = 20, Bowl = 8, Cup = 8, Glass = 4, Fork = 6, Knife = 5, Spoon = 5, Pan = 0, Pot = 2 },
-		Spots = { Plate = 9, Bowl = 8, Cup = 5, Glass = 4, Fork = 2, Knife = 2, Spoon = 2, Pan = 18, Pot = 20 },
+		Spots = { Plate = 5, Bowl = 5, Cup = 3, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 11, Pot = 13 },
 		Grime = { { Type = "Frosting", Weight = 35 }, { Type = "Sprinkles", Weight = 25 }, { Type = "Chocolate", Weight = 25 }, { Type = "BurntSugar", Weight = 15 } },
 		Theme = {
 			Tub = Color3.fromRGB(215, 205, 225),
@@ -234,11 +239,11 @@ Config.Levels = {
 		Subtitle = "Gold plates, fancy food and ancient gravy.",
 		Icon = "👑",
 		Mult = 150,
-		ParTime = 840,
+		ParTime = 780,
 		Bubbles = 1000,
 		GoldenChance = 0.04,
 		Dishes = { Plate = 24, Bowl = 8, Cup = 4, Glass = 8, Fork = 6, Knife = 6, Spoon = 6, Pan = 2, Pot = 2 },
-		Spots = { Plate = 10, Bowl = 10, Cup = 5, Glass = 5, Fork = 3, Knife = 3, Spoon = 3, Pan = 20, Pot = 24 },
+		Spots = { Plate = 5, Bowl = 5, Cup = 3, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 12, Pot = 14 },
 		Grime = { { Type = "TruffleGunk", Weight = 35 }, { Type = "CaviarSmear", Weight = 30 }, { Type = "Gravy", Weight = 20 }, { Type = "AncientGravy", Weight = 15 } },
 		Theme = {
 			Tub = Color3.fromRGB(60, 55, 70),
@@ -358,15 +363,113 @@ Config.GamePasses = {
 	{ Key = "MegaTank", Id = 0, Price = 149, Name = "Mega Tank", Icon = "🛢️", Desc = "Your tank holds twice as much." },
 	{ Key = "LuckyCharm", Id = 0, Price = 99, Name = "Lucky Charm", Icon = "🍀", Desc = "Twice as much golden dirt in your dishwasher." },
 	{ Key = "PetSlots", Id = 0, Price = 149, Name = "+2 Pet Slots", Icon = "🐾", Desc = "Equip two more pets." },
-	{ Key = "AutoDrain", Id = 0, Price = 199, Name = "Auto Drain", Icon = "🌀", Desc = "Your tank sells itself the moment it's full. No more walking!" },
-	{ Key = "DoubleBubbles", Id = 0, Price = 249, Name = "2x Bubbles", Icon = "🧼", Desc = "Double Bubbles from every finished run." },
-	{ Key = "VIP", Id = 0, Price = 299, Name = "VIP", Icon = "👑", Desc = "+25% coins and +25% Bubbles, forever." },
+	{ Key = "AutoDrain", Id = 0, Price = 149, Name = "Auto Drain", Icon = "🌀", Desc = "Your tank sells itself the moment it's full. No more walking!" },
+	{ Key = "DoubleBubbles", Id = 0, Price = 179, Name = "2x Bubbles", Icon = "🧼", Desc = "Double Bubbles from every finished run." },
+	{ Key = "VIP", Id = 0, Price = 199, Name = "VIP", Icon = "👑", Desc = "+25% coins and +25% Bubbles, forever." },
+	{ Key = "DoubleLuck", Id = 0, Price = 149, Name = "x2 Luck", Icon = "🍀", Desc = "Double the chance of Rare, Epic, Legendary and Mythic ranks." },
 }
 
+-- Developer products (buy as many times as you like). Same deal as passes: create a Developer
+-- Product on the Creator Dashboard (Monetization -> Developer Products) with this price, and paste
+-- its ID over the 0. Bubbles packs work anywhere; Coins packs only inside a run (the coins are
+-- multiplied by the dishwasher's level multiplier so they stay useful on every level).
+Config.DevProducts = {
+	{ Key = "Bubbles1", Id = 0, Price = 19, Kind = "Bubbles", Amount = 250, Name = "Handful of Bubbles", Icon = "🧼" },
+	{ Key = "Bubbles2", Id = 0, Price = 49, Kind = "Bubbles", Amount = 800, Name = "Bucket of Bubbles", Icon = "🧼" },
+	{ Key = "Bubbles3", Id = 0, Price = 99, Kind = "Bubbles", Amount = 2000, Name = "Tub of Bubbles", Icon = "🛁" },
+	{ Key = "Bubbles4", Id = 0, Price = 199, Kind = "Bubbles", Amount = 5000, Name = "Bathtub Overflow", Icon = "🌊" },
+	{ Key = "Coins1", Id = 0, Price = 15, Kind = "Coins", Amount = 150, Name = "Coin Splash", Icon = "💰" },
+	{ Key = "Coins2", Id = 0, Price = 39, Kind = "Coins", Amount = 600, Name = "Coin Wave", Icon = "💰" },
+	{ Key = "Coins3", Id = 0, Price = 89, Kind = "Coins", Amount = 2000, Name = "Coin Flood", Icon = "💰" },
+	{ Key = "Gems1", Id = 0, Price = 29, Kind = "Gems", Amount = 30, Name = "Pouch of Gems", Icon = "💎" },
+	{ Key = "Gems2", Id = 0, Price = 79, Kind = "Gems", Amount = 100, Name = "Sack of Gems", Icon = "💎" },
+	{ Key = "Gems3", Id = 0, Price = 199, Kind = "Gems", Amount = 300, Name = "Chest of Gems", Icon = "💎" },
+}
+
+function Config.GetProduct(key: string)
+	for _, p in Config.DevProducts do
+		if p.Key == key then
+			return p
+		end
+	end
+	return nil
+end
+
 Config.TestPasses = {
-	AllowInStudio = true, -- Id = 0 passes can be "bought" for free in Studio play tests
+	AllowInStudio = true, -- Id = 0 passes and products can be "bought" for free in Studio play tests
 	AllowInLiveGame = false, -- keep false: otherwise anyone could take unfinished passes for free
 }
+
+----------------------------------------------------------------------------------------------------
+-- Gems (premium currency) and Ranks.
+-- Gems drop rarely while cleaning (always from golden dirt), you get a few for every clear, and they
+-- can be bought with Robux (Config.DevProducts). A Rank roll costs Gems and gives a random rank; the
+-- rank you have equipped gives its perk in every run. Gems can be bought with Robux, so rank rolls
+-- are "paid random items": the odds are always shown before rolling (Roblox rules).
+----------------------------------------------------------------------------------------------------
+Config.Gems = {
+	DropChance = 0.006, -- per dirt spot you clean yourself
+	GoldenDrop = 1, -- gems from every golden spot
+	PerClear = 1, -- gems per finished run, times the level index
+}
+
+Config.RankRoll = {
+	Cost = 30, -- gems per roll
+	LuckMult = 2, -- x2 Luck pass: Rare and better are this many times as likely
+}
+
+Config.RankRarities = {
+	Common = { Order = 1, Color = Color3.fromRGB(190, 200, 210) },
+	Uncommon = { Order = 2, Color = Color3.fromRGB(110, 220, 120) },
+	Rare = { Order = 3, Color = Color3.fromRGB(80, 170, 255) },
+	Epic = { Order = 4, Color = Color3.fromRGB(190, 110, 255) },
+	Legendary = { Order = 5, Color = Color3.fromRGB(255, 190, 40) },
+	Mythic = { Order = 6, Color = Color3.fromRGB(255, 80, 120) },
+}
+
+-- Chance is out of 100 (they add up to 100). Effects:
+--   PowerAll   +x scrub power with every tool     ToolPower  { [toolId] = +x } for one tool
+--   Coins      +x coins from the drain            Tank       +x tank size
+--   Speed      +x walk speed (studs/s)            Golden     +x golden dirt chance (x times as much)
+Config.Ranks = {
+	{ Id = "Rinser", Name = "Rinser", Icon = "💧", Rarity = "Common", Chance = 24, Desc = "+10% coins", Effects = { Coins = 0.10 } },
+	{ Id = "DishHand", Name = "Dish Hand", Icon = "🍽️", Rarity = "Common", Chance = 22, Desc = "+15% tank size", Effects = { Tank = 0.15 } },
+	{ Id = "SpongeMaster", Name = "Sponge Master", Icon = "🧽", Rarity = "Uncommon", Chance = 10, Desc = "Sponge cleans 60% faster", Effects = { ToolPower = { Sponge = 0.6 } } },
+	{ Id = "BristleBoss", Name = "Bristle Boss", Icon = "🧹", Rarity = "Uncommon", Chance = 10, Desc = "Scrub Brush cleans 60% faster", Effects = { ToolPower = { Brush = 0.6 } } },
+	{ Id = "Speedy", Name = "Speedy Sudser", Icon = "👟", Rarity = "Uncommon", Chance = 9, Desc = "+4 walk speed", Effects = { Speed = 4 } },
+	{ Id = "SpraySniper", Name = "Spray Sniper", Icon = "🚿", Rarity = "Rare", Chance = 8, Desc = "Nozzle and Washer clean 50% faster", Effects = { ToolPower = { Nozzle = 0.5, Washer = 0.5 } } },
+	{ Id = "TankTitan", Name = "Tank Titan", Icon = "🛢️", Rarity = "Rare", Chance = 7, Desc = "+50% tank size, +10% coins", Effects = { Tank = 0.5, Coins = 0.1 } },
+	{ Id = "ScrubMaster", Name = "Scrub Master", Icon = "💪", Rarity = "Epic", Chance = 3.5, Desc = "Every tool cleans 25% faster", Effects = { PowerAll = 0.25 } },
+	{ Id = "GoldDigger", Name = "Gold Digger", Icon = "✨", Rarity = "Epic", Chance = 3.5, Desc = "Twice the golden dirt, +15% coins", Effects = { Golden = 1, Coins = 0.15 } },
+	{ Id = "SudsLegend", Name = "Suds Legend", Icon = "🏆", Rarity = "Legendary", Chance = 2.5, Desc = "Every tool 40% faster, +25% coins", Effects = { PowerAll = 0.4, Coins = 0.25 } },
+	{ Id = "Deity", Name = "Dishwasher Deity", Icon = "👑", Rarity = "Mythic", Chance = 0.5, Desc = "Every tool 75% faster, +50% coins, +50% tank", Effects = { PowerAll = 0.75, Coins = 0.5, Tank = 0.5 } },
+}
+
+function Config.GetRank(rankId: string?)
+	if not rankId then
+		return nil
+	end
+	for _, r in Config.Ranks do
+		if r.Id == rankId then
+			return r
+		end
+	end
+	return nil
+end
+
+-- Roll weights, with the x2 Luck pass applied. Returns { { Rank = def, Weight = n } }, total.
+function Config.RankWeights(doubleLuck: boolean?)
+	local list, total = {}, 0
+	for _, r in Config.Ranks do
+		local w = r.Chance
+		if doubleLuck and Config.RankRarities[r.Rarity].Order >= 3 then
+			w *= Config.RankRoll.LuckMult
+		end
+		table.insert(list, { Rank = r, Weight = w })
+		total += w
+	end
+	return list, total
+end
 
 ----------------------------------------------------------------------------------------------------
 -- Sounds. The rbxassetid ones are free Creator Store sounds (Roblox / ProSoundEffects). If one ever
@@ -440,12 +543,18 @@ function Config.GetPass(key: string)
 end
 
 -- Coin price of the next level of an in-run upgrade, or nil when maxed.
-function Config.UpgradeCost(upgradeId: string, currentLevel: number, levelIndex: number): number?
+-- toolIndex matters for PerTool upgrades (better tools cost more to upgrade).
+function Config.UpgradeCost(upgradeId: string, currentLevel: number, levelIndex: number, toolIndex: number?): number?
 	local u = Config.GetUpgrade(upgradeId)
 	if not u or currentLevel >= u.Max then
 		return nil
 	end
-	return Config.Round2(u.Base * (u.Growth ^ currentLevel) * Config.GetLevel(levelIndex).Mult)
+	local toolMult = 1
+	if u.PerTool then
+		local tool = Config.Tools[toolIndex or 1]
+		toolMult = (tool and tool.UpgradeMult) or 1
+	end
+	return Config.Round2(u.Base * (u.Growth ^ currentLevel) * Config.GetLevel(levelIndex).Mult * toolMult)
 end
 
 -- Coin price of a tool in a run.
@@ -494,7 +603,7 @@ end
 	  passes     : { DoubleCoins = bool, MegaTank = bool, ... }
 	  petCoinBonus : Config.PetCoinBonus(...)
 ]]
-function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, perks, passes, petCoinBonus: number?)
+function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, perks, passes, petCoinBonus: number?, rankId: string?)
 	local level = Config.GetLevel(levelIndex)
 	local tool = Config.Tools[toolIndex] or Config.Tools[1]
 	upgrades = upgrades or {}
@@ -507,11 +616,15 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 	if passes.SuperScrub then
 		power *= 1.5
 	end
+	local rank = Config.GetRank(rankId)
+	local fx = (rank and rank.Effects) or {}
+	power *= 1 + (fx.PowerAll or 0) + ((fx.ToolPower and fx.ToolPower[tool.Id]) or 0)
 	local tank = b.Tank * (b.TankGrowth ^ (upgrades.TankSize or 0)) * level.Mult
 	tank *= 1 + (perks.DeepTank or 0) * Config.GetPerk("DeepTank").PerLevel
 	if passes.MegaTank then
 		tank *= 2
 	end
+	tank *= 1 + (fx.Tank or 0)
 	local coinMult = 1 + (perks.CoinSoap or 0) * Config.GetPerk("CoinSoap").PerLevel + (petCoinBonus or 0)
 	if passes.DoubleCoins then
 		coinMult *= 2
@@ -519,16 +632,18 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 	if passes.VIP then
 		coinMult *= 1.25
 	end
+	coinMult *= 1 + (fx.Coins or 0)
 
 	return {
 		Radius = radius,
 		Power = power,
 		TankMax = math.floor(tank),
 		Reach = tool.Reach,
-		WalkSpeed = b.WalkSpeed + b.WalkSpeedPerLevel * (upgrades.Sneakers or 0),
+		WalkSpeed = b.WalkSpeed + b.WalkSpeedPerLevel * (upgrades.Sneakers or 0) + (fx.Speed or 0),
 		Hold = true, -- holding always scrubs (the old "Hold to Scrub" upgrade confused new players)
 		CoinMult = coinMult,
 		ToolIndex = toolIndex,
+		Tier = tool.Tier or toolIndex,
 	}
 end
 
@@ -568,6 +683,12 @@ do
 	for id, pet in Config.Pets do
 		assert(Config.Rarities[pet.Rarity], "Config: pet " .. id .. " has unknown rarity")
 	end
+	local rankSum = 0
+	for _, r in Config.Ranks do
+		assert(Config.RankRarities[r.Rarity], "Config: rank " .. r.Id .. " has unknown rarity")
+		rankSum += r.Chance
+	end
+	assert(math.abs(rankSum - 100) < 0.001, "Config: rank chances add to " .. rankSum)
 end
 
 return Config

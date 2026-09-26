@@ -45,6 +45,7 @@ export type RunStats = {
 	Hold: boolean,
 	CoinMult: number,
 	ToolIndex: number,
+	Tier: number, -- the tool's Tier (dirt with MinTool above this can't be scrubbed)
 }
 
 export type ResultRow = {
@@ -76,8 +77,10 @@ export type RunState = {
 	Coins: number,
 	Tank: number,
 	TankMax: number,
-	ToolIndex: number,
-	Upgrades: RunUpgrades,
+	ToolIndex: number, -- the tool in your hand
+	OwnedTools: { boolean }, -- [toolIndex] = owned (every index present)
+	ToolUpgrades: { RunUpgrades }, -- [toolIndex] = that tool's own HandSize / ScrubPower levels
+	Upgrades: RunUpgrades, -- effective levels for the tool in hand (its per-tool + global ones)
 	Stats: RunStats,
 	DrainPosition: Vector3,
 	StationPosition: Vector3,
@@ -95,6 +98,9 @@ export type PetEntry = {
 -- MetaState (S->C) - the player's permanent data.
 export type MetaState = {
 	Bubbles: number,
+	Gems: number, -- premium currency (rank rolls)
+	Rank: string, -- equipped rank id, "" = none
+	Ranks: { string }, -- every rank id owned
 	Perks: { [string]: number }, -- Config.Perks[i].Id -> level
 	Pets: { PetEntry },
 	Equipped: { string }, -- Uids
@@ -117,6 +123,8 @@ export type RequestResult = {
 	Ok: boolean,
 	Error: string?,
 	Pets: { PetEntry }?, -- MetaRequest "Hatch"
+	Rank: string?, -- MetaRequest "RollRank": the rank rolled
+	Equipped: boolean?, -- MetaRequest "RollRank": it was better, so it was put on
 }
 
 -- RunFX payloads (S->C), by kind.

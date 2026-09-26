@@ -28,6 +28,7 @@ local Config = require(Shared:WaitForChild("Config"))
 local Format = require(Shared:WaitForChild("Format"))
 
 local DishFactory = require(script.Parent:WaitForChild("DishFactory"))
+local ToolModels = require(Shared:WaitForChild("ToolModels"))
 
 local ArenaBuilder = {}
 
@@ -85,10 +86,8 @@ local LIFTS = {
 local CHUTE = { from = Vector3.new(0, TOP_RACK_Y, -36), to = Vector3.new(0, 0, -49) }
 
 -- Tool shop counter on the left of the open door.
-local SHOP_X = -44
+local SHOP_X = -49
 local SHOP_Z = { -112, -60 }
-local SHOP_HEIGHT = 5
-local BOOK_POS = Vector3.new(44, 0, -72)
 
 local YIELD_EVERY = 200
 
@@ -351,13 +350,12 @@ end
 
 local function buildTub(b: Builder, theme)
 	local steel = theme.Tub
-	local shadowless = { CastShadow = false }
 	local zMid = (TUB_Z_MIN + TUB_Z_MAX) / 2
 
 	-- Tub floor and walls. They don't cast shadows, so the room's daylight still reaches inside.
 	span(b, "TubFloor", -TUB_HALF_X - 2, TUB_HALF_X + 2, -2, 0, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal)
 	for _, side in { -1, 1 } do
-		span(b, "TubWall", side * TUB_HALF_X, side * (TUB_HALF_X + 2), 0, TUB_HEIGHT, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal, shadowless)
+		span(b, "TubWall", side * TUB_HALF_X, side * (TUB_HALF_X + 2), 0, TUB_HEIGHT, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal)
 		-- Pressed ribs and rack rails on the side walls.
 		for i = 1, 6 do
 			local y = i * (TUB_HEIGHT / 7)
@@ -367,8 +365,10 @@ local function buildTub(b: Builder, theme)
 			span(b, "RackRail", side * (TUB_HALF_X - 1.6), side * TUB_HALF_X, y - 0.8, y + 0.8, TUB_Z_MIN + 2, TUB_Z_MAX - 2, theme.Rack, Enum.Material.Metal, noCollide())
 		end
 	end
-	span(b, "TubBack", -TUB_HALF_X - 2, TUB_HALF_X + 2, 0, TUB_HEIGHT, TUB_Z_MAX, TUB_Z_MAX + 2, steel, Enum.Material.Metal, shadowless)
-	span(b, "TubCeiling", -TUB_HALF_X - 2, TUB_HALF_X + 2, TUB_HEIGHT, TUB_HEIGHT + 2, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal, shadowless)
+	-- The tub casts shadows (it's a closed box, like a real machine): the inside is lit by the
+	-- interior lights below rather than blasted by daylight.
+	span(b, "TubBack", -TUB_HALF_X - 2, TUB_HALF_X + 2, 0, TUB_HEIGHT, TUB_Z_MAX, TUB_Z_MAX + 2, steel, Enum.Material.Metal)
+	span(b, "TubCeiling", -TUB_HALF_X - 2, TUB_HALF_X + 2, TUB_HEIGHT, TUB_HEIGHT + 2, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal)
 
 	-- Filter cup in the floor at the back, heating element loop.
 	cyl(b, "Filter", 0.4, 14, 0, 0.2, 30, Color3.fromRGB(120, 125, 130), Enum.Material.DiamondPlate, noCollide())
@@ -392,7 +392,7 @@ local function buildTub(b: Builder, theme)
 		local lightPart = box(b, "InteriorLight", Vector3.new(1, 1, 1), spot[1], spot[2], spot[3], theme.Light, nil, { Transparency = 1, CanCollide = false, CastShadow = false })
 		local light = Instance.new("PointLight")
 		light.Color = theme.Light
-		light.Brightness = 1.1
+		light.Brightness = if spot[2] > 60 then 0.45 else 0.6
 		light.Range = 60
 		light.Shadows = false
 		light.Parent = lightPart
@@ -527,13 +527,41 @@ local function buildCutleryBasket(b: Builder, theme)
 	span(b, "BasketHandle", c.X - 0.4, c.X + 0.4, y0 + h.Y + 4.2, y0 + h.Y + 5, c.Z - h.Z, c.Z + h.Z, theme.Rack, nil, noCollide())
 end
 
+local function sprayEmitter(parent: Instance, rate: number, speed: number, direction: Enum.NormalId)
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Name = "Spray"
+	emitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	emitter.Color = ColorSequence.new(Color3.fromRGB(200, 235, 255))
+	emitter.LightEmission = 0.25
+	emitter.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.28), NumberSequenceKeypoint.new(1, 0.12) })
+	emitter.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.35), NumberSequenceKeypoint.new(0.8, 0.5), NumberSequenceKeypoint.new(1, 1) })
+	emitter.Lifetime = NumberRange.new(0.9, 1.4)
+	emitter.Rate = rate
+	emitter.Speed = NumberRange.new(speed * 0.8, speed)
+	emitter.SpreadAngle = Vector2.new(18, 18)
+	emitter.Acceleration = Vector3.new(0, -45, 0)
+	emitter.EmissionDirection = direction
+	emitter.Parent = parent
+end
+
+-- The spray arms spin (client side, tag SpinY) and throw arcs of droplets up into the load. A thin
+-- drizzle falls from the ceiling. Kept light so it never gets in the way of aiming.
 local function buildSprayArms(b: Builder, theme)
 	for _, y in { 2, TOP_RACK_Y - 3 } do
 		cyl(b, "ArmHub", 1.5, 5, 0, y, 10, theme.Metal, Enum.Material.Metal, noCollide())
-		local arm = box(b, "SprayArm", Vector3.new(RACK_HALF_X * 1.6, 0.9, 3), 0, y, 10, theme.Metal, Enum.Material.Metal, noCollide())
+		local length = RACK_HALF_X * 1.6
+		local arm = box(b, "SprayArm", Vector3.new(length, 0.9, 3), 0, y, 10, theme.Metal, Enum.Material.Metal, noCollide())
 		arm:SetAttribute("SpinSpeed", if y > 10 then 1.1 else 0.8)
 		CollectionService:AddTag(arm, "SpinY")
+		for _, f in { -0.42, -0.2, 0.2, 0.42 } do
+			local attach = Instance.new("Attachment")
+			attach.Position = Vector3.new(length * f, 0.5, 0)
+			attach.Parent = arm
+			sprayEmitter(attach, 5, if y > 10 then 22 else 30, Enum.NormalId.Top)
+		end
 	end
+	local drizzle = box(b, "Drizzle", Vector3.new(TUB_HALF_X * 1.8, 1, (TUB_Z_MAX - TUB_Z_MIN) * 0.9), 0, TUB_HEIGHT - 2, (TUB_Z_MIN + TUB_Z_MAX) / 2, theme.Light, nil, { Transparency = 1, CanCollide = false, CastShadow = false })
+	sprayEmitter(drizzle, 14, 4, Enum.NormalId.Bottom)
 end
 
 -- Bubble lifts and the drain chute. The client teleports whoever steps on a pad (Effects).
@@ -580,80 +608,6 @@ end
 -- Tool shop on the door (walk up to a tool and press the prompt to buy it) and the upgrade book.
 ----------------------------------------------------------------------------------------------------
 
--- One part of a display model, placed relative to `base` (the pedestal top, facing the players)
--- and scaled by `scale`. Cylinders use Roblox's X axis as their length axis.
-local function mp(b: Builder, base: CFrame, scale: number, name: string, shape: Enum.PartType?, size: Vector3, offset: Vector3, rot: CFrame?, color: Color3, material: Enum.Material?, transparency: number?): Part
-	local p = Instance.new("Part")
-	p.Name = name
-	if shape then
-		p.Shape = shape
-	end
-	p.Size = size * scale
-	p.CFrame = base * CFrame.new(offset * scale) * (rot or CFrame.identity)
-	p.Color = color
-	p.Material = material or Enum.Material.SmoothPlastic
-	p.Transparency = transparency or 0
-	p.Anchored = true
-	p.CanCollide = false
-	p.CanQuery = false
-	p.CanTouch = false
-	p.TopSurface = Enum.SurfaceType.Smooth
-	p.BottomSurface = Enum.SurfaceType.Smooth
-	p.Parent = b.model
-	b.count += 1
-	return p
-end
-
-local UPRIGHT = CFrame.Angles(0, 0, math.rad(90)) -- cylinder axis -> up
-local ALONG_Z = CFrame.Angles(0, math.rad(90), 0) -- cylinder axis -> front/back
-local DARK = Color3.fromRGB(45, 45, 52)
-local WHITE = Color3.fromRGB(245, 247, 250)
-local CHROME = Color3.fromRGB(205, 210, 218)
-
--- Display models for each tool. `base` sits on the pedestal top; local -Z faces the players.
-local function toolModel(b: Builder, index: number, base: CFrame, color: Color3)
-	local S = 1.6
-	if index == 2 then -- Sponge: yellow foam, green scrubber, a few pores
-		mp(b, base, S, "Sponge", nil, Vector3.new(3.4, 1.6, 2.2), Vector3.new(0, 0.8, 0), nil, Color3.fromRGB(255, 221, 87), Enum.Material.Sand)
-		mp(b, base, S, "Scrubber", nil, Vector3.new(3.4, 0.5, 2.2), Vector3.new(0, 1.85, 0), nil, Color3.fromRGB(70, 165, 80), Enum.Material.Fabric)
-		for _, o in { Vector3.new(-1, 0.6, -1.05), Vector3.new(0.4, 1.05, -1.05), Vector3.new(1.1, 0.5, -1.05), Vector3.new(-0.3, 0.35, -1.05) } do
-			mp(b, base, S, "Pore", Enum.PartType.Ball, Vector3.new(0.32, 0.32, 0.32), o, nil, Color3.fromRGB(215, 175, 55), Enum.Material.Sand)
-		end
-	elseif index == 3 then -- Scrub brush: coloured head, white bristle rows, angled wooden handle
-		mp(b, base, S, "BrushHead", nil, Vector3.new(3.2, 0.9, 1.6), Vector3.new(0, 1.0, 0), nil, color)
-		for i = -2, 2 do
-			mp(b, base, S, "Bristles", nil, Vector3.new(0.4, 0.7, 1.3), Vector3.new(i * 0.6, 0.35, 0), nil, WHITE, Enum.Material.Fabric)
-		end
-		mp(b, base, S, "Handle", nil, Vector3.new(0.6, 0.6, 3), Vector3.new(0, 2.0, 1.4), CFrame.Angles(math.rad(28), 0, 0), Color3.fromRGB(160, 110, 70), Enum.Material.Wood)
-		mp(b, base, S, "Knob", Enum.PartType.Ball, Vector3.new(0.9, 0.9, 0.9), Vector3.new(0, 2.75, 2.75), nil, Color3.fromRGB(160, 110, 70), Enum.Material.Wood)
-	elseif index == 4 then -- Spray nozzle: pistol grip, barrel, chrome tip, trigger, hose
-		mp(b, base, S, "Grip", nil, Vector3.new(0.8, 2, 1), Vector3.new(0, 1.1, 0.7), CFrame.Angles(math.rad(-15), 0, 0), DARK)
-		mp(b, base, S, "Barrel", Enum.PartType.Cylinder, Vector3.new(3.2, 1, 1), Vector3.new(0, 2.3, -0.4), ALONG_Z, color)
-		mp(b, base, S, "Tip", Enum.PartType.Cylinder, Vector3.new(0.9, 0.6, 0.6), Vector3.new(0, 2.3, -2.4), ALONG_Z, CHROME, Enum.Material.Metal)
-		mp(b, base, S, "Trigger", nil, Vector3.new(0.3, 0.8, 0.3), Vector3.new(0, 1.6, -0.2), nil, DARK)
-		mp(b, base, S, "Hose", Enum.PartType.Cylinder, Vector3.new(2, 0.45, 0.45), Vector3.new(0, 0.3, 1.9), ALONG_Z, Color3.fromRGB(60, 120, 60))
-	elseif index == 5 then -- Pressure washer: rounded body, wheels, handle, wand with a gun
-		mp(b, base, S, "Body", nil, Vector3.new(2.8, 1.6, 3.2), Vector3.new(0, 1.4, 0.4), nil, color)
-		mp(b, base, S, "Top", Enum.PartType.Cylinder, Vector3.new(3.2, 2.8, 2.8), Vector3.new(0, 2.2, 0.4), ALONG_Z, color)
-		mp(b, base, S, "Badge", nil, Vector3.new(1.4, 0.6, 0.1), Vector3.new(0, 1.6, -1.25), nil, WHITE)
-		for _, x in { -1.5, 1.5 } do
-			mp(b, base, S, "Wheel", Enum.PartType.Cylinder, Vector3.new(0.5, 1.4, 1.4), Vector3.new(x, 0.7, 1.3), nil, DARK)
-			mp(b, base, S, "HandlePost", nil, Vector3.new(0.3, 2.4, 0.3), Vector3.new(x * 0.75, 3.4, 1.9), nil, DARK)
-		end
-		mp(b, base, S, "HandleBar", nil, Vector3.new(2.6, 0.35, 0.35), Vector3.new(0, 4.6, 1.9), nil, DARK)
-		mp(b, base, S, "Gun", nil, Vector3.new(0.6, 1, 0.9), Vector3.new(1.9, 1.3, -0.3), nil, DARK)
-		mp(b, base, S, "Wand", Enum.PartType.Cylinder, Vector3.new(3.6, 0.3, 0.3), Vector3.new(1.9, 1.7, -2.4), ALONG_Z, CHROME, Enum.Material.Metal)
-	else -- Foam cannon: see-through soap tank, white barrel and bell, foam spilling out
-		mp(b, base, S, "Tank", Enum.PartType.Cylinder, Vector3.new(2.6, 2.2, 2.2), Vector3.new(0, 1.3, 0.7), UPRIGHT, color, Enum.Material.Glass, 0.25)
-		mp(b, base, S, "Soap", Enum.PartType.Cylinder, Vector3.new(1.6, 1.9, 1.9), Vector3.new(0, 0.85, 0.7), UPRIGHT, Color3.fromRGB(255, 150, 220), Enum.Material.SmoothPlastic, 0.1)
-		mp(b, base, S, "Barrel", Enum.PartType.Cylinder, Vector3.new(3.4, 1.1, 1.1), Vector3.new(0, 2.9, -0.6), ALONG_Z, WHITE)
-		mp(b, base, S, "Bell", Enum.PartType.Cylinder, Vector3.new(0.8, 1.9, 1.9), Vector3.new(0, 2.9, -2.6), ALONG_Z, WHITE)
-		for _, f in { { Vector3.new(0, 2.9, -3.5), 1.3 }, { Vector3.new(0.6, 3.5, -3.9), 0.9 }, { Vector3.new(-0.5, 3.4, -3.8), 0.8 } } do
-			mp(b, base, S, "Foam", Enum.PartType.Ball, Vector3.new(f[2], f[2], f[2]), f[1], nil, WHITE)
-		end
-	end
-end
-
 -- A SurfaceGui sign on a real part, facing `facing` (so it never floats, sinks or flickers).
 local function signBoard(b: Builder, name: string, size: Vector3, pos: Vector3, facing: Vector3, color: Color3): (Part, SurfaceGui)
 	local p = Instance.new("Part")
@@ -695,98 +649,90 @@ local function guiText(parent: Instance, name: string, text: string, pos: UDim2,
 	return label
 end
 
+-- The Tool Shop: a chrome wire shelving unit (it matches the dishwasher racks) standing on the
+-- left of the open door, facing the players. Two shelves, the tools on the upper ones, a price tag
+-- on the front lip of each spot, a sign on top. Buy any tool in any order with the prompt.
 local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 	local z0, z1 = SHOP_Z[1], SHOP_Z[2]
-	local x0, x1 = SHOP_X - 7, SHOP_X + 7
-	local toPlayers = b.origin.RightVector -- the shop faces +x, toward the middle of the door
-	local wood = Color3.fromRGB(176, 120, 76)
-	local darkWood = Color3.fromRGB(120, 78, 48)
-	local top = SHOP_HEIGHT + 0.6
+	local depth = 9
+	local x0, x1 = SHOP_X - depth / 2, SHOP_X + depth / 2 -- x1 is the front, facing the players
+	local toPlayers = b.origin.RightVector
+	local chrome = Color3.fromRGB(215, 220, 228)
+	local shelfYs = { 3, 9.5, 16 } -- bottom, middle (tools), top (tools)
+	local topY = 21
 
-	-- Rug, counter with inset front panels, countertop.
-	span(b, "ShopRug", x0 - 1, x1 + 10, 0, 0.12, z0 - 2, z1 + 2, Color3.fromRGB(190, 70, 70), Enum.Material.Fabric, noCollide())
-	span(b, "ShopCounter", x0, x1, 0.12, SHOP_HEIGHT, z0, z1, wood, Enum.Material.Wood)
-	span(b, "ShopCounterTop", x0 - 0.5, x1 + 0.8, SHOP_HEIGHT, top, z0 - 0.5, z1 + 0.5, darkWood, Enum.Material.Wood)
-	local panels = 5
-	for i = 0, panels - 1 do
-		local pz0 = z0 + 1 + (z1 - z0 - 2) / panels * i
-		local pz1 = pz0 + (z1 - z0 - 2) / panels - 1
-		span(b, "CounterPanel", x1, x1 + 0.25, 1, SHOP_HEIGHT - 1, pz0, pz1, Color3.fromRGB(205, 150, 100), Enum.Material.Wood, noCollide())
+	-- Four corner posts plus a middle pair, floor to top, with little feet.
+	for _, x in { x0, x1 } do
+		for _, z in { z0, (z0 + z1) / 2, z1 } do
+			cyl(b, "ShelfPost", topY, 0.7, x, topY / 2, z, chrome, Enum.Material.Metal)
+			cyl(b, "ShelfFoot", 0.4, 1.3, x, 0.2, z, Color3.fromRGB(60, 62, 70), nil, noCollide())
+		end
+	end
+	-- Shelves: a solid (invisible-ish) board so things rest on something, plus wire detail.
+	for _, y in shelfYs do
+		span(b, "ShelfBoard", x0, x1, y - 0.25, y, z0, z1, Color3.fromRGB(235, 238, 242), Enum.Material.DiamondPlate, { Transparency = 0.25 })
+		for _, x in { x0, x1 } do
+			span(b, "ShelfRail", x - 0.2, x + 0.2, y, y + 0.9, z0, z1, chrome, Enum.Material.Metal, noCollide())
+		end
+		for z = z0 + 3, z1 - 3, 3 do
+			span(b, "ShelfWire", x0, x1, y + 0.01, y + 0.07, z - 0.08, z + 0.08, chrome, Enum.Material.Metal, noCollide())
+		end
+	end
+	span(b, "ShelfTop", x0 - 0.3, x1 + 0.3, topY, topY + 0.4, z0 - 0.3, z1 + 0.3, chrome, Enum.Material.Metal)
+
+	-- Sign across the top.
+	local _, headerGui = signBoard(b, "ShopSign", Vector3.new(z1 - z0 - 4, 4, 0.5), worldPoint(b.origin, x1 - 0.5, topY + 2.6, (z0 + z1) / 2), toPlayers, theme.Accent)
+	guiText(headerGui, "Title", "🧽 TOOL SHOP  •  any tool, any order", UDim2.fromScale(0.03, 0.1), UDim2.fromScale(0.94, 0.8), Color3.new(1, 1, 1))
+
+	-- Spare sponges and bottles on the bottom shelf, for looks.
+	for i, z in { z0 + 6, z0 + 16, z1 - 16, z1 - 6 } do
+		local color = ({ Color3.fromRGB(255, 214, 80), Color3.fromRGB(120, 200, 255), Color3.fromRGB(255, 150, 200), Color3.fromRGB(120, 220, 140) })[i]
+		cyl(b, "Bottle", 4, 1.8, SHOP_X, shelfYs[1] + 2, z, color, Enum.Material.Glass, { CanCollide = false, Transparency = 0.15 })
+		cyl(b, "BottleCap", 0.8, 0.9, SHOP_X, shelfYs[1] + 4.4, z, Color3.new(1, 1, 1), nil, noCollide())
 	end
 
-	-- Back wall, corner posts and a striped awning with a scalloped edge.
-	local awningY = 22
-	span(b, "ShopBackWall", x0 - 2, x0 - 0.6, 0.12, awningY, z0 - 1, z1 + 1, Color3.fromRGB(235, 220, 190), Enum.Material.WoodPlanks)
-	for _, z in { z0 - 0.5, z1 + 0.5 } do
-		span(b, "ShopPost", x1 + 0.9, x1 + 1.9, top, awningY, z - 0.5, z + 0.5, darkWood, Enum.Material.Wood)
-	end
-	local stripes = 12
-	for i = 0, stripes - 1 do
-		local sz0 = z0 - 1 + (z1 - z0 + 2) / stripes * i
-		local sz1 = sz0 + (z1 - z0 + 2) / stripes
-		local color = if i % 2 == 0 then theme.Accent else Color3.new(1, 1, 1)
-		span(b, "Awning", x0 - 2, x1 + 3, awningY, awningY + 0.8, sz0, sz1, color, nil, noCollide())
-		local scallop = cyl(b, "Scallop", 0.4, (sz1 - sz0), x1 + 3.2, awningY + 0.1, (sz0 + sz1) / 2, color, nil, noCollide())
-		scallop.CFrame = footprint(b.origin, x1 + 3.2, awningY + 0.1, (sz0 + sz1) / 2)
-	end
-
-	-- Sign board on top of the awning.
-	local _, headerGui = signBoard(b, "ShopSign", Vector3.new(30, 5, 0.6), worldPoint(b.origin, x1 + 2.5, awningY + 3.4, (z0 + z1) / 2), toPlayers, Color3.fromRGB(40, 90, 170))
-	guiText(headerGui, "Title", "🧽 TOOL SHOP", UDim2.fromScale(0.05, 0.08), UDim2.fromScale(0.9, 0.84), Color3.fromRGB(255, 230, 120))
-
-	-- Two hanging lamps.
-	for _, z in { z0 + (z1 - z0) * 0.3, z0 + (z1 - z0) * 0.7 } do
-		span(b, "LampCord", SHOP_X - 0.1, SHOP_X + 0.1, 16, awningY, z - 0.1, z + 0.1, DARK, nil, noCollide())
-		local shade = cyl(b, "LampShade", 1.4, 3, SHOP_X, 15.4, z, theme.Accent, nil, noCollide())
-		local light = Instance.new("PointLight")
-		light.Range = 18
-		light.Brightness = 1.2
-		light.Color = Color3.fromRGB(255, 235, 200)
-		light.Parent = shade
-	end
-
-	-- The tools: pedestal + model + price tag + buy prompt.
-	local count = #Config.Tools - 1
+	-- Tools 2..6: the tall ones (sponge, nozzle, washer) on the middle shelf, the short ones on top.
+	local spots = {
+		[2] = { y = shelfYs[2], z = z1 - 8 },
+		[3] = { y = shelfYs[3], z = z1 - 13 },
+		[4] = { y = shelfYs[2], z = (z0 + z1) / 2 + 0.5 },
+		[5] = { y = shelfYs[2], z = z0 + 8 },
+		[6] = { y = shelfYs[3], z = z0 + 13 },
+	}
 	for i = 2, #Config.Tools do
 		local tool = Config.Tools[i]
-		local z = z1 - 6 - (i - 2) * ((z1 - z0 - 12) / math.max(1, count - 1))
-		local pedestal = cyl(b, "Pedestal", 0.8, 6, SHOP_X - 1, top + 0.4, z, WHITE, nil, noCollide())
+		local spot = spots[i]
+		if not spot then
+			break
+		end
+		local pedestal = cyl(b, "Pedestal", 0.4, 4.4, SHOP_X, spot.y + 0.2, spot.z, Color3.new(1, 1, 1), nil, noCollide())
 		pedestal.Name = "ToolDisplay_" .. i
-		cyl(b, "PedestalGlow", 0.2, 6.6, SHOP_X - 1, top + 0.1, z, tool.Color, Enum.Material.Neon, noCollide())
-		local basePos = worldPoint(b.origin, SHOP_X - 1, top + 0.8, z)
-		toolModel(b, i, CFrame.lookAt(basePos, basePos - toPlayers) * CFrame.Angles(0, math.rad(180), 0), tool.Color)
+		cyl(b, "PedestalGlow", 0.12, 4.8, SHOP_X, spot.y + 0.06, spot.z, tool.Color, Enum.Material.Neon, noCollide())
+		local okModel, model = pcall(ToolModels.Build, i, 1.05)
+		if okModel and model then
+			local basePos = worldPoint(b.origin, SHOP_X, spot.y + 0.4, spot.z)
+			model:PivotTo(CFrame.lookAt(basePos, basePos + toPlayers) * CFrame.Angles(0, math.rad(25), 0))
+			model.Parent = b.model
+			b.count += #model:GetChildren()
+		end
 
 		local cost = Config.ToolCost(i, levelIndex) or 0
-		local tag, tagGui = signBoard(b, "PriceTag_" .. i, Vector3.new(6.5, 3, 0.3), worldPoint(b.origin, x1 + 0.4, top + 1.6, z), toPlayers, Color3.fromRGB(255, 250, 235))
+		local tag, tagGui = signBoard(b, "PriceTag_" .. i, Vector3.new(5.6, 1.6, 0.2), worldPoint(b.origin, x1 + 0.35, spot.y - 0.5, spot.z), toPlayers, Color3.fromRGB(255, 250, 235))
 		tag:SetAttribute("ToolIndex", i)
-		guiText(tagGui, "Title", tool.Icon .. " " .. tool.Name, UDim2.fromScale(0.04, 0.05), UDim2.fromScale(0.92, 0.45), Color3.new(1, 1, 1))
-		guiText(tagGui, "Price", "💰 " .. Format.Short(cost), UDim2.fromScale(0.04, 0.52), UDim2.fromScale(0.92, 0.43), Color3.fromRGB(255, 210, 60))
+		guiText(tagGui, "Title", tool.Icon .. " " .. tool.Name, UDim2.fromScale(0.03, 0.02), UDim2.fromScale(0.94, 0.5), Color3.new(1, 1, 1))
+		guiText(tagGui, "Price", "💰 " .. Format.Short(cost), UDim2.fromScale(0.03, 0.52), UDim2.fromScale(0.94, 0.46), Color3.fromRGB(255, 210, 60))
 
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = "Buy"
 		prompt.ObjectText = string.format("%s  💰%s", tool.Name, Format.Short(cost))
 		prompt.HoldDuration = 0
 		prompt.RequiresLineOfSight = false
-		prompt.MaxActivationDistance = 15
+		prompt.MaxActivationDistance = 14
 		prompt:SetAttribute("BuyTool", i)
 		prompt.Parent = pedestal
 	end
 
-	-- Upgrade book on a lectern across the door.
-	local lectern = span(b, "Lectern", BOOK_POS.X - 2, BOOK_POS.X + 2, 0, 5, BOOK_POS.Z - 2, BOOK_POS.Z + 2, Color3.fromRGB(150, 100, 62), Enum.Material.Wood)
-	box(b, "BookCover", Vector3.new(4.6, 0.5, 3.4), BOOK_POS.X, 5.4, BOOK_POS.Z, Color3.fromRGB(40, 90, 180), nil, noCollide())
-	box(b, "BookPages", Vector3.new(4.2, 0.4, 3), BOOK_POS.X, 5.8, BOOK_POS.Z, Color3.fromRGB(250, 244, 225), nil, noCollide())
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Open"
-	prompt.ObjectText = "Upgrade Book"
-	prompt.HoldDuration = 0
-	prompt.RequiresLineOfSight = false
-	prompt.MaxActivationDistance = 12
-	prompt:SetAttribute("OpenWindow", "Upgrades")
-	prompt.Parent = lectern
-	sign(lectern, "📖 UPGRADES", 12, 2.6, 7, Color3.fromRGB(255, 230, 120))
-
-	return worldPoint(b.origin, BOOK_POS.X, 0, BOOK_POS.Z)
+	return worldPoint(b.origin, SHOP_X + depth, 0, (z0 + z1) / 2)
 end
 
 ----------------------------------------------------------------------------------------------------

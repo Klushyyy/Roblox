@@ -534,12 +534,11 @@ local function updateShopDisplays()
 		if not index or not tool then
 			continue
 		end
-		local owned = run.ToolIndex >= index
-		local isNext = index == run.ToolIndex + 1
+		local owned = run.OwnedTools ~= nil and run.OwnedTools[index] == true
 		if display then
 			local prompt = inst:FindFirstChildOfClass("ProximityPrompt")
 			if prompt then
-				prompt.Enabled = isNext
+				prompt.Enabled = not owned
 			end
 		else
 			local gui = inst:FindFirstChildOfClass("SurfaceGui")
@@ -549,12 +548,9 @@ local function updateShopDisplays()
 				if owned then
 					price.Text = "✅ Owned"
 					price.TextColor3 = UIKit.Theme.Colors.Good
-				elseif isNext then
+				else
 					price.Text = "💰 " .. UIKit.Short(cost)
 					price.TextColor3 = if run.Coins >= cost then UIKit.Theme.Colors.Coin else UIKit.Theme.Colors.Bad
-				else
-					price.Text = "🔒 💰 " .. UIKit.Short(cost)
-					price.TextColor3 = UIKit.Theme.Colors.TextDim
 				end
 			end
 		end

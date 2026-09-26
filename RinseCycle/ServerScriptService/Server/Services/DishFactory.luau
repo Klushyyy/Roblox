@@ -33,7 +33,7 @@ local DishFactory = {}
 -- load: plates are four characters tall and stand close together in the rack.
 ----------------------------------------------------------------------------------------------------
 local SIZE = {
-	Plate = { Diameter = 20, Thickness = 1 },
+	Plate = { Diameter = 20, Thickness = 1.2 },
 	Bowl = { Diameter = 15, Depth = 7 },
 	Cup = { Diameter = 8, Height = 10 },
 	Glass = { Diameter = 7, Height = 12 },
@@ -179,19 +179,32 @@ end
 -- Per-kind builders. Each returns (parts: {BasePart}, primaryIndex: number).
 ----------------------------------------------------------------------------------------------------
 
--- Plate standing on its edge: a coloured edge band with a thicker white face in front of it, so the
--- band shows as a rim ring. Face normal = anchor.LookVector. No two faces share a plane.
+-- Plate standing on its edge, face (the dirty side) toward anchor.LookVector. With CSG: a white body
+-- with a recessed well, a coloured stripe ring on the rim and a foot ring on the back. Without CSG:
+-- a coloured edge band behind a thicker white face. No two faces share a plane either way.
 local function buildPlate(anchor: CFrame, theme, _rng: Random)
 	local s = SIZE.Plate
+	local frame = CFrame.new(anchor.Position) * anchor.Rotation
+	local body = placeTemplate("PlateBody", frame, theme.Plate)
+	if body then
+		local parts = { body }
+		local stripe = placeTemplate("PlateStripe", frame, theme.PlateRim)
+		if stripe then
+			table.insert(parts, stripe)
+		end
+		local foot = placeTemplate("PlateFoot", frame, theme.Plate)
+		if foot then
+			table.insert(parts, foot)
+		end
+		return parts, 1
+	end
 	local r = s.Diameter / 2
-	local center = localPos(anchor, 0, r, 0)
-	local cf = axisCFrame(center, anchor.LookVector, anchor.UpVector)
+	local cf = axisCFrame(localPos(anchor, 0, r, 0), anchor.LookVector, anchor.UpVector)
 	local t = s.Thickness
-	local parts = {
+	return {
 		newPart(Enum.PartType.Cylinder, Vector3.new(t, s.Diameter, s.Diameter), cf, theme.PlateRim), -- edge band
 		newPart(Enum.PartType.Cylinder, Vector3.new(t + 0.3, s.Diameter * 0.88, s.Diameter * 0.88), cf, theme.Plate), -- face
-	}
-	return parts, 2
+	}, 2
 end
 
 -- Bowl, opening along anchor Up. CSG shell when available, otherwise a ring of angled slats.
@@ -214,8 +227,12 @@ local function buildBowl(anchor: CFrame, theme, _rng: Random)
 			table.insert(parts, newPart(nil, Vector3.new(r * 0.52, s.Depth * 1.05, WALL), cf, theme.Bowl))
 		end
 	end
-	-- Foot ring and a coloured band just under the rim.
+	-- Foot ring, and a coloured band hugging the outside of the rim.
 	table.insert(parts, newPart(Enum.PartType.Cylinder, Vector3.new(0.6, s.Diameter * 0.45, s.Diameter * 0.45), upright(anchor, 0.3), theme.Bowl))
+	local stripe = placeTemplate("BowlStripe", CFrame.new(anchor.Position) * anchor.Rotation, theme.PlateRim)
+	if stripe then
+		table.insert(parts, stripe)
+	end
 	return parts, 1
 end
 
@@ -390,7 +407,38 @@ local function cut(name: string, outer: Part, cutters: { Part })
 	end
 end
 
+-- Cylinder whose axis runs along the build frame's Z (the plate's facing), centred at (0, y, z).
+local function alongZAt(y: number, z: number): CFrame
+	return BUILD_AT * CFrame.new(0, y, z) * CFrame.Angles(0, math.rad(90), 0)
+end
+
+-- A flat ring (annulus) cut from two cylinders.
+local function ring(name: string, outerD: number, innerD: number, thickness: number, cf: CFrame)
+	local outer = tempPart(Enum.PartType.Cylinder, Vector3.new(thickness, outerD, outerD), cf)
+	local inner = tempPart(Enum.PartType.Cylinder, Vector3.new(thickness + 1, innerD, innerD), cf)
+	cut(name, outer, { inner })
+end
+
 local function buildTemplates()
+	-- Plate, standing on its edge at y = 0, face toward the build frame's -Z (its LookVector side).
+	do
+		local s = SIZE.Plate
+		local d, t = s.Diameter, s.Thickness
+		local r = d / 2
+		local front = -t / 2 -- local Z of the front face
+		local body = tempPart(Enum.PartType.Cylinder, Vector3.new(t, d, d), alongZAt(r, 0))
+		-- A well 0.35 deep with a small bevel step around it.
+		local well = tempPart(Enum.PartType.Cylinder, Vector3.new(1.4, d * 0.64, d * 0.64), alongZAt(r, front - 0.7 + 0.35))
+		local bevel = tempPart(Enum.PartType.Cylinder, Vector3.new(1.4, d * 0.72, d * 0.72), alongZAt(r, front - 0.7 + 0.15))
+		cut("PlateBody", body, { well, bevel })
+		ring("PlateStripe", d * 0.93, d * 0.86, 0.1, alongZAt(r, front - 0.05))
+		ring("PlateFoot", d * 0.6, d * 0.53, 0.3, alongZAt(r, t / 2 + 0.15))
+	end
+	-- Bowl rim band.
+	do
+		local s = SIZE.Bowl
+		ring("BowlStripe", s.Diameter + 0.4, s.Diameter - 0.8, 0.4, BUILD_AT * CFrame.new(0, s.Depth - 0.1, 0) * CFrame.Angles(0, 0, math.rad(90)))
+	end
 	-- Bowl: a ball, hollowed, with everything above the rim cut off. Contact point at y = 0.
 	do
 		local s = SIZE.Bowl
@@ -478,8 +526,8 @@ end
 ----------------------------------------------------------------------------------------------------
 local function candidatePlate(rng: Random)
 	local s = SIZE.Plate
-	local side = if rng:NextNumber() < 0.5 then 1 else -1
-	local r = math.sqrt(rng:NextNumber()) * s.Diameter * 0.4
+	local side = 1 -- only the front (the side you can see) gets dirty
+	local r = math.sqrt(rng:NextNumber()) * s.Diameter * 0.36
 	local theta = rng:NextNumber() * math.pi * 2
 	local x, y = r * math.cos(theta), s.Diameter / 2 + r * math.sin(theta)
 	return Vector3.new(x, y, side * 4), Vector3.new(0, 0, -side)
@@ -649,8 +697,45 @@ end
 -- ApplyGrime (dirt)
 ----------------------------------------------------------------------------------------------------
 local GOLDEN_COLOR = Color3.fromRGB(255, 213, 80)
-local RAY_ATTEMPTS = 10
+local RAY_ATTEMPTS = 14
 local MIN_SPACING = 1.2 -- spots on the same dish don't pile on top of each other
+local FIT_TOLERANCE = 0.35 -- how far the dish surface may drift from a spot's plane at its edge
+
+-- The dish surface under `pos` along `normal` (a short ray back down onto the dish), or nil.
+local function surfaceAt(params: RaycastParams, pos: Vector3, normal: Vector3): RaycastResult?
+	return workspace:Raycast(pos + normal * 1.2, -normal * 2.6, params)
+end
+
+-- Does a flat spot of `radius` at `center` sit on the dish all the way round? (No overhang off an
+-- edge, and not floating over a curve.)
+local function fits(params: RaycastParams, center: Vector3, normal: Vector3, radius: number): boolean
+	local cf = axisCFrame(center, normal, if math.abs(normal.Y) > 0.9 then Vector3.new(1, 0, 0) else Vector3.new(0, 1, 0))
+	for i = 1, 8 do
+		local a = i / 8 * math.pi * 2
+		local p = (cf * CFrame.new(0, math.cos(a) * radius, math.sin(a) * radius)).Position
+		local hit = surfaceAt(params, p, normal)
+		if not hit or math.abs((hit.Position - p):Dot(normal)) > FIT_TOLERANCE then
+			return false
+		end
+	end
+	return true
+end
+
+-- Glues a decoration part onto the dish surface under it, keeping its height above the surface.
+-- Returns false (and the caller drops it) when there's no dish underneath: that's what used to leave
+-- splats hanging off plate edges and cutlery.
+local function snapToSurface(params: RaycastParams, child: BasePart, basePos: Vector3, baseNormal: Vector3): boolean
+	local c = child.CFrame
+	local lift = (c.Position - basePos):Dot(baseNormal)
+	local hit = surfaceAt(params, c.Position - baseNormal * lift, baseNormal)
+	if not hit then
+		return false
+	end
+	local ok, rot = pcall(CFrame.fromRotationBetweenVectors, baseNormal, hit.Normal)
+	local turn = if ok and rot then rot else CFrame.identity
+	child.CFrame = CFrame.new(hit.Position + hit.Normal * lift) * turn * c.Rotation
+	return true
+end
 
 function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, levelIndex: number, rng: Random, goldenChance: number, folder: Folder): { BasePart }
 	local kind = dish:GetAttribute("Kind")
@@ -676,8 +761,16 @@ function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, leve
 	count = math.max(1, count)
 
 	for _ = 1, count do
+		local entry = Util.WeightedPick(level.Grime, "Weight", rng)
+		local grimeType = Config.GrimeTypes[entry.Type]
+		if not grimeType then
+			continue
+		end
+		local size = rng:NextNumber(grimeType.Size[1], grimeType.Size[2]) * DIRT_SCALE
+
+		-- Find a spot where the whole splat sits on the dish; shrink it if it only just misses.
 		local hitPos, hitNormal = nil, nil
-		for _attempt = 1, RAY_ATTEMPTS do
+		for attempt = 1, RAY_ATTEMPTS do
 			local lo, ld = candidateFn(rng)
 			if ld.Magnitude > 1e-4 then
 				local originWorld = localPos(anchor, lo.X, lo.Y, lo.Z)
@@ -692,88 +785,93 @@ function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, leve
 						end
 					end
 					if not crowded then
-						hitPos, hitNormal = result.Position, result.Normal
-						break
+						if fits(params, result.Position, result.Normal, size * 0.5) then
+							hitPos, hitNormal = result.Position, result.Normal
+							break
+						elseif attempt > RAY_ATTEMPTS / 2 and fits(params, result.Position, result.Normal, size * 0.32) then
+							size *= 0.65
+							hitPos, hitNormal = result.Position, result.Normal
+							break
+						end
 					end
 				end
 			end
 		end
 		if hitPos and hitNormal then
 			table.insert(used, hitPos)
-			local entry = Util.WeightedPick(level.Grime, "Weight", rng)
-			local grimeType = Config.GrimeTypes[entry.Type]
-			if grimeType then
-				local golden = rng:NextNumber() < goldenChance
-				local size = rng:NextNumber(grimeType.Size[1], grimeType.Size[2]) * DIRT_SCALE
-				local hint = if math.abs(hitNormal:Dot(Vector3.new(0, 1, 0))) > 0.9 then anchor.RightVector else Vector3.new(0, 1, 0)
-				local cf = axisCFrame(hitPos + hitNormal * 0.08, hitNormal, hint)
-				cf = cf * CFrame.Angles(rng:NextNumber() * math.pi * 2, 0, 0)
+			local golden = rng:NextNumber() < goldenChance
+			local hint = if math.abs(hitNormal:Dot(Vector3.new(0, 1, 0))) > 0.9 then anchor.RightVector else Vector3.new(0, 1, 0)
+			local cf = axisCFrame(hitPos + hitNormal * 0.08, hitNormal, hint)
+			cf = cf * CFrame.Angles(rng:NextNumber() * math.pi * 2, 0, 0)
 
-				local color = if golden then GOLDEN_COLOR else grimeType.Color
-				local material = grimeType.Material
+			local color = if golden then GOLDEN_COLOR else grimeType.Color
+			local material = grimeType.Material
 
-				local part: BasePart, children: { BasePart }
-				if grimeType.Shape == "Crumbs" then
-					part, children = shapeCrumbs(cf, size, color, material, rng)
-				elseif grimeType.Shape == "Sprinkles" then
-					part, children = shapeSprinkles(cf, size, color, material, rng)
-				elseif grimeType.Shape == "Streak" then
-					part, children = shapeStreak(cf, size, color, material, rng)
-				else
-					part, children = shapeBlob(cf, size, color, material, rng)
-				end
+			local part: BasePart, children: { BasePart }
+			if grimeType.Shape == "Crumbs" then
+				part, children = shapeCrumbs(cf, size, color, material, rng)
+			elseif grimeType.Shape == "Sprinkles" then
+				part, children = shapeSprinkles(cf, size, color, material, rng)
+			elseif grimeType.Shape == "Streak" then
+				part, children = shapeStreak(cf, size, color, material, rng)
+			else
+				part, children = shapeBlob(cf, size, color, material, rng)
+			end
 
-				part.Name = "Dirt"
-				part.CanTouch = false
-				part.CanQuery = true
-				part.CanCollide = false
-				part.CastShadow = false
-				-- Stay in the Default collision group: spatial queries (the server's scrub overlap,
-				-- raycasts) skip parts whose group can't collide with the query's group, so a
-				-- "collides with nothing" group would make dirt impossible to clean.
+			part.Name = "Dirt"
+			part.CanTouch = false
+			part.CanQuery = true
+			part.CanCollide = false
+			part.CastShadow = false
+			-- Stay in the Default collision group: spatial queries (the server's scrub overlap,
+			-- raycasts) skip parts whose group can't collide with the query's group, so a
+			-- "collides with nothing" group would make dirt impossible to clean.
 
-				local hp = math.max(1, math.floor(grimeType.HP * levelMult + 0.5))
-				local units = math.max(1, math.floor(grimeType.Units * levelMult + 0.5))
-				local minTool = grimeType.MinTool
-				if golden then
-					units = math.floor(units * Config.Round.GoldenUnitsMult + 0.5)
-					minTool = 1
-					part.Material = Enum.Material.Neon
-					part.Color = GOLDEN_COLOR
-					for _, child in children do
-						child.Color = GOLDEN_COLOR
-						child.Material = Enum.Material.Foil
-					end
-					local attach = Instance.new("Attachment")
-					attach.Parent = part
-					local emitter = Instance.new("ParticleEmitter")
-					emitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-					emitter.Lifetime = NumberRange.new(0.5, 1.0)
-					emitter.Rate = 6
-					emitter.Speed = NumberRange.new(0.5, 1.5)
-					emitter.Size = NumberSequence.new(0.5, 0)
-					emitter.Color = ColorSequence.new(GOLDEN_COLOR)
-					emitter.Parent = attach
-				end
-
-				part:SetAttribute("HP", hp)
-				part:SetAttribute("MaxHP", hp)
-				part:SetAttribute("Units", units)
-				part:SetAttribute("Type", entry.Type)
-				part:SetAttribute("DishId", dishId)
-				part:SetAttribute("Golden", golden)
-				part:SetAttribute("MinTool", minTool)
-				part:SetAttribute("BaseSize", part.Size)
-				part:SetAttribute("BaseTransparency", part.Transparency)
-
+			local hp = math.max(1, math.floor(grimeType.HP * levelMult + 0.5))
+			local units = math.max(1, math.floor(grimeType.Units * levelMult + 0.5))
+			local minTool = grimeType.MinTool
+			if golden then
+				units = math.floor(units * Config.Round.GoldenUnitsMult + 0.5)
+				minTool = 1
+				part.Material = Enum.Material.Neon
+				part.Color = GOLDEN_COLOR
 				for _, child in children do
+					child.Color = GOLDEN_COLOR
+					child.Material = Enum.Material.Foil
+				end
+				local attach = Instance.new("Attachment")
+				attach.Parent = part
+				local emitter = Instance.new("ParticleEmitter")
+				emitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+				emitter.Lifetime = NumberRange.new(0.5, 1.0)
+				emitter.Rate = 6
+				emitter.Speed = NumberRange.new(0.5, 1.5)
+				emitter.Size = NumberSequence.new(0.5, 0)
+				emitter.Color = ColorSequence.new(GOLDEN_COLOR)
+				emitter.Parent = attach
+			end
+
+			part:SetAttribute("HP", hp)
+			part:SetAttribute("MaxHP", hp)
+			part:SetAttribute("Units", units)
+			part:SetAttribute("Type", entry.Type)
+			part:SetAttribute("DishId", dishId)
+			part:SetAttribute("Golden", golden)
+			part:SetAttribute("MinTool", minTool)
+			part:SetAttribute("BaseSize", part.Size)
+			part:SetAttribute("BaseTransparency", part.Transparency)
+
+			for _, child in children do
+				if snapToSurface(params, child, hitPos, hitNormal) then
 					child:SetAttribute("BaseSize", child.Size)
 					child.Parent = part
+				else
+					child:Destroy()
 				end
-
-				part.Parent = folder
-				table.insert(placed, part)
 			end
+
+			part.Parent = folder
+			table.insert(placed, part)
 		end
 	end
 

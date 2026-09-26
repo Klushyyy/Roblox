@@ -59,6 +59,7 @@ Config.Round = {
 	StuckMaxRemaining = 3, -- ...and this few spots are left, they pop on their own
 	DishBonusShare = 0.25, -- cleaning the last spot on a dish pays 25% of the dish's units as coins
 	GoldenUnitsMult = 5,
+	UnderTierMult = 0.2, -- a tool below a spot's MinTool still cleans it, at this fraction of its power
 	GoldenBubbles = { 1, 3 }, -- min/max Bubbles for a golden spot (times the level index)
 	UnderParBonus = 0.25, -- +25% Bubbles for finishing under par time
 	FirstClearMult = 2,
@@ -79,26 +80,30 @@ Config.Base = {
 }
 
 -- In-run upgrades bought with Coins. Price = Base * Growth^level * level Mult (2 significant figures).
+-- PerTool upgrades are bought separately for every tool (and cost more on better tools: x UpgradeMult);
+-- the others (Tank, Sneakers) are yours whatever you're holding.
 Config.Upgrades = {
-	{ Id = "HandSize", Name = "Hand Size", Icon = "🖐️", Desc = "Clean a bigger area.", Base = 8, Growth = 1.55, Max = 12 },
-	{ Id = "ScrubPower", Name = "Scrub Power", Icon = "💪", Desc = "Dirt comes off faster.", Base = 6, Growth = 1.5, Max = 15 },
+	{ Id = "ScrubPower", Name = "Power", Icon = "💪", Desc = "This tool cleans faster.", Base = 6, Growth = 1.5, Max = 15, PerTool = true },
+	{ Id = "HandSize", Name = "Size", Icon = "🖐️", Desc = "This tool cleans a bigger area.", Base = 8, Growth = 1.55, Max = 12, PerTool = true },
 	{ Id = "TankSize", Name = "Tank Size", Icon = "🛢️", Desc = "Carry more dirt per trip.", Base = 5, Growth = 1.5, Max = 15 },
 	{ Id = "Sneakers", Name = "Sneakers", Icon = "👟", Desc = "Run to the drain faster.", Base = 10, Growth = 1.6, Max = 8 },
 }
 
--- Tools, bought in order with Coins inside a run (the "rake" tier). Cost is times level Mult.
--- Radius and Power multiply the upgraded base stats. Reach is in studs from your character.
+-- Tools, bought with Coins inside a run in ANY order, then picked from the hotbar (keys 1-6). Each
+-- one plays differently. Tier decides which dirt it can shift: dirt with MinTool 2 needs a Tier 2+
+-- tool. Radius and Power multiply the (per-tool) upgraded base stats. Reach is in studs.
 Config.Tools = {
-	{ Id = "Hands", Name = "Bare Hands", Icon = "🖐️", Cost = 0, Radius = 1.0, Power = 1.0, Reach = 16, Color = Color3.fromRGB(150, 210, 255), Desc = "Just you and some water." },
-	{ Id = "Sponge", Name = "Sponge", Icon = "🧽", Cost = 50, Radius = 1.3, Power = 2.0, Reach = 17, Color = Color3.fromRGB(255, 221, 87), Desc = "Soft, squishy, twice as strong." },
-	{ Id = "Brush", Name = "Scrub Brush", Icon = "🧹", Cost = 200, Radius = 1.5, Power = 3.5, Reach = 18, Color = Color3.fromRGB(120, 230, 160), Desc = "Bristles for burnt-on bits." },
-	{ Id = "Nozzle", Name = "Spray Nozzle", Icon = "🚿", Cost = 700, Radius = 1.8, Power = 6.0, Reach = 26, Color = Color3.fromRGB(90, 200, 255), Desc = "Clean from a distance." },
-	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Cost = 2500, Radius = 2.2, Power = 10.0, Reach = 34, Color = Color3.fromRGB(60, 140, 255), Desc = "Blasts through anything." },
-	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Cost = 9000, Radius = 2.8, Power = 16.0, Reach = 42, Color = Color3.fromRGB(200, 150, 255), Desc = "A tidal wave of suds." },
+	{ Id = "Hands", Name = "Bare Hands", Icon = "🖐️", Tier = 1, Cost = 0, Radius = 1.0, Power = 1.0, Reach = 16, UpgradeMult = 1, Color = Color3.fromRGB(150, 210, 255), Desc = "Free, but slow." },
+	{ Id = "Sponge", Name = "Sponge", Icon = "🧽", Tier = 1, Cost = 50, Radius = 1.3, Power = 2.0, Reach = 16, UpgradeMult = 1.5, Color = Color3.fromRGB(255, 221, 87), Desc = "Soft and quick on sauces." },
+	{ Id = "Brush", Name = "Scrub Brush", Icon = "🧹", Tier = 2, Cost = 200, Radius = 1.0, Power = 3.4, Reach = 15, UpgradeMult = 2, Color = Color3.fromRGB(120, 230, 160), Desc = "Small but tough: shifts burnt-on bits." },
+	{ Id = "Nozzle", Name = "Spray Nozzle", Icon = "🚿", Tier = 2, Cost = 600, Radius = 1.5, Power = 2.8, Reach = 30, UpgradeMult = 3, Color = Color3.fromRGB(90, 200, 255), Desc = "Cleans from far away." },
+	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Tier = 3, Cost = 2200, Radius = 1.9, Power = 7.0, Reach = 30, UpgradeMult = 5, Color = Color3.fromRGB(60, 140, 255), Desc = "Blasts through anything." },
+	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Tier = 3, Cost = 8000, Radius = 3.2, Power = 9.0, Reach = 36, UpgradeMult = 8, Color = Color3.fromRGB(200, 150, 255), Desc = "A huge wave of foam." },
 }
 
 ----------------------------------------------------------------------------------------------------
--- Grime. HP and Units are multiplied by the level Mult. MinTool = lowest tool index that can clean it.
+-- Grime (players see "dirt"). HP and Units are multiplied by the level Mult. MinTool = the lowest tool
+-- Tier that can clean it.
 -- Shape: "Blob" (flat ellipsoid), "Crumbs" (disc + little bits), "Streak" (long smear), "Sprinkles".
 ----------------------------------------------------------------------------------------------------
 Config.GrimeTypes = {
@@ -112,16 +117,16 @@ Config.GrimeTypes = {
 
 	Grease = { Name = "Grease", HP = 9, Units = 3, Color = Color3.fromRGB(235, 205, 110), Material = Enum.Material.Glass, Size = { 1.6, 2.6 }, Shape = "Streak", MinTool = 1 },
 	Mustard = { Name = "Mustard", HP = 6, Units = 2, Color = Color3.fromRGB(240, 190, 20), Material = Enum.Material.SmoothPlastic, Size = { 1.0, 1.8 }, Shape = "Streak", MinTool = 1 },
-	Char = { Name = "Char", HP = 16, Units = 4, Color = Color3.fromRGB(30, 26, 24), Material = Enum.Material.Basalt, Size = { 1.2, 2.0 }, Shape = "Crumbs", MinTool = 3 },
+	Char = { Name = "Char", HP = 16, Units = 4, Color = Color3.fromRGB(30, 26, 24), Material = Enum.Material.Basalt, Size = { 1.2, 2.0 }, Shape = "Crumbs", MinTool = 2 },
 
 	Frosting = { Name = "Frosting", HP = 8, Units = 3, Color = Color3.fromRGB(255, 150, 200), Material = Enum.Material.SmoothPlastic, Size = { 1.4, 2.4 }, Shape = "Blob", MinTool = 1 },
 	Sprinkles = { Name = "Sprinkles", HP = 3, Units = 1, Color = Color3.fromRGB(255, 255, 255), Material = Enum.Material.SmoothPlastic, Size = { 1.0, 1.6 }, Shape = "Sprinkles", MinTool = 1 },
 	Chocolate = { Name = "Chocolate", HP = 11, Units = 3, Color = Color3.fromRGB(80, 45, 25), Material = Enum.Material.SmoothPlastic, Size = { 1.4, 2.4 }, Shape = "Blob", MinTool = 1 },
-	BurntSugar = { Name = "Burnt Sugar", HP = 18, Units = 5, Color = Color3.fromRGB(120, 60, 10), Material = Enum.Material.Glass, Size = { 1.0, 1.8 }, Shape = "Crumbs", MinTool = 3 },
+	BurntSugar = { Name = "Burnt Sugar", HP = 18, Units = 5, Color = Color3.fromRGB(120, 60, 10), Material = Enum.Material.Glass, Size = { 1.0, 1.8 }, Shape = "Crumbs", MinTool = 2 },
 
 	TruffleGunk = { Name = "Truffle Gunk", HP = 10, Units = 3, Color = Color3.fromRGB(70, 60, 50), Material = Enum.Material.Mud, Size = { 1.4, 2.4 }, Shape = "Blob", MinTool = 1 },
 	CaviarSmear = { Name = "Caviar Smear", HP = 8, Units = 3, Color = Color3.fromRGB(25, 25, 35), Material = Enum.Material.Pebble, Size = { 1.2, 2.0 }, Shape = "Crumbs", MinTool = 1 },
-	AncientGravy = { Name = "Ancient Gravy", HP = 22, Units = 6, Color = Color3.fromRGB(90, 110, 50), Material = Enum.Material.Mud, Size = { 1.6, 2.6 }, Shape = "Streak", MinTool = 4 },
+	AncientGravy = { Name = "Ancient Gravy", HP = 22, Units = 6, Color = Color3.fromRGB(90, 110, 50), Material = Enum.Material.Mud, Size = { 1.6, 2.6 }, Shape = "Streak", MinTool = 2 },
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -138,14 +143,14 @@ Config.Levels = {
 		Subtitle = "Crumbs, ketchup and a whole lot of gravy.",
 		Icon = "🍝",
 		Mult = 1,
-		ParTime = 300,
+		ParTime = 330,
 		Bubbles = 40,
 		GoldenChance = 0.02,
 		Dishes = { Plate = 14, Bowl = 5, Cup = 5, Glass = 0, Fork = 4, Knife = 3, Spoon = 3, Pan = 0, Pot = 0 },
 		Spots = { Plate = 6, Bowl = 6, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16 },
 		Grime = { { Type = "Crumbs", Weight = 45 }, { Type = "Ketchup", Weight = 35 }, { Type = "Gravy", Weight = 20 } },
 		Theme = {
-			Tub = Color3.fromRGB(205, 211, 218),
+			Tub = Color3.fromRGB(172, 178, 187),
 			Rack = Color3.fromRGB(235, 240, 245),
 			Accent = Color3.fromRGB(80, 170, 255),
 			Plate = Color3.fromRGB(250, 250, 248),
@@ -163,11 +168,11 @@ Config.Levels = {
 		Subtitle = "Sauce everywhere. Watch out for burnt crust.",
 		Icon = "🍕",
 		Mult = 3,
-		ParTime = 420,
+		ParTime = 540,
 		Bubbles = 90,
 		GoldenChance = 0.02,
 		Dishes = { Plate = 16, Bowl = 6, Cup = 6, Glass = 2, Fork = 5, Knife = 4, Spoon = 3, Pan = 1, Pot = 0 },
-		Spots = { Plate = 7, Bowl = 7, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 16, Pot = 18 },
+		Spots = { Plate = 5, Bowl = 5, Cup = 3, Glass = 2, Fork = 2, Knife = 2, Spoon = 2, Pan = 11, Pot = 13 },
 		Grime = { { Type = "TomatoSauce", Weight = 40 }, { Type = "MeltedCheese", Weight = 30 }, { Type = "Crumbs", Weight = 15 }, { Type = "BurntCrust", Weight = 15 } },
 		Theme = {
 			Tub = Color3.fromRGB(200, 205, 210),
@@ -188,11 +193,11 @@ Config.Levels = {
 		Subtitle = "Grease, mustard, and char that needs a brush.",
 		Icon = "🍔",
 		Mult = 10,
-		ParTime = 540,
+		ParTime = 600,
 		Bubbles = 200,
 		GoldenChance = 0.025,
 		Dishes = { Plate = 18, Bowl = 6, Cup = 6, Glass = 4, Fork = 5, Knife = 5, Spoon = 4, Pan = 2, Pot = 0 },
-		Spots = { Plate = 8, Bowl = 8, Cup = 5, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 18, Pot = 20 },
+		Spots = { Plate = 5, Bowl = 5, Cup = 3, Glass = 2, Fork = 2, Knife = 2, Spoon = 2, Pan = 11, Pot = 13 },
 		Grime = { { Type = "Grease", Weight = 35 }, { Type = "Mustard", Weight = 25 }, { Type = "Ketchup", Weight = 25 }, { Type = "Char", Weight = 15 } },
 		Theme = {
 			Tub = Color3.fromRGB(190, 196, 202),
@@ -217,7 +222,7 @@ Config.Levels = {
 		Bubbles = 450,
 		GoldenChance = 0.03,
 		Dishes = { Plate = 20, Bowl = 8, Cup = 8, Glass = 4, Fork = 6, Knife = 5, Spoon = 5, Pan = 0, Pot = 2 },
-		Spots = { Plate = 9, Bowl = 8, Cup = 5, Glass = 4, Fork = 2, Knife = 2, Spoon = 2, Pan = 18, Pot = 20 },
+		Spots = { Plate = 5, Bowl = 5, Cup = 3, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 11, Pot = 13 },
 		Grime = { { Type = "Frosting", Weight = 35 }, { Type = "Sprinkles", Weight = 25 }, { Type = "Chocolate", Weight = 25 }, { Type = "BurntSugar", Weight = 15 } },
 		Theme = {
 			Tub = Color3.fromRGB(215, 205, 225),
@@ -238,11 +243,11 @@ Config.Levels = {
 		Subtitle = "Gold plates, fancy food and ancient gravy.",
 		Icon = "👑",
 		Mult = 150,
-		ParTime = 840,
+		ParTime = 780,
 		Bubbles = 1000,
 		GoldenChance = 0.04,
 		Dishes = { Plate = 24, Bowl = 8, Cup = 4, Glass = 8, Fork = 6, Knife = 6, Spoon = 6, Pan = 2, Pot = 2 },
-		Spots = { Plate = 10, Bowl = 10, Cup = 5, Glass = 5, Fork = 3, Knife = 3, Spoon = 3, Pan = 20, Pot = 24 },
+		Spots = { Plate = 5, Bowl = 5, Cup = 3, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 12, Pot = 14 },
 		Grime = { { Type = "TruffleGunk", Weight = 35 }, { Type = "CaviarSmear", Weight = 30 }, { Type = "Gravy", Weight = 20 }, { Type = "AncientGravy", Weight = 15 } },
 		Theme = {
 			Tub = Color3.fromRGB(60, 55, 70),
@@ -362,15 +367,113 @@ Config.GamePasses = {
 	{ Key = "MegaTank", Id = 0, Price = 149, Name = "Mega Tank", Icon = "🛢️", Desc = "Your tank holds twice as much." },
 	{ Key = "LuckyCharm", Id = 0, Price = 99, Name = "Lucky Charm", Icon = "🍀", Desc = "Twice as much golden dirt in your dishwasher." },
 	{ Key = "PetSlots", Id = 0, Price = 149, Name = "+2 Pet Slots", Icon = "🐾", Desc = "Equip two more pets." },
-	{ Key = "AutoDrain", Id = 0, Price = 199, Name = "Auto Drain", Icon = "🌀", Desc = "Your tank sells itself the moment it's full. No more walking!" },
-	{ Key = "DoubleBubbles", Id = 0, Price = 249, Name = "2x Bubbles", Icon = "🧼", Desc = "Double Bubbles from every finished run." },
-	{ Key = "VIP", Id = 0, Price = 299, Name = "VIP", Icon = "👑", Desc = "+25% coins and +25% Bubbles, forever." },
+	{ Key = "AutoDrain", Id = 0, Price = 149, Name = "Auto Drain", Icon = "🌀", Desc = "Your tank sells itself the moment it's full. No more walking!" },
+	{ Key = "DoubleBubbles", Id = 0, Price = 179, Name = "2x Bubbles", Icon = "🧼", Desc = "Double Bubbles from every finished run." },
+	{ Key = "VIP", Id = 0, Price = 199, Name = "VIP", Icon = "👑", Desc = "+25% coins and +25% Bubbles, forever." },
+	{ Key = "DoubleLuck", Id = 0, Price = 149, Name = "x2 Luck", Icon = "🍀", Desc = "Double the chance of Rare, Epic, Legendary and Mythic ranks." },
 }
 
+-- Developer products (buy as many times as you like). Same deal as passes: create a Developer
+-- Product on the Creator Dashboard (Monetization -&gt; Developer Products) with this price, and paste
+-- its ID over the 0. Bubbles packs work anywhere; Coins packs only inside a run (the coins are
+-- multiplied by the dishwasher's level multiplier so they stay useful on every level).
+Config.DevProducts = {
+	{ Key = "Bubbles1", Id = 0, Price = 19, Kind = "Bubbles", Amount = 250, Name = "Handful of Bubbles", Icon = "🧼" },
+	{ Key = "Bubbles2", Id = 0, Price = 49, Kind = "Bubbles", Amount = 800, Name = "Bucket of Bubbles", Icon = "🧼" },
+	{ Key = "Bubbles3", Id = 0, Price = 99, Kind = "Bubbles", Amount = 2000, Name = "Tub of Bubbles", Icon = "🛁" },
+	{ Key = "Bubbles4", Id = 0, Price = 199, Kind = "Bubbles", Amount = 5000, Name = "Bathtub Overflow", Icon = "🌊" },
+	{ Key = "Coins1", Id = 0, Price = 15, Kind = "Coins", Amount = 150, Name = "Coin Splash", Icon = "💰" },
+	{ Key = "Coins2", Id = 0, Price = 39, Kind = "Coins", Amount = 600, Name = "Coin Wave", Icon = "💰" },
+	{ Key = "Coins3", Id = 0, Price = 89, Kind = "Coins", Amount = 2000, Name = "Coin Flood", Icon = "💰" },
+	{ Key = "Gems1", Id = 0, Price = 29, Kind = "Gems", Amount = 30, Name = "Pouch of Gems", Icon = "💎" },
+	{ Key = "Gems2", Id = 0, Price = 79, Kind = "Gems", Amount = 100, Name = "Sack of Gems", Icon = "💎" },
+	{ Key = "Gems3", Id = 0, Price = 199, Kind = "Gems", Amount = 300, Name = "Chest of Gems", Icon = "💎" },
+}
+
+function Config.GetProduct(key: string)
+	for _, p in Config.DevProducts do
+		if p.Key == key then
+			return p
+		end
+	end
+	return nil
+end
+
 Config.TestPasses = {
-	AllowInStudio = true, -- Id = 0 passes can be "bought" for free in Studio play tests
+	AllowInStudio = true, -- Id = 0 passes and products can be "bought" for free in Studio play tests
 	AllowInLiveGame = false, -- keep false: otherwise anyone could take unfinished passes for free
 }
+
+----------------------------------------------------------------------------------------------------
+-- Gems (premium currency) and Ranks.
+-- Gems drop rarely while cleaning (always from golden dirt), you get a few for every clear, and they
+-- can be bought with Robux (Config.DevProducts). A Rank roll costs Gems and gives a random rank; the
+-- rank you have equipped gives its perk in every run. Gems can be bought with Robux, so rank rolls
+-- are "paid random items": the odds are always shown before rolling (Roblox rules).
+----------------------------------------------------------------------------------------------------
+Config.Gems = {
+	DropChance = 0.006, -- per dirt spot you clean yourself
+	GoldenDrop = 1, -- gems from every golden spot
+	PerClear = 1, -- gems per finished run, times the level index
+}
+
+Config.RankRoll = {
+	Cost = 30, -- gems per roll
+	LuckMult = 2, -- x2 Luck pass: Rare and better are this many times as likely
+}
+
+Config.RankRarities = {
+	Common = { Order = 1, Color = Color3.fromRGB(190, 200, 210) },
+	Uncommon = { Order = 2, Color = Color3.fromRGB(110, 220, 120) },
+	Rare = { Order = 3, Color = Color3.fromRGB(80, 170, 255) },
+	Epic = { Order = 4, Color = Color3.fromRGB(190, 110, 255) },
+	Legendary = { Order = 5, Color = Color3.fromRGB(255, 190, 40) },
+	Mythic = { Order = 6, Color = Color3.fromRGB(255, 80, 120) },
+}
+
+-- Chance is out of 100 (they add up to 100). Effects:
+--   PowerAll   +x scrub power with every tool     ToolPower  { [toolId] = +x } for one tool
+--   Coins      +x coins from the drain            Tank       +x tank size
+--   Speed      +x walk speed (studs/s)            Golden     +x golden dirt chance (x times as much)
+Config.Ranks = {
+	{ Id = "Rinser", Name = "Rinser", Icon = "💧", Rarity = "Common", Chance = 24, Desc = "+10% coins", Effects = { Coins = 0.10 } },
+	{ Id = "DishHand", Name = "Dish Hand", Icon = "🍽️", Rarity = "Common", Chance = 22, Desc = "+15% tank size", Effects = { Tank = 0.15 } },
+	{ Id = "SpongeMaster", Name = "Sponge Master", Icon = "🧽", Rarity = "Uncommon", Chance = 10, Desc = "Sponge cleans 60% faster", Effects = { ToolPower = { Sponge = 0.6 } } },
+	{ Id = "BristleBoss", Name = "Bristle Boss", Icon = "🧹", Rarity = "Uncommon", Chance = 10, Desc = "Scrub Brush cleans 60% faster", Effects = { ToolPower = { Brush = 0.6 } } },
+	{ Id = "Speedy", Name = "Speedy Sudser", Icon = "👟", Rarity = "Uncommon", Chance = 9, Desc = "+4 walk speed", Effects = { Speed = 4 } },
+	{ Id = "SpraySniper", Name = "Spray Sniper", Icon = "🚿", Rarity = "Rare", Chance = 8, Desc = "Nozzle and Washer clean 50% faster", Effects = { ToolPower = { Nozzle = 0.5, Washer = 0.5 } } },
+	{ Id = "TankTitan", Name = "Tank Titan", Icon = "🛢️", Rarity = "Rare", Chance = 7, Desc = "+50% tank size, +10% coins", Effects = { Tank = 0.5, Coins = 0.1 } },
+	{ Id = "ScrubMaster", Name = "Scrub Master", Icon = "💪", Rarity = "Epic", Chance = 3.5, Desc = "Every tool cleans 25% faster", Effects = { PowerAll = 0.25 } },
+	{ Id = "GoldDigger", Name = "Gold Digger", Icon = "✨", Rarity = "Epic", Chance = 3.5, Desc = "Twice the golden dirt, +15% coins", Effects = { Golden = 1, Coins = 0.15 } },
+	{ Id = "SudsLegend", Name = "Suds Legend", Icon = "🏆", Rarity = "Legendary", Chance = 2.5, Desc = "Every tool 40% faster, +25% coins", Effects = { PowerAll = 0.4, Coins = 0.25 } },
+	{ Id = "Deity", Name = "Dishwasher Deity", Icon = "👑", Rarity = "Mythic", Chance = 0.5, Desc = "Every tool 75% faster, +50% coins, +50% tank", Effects = { PowerAll = 0.75, Coins = 0.5, Tank = 0.5 } },
+}
+
+function Config.GetRank(rankId: string?)
+	if not rankId then
+		return nil
+	end
+	for _, r in Config.Ranks do
+		if r.Id == rankId then
+			return r
+		end
+	end
+	return nil
+end
+
+-- Roll weights, with the x2 Luck pass applied. Returns { { Rank = def, Weight = n } }, total.
+function Config.RankWeights(doubleLuck: boolean?)
+	local list, total = {}, 0
+	for _, r in Config.Ranks do
+		local w = r.Chance
+		if doubleLuck and Config.RankRarities[r.Rarity].Order &gt;= 3 then
+			w *= Config.RankRoll.LuckMult
+		end
+		table.insert(list, { Rank = r, Weight = w })
+		total += w
+	end
+	return list, total
+end
 
 ----------------------------------------------------------------------------------------------------
 -- Sounds. The rbxassetid ones are free Creator Store sounds (Roblox / ProSoundEffects). If one ever
@@ -444,12 +547,18 @@ function Config.GetPass(key: string)
 end
 
 -- Coin price of the next level of an in-run upgrade, or nil when maxed.
-function Config.UpgradeCost(upgradeId: string, currentLevel: number, levelIndex: number): number?
+-- toolIndex matters for PerTool upgrades (better tools cost more to upgrade).
+function Config.UpgradeCost(upgradeId: string, currentLevel: number, levelIndex: number, toolIndex: number?): number?
 	local u = Config.GetUpgrade(upgradeId)
 	if not u or currentLevel &gt;= u.Max then
 		return nil
 	end
-	return Config.Round2(u.Base * (u.Growth ^ currentLevel) * Config.GetLevel(levelIndex).Mult)
+	local toolMult = 1
+	if u.PerTool then
+		local tool = Config.Tools[toolIndex or 1]
+		toolMult = (tool and tool.UpgradeMult) or 1
+	end
+	return Config.Round2(u.Base * (u.Growth ^ currentLevel) * Config.GetLevel(levelIndex).Mult * toolMult)
 end
 
 -- Coin price of a tool in a run.
@@ -498,7 +607,7 @@ end
 	  passes     : { DoubleCoins = bool, MegaTank = bool, ... }
 	  petCoinBonus : Config.PetCoinBonus(...)
 ]]
-function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, perks, passes, petCoinBonus: number?)
+function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, perks, passes, petCoinBonus: number?, rankId: string?)
 	local level = Config.GetLevel(levelIndex)
 	local tool = Config.Tools[toolIndex] or Config.Tools[1]
 	upgrades = upgrades or {}
@@ -511,11 +620,15 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 	if passes.SuperScrub then
 		power *= 1.5
 	end
+	local rank = Config.GetRank(rankId)
+	local fx = (rank and rank.Effects) or {}
+	power *= 1 + (fx.PowerAll or 0) + ((fx.ToolPower and fx.ToolPower[tool.Id]) or 0)
 	local tank = b.Tank * (b.TankGrowth ^ (upgrades.TankSize or 0)) * level.Mult
 	tank *= 1 + (perks.DeepTank or 0) * Config.GetPerk("DeepTank").PerLevel
 	if passes.MegaTank then
 		tank *= 2
 	end
+	tank *= 1 + (fx.Tank or 0)
 	local coinMult = 1 + (perks.CoinSoap or 0) * Config.GetPerk("CoinSoap").PerLevel + (petCoinBonus or 0)
 	if passes.DoubleCoins then
 		coinMult *= 2
@@ -523,16 +636,18 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 	if passes.VIP then
 		coinMult *= 1.25
 	end
+	coinMult *= 1 + (fx.Coins or 0)
 
 	return {
 		Radius = radius,
 		Power = power,
 		TankMax = math.floor(tank),
 		Reach = tool.Reach,
-		WalkSpeed = b.WalkSpeed + b.WalkSpeedPerLevel * (upgrades.Sneakers or 0),
+		WalkSpeed = b.WalkSpeed + b.WalkSpeedPerLevel * (upgrades.Sneakers or 0) + (fx.Speed or 0),
 		Hold = true, -- holding always scrubs (the old "Hold to Scrub" upgrade confused new players)
 		CoinMult = coinMult,
 		ToolIndex = toolIndex,
+		Tier = tool.Tier or toolIndex,
 	}
 end
 
@@ -572,6 +687,12 @@ do
 	for id, pet in Config.Pets do
 		assert(Config.Rarities[pet.Rarity], "Config: pet " .. id .. " has unknown rarity")
 	end
+	local rankSum = 0
+	for _, r in Config.Ranks do
+		assert(Config.RankRarities[r.Rarity], "Config: rank " .. r.Id .. " has unknown rarity")
+		rankSum += r.Chance
+	end
+	assert(math.abs(rankSum - 100) &lt; 0.001, "Config: rank chances add to " .. rankSum)
 end
 
 return Config</ProtectedString></Properties></Item>
@@ -1769,7 +1890,147 @@ function Remotes.Function(name: string): RemoteFunction
 end
 
 return Remotes</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000008"><Properties><string name="Name">Types</string><ProtectedString name="Source">-- Shapes of every table that crosses the network. Annotate with these on both sides, e.g.
+<Item class="ModuleScript" referent="RBX00000008"><Properties><string name="Name">ToolModels</string><ProtectedString name="Source">-- ToolModels: builds a model of each cleaning tool out of primitive parts. Used for the arena's tool
+-- shelf (anchored, big) and for the tool in a player's hand (welded, small).
+--
+-- ToolModels.Build(toolIndex, scale) -&gt; Model
+--   * built around CFrame.identity: the model's base sits on Y = 0 and its business end points at -Z
+--   * PrimaryPart is "Grip", an invisible 0.2 stud part at the origin
+--   * every part is Anchored, CanCollide/CanQuery/CanTouch false, Massless, CastShadow false
+--   * Bare Hands (index 1) is just the Grip
+-- ToolModels.HoldOffset(toolIndex) -&gt; CFrame: where the Grip sits relative to a RightHand (R15) so
+-- the tool looks held.
+
+local ToolModels = {}
+
+local DARK = Color3.fromRGB(45, 45, 52)
+local WHITE = Color3.fromRGB(245, 247, 250)
+local CHROME = Color3.fromRGB(205, 210, 218)
+local WOOD = Color3.fromRGB(160, 110, 70)
+
+local UPRIGHT = CFrame.Angles(0, 0, math.rad(90)) -- cylinder axis -&gt; up
+local ALONG_Z = CFrame.Angles(0, math.rad(90), 0) -- cylinder axis -&gt; front/back
+
+local COLORS = {
+	Color3.fromRGB(150, 210, 255),
+	Color3.fromRGB(255, 221, 87),
+	Color3.fromRGB(120, 230, 160),
+	Color3.fromRGB(90, 200, 255),
+	Color3.fromRGB(60, 140, 255),
+	Color3.fromRGB(200, 150, 255),
+}
+
+type Ctx = { Model: Model, Scale: number }
+
+local function part(ctx: Ctx, name: string, shape: Enum.PartType?, size: Vector3, offset: Vector3, rot: CFrame?, color: Color3, material: Enum.Material?, transparency: number?): Part
+	local p = Instance.new("Part")
+	p.Name = name
+	if shape then
+		p.Shape = shape
+	end
+	p.Size = size * ctx.Scale
+	p.CFrame = CFrame.new(offset * ctx.Scale) * (rot or CFrame.identity)
+	p.Color = color
+	p.Material = material or Enum.Material.SmoothPlastic
+	p.Transparency = transparency or 0
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.CastShadow = false
+	p.Massless = true
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	p.Parent = ctx.Model
+	return p
+end
+
+local BUILDERS: { [number]: (Ctx, Color3) -&gt; () } = {}
+
+-- Sponge: yellow foam with rounded ends, a green scrubber layer, a few pores.
+BUILDERS[2] = function(ctx, _color)
+	local yellow = Color3.fromRGB(255, 214, 80)
+	part(ctx, "Foam", nil, Vector3.new(2.8, 1.6, 2.2), Vector3.new(0, 0.8, 0), nil, yellow, Enum.Material.Sand)
+	for _, x in { -1.4, 1.4 } do
+		part(ctx, "FoamEnd", Enum.PartType.Cylinder, Vector3.new(2.2, 1.6, 1.6), Vector3.new(x, 0.8, 0), ALONG_Z, yellow, Enum.Material.Sand)
+	end
+	part(ctx, "Scrubber", nil, Vector3.new(3.6, 0.5, 2.2), Vector3.new(0, 1.85, 0), nil, Color3.fromRGB(70, 165, 80), Enum.Material.Fabric)
+	for _, o in { Vector3.new(-0.9, 0.6, -1.08), Vector3.new(0.3, 1.1, -1.08), Vector3.new(1.0, 0.45, -1.08), Vector3.new(-0.2, 0.35, -1.08) } do
+		part(ctx, "Pore", Enum.PartType.Ball, Vector3.new(0.34, 0.34, 0.34), o, nil, Color3.fromRGB(215, 172, 50), Enum.Material.Sand)
+	end
+end
+
+-- Scrub brush: rounded coloured head, white bristle rows, angled wooden handle with a knob.
+BUILDERS[3] = function(ctx, color)
+	part(ctx, "Head", nil, Vector3.new(2.6, 0.9, 1.6), Vector3.new(0, 1.0, 0), nil, color)
+	for _, x in { -1.3, 1.3 } do
+		part(ctx, "HeadEnd", Enum.PartType.Cylinder, Vector3.new(0.9, 1.6, 1.6), Vector3.new(x, 1.0, 0), UPRIGHT, color)
+	end
+	for i = -2, 2 do
+		part(ctx, "Bristles", nil, Vector3.new(0.4, 0.7, 1.3), Vector3.new(i * 0.6, 0.35, 0), nil, WHITE, Enum.Material.Fabric)
+	end
+	part(ctx, "Handle", Enum.PartType.Cylinder, Vector3.new(3.2, 0.6, 0.6), Vector3.new(0, 2.0, 1.4), CFrame.Angles(math.rad(28), 0, 0) * ALONG_Z, WOOD, Enum.Material.Wood)
+	part(ctx, "Knob", Enum.PartType.Ball, Vector3.new(0.9, 0.9, 0.9), Vector3.new(0, 2.75, 2.8), nil, WOOD, Enum.Material.Wood)
+end
+
+-- Spray nozzle: pistol grip, barrel, chrome tip, trigger, a stub of green hose.
+BUILDERS[4] = function(ctx, color)
+	part(ctx, "Grip", nil, Vector3.new(0.8, 2, 1), Vector3.new(0, 1.1, 0.7), CFrame.Angles(math.rad(-15), 0, 0), DARK)
+	part(ctx, "Barrel", Enum.PartType.Cylinder, Vector3.new(3.2, 1, 1), Vector3.new(0, 2.3, -0.4), ALONG_Z, color)
+	part(ctx, "Collar", Enum.PartType.Cylinder, Vector3.new(0.3, 1.2, 1.2), Vector3.new(0, 2.3, -1.9), ALONG_Z, CHROME, Enum.Material.Metal)
+	part(ctx, "Tip", Enum.PartType.Cylinder, Vector3.new(0.9, 0.6, 0.6), Vector3.new(0, 2.3, -2.4), ALONG_Z, CHROME, Enum.Material.Metal)
+	part(ctx, "Trigger", nil, Vector3.new(0.3, 0.8, 0.3), Vector3.new(0, 1.6, -0.2), nil, DARK)
+	part(ctx, "Hose", Enum.PartType.Cylinder, Vector3.new(2, 0.45, 0.45), Vector3.new(0, 0.3, 1.9), ALONG_Z, Color3.fromRGB(60, 140, 70))
+end
+
+-- Pressure washer: rounded body, wheels, push handle, gun and chrome wand.
+BUILDERS[5] = function(ctx, color)
+	part(ctx, "Body", nil, Vector3.new(2.8, 1.6, 3.2), Vector3.new(0, 1.4, 0.4), nil, color)
+	part(ctx, "Top", Enum.PartType.Cylinder, Vector3.new(3.2, 2.8, 2.8), Vector3.new(0, 2.2, 0.4), ALONG_Z, color)
+	part(ctx, "Badge", nil, Vector3.new(1.4, 0.6, 0.1), Vector3.new(0, 1.6, -1.25), nil, WHITE)
+	for _, x in { -1.5, 1.5 } do
+		part(ctx, "Wheel", Enum.PartType.Cylinder, Vector3.new(0.5, 1.4, 1.4), Vector3.new(x, 0.7, 1.3), nil, DARK)
+		part(ctx, "HandlePost", nil, Vector3.new(0.3, 2.4, 0.3), Vector3.new(x * 0.75, 3.4, 1.9), nil, DARK)
+	end
+	part(ctx, "HandleBar", nil, Vector3.new(2.6, 0.35, 0.35), Vector3.new(0, 4.6, 1.9), nil, DARK)
+	part(ctx, "Gun", nil, Vector3.new(0.6, 1, 0.9), Vector3.new(1.9, 1.3, -0.3), nil, DARK)
+	part(ctx, "Wand", Enum.PartType.Cylinder, Vector3.new(3.6, 0.3, 0.3), Vector3.new(1.9, 1.7, -2.4), ALONG_Z, CHROME, Enum.Material.Metal)
+end
+
+-- Foam cannon: see-through soap bottle, white barrel and bell, foam spilling out.
+BUILDERS[6] = function(ctx, color)
+	part(ctx, "Bottle", Enum.PartType.Cylinder, Vector3.new(2.6, 2.2, 2.2), Vector3.new(0, 1.3, 0.7), UPRIGHT, color, Enum.Material.Glass, 0.25)
+	part(ctx, "Soap", Enum.PartType.Cylinder, Vector3.new(1.6, 1.9, 1.9), Vector3.new(0, 0.85, 0.7), UPRIGHT, Color3.fromRGB(255, 150, 220), nil, 0.1)
+	part(ctx, "Barrel", Enum.PartType.Cylinder, Vector3.new(3.4, 1.1, 1.1), Vector3.new(0, 2.9, -0.6), ALONG_Z, WHITE)
+	part(ctx, "Bell", Enum.PartType.Cylinder, Vector3.new(0.8, 1.9, 1.9), Vector3.new(0, 2.9, -2.6), ALONG_Z, WHITE)
+	for _, f in { { Vector3.new(0, 2.9, -3.5), 1.3 }, { Vector3.new(0.6, 3.5, -3.9), 0.9 }, { Vector3.new(-0.5, 3.4, -3.8), 0.8 } } do
+		part(ctx, "Foam", Enum.PartType.Ball, Vector3.new(f[2], f[2], f[2]), f[1], nil, WHITE)
+	end
+end
+
+function ToolModels.Build(toolIndex: number, scale: number?): Model
+	local model = Instance.new("Model")
+	model.Name = "Tool_" .. tostring(toolIndex)
+	local ctx: Ctx = { Model = model, Scale = scale or 1 }
+	local grip = part(ctx, "Grip", nil, Vector3.new(0.2, 0.2, 0.2) / ctx.Scale, Vector3.zero, nil, WHITE)
+	grip.Transparency = 1
+	model.PrimaryPart = grip
+	local builder = BUILDERS[toolIndex]
+	if builder then
+		builder(ctx, COLORS[toolIndex] or WHITE)
+	end
+	return model
+end
+
+-- Grip placement relative to an R15 RightHand (R6 Right Arm is handled by the caller's offset).
+-- The tool sits just in front of the hand, business end pointing forward.
+function ToolModels.HoldOffset(toolIndex: number): CFrame
+	local lift = if toolIndex == 5 then -1.6 else -0.9
+	return CFrame.new(0, lift, -0.6)
+end
+
+return ToolModels</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000009"><Properties><string name="Name">Types</string><ProtectedString name="Source">-- Shapes of every table that crosses the network. Annotate with these on both sides, e.g.
 --   local state: Types.RunState = { ... }            (server, when building a payload)
 --   local run = ClientState.Run :: Types.RunState?   (client, when reading one)
 -- so the type checker catches a misspelt field on either end.
@@ -1816,6 +2077,7 @@ export type RunStats = {
 	Hold: boolean,
 	CoinMult: number,
 	ToolIndex: number,
+	Tier: number, -- the tool's Tier (dirt with MinTool above this can't be scrubbed)
 }
 
 export type ResultRow = {
@@ -1847,8 +2109,10 @@ export type RunState = {
 	Coins: number,
 	Tank: number,
 	TankMax: number,
-	ToolIndex: number,
-	Upgrades: RunUpgrades,
+	ToolIndex: number, -- the tool in your hand
+	OwnedTools: { boolean }, -- [toolIndex] = owned (every index present)
+	ToolUpgrades: { RunUpgrades }, -- [toolIndex] = that tool's own HandSize / ScrubPower levels
+	Upgrades: RunUpgrades, -- effective levels for the tool in hand (its per-tool + global ones)
 	Stats: RunStats,
 	DrainPosition: Vector3,
 	StationPosition: Vector3,
@@ -1866,6 +2130,9 @@ export type PetEntry = {
 -- MetaState (S-&gt;C) - the player's permanent data.
 export type MetaState = {
 	Bubbles: number,
+	Gems: number, -- premium currency (rank rolls)
+	Rank: string, -- equipped rank id, "" = none
+	Ranks: { string }, -- every rank id owned
 	Perks: { [string]: number }, -- Config.Perks[i].Id -&gt; level
 	Pets: { PetEntry },
 	Equipped: { string }, -- Uids
@@ -1888,6 +2155,8 @@ export type RequestResult = {
 	Ok: boolean,
 	Error: string?,
 	Pets: { PetEntry }?, -- MetaRequest "Hatch"
+	Rank: string?, -- MetaRequest "RollRank": the rank rolled
+	Equipped: boolean?, -- MetaRequest "RollRank": it was better, so it was put on
 }
 
 -- RunFX payloads (S-&gt;C), by kind.
@@ -1915,7 +2184,7 @@ export type FXSold = {
 }
 
 return {}</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000009"><Properties><string name="Name">Util</string><ProtectedString name="Source">-- Small helpers shared by server and client.
+<Item class="ModuleScript" referent="RBX0000000A"><Properties><string name="Name">Util</string><ProtectedString name="Source">-- Small helpers shared by server and client.
 
 local Util = {}
 
@@ -2067,10 +2336,10 @@ end
 return Util</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="ServerScriptService" referent="RBX0000000A"><Properties><string name="Name">ServerScriptService</string></Properties>
-<Item class="Folder" referent="RBX0000000B"><Properties><string name="Name">Server</string></Properties>
-<Item class="Folder" referent="RBX0000000C"><Properties><string name="Name">Services</string></Properties>
-<Item class="ModuleScript" referent="RBX0000000D"><Properties><string name="Name">ArenaBuilder</string><ProtectedString name="Source">-- ArenaBuilder: builds one dishwasher ("arena") for a run, sitting in a family kitchen, and lays out
+<Item class="ServerScriptService" referent="RBX0000000B"><Properties><string name="Name">ServerScriptService</string></Properties>
+<Item class="Folder" referent="RBX0000000C"><Properties><string name="Name">Server</string></Properties>
+<Item class="Folder" referent="RBX0000000D"><Properties><string name="Name">Services</string></Properties>
+<Item class="ModuleScript" referent="RBX0000000E"><Properties><string name="Name">ArenaBuilder</string><ProtectedString name="Source">-- ArenaBuilder: builds one dishwasher ("arena") for a run, sitting in a family kitchen, and lays out
 -- the load of dirty dishes inside it. RoundService calls Build(slot, levelIndex, options) once per
 -- run and Destroy(arena) when the run ends; nothing else touches workspace.Arenas directly.
 --
@@ -2100,6 +2369,7 @@ local Config = require(Shared:WaitForChild("Config"))
 local Format = require(Shared:WaitForChild("Format"))
 
 local DishFactory = require(script.Parent:WaitForChild("DishFactory"))
+local ToolModels = require(Shared:WaitForChild("ToolModels"))
 
 local ArenaBuilder = {}
 
@@ -2157,10 +2427,8 @@ local LIFTS = {
 local CHUTE = { from = Vector3.new(0, TOP_RACK_Y, -36), to = Vector3.new(0, 0, -49) }
 
 -- Tool shop counter on the left of the open door.
-local SHOP_X = -44
+local SHOP_X = -49
 local SHOP_Z = { -112, -60 }
-local SHOP_HEIGHT = 5
-local BOOK_POS = Vector3.new(44, 0, -72)
 
 local YIELD_EVERY = 200
 
@@ -2423,13 +2691,12 @@ end
 
 local function buildTub(b: Builder, theme)
 	local steel = theme.Tub
-	local shadowless = { CastShadow = false }
 	local zMid = (TUB_Z_MIN + TUB_Z_MAX) / 2
 
 	-- Tub floor and walls. They don't cast shadows, so the room's daylight still reaches inside.
 	span(b, "TubFloor", -TUB_HALF_X - 2, TUB_HALF_X + 2, -2, 0, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal)
 	for _, side in { -1, 1 } do
-		span(b, "TubWall", side * TUB_HALF_X, side * (TUB_HALF_X + 2), 0, TUB_HEIGHT, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal, shadowless)
+		span(b, "TubWall", side * TUB_HALF_X, side * (TUB_HALF_X + 2), 0, TUB_HEIGHT, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal)
 		-- Pressed ribs and rack rails on the side walls.
 		for i = 1, 6 do
 			local y = i * (TUB_HEIGHT / 7)
@@ -2439,8 +2706,10 @@ local function buildTub(b: Builder, theme)
 			span(b, "RackRail", side * (TUB_HALF_X - 1.6), side * TUB_HALF_X, y - 0.8, y + 0.8, TUB_Z_MIN + 2, TUB_Z_MAX - 2, theme.Rack, Enum.Material.Metal, noCollide())
 		end
 	end
-	span(b, "TubBack", -TUB_HALF_X - 2, TUB_HALF_X + 2, 0, TUB_HEIGHT, TUB_Z_MAX, TUB_Z_MAX + 2, steel, Enum.Material.Metal, shadowless)
-	span(b, "TubCeiling", -TUB_HALF_X - 2, TUB_HALF_X + 2, TUB_HEIGHT, TUB_HEIGHT + 2, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal, shadowless)
+	-- The tub casts shadows (it's a closed box, like a real machine): the inside is lit by the
+	-- interior lights below rather than blasted by daylight.
+	span(b, "TubBack", -TUB_HALF_X - 2, TUB_HALF_X + 2, 0, TUB_HEIGHT, TUB_Z_MAX, TUB_Z_MAX + 2, steel, Enum.Material.Metal)
+	span(b, "TubCeiling", -TUB_HALF_X - 2, TUB_HALF_X + 2, TUB_HEIGHT, TUB_HEIGHT + 2, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal)
 
 	-- Filter cup in the floor at the back, heating element loop.
 	cyl(b, "Filter", 0.4, 14, 0, 0.2, 30, Color3.fromRGB(120, 125, 130), Enum.Material.DiamondPlate, noCollide())
@@ -2464,7 +2733,7 @@ local function buildTub(b: Builder, theme)
 		local lightPart = box(b, "InteriorLight", Vector3.new(1, 1, 1), spot[1], spot[2], spot[3], theme.Light, nil, { Transparency = 1, CanCollide = false, CastShadow = false })
 		local light = Instance.new("PointLight")
 		light.Color = theme.Light
-		light.Brightness = 1.1
+		light.Brightness = if spot[2] &gt; 60 then 0.45 else 0.6
 		light.Range = 60
 		light.Shadows = false
 		light.Parent = lightPart
@@ -2599,13 +2868,41 @@ local function buildCutleryBasket(b: Builder, theme)
 	span(b, "BasketHandle", c.X - 0.4, c.X + 0.4, y0 + h.Y + 4.2, y0 + h.Y + 5, c.Z - h.Z, c.Z + h.Z, theme.Rack, nil, noCollide())
 end
 
+local function sprayEmitter(parent: Instance, rate: number, speed: number, direction: Enum.NormalId)
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Name = "Spray"
+	emitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	emitter.Color = ColorSequence.new(Color3.fromRGB(200, 235, 255))
+	emitter.LightEmission = 0.25
+	emitter.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.28), NumberSequenceKeypoint.new(1, 0.12) })
+	emitter.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.35), NumberSequenceKeypoint.new(0.8, 0.5), NumberSequenceKeypoint.new(1, 1) })
+	emitter.Lifetime = NumberRange.new(0.9, 1.4)
+	emitter.Rate = rate
+	emitter.Speed = NumberRange.new(speed * 0.8, speed)
+	emitter.SpreadAngle = Vector2.new(18, 18)
+	emitter.Acceleration = Vector3.new(0, -45, 0)
+	emitter.EmissionDirection = direction
+	emitter.Parent = parent
+end
+
+-- The spray arms spin (client side, tag SpinY) and throw arcs of droplets up into the load. A thin
+-- drizzle falls from the ceiling. Kept light so it never gets in the way of aiming.
 local function buildSprayArms(b: Builder, theme)
 	for _, y in { 2, TOP_RACK_Y - 3 } do
 		cyl(b, "ArmHub", 1.5, 5, 0, y, 10, theme.Metal, Enum.Material.Metal, noCollide())
-		local arm = box(b, "SprayArm", Vector3.new(RACK_HALF_X * 1.6, 0.9, 3), 0, y, 10, theme.Metal, Enum.Material.Metal, noCollide())
+		local length = RACK_HALF_X * 1.6
+		local arm = box(b, "SprayArm", Vector3.new(length, 0.9, 3), 0, y, 10, theme.Metal, Enum.Material.Metal, noCollide())
 		arm:SetAttribute("SpinSpeed", if y &gt; 10 then 1.1 else 0.8)
 		CollectionService:AddTag(arm, "SpinY")
+		for _, f in { -0.42, -0.2, 0.2, 0.42 } do
+			local attach = Instance.new("Attachment")
+			attach.Position = Vector3.new(length * f, 0.5, 0)
+			attach.Parent = arm
+			sprayEmitter(attach, 5, if y &gt; 10 then 22 else 30, Enum.NormalId.Top)
+		end
 	end
+	local drizzle = box(b, "Drizzle", Vector3.new(TUB_HALF_X * 1.8, 1, (TUB_Z_MAX - TUB_Z_MIN) * 0.9), 0, TUB_HEIGHT - 2, (TUB_Z_MIN + TUB_Z_MAX) / 2, theme.Light, nil, { Transparency = 1, CanCollide = false, CastShadow = false })
+	sprayEmitter(drizzle, 14, 4, Enum.NormalId.Bottom)
 end
 
 -- Bubble lifts and the drain chute. The client teleports whoever steps on a pad (Effects).
@@ -2652,80 +2949,6 @@ end
 -- Tool shop on the door (walk up to a tool and press the prompt to buy it) and the upgrade book.
 ----------------------------------------------------------------------------------------------------
 
--- One part of a display model, placed relative to `base` (the pedestal top, facing the players)
--- and scaled by `scale`. Cylinders use Roblox's X axis as their length axis.
-local function mp(b: Builder, base: CFrame, scale: number, name: string, shape: Enum.PartType?, size: Vector3, offset: Vector3, rot: CFrame?, color: Color3, material: Enum.Material?, transparency: number?): Part
-	local p = Instance.new("Part")
-	p.Name = name
-	if shape then
-		p.Shape = shape
-	end
-	p.Size = size * scale
-	p.CFrame = base * CFrame.new(offset * scale) * (rot or CFrame.identity)
-	p.Color = color
-	p.Material = material or Enum.Material.SmoothPlastic
-	p.Transparency = transparency or 0
-	p.Anchored = true
-	p.CanCollide = false
-	p.CanQuery = false
-	p.CanTouch = false
-	p.TopSurface = Enum.SurfaceType.Smooth
-	p.BottomSurface = Enum.SurfaceType.Smooth
-	p.Parent = b.model
-	b.count += 1
-	return p
-end
-
-local UPRIGHT = CFrame.Angles(0, 0, math.rad(90)) -- cylinder axis -&gt; up
-local ALONG_Z = CFrame.Angles(0, math.rad(90), 0) -- cylinder axis -&gt; front/back
-local DARK = Color3.fromRGB(45, 45, 52)
-local WHITE = Color3.fromRGB(245, 247, 250)
-local CHROME = Color3.fromRGB(205, 210, 218)
-
--- Display models for each tool. `base` sits on the pedestal top; local -Z faces the players.
-local function toolModel(b: Builder, index: number, base: CFrame, color: Color3)
-	local S = 1.6
-	if index == 2 then -- Sponge: yellow foam, green scrubber, a few pores
-		mp(b, base, S, "Sponge", nil, Vector3.new(3.4, 1.6, 2.2), Vector3.new(0, 0.8, 0), nil, Color3.fromRGB(255, 221, 87), Enum.Material.Sand)
-		mp(b, base, S, "Scrubber", nil, Vector3.new(3.4, 0.5, 2.2), Vector3.new(0, 1.85, 0), nil, Color3.fromRGB(70, 165, 80), Enum.Material.Fabric)
-		for _, o in { Vector3.new(-1, 0.6, -1.05), Vector3.new(0.4, 1.05, -1.05), Vector3.new(1.1, 0.5, -1.05), Vector3.new(-0.3, 0.35, -1.05) } do
-			mp(b, base, S, "Pore", Enum.PartType.Ball, Vector3.new(0.32, 0.32, 0.32), o, nil, Color3.fromRGB(215, 175, 55), Enum.Material.Sand)
-		end
-	elseif index == 3 then -- Scrub brush: coloured head, white bristle rows, angled wooden handle
-		mp(b, base, S, "BrushHead", nil, Vector3.new(3.2, 0.9, 1.6), Vector3.new(0, 1.0, 0), nil, color)
-		for i = -2, 2 do
-			mp(b, base, S, "Bristles", nil, Vector3.new(0.4, 0.7, 1.3), Vector3.new(i * 0.6, 0.35, 0), nil, WHITE, Enum.Material.Fabric)
-		end
-		mp(b, base, S, "Handle", nil, Vector3.new(0.6, 0.6, 3), Vector3.new(0, 2.0, 1.4), CFrame.Angles(math.rad(28), 0, 0), Color3.fromRGB(160, 110, 70), Enum.Material.Wood)
-		mp(b, base, S, "Knob", Enum.PartType.Ball, Vector3.new(0.9, 0.9, 0.9), Vector3.new(0, 2.75, 2.75), nil, Color3.fromRGB(160, 110, 70), Enum.Material.Wood)
-	elseif index == 4 then -- Spray nozzle: pistol grip, barrel, chrome tip, trigger, hose
-		mp(b, base, S, "Grip", nil, Vector3.new(0.8, 2, 1), Vector3.new(0, 1.1, 0.7), CFrame.Angles(math.rad(-15), 0, 0), DARK)
-		mp(b, base, S, "Barrel", Enum.PartType.Cylinder, Vector3.new(3.2, 1, 1), Vector3.new(0, 2.3, -0.4), ALONG_Z, color)
-		mp(b, base, S, "Tip", Enum.PartType.Cylinder, Vector3.new(0.9, 0.6, 0.6), Vector3.new(0, 2.3, -2.4), ALONG_Z, CHROME, Enum.Material.Metal)
-		mp(b, base, S, "Trigger", nil, Vector3.new(0.3, 0.8, 0.3), Vector3.new(0, 1.6, -0.2), nil, DARK)
-		mp(b, base, S, "Hose", Enum.PartType.Cylinder, Vector3.new(2, 0.45, 0.45), Vector3.new(0, 0.3, 1.9), ALONG_Z, Color3.fromRGB(60, 120, 60))
-	elseif index == 5 then -- Pressure washer: rounded body, wheels, handle, wand with a gun
-		mp(b, base, S, "Body", nil, Vector3.new(2.8, 1.6, 3.2), Vector3.new(0, 1.4, 0.4), nil, color)
-		mp(b, base, S, "Top", Enum.PartType.Cylinder, Vector3.new(3.2, 2.8, 2.8), Vector3.new(0, 2.2, 0.4), ALONG_Z, color)
-		mp(b, base, S, "Badge", nil, Vector3.new(1.4, 0.6, 0.1), Vector3.new(0, 1.6, -1.25), nil, WHITE)
-		for _, x in { -1.5, 1.5 } do
-			mp(b, base, S, "Wheel", Enum.PartType.Cylinder, Vector3.new(0.5, 1.4, 1.4), Vector3.new(x, 0.7, 1.3), nil, DARK)
-			mp(b, base, S, "HandlePost", nil, Vector3.new(0.3, 2.4, 0.3), Vector3.new(x * 0.75, 3.4, 1.9), nil, DARK)
-		end
-		mp(b, base, S, "HandleBar", nil, Vector3.new(2.6, 0.35, 0.35), Vector3.new(0, 4.6, 1.9), nil, DARK)
-		mp(b, base, S, "Gun", nil, Vector3.new(0.6, 1, 0.9), Vector3.new(1.9, 1.3, -0.3), nil, DARK)
-		mp(b, base, S, "Wand", Enum.PartType.Cylinder, Vector3.new(3.6, 0.3, 0.3), Vector3.new(1.9, 1.7, -2.4), ALONG_Z, CHROME, Enum.Material.Metal)
-	else -- Foam cannon: see-through soap tank, white barrel and bell, foam spilling out
-		mp(b, base, S, "Tank", Enum.PartType.Cylinder, Vector3.new(2.6, 2.2, 2.2), Vector3.new(0, 1.3, 0.7), UPRIGHT, color, Enum.Material.Glass, 0.25)
-		mp(b, base, S, "Soap", Enum.PartType.Cylinder, Vector3.new(1.6, 1.9, 1.9), Vector3.new(0, 0.85, 0.7), UPRIGHT, Color3.fromRGB(255, 150, 220), Enum.Material.SmoothPlastic, 0.1)
-		mp(b, base, S, "Barrel", Enum.PartType.Cylinder, Vector3.new(3.4, 1.1, 1.1), Vector3.new(0, 2.9, -0.6), ALONG_Z, WHITE)
-		mp(b, base, S, "Bell", Enum.PartType.Cylinder, Vector3.new(0.8, 1.9, 1.9), Vector3.new(0, 2.9, -2.6), ALONG_Z, WHITE)
-		for _, f in { { Vector3.new(0, 2.9, -3.5), 1.3 }, { Vector3.new(0.6, 3.5, -3.9), 0.9 }, { Vector3.new(-0.5, 3.4, -3.8), 0.8 } } do
-			mp(b, base, S, "Foam", Enum.PartType.Ball, Vector3.new(f[2], f[2], f[2]), f[1], nil, WHITE)
-		end
-	end
-end
-
 -- A SurfaceGui sign on a real part, facing `facing` (so it never floats, sinks or flickers).
 local function signBoard(b: Builder, name: string, size: Vector3, pos: Vector3, facing: Vector3, color: Color3): (Part, SurfaceGui)
 	local p = Instance.new("Part")
@@ -2767,98 +2990,90 @@ local function guiText(parent: Instance, name: string, text: string, pos: UDim2,
 	return label
 end
 
+-- The Tool Shop: a chrome wire shelving unit (it matches the dishwasher racks) standing on the
+-- left of the open door, facing the players. Two shelves, the tools on the upper ones, a price tag
+-- on the front lip of each spot, a sign on top. Buy any tool in any order with the prompt.
 local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 	local z0, z1 = SHOP_Z[1], SHOP_Z[2]
-	local x0, x1 = SHOP_X - 7, SHOP_X + 7
-	local toPlayers = b.origin.RightVector -- the shop faces +x, toward the middle of the door
-	local wood = Color3.fromRGB(176, 120, 76)
-	local darkWood = Color3.fromRGB(120, 78, 48)
-	local top = SHOP_HEIGHT + 0.6
+	local depth = 9
+	local x0, x1 = SHOP_X - depth / 2, SHOP_X + depth / 2 -- x1 is the front, facing the players
+	local toPlayers = b.origin.RightVector
+	local chrome = Color3.fromRGB(215, 220, 228)
+	local shelfYs = { 3, 9.5, 16 } -- bottom, middle (tools), top (tools)
+	local topY = 21
 
-	-- Rug, counter with inset front panels, countertop.
-	span(b, "ShopRug", x0 - 1, x1 + 10, 0, 0.12, z0 - 2, z1 + 2, Color3.fromRGB(190, 70, 70), Enum.Material.Fabric, noCollide())
-	span(b, "ShopCounter", x0, x1, 0.12, SHOP_HEIGHT, z0, z1, wood, Enum.Material.Wood)
-	span(b, "ShopCounterTop", x0 - 0.5, x1 + 0.8, SHOP_HEIGHT, top, z0 - 0.5, z1 + 0.5, darkWood, Enum.Material.Wood)
-	local panels = 5
-	for i = 0, panels - 1 do
-		local pz0 = z0 + 1 + (z1 - z0 - 2) / panels * i
-		local pz1 = pz0 + (z1 - z0 - 2) / panels - 1
-		span(b, "CounterPanel", x1, x1 + 0.25, 1, SHOP_HEIGHT - 1, pz0, pz1, Color3.fromRGB(205, 150, 100), Enum.Material.Wood, noCollide())
+	-- Four corner posts plus a middle pair, floor to top, with little feet.
+	for _, x in { x0, x1 } do
+		for _, z in { z0, (z0 + z1) / 2, z1 } do
+			cyl(b, "ShelfPost", topY, 0.7, x, topY / 2, z, chrome, Enum.Material.Metal)
+			cyl(b, "ShelfFoot", 0.4, 1.3, x, 0.2, z, Color3.fromRGB(60, 62, 70), nil, noCollide())
+		end
+	end
+	-- Shelves: a solid (invisible-ish) board so things rest on something, plus wire detail.
+	for _, y in shelfYs do
+		span(b, "ShelfBoard", x0, x1, y - 0.25, y, z0, z1, Color3.fromRGB(235, 238, 242), Enum.Material.DiamondPlate, { Transparency = 0.25 })
+		for _, x in { x0, x1 } do
+			span(b, "ShelfRail", x - 0.2, x + 0.2, y, y + 0.9, z0, z1, chrome, Enum.Material.Metal, noCollide())
+		end
+		for z = z0 + 3, z1 - 3, 3 do
+			span(b, "ShelfWire", x0, x1, y + 0.01, y + 0.07, z - 0.08, z + 0.08, chrome, Enum.Material.Metal, noCollide())
+		end
+	end
+	span(b, "ShelfTop", x0 - 0.3, x1 + 0.3, topY, topY + 0.4, z0 - 0.3, z1 + 0.3, chrome, Enum.Material.Metal)
+
+	-- Sign across the top.
+	local _, headerGui = signBoard(b, "ShopSign", Vector3.new(z1 - z0 - 4, 4, 0.5), worldPoint(b.origin, x1 - 0.5, topY + 2.6, (z0 + z1) / 2), toPlayers, theme.Accent)
+	guiText(headerGui, "Title", "🧽 TOOL SHOP  •  any tool, any order", UDim2.fromScale(0.03, 0.1), UDim2.fromScale(0.94, 0.8), Color3.new(1, 1, 1))
+
+	-- Spare sponges and bottles on the bottom shelf, for looks.
+	for i, z in { z0 + 6, z0 + 16, z1 - 16, z1 - 6 } do
+		local color = ({ Color3.fromRGB(255, 214, 80), Color3.fromRGB(120, 200, 255), Color3.fromRGB(255, 150, 200), Color3.fromRGB(120, 220, 140) })[i]
+		cyl(b, "Bottle", 4, 1.8, SHOP_X, shelfYs[1] + 2, z, color, Enum.Material.Glass, { CanCollide = false, Transparency = 0.15 })
+		cyl(b, "BottleCap", 0.8, 0.9, SHOP_X, shelfYs[1] + 4.4, z, Color3.new(1, 1, 1), nil, noCollide())
 	end
 
-	-- Back wall, corner posts and a striped awning with a scalloped edge.
-	local awningY = 22
-	span(b, "ShopBackWall", x0 - 2, x0 - 0.6, 0.12, awningY, z0 - 1, z1 + 1, Color3.fromRGB(235, 220, 190), Enum.Material.WoodPlanks)
-	for _, z in { z0 - 0.5, z1 + 0.5 } do
-		span(b, "ShopPost", x1 + 0.9, x1 + 1.9, top, awningY, z - 0.5, z + 0.5, darkWood, Enum.Material.Wood)
-	end
-	local stripes = 12
-	for i = 0, stripes - 1 do
-		local sz0 = z0 - 1 + (z1 - z0 + 2) / stripes * i
-		local sz1 = sz0 + (z1 - z0 + 2) / stripes
-		local color = if i % 2 == 0 then theme.Accent else Color3.new(1, 1, 1)
-		span(b, "Awning", x0 - 2, x1 + 3, awningY, awningY + 0.8, sz0, sz1, color, nil, noCollide())
-		local scallop = cyl(b, "Scallop", 0.4, (sz1 - sz0), x1 + 3.2, awningY + 0.1, (sz0 + sz1) / 2, color, nil, noCollide())
-		scallop.CFrame = footprint(b.origin, x1 + 3.2, awningY + 0.1, (sz0 + sz1) / 2)
-	end
-
-	-- Sign board on top of the awning.
-	local _, headerGui = signBoard(b, "ShopSign", Vector3.new(30, 5, 0.6), worldPoint(b.origin, x1 + 2.5, awningY + 3.4, (z0 + z1) / 2), toPlayers, Color3.fromRGB(40, 90, 170))
-	guiText(headerGui, "Title", "🧽 TOOL SHOP", UDim2.fromScale(0.05, 0.08), UDim2.fromScale(0.9, 0.84), Color3.fromRGB(255, 230, 120))
-
-	-- Two hanging lamps.
-	for _, z in { z0 + (z1 - z0) * 0.3, z0 + (z1 - z0) * 0.7 } do
-		span(b, "LampCord", SHOP_X - 0.1, SHOP_X + 0.1, 16, awningY, z - 0.1, z + 0.1, DARK, nil, noCollide())
-		local shade = cyl(b, "LampShade", 1.4, 3, SHOP_X, 15.4, z, theme.Accent, nil, noCollide())
-		local light = Instance.new("PointLight")
-		light.Range = 18
-		light.Brightness = 1.2
-		light.Color = Color3.fromRGB(255, 235, 200)
-		light.Parent = shade
-	end
-
-	-- The tools: pedestal + model + price tag + buy prompt.
-	local count = #Config.Tools - 1
+	-- Tools 2..6: the tall ones (sponge, nozzle, washer) on the middle shelf, the short ones on top.
+	local spots = {
+		[2] = { y = shelfYs[2], z = z1 - 8 },
+		[3] = { y = shelfYs[3], z = z1 - 13 },
+		[4] = { y = shelfYs[2], z = (z0 + z1) / 2 + 0.5 },
+		[5] = { y = shelfYs[2], z = z0 + 8 },
+		[6] = { y = shelfYs[3], z = z0 + 13 },
+	}
 	for i = 2, #Config.Tools do
 		local tool = Config.Tools[i]
-		local z = z1 - 6 - (i - 2) * ((z1 - z0 - 12) / math.max(1, count - 1))
-		local pedestal = cyl(b, "Pedestal", 0.8, 6, SHOP_X - 1, top + 0.4, z, WHITE, nil, noCollide())
+		local spot = spots[i]
+		if not spot then
+			break
+		end
+		local pedestal = cyl(b, "Pedestal", 0.4, 4.4, SHOP_X, spot.y + 0.2, spot.z, Color3.new(1, 1, 1), nil, noCollide())
 		pedestal.Name = "ToolDisplay_" .. i
-		cyl(b, "PedestalGlow", 0.2, 6.6, SHOP_X - 1, top + 0.1, z, tool.Color, Enum.Material.Neon, noCollide())
-		local basePos = worldPoint(b.origin, SHOP_X - 1, top + 0.8, z)
-		toolModel(b, i, CFrame.lookAt(basePos, basePos - toPlayers) * CFrame.Angles(0, math.rad(180), 0), tool.Color)
+		cyl(b, "PedestalGlow", 0.12, 4.8, SHOP_X, spot.y + 0.06, spot.z, tool.Color, Enum.Material.Neon, noCollide())
+		local okModel, model = pcall(ToolModels.Build, i, 1.05)
+		if okModel and model then
+			local basePos = worldPoint(b.origin, SHOP_X, spot.y + 0.4, spot.z)
+			model:PivotTo(CFrame.lookAt(basePos, basePos + toPlayers) * CFrame.Angles(0, math.rad(25), 0))
+			model.Parent = b.model
+			b.count += #model:GetChildren()
+		end
 
 		local cost = Config.ToolCost(i, levelIndex) or 0
-		local tag, tagGui = signBoard(b, "PriceTag_" .. i, Vector3.new(6.5, 3, 0.3), worldPoint(b.origin, x1 + 0.4, top + 1.6, z), toPlayers, Color3.fromRGB(255, 250, 235))
+		local tag, tagGui = signBoard(b, "PriceTag_" .. i, Vector3.new(5.6, 1.6, 0.2), worldPoint(b.origin, x1 + 0.35, spot.y - 0.5, spot.z), toPlayers, Color3.fromRGB(255, 250, 235))
 		tag:SetAttribute("ToolIndex", i)
-		guiText(tagGui, "Title", tool.Icon .. " " .. tool.Name, UDim2.fromScale(0.04, 0.05), UDim2.fromScale(0.92, 0.45), Color3.new(1, 1, 1))
-		guiText(tagGui, "Price", "💰 " .. Format.Short(cost), UDim2.fromScale(0.04, 0.52), UDim2.fromScale(0.92, 0.43), Color3.fromRGB(255, 210, 60))
+		guiText(tagGui, "Title", tool.Icon .. " " .. tool.Name, UDim2.fromScale(0.03, 0.02), UDim2.fromScale(0.94, 0.5), Color3.new(1, 1, 1))
+		guiText(tagGui, "Price", "💰 " .. Format.Short(cost), UDim2.fromScale(0.03, 0.52), UDim2.fromScale(0.94, 0.46), Color3.fromRGB(255, 210, 60))
 
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = "Buy"
 		prompt.ObjectText = string.format("%s  💰%s", tool.Name, Format.Short(cost))
 		prompt.HoldDuration = 0
 		prompt.RequiresLineOfSight = false
-		prompt.MaxActivationDistance = 15
+		prompt.MaxActivationDistance = 14
 		prompt:SetAttribute("BuyTool", i)
 		prompt.Parent = pedestal
 	end
 
-	-- Upgrade book on a lectern across the door.
-	local lectern = span(b, "Lectern", BOOK_POS.X - 2, BOOK_POS.X + 2, 0, 5, BOOK_POS.Z - 2, BOOK_POS.Z + 2, Color3.fromRGB(150, 100, 62), Enum.Material.Wood)
-	box(b, "BookCover", Vector3.new(4.6, 0.5, 3.4), BOOK_POS.X, 5.4, BOOK_POS.Z, Color3.fromRGB(40, 90, 180), nil, noCollide())
-	box(b, "BookPages", Vector3.new(4.2, 0.4, 3), BOOK_POS.X, 5.8, BOOK_POS.Z, Color3.fromRGB(250, 244, 225), nil, noCollide())
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Open"
-	prompt.ObjectText = "Upgrade Book"
-	prompt.HoldDuration = 0
-	prompt.RequiresLineOfSight = false
-	prompt.MaxActivationDistance = 12
-	prompt:SetAttribute("OpenWindow", "Upgrades")
-	prompt.Parent = lectern
-	sign(lectern, "📖 UPGRADES", 12, 2.6, 7, Color3.fromRGB(255, 230, 120))
-
-	return worldPoint(b.origin, BOOK_POS.X, 0, BOOK_POS.Z)
+	return worldPoint(b.origin, SHOP_X + depth, 0, (z0 + z1) / 2)
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -3102,7 +3317,7 @@ function ArenaBuilder.Destroy(arena: any)
 end
 
 return ArenaBuilder</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000000E"><Properties><string name="Name">Characters</string><ProtectedString name="Source">-- Character helpers shared by every server service: collision groups, teleporting,
+<Item class="ModuleScript" referent="RBX0000000F"><Properties><string name="Name">Characters</string><ProtectedString name="Source">-- Character helpers shared by every server service: collision groups, teleporting,
 -- walk speed that survives respawns, and "where should this player respawn".
 
 local Players = game:GetService("Players")
@@ -3288,7 +3503,7 @@ function Characters.AddRespawnResolver(resolver: (Player) -&gt; CFrame?)
 end
 
 return Characters</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000000F"><Properties><string name="Name">DataService</string><ProtectedString name="Source">-- DataService: every player's permanent profile (Bubbles, perks, pets, unlocks, best times, stats).
+<Item class="ModuleScript" referent="RBX00000010"><Properties><string name="Name">DataService</string><ProtectedString name="Source">-- DataService: every player's permanent profile (Bubbles, perks, pets, unlocks, best times, stats).
 --
 -- Life of a profile:
 --   join     -&gt; a Session is created and loaded in the background. The load is one UpdateAsync that
@@ -3364,6 +3579,9 @@ local MSG_LOCK_LOST = "Your save was opened on another server - progress here wo
 export type Profile = {
 	Version: number,
 	Bubbles: number,
+	Gems: number, -- premium currency
+	Rank: string, -- equipped rank id ("" = none)
+	Ranks: { string }, -- owned rank ids
 	Perks: { [string]: number }, -- Config.Perks[i].Id -&gt; level
 	Pets: { Types.PetEntry },
 	Equipped: { string }, -- Uids, slot order
@@ -3413,6 +3631,9 @@ type Session = {
 local TEMPLATE: Profile = {
 	Version = PROFILE_VERSION,
 	Bubbles = 0,
+	Gems = 0,
+	Rank = "",
+	Ranks = {},
 	Perks = {},
 	Pets = {},
 	Equipped = {},
@@ -3606,6 +3827,18 @@ local function sanitizeProfile(profile: Profile, player: Player)
 
 	p.Version = if isFinite(p.Version) then math.max(p.Version, PROFILE_VERSION) else PROFILE_VERSION
 	p.Bubbles = toCount(p.Bubbles, 0)
+	p.Gems = toCount(p.Gems, 0)
+	local ranks, seenRank = {}, {}
+	for _, id in (if type(p.Ranks) == "table" then p.Ranks else {}) do
+		if type(id) == "string" and Config.GetRank(id) and not seenRank[id] then
+			seenRank[id] = true
+			table.insert(ranks, id)
+		end
+	end
+	p.Ranks = ranks
+	if type(p.Rank) ~= "string" or not seenRank[p.Rank] then
+		p.Rank = ""
+	end
 
 	if type(p.Perks) ~= "table" then
 		p.Perks = Util.DeepCopy(TEMPLATE.Perks)
@@ -3782,6 +4015,9 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 	local stats = profile.Stats
 	local state: Types.MetaState = {
 		Bubbles = profile.Bubbles,
+		Gems = profile.Gems,
+		Rank = profile.Rank,
+		Ranks = table.clone(profile.Ranks),
 		Perks = perks,
 		Pets = pets,
 		Equipped = equipped,
@@ -4366,6 +4602,53 @@ function DataService.SpendBubbles(player: Player, amount: number): boolean
 	return true
 end
 
+-- Gems (premium currency). Returns true when applied.
+function DataService.AddGems(player: Player, amount: number): boolean
+	local profile = DataService.Get(player)
+	if not profile or not isFinite(amount) or amount &lt;= 0 then
+		return false
+	end
+	profile.Gems += math.floor(amount + 0.5)
+	DataService.PushMeta(player)
+	return true
+end
+
+function DataService.SpendGems(player: Player, amount: number): boolean
+	local profile = DataService.Get(player)
+	if not profile or not isFinite(amount) or amount &lt; 0 then
+		return false
+	end
+	local cost = math.ceil(amount)
+	if profile.Gems &lt; cost then
+		return false
+	end
+	profile.Gems -= cost
+	DataService.PushMeta(player)
+	return true
+end
+
+-- Adds a rank to the collection (no-op if owned). Returns true if it was new.
+function DataService.AddRank(player: Player, rankId: string): boolean
+	local profile = DataService.Get(player)
+	if not profile or not Config.GetRank(rankId) or table.find(profile.Ranks, rankId) then
+		return false
+	end
+	table.insert(profile.Ranks, rankId)
+	DataService.PushMeta(player)
+	return true
+end
+
+function DataService.SetRank(player: Player, rankId: string): boolean
+	local profile = DataService.Get(player)
+	if not profile or (rankId ~= "" and not table.find(profile.Ranks, rankId)) then
+		return false
+	end
+	profile.Rank = rankId
+	DataService.PushMeta(player)
+	DataService.PassesChanged:Fire(player) -- same effect as a pass change: run stats recompute
+	return true
+end
+
 -- Adds to one of profile.Stats (Runs, DishesCleaned, GrimeCleaned, EggsHatched, BubblesEarned).
 function DataService.AddStat(player: Player, statName: string, amount: number): boolean
 	if type(statName) ~= "string" or (TEMPLATE.Stats :: any)[statName] == nil or not isFinite(amount) then
@@ -4509,7 +4792,7 @@ function DataService.CanSave(player: Player): boolean
 end
 
 return DataService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000010"><Properties><string name="Name">DishFactory</string><ProtectedString name="Source">-- DishFactory: builds one dish (plate/bowl/cup/glass/fork/knife/spoon/pan/pot) and covers a built
+<Item class="ModuleScript" referent="RBX00000011"><Properties><string name="Name">DishFactory</string><ProtectedString name="Source">-- DishFactory: builds one dish (plate/bowl/cup/glass/fork/knife/spoon/pan/pot) and covers a built
 -- dish in dirt spots that sit on its real, raycast-checked surfaces.
 --
 -- Everything here works in the dish's own "anchor" frame: `cf` (a CFrame passed to BuildDish) whose
@@ -4544,7 +4827,7 @@ local DishFactory = {}
 -- load: plates are four characters tall and stand close together in the rack.
 ----------------------------------------------------------------------------------------------------
 local SIZE = {
-	Plate = { Diameter = 20, Thickness = 1 },
+	Plate = { Diameter = 20, Thickness = 1.2 },
 	Bowl = { Diameter = 15, Depth = 7 },
 	Cup = { Diameter = 8, Height = 10 },
 	Glass = { Diameter = 7, Height = 12 },
@@ -4690,19 +4973,32 @@ end
 -- Per-kind builders. Each returns (parts: {BasePart}, primaryIndex: number).
 ----------------------------------------------------------------------------------------------------
 
--- Plate standing on its edge: a coloured edge band with a thicker white face in front of it, so the
--- band shows as a rim ring. Face normal = anchor.LookVector. No two faces share a plane.
+-- Plate standing on its edge, face (the dirty side) toward anchor.LookVector. With CSG: a white body
+-- with a recessed well, a coloured stripe ring on the rim and a foot ring on the back. Without CSG:
+-- a coloured edge band behind a thicker white face. No two faces share a plane either way.
 local function buildPlate(anchor: CFrame, theme, _rng: Random)
 	local s = SIZE.Plate
+	local frame = CFrame.new(anchor.Position) * anchor.Rotation
+	local body = placeTemplate("PlateBody", frame, theme.Plate)
+	if body then
+		local parts = { body }
+		local stripe = placeTemplate("PlateStripe", frame, theme.PlateRim)
+		if stripe then
+			table.insert(parts, stripe)
+		end
+		local foot = placeTemplate("PlateFoot", frame, theme.Plate)
+		if foot then
+			table.insert(parts, foot)
+		end
+		return parts, 1
+	end
 	local r = s.Diameter / 2
-	local center = localPos(anchor, 0, r, 0)
-	local cf = axisCFrame(center, anchor.LookVector, anchor.UpVector)
+	local cf = axisCFrame(localPos(anchor, 0, r, 0), anchor.LookVector, anchor.UpVector)
 	local t = s.Thickness
-	local parts = {
+	return {
 		newPart(Enum.PartType.Cylinder, Vector3.new(t, s.Diameter, s.Diameter), cf, theme.PlateRim), -- edge band
 		newPart(Enum.PartType.Cylinder, Vector3.new(t + 0.3, s.Diameter * 0.88, s.Diameter * 0.88), cf, theme.Plate), -- face
-	}
-	return parts, 2
+	}, 2
 end
 
 -- Bowl, opening along anchor Up. CSG shell when available, otherwise a ring of angled slats.
@@ -4725,8 +5021,12 @@ local function buildBowl(anchor: CFrame, theme, _rng: Random)
 			table.insert(parts, newPart(nil, Vector3.new(r * 0.52, s.Depth * 1.05, WALL), cf, theme.Bowl))
 		end
 	end
-	-- Foot ring and a coloured band just under the rim.
+	-- Foot ring, and a coloured band hugging the outside of the rim.
 	table.insert(parts, newPart(Enum.PartType.Cylinder, Vector3.new(0.6, s.Diameter * 0.45, s.Diameter * 0.45), upright(anchor, 0.3), theme.Bowl))
+	local stripe = placeTemplate("BowlStripe", CFrame.new(anchor.Position) * anchor.Rotation, theme.PlateRim)
+	if stripe then
+		table.insert(parts, stripe)
+	end
 	return parts, 1
 end
 
@@ -4901,7 +5201,38 @@ local function cut(name: string, outer: Part, cutters: { Part })
 	end
 end
 
+-- Cylinder whose axis runs along the build frame's Z (the plate's facing), centred at (0, y, z).
+local function alongZAt(y: number, z: number): CFrame
+	return BUILD_AT * CFrame.new(0, y, z) * CFrame.Angles(0, math.rad(90), 0)
+end
+
+-- A flat ring (annulus) cut from two cylinders.
+local function ring(name: string, outerD: number, innerD: number, thickness: number, cf: CFrame)
+	local outer = tempPart(Enum.PartType.Cylinder, Vector3.new(thickness, outerD, outerD), cf)
+	local inner = tempPart(Enum.PartType.Cylinder, Vector3.new(thickness + 1, innerD, innerD), cf)
+	cut(name, outer, { inner })
+end
+
 local function buildTemplates()
+	-- Plate, standing on its edge at y = 0, face toward the build frame's -Z (its LookVector side).
+	do
+		local s = SIZE.Plate
+		local d, t = s.Diameter, s.Thickness
+		local r = d / 2
+		local front = -t / 2 -- local Z of the front face
+		local body = tempPart(Enum.PartType.Cylinder, Vector3.new(t, d, d), alongZAt(r, 0))
+		-- A well 0.35 deep with a small bevel step around it.
+		local well = tempPart(Enum.PartType.Cylinder, Vector3.new(1.4, d * 0.64, d * 0.64), alongZAt(r, front - 0.7 + 0.35))
+		local bevel = tempPart(Enum.PartType.Cylinder, Vector3.new(1.4, d * 0.72, d * 0.72), alongZAt(r, front - 0.7 + 0.15))
+		cut("PlateBody", body, { well, bevel })
+		ring("PlateStripe", d * 0.93, d * 0.86, 0.1, alongZAt(r, front - 0.05))
+		ring("PlateFoot", d * 0.6, d * 0.53, 0.3, alongZAt(r, t / 2 + 0.15))
+	end
+	-- Bowl rim band.
+	do
+		local s = SIZE.Bowl
+		ring("BowlStripe", s.Diameter + 0.4, s.Diameter - 0.8, 0.4, BUILD_AT * CFrame.new(0, s.Depth - 0.1, 0) * CFrame.Angles(0, 0, math.rad(90)))
+	end
 	-- Bowl: a ball, hollowed, with everything above the rim cut off. Contact point at y = 0.
 	do
 		local s = SIZE.Bowl
@@ -4989,8 +5320,8 @@ end
 ----------------------------------------------------------------------------------------------------
 local function candidatePlate(rng: Random)
 	local s = SIZE.Plate
-	local side = if rng:NextNumber() &lt; 0.5 then 1 else -1
-	local r = math.sqrt(rng:NextNumber()) * s.Diameter * 0.4
+	local side = 1 -- only the front (the side you can see) gets dirty
+	local r = math.sqrt(rng:NextNumber()) * s.Diameter * 0.36
 	local theta = rng:NextNumber() * math.pi * 2
 	local x, y = r * math.cos(theta), s.Diameter / 2 + r * math.sin(theta)
 	return Vector3.new(x, y, side * 4), Vector3.new(0, 0, -side)
@@ -5160,8 +5491,45 @@ end
 -- ApplyGrime (dirt)
 ----------------------------------------------------------------------------------------------------
 local GOLDEN_COLOR = Color3.fromRGB(255, 213, 80)
-local RAY_ATTEMPTS = 10
+local RAY_ATTEMPTS = 14
 local MIN_SPACING = 1.2 -- spots on the same dish don't pile on top of each other
+local FIT_TOLERANCE = 0.35 -- how far the dish surface may drift from a spot's plane at its edge
+
+-- The dish surface under `pos` along `normal` (a short ray back down onto the dish), or nil.
+local function surfaceAt(params: RaycastParams, pos: Vector3, normal: Vector3): RaycastResult?
+	return workspace:Raycast(pos + normal * 1.2, -normal * 2.6, params)
+end
+
+-- Does a flat spot of `radius` at `center` sit on the dish all the way round? (No overhang off an
+-- edge, and not floating over a curve.)
+local function fits(params: RaycastParams, center: Vector3, normal: Vector3, radius: number): boolean
+	local cf = axisCFrame(center, normal, if math.abs(normal.Y) &gt; 0.9 then Vector3.new(1, 0, 0) else Vector3.new(0, 1, 0))
+	for i = 1, 8 do
+		local a = i / 8 * math.pi * 2
+		local p = (cf * CFrame.new(0, math.cos(a) * radius, math.sin(a) * radius)).Position
+		local hit = surfaceAt(params, p, normal)
+		if not hit or math.abs((hit.Position - p):Dot(normal)) &gt; FIT_TOLERANCE then
+			return false
+		end
+	end
+	return true
+end
+
+-- Glues a decoration part onto the dish surface under it, keeping its height above the surface.
+-- Returns false (and the caller drops it) when there's no dish underneath: that's what used to leave
+-- splats hanging off plate edges and cutlery.
+local function snapToSurface(params: RaycastParams, child: BasePart, basePos: Vector3, baseNormal: Vector3): boolean
+	local c = child.CFrame
+	local lift = (c.Position - basePos):Dot(baseNormal)
+	local hit = surfaceAt(params, c.Position - baseNormal * lift, baseNormal)
+	if not hit then
+		return false
+	end
+	local ok, rot = pcall(CFrame.fromRotationBetweenVectors, baseNormal, hit.Normal)
+	local turn = if ok and rot then rot else CFrame.identity
+	child.CFrame = CFrame.new(hit.Position + hit.Normal * lift) * turn * c.Rotation
+	return true
+end
 
 function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, levelIndex: number, rng: Random, goldenChance: number, folder: Folder): { BasePart }
 	local kind = dish:GetAttribute("Kind")
@@ -5187,8 +5555,16 @@ function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, leve
 	count = math.max(1, count)
 
 	for _ = 1, count do
+		local entry = Util.WeightedPick(level.Grime, "Weight", rng)
+		local grimeType = Config.GrimeTypes[entry.Type]
+		if not grimeType then
+			continue
+		end
+		local size = rng:NextNumber(grimeType.Size[1], grimeType.Size[2]) * DIRT_SCALE
+
+		-- Find a spot where the whole splat sits on the dish; shrink it if it only just misses.
 		local hitPos, hitNormal = nil, nil
-		for _attempt = 1, RAY_ATTEMPTS do
+		for attempt = 1, RAY_ATTEMPTS do
 			local lo, ld = candidateFn(rng)
 			if ld.Magnitude &gt; 1e-4 then
 				local originWorld = localPos(anchor, lo.X, lo.Y, lo.Z)
@@ -5203,88 +5579,93 @@ function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, leve
 						end
 					end
 					if not crowded then
-						hitPos, hitNormal = result.Position, result.Normal
-						break
+						if fits(params, result.Position, result.Normal, size * 0.5) then
+							hitPos, hitNormal = result.Position, result.Normal
+							break
+						elseif attempt &gt; RAY_ATTEMPTS / 2 and fits(params, result.Position, result.Normal, size * 0.32) then
+							size *= 0.65
+							hitPos, hitNormal = result.Position, result.Normal
+							break
+						end
 					end
 				end
 			end
 		end
 		if hitPos and hitNormal then
 			table.insert(used, hitPos)
-			local entry = Util.WeightedPick(level.Grime, "Weight", rng)
-			local grimeType = Config.GrimeTypes[entry.Type]
-			if grimeType then
-				local golden = rng:NextNumber() &lt; goldenChance
-				local size = rng:NextNumber(grimeType.Size[1], grimeType.Size[2]) * DIRT_SCALE
-				local hint = if math.abs(hitNormal:Dot(Vector3.new(0, 1, 0))) &gt; 0.9 then anchor.RightVector else Vector3.new(0, 1, 0)
-				local cf = axisCFrame(hitPos + hitNormal * 0.08, hitNormal, hint)
-				cf = cf * CFrame.Angles(rng:NextNumber() * math.pi * 2, 0, 0)
+			local golden = rng:NextNumber() &lt; goldenChance
+			local hint = if math.abs(hitNormal:Dot(Vector3.new(0, 1, 0))) &gt; 0.9 then anchor.RightVector else Vector3.new(0, 1, 0)
+			local cf = axisCFrame(hitPos + hitNormal * 0.08, hitNormal, hint)
+			cf = cf * CFrame.Angles(rng:NextNumber() * math.pi * 2, 0, 0)
 
-				local color = if golden then GOLDEN_COLOR else grimeType.Color
-				local material = grimeType.Material
+			local color = if golden then GOLDEN_COLOR else grimeType.Color
+			local material = grimeType.Material
 
-				local part: BasePart, children: { BasePart }
-				if grimeType.Shape == "Crumbs" then
-					part, children = shapeCrumbs(cf, size, color, material, rng)
-				elseif grimeType.Shape == "Sprinkles" then
-					part, children = shapeSprinkles(cf, size, color, material, rng)
-				elseif grimeType.Shape == "Streak" then
-					part, children = shapeStreak(cf, size, color, material, rng)
-				else
-					part, children = shapeBlob(cf, size, color, material, rng)
-				end
+			local part: BasePart, children: { BasePart }
+			if grimeType.Shape == "Crumbs" then
+				part, children = shapeCrumbs(cf, size, color, material, rng)
+			elseif grimeType.Shape == "Sprinkles" then
+				part, children = shapeSprinkles(cf, size, color, material, rng)
+			elseif grimeType.Shape == "Streak" then
+				part, children = shapeStreak(cf, size, color, material, rng)
+			else
+				part, children = shapeBlob(cf, size, color, material, rng)
+			end
 
-				part.Name = "Dirt"
-				part.CanTouch = false
-				part.CanQuery = true
-				part.CanCollide = false
-				part.CastShadow = false
-				-- Stay in the Default collision group: spatial queries (the server's scrub overlap,
-				-- raycasts) skip parts whose group can't collide with the query's group, so a
-				-- "collides with nothing" group would make dirt impossible to clean.
+			part.Name = "Dirt"
+			part.CanTouch = false
+			part.CanQuery = true
+			part.CanCollide = false
+			part.CastShadow = false
+			-- Stay in the Default collision group: spatial queries (the server's scrub overlap,
+			-- raycasts) skip parts whose group can't collide with the query's group, so a
+			-- "collides with nothing" group would make dirt impossible to clean.
 
-				local hp = math.max(1, math.floor(grimeType.HP * levelMult + 0.5))
-				local units = math.max(1, math.floor(grimeType.Units * levelMult + 0.5))
-				local minTool = grimeType.MinTool
-				if golden then
-					units = math.floor(units * Config.Round.GoldenUnitsMult + 0.5)
-					minTool = 1
-					part.Material = Enum.Material.Neon
-					part.Color = GOLDEN_COLOR
-					for _, child in children do
-						child.Color = GOLDEN_COLOR
-						child.Material = Enum.Material.Foil
-					end
-					local attach = Instance.new("Attachment")
-					attach.Parent = part
-					local emitter = Instance.new("ParticleEmitter")
-					emitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-					emitter.Lifetime = NumberRange.new(0.5, 1.0)
-					emitter.Rate = 6
-					emitter.Speed = NumberRange.new(0.5, 1.5)
-					emitter.Size = NumberSequence.new(0.5, 0)
-					emitter.Color = ColorSequence.new(GOLDEN_COLOR)
-					emitter.Parent = attach
-				end
-
-				part:SetAttribute("HP", hp)
-				part:SetAttribute("MaxHP", hp)
-				part:SetAttribute("Units", units)
-				part:SetAttribute("Type", entry.Type)
-				part:SetAttribute("DishId", dishId)
-				part:SetAttribute("Golden", golden)
-				part:SetAttribute("MinTool", minTool)
-				part:SetAttribute("BaseSize", part.Size)
-				part:SetAttribute("BaseTransparency", part.Transparency)
-
+			local hp = math.max(1, math.floor(grimeType.HP * levelMult + 0.5))
+			local units = math.max(1, math.floor(grimeType.Units * levelMult + 0.5))
+			local minTool = grimeType.MinTool
+			if golden then
+				units = math.floor(units * Config.Round.GoldenUnitsMult + 0.5)
+				minTool = 1
+				part.Material = Enum.Material.Neon
+				part.Color = GOLDEN_COLOR
 				for _, child in children do
+					child.Color = GOLDEN_COLOR
+					child.Material = Enum.Material.Foil
+				end
+				local attach = Instance.new("Attachment")
+				attach.Parent = part
+				local emitter = Instance.new("ParticleEmitter")
+				emitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+				emitter.Lifetime = NumberRange.new(0.5, 1.0)
+				emitter.Rate = 6
+				emitter.Speed = NumberRange.new(0.5, 1.5)
+				emitter.Size = NumberSequence.new(0.5, 0)
+				emitter.Color = ColorSequence.new(GOLDEN_COLOR)
+				emitter.Parent = attach
+			end
+
+			part:SetAttribute("HP", hp)
+			part:SetAttribute("MaxHP", hp)
+			part:SetAttribute("Units", units)
+			part:SetAttribute("Type", entry.Type)
+			part:SetAttribute("DishId", dishId)
+			part:SetAttribute("Golden", golden)
+			part:SetAttribute("MinTool", minTool)
+			part:SetAttribute("BaseSize", part.Size)
+			part:SetAttribute("BaseTransparency", part.Transparency)
+
+			for _, child in children do
+				if snapToSurface(params, child, hitPos, hitNormal) then
 					child:SetAttribute("BaseSize", child.Size)
 					child.Parent = part
+				else
+					child:Destroy()
 				end
-
-				part.Parent = folder
-				table.insert(placed, part)
 			end
+
+			part.Parent = folder
+			table.insert(placed, part)
 		end
 	end
 
@@ -5358,7 +5739,7 @@ function DishFactory.Sparkle(dish: Model)
 end
 
 return DishFactory</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000011"><Properties><string name="Name">LeaderboardService</string><ProtectedString name="Source">-- Lobby leaderboards: "Fastest Clean" (one board that cycles through the levels) and
+<Item class="ModuleScript" referent="RBX00000012"><Properties><string name="Name">LeaderboardService</string><ProtectedString name="Source">-- Lobby leaderboards: "Fastest Clean" (one board that cycles through the levels) and
 -- "Most Dishes Cleaned".
 --
 --   * OrderedDataStores: RinseCycle_Fastest_L&lt;n&gt; holds best times in tenths of a second (ascending,
@@ -5728,7 +6109,7 @@ function LeaderboardService.Start()
 end
 
 return LeaderboardService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000012"><Properties><string name="Name">LobbyBuilder</string><ProtectedString name="Source">-- LobbyBuilder: builds the entire lobby world at boot. Nothing here is an uploaded asset: every part
+<Item class="ModuleScript" referent="RBX00000013"><Properties><string name="Name">LobbyBuilder</string><ProtectedString name="Source">-- LobbyBuilder: builds the entire lobby world at boot. Nothing here is an uploaded asset: every part
 -- is a primitive. The layout is deliberately compact (you can cross it in a few seconds):
 --
 --                         [ giant dishwasher building + title ]
@@ -5801,8 +6182,8 @@ local SHOP_X = -40
 local PETSTAND_X = 40
 
 -- Colors
-local TILE_A = Color3.fromRGB(246, 244, 238)
-local TILE_B = Color3.fromRGB(218, 234, 240)
+local TILE_A = Color3.fromRGB(226, 218, 204)
+local TILE_B = Color3.fromRGB(182, 206, 222)
 local GRASS = Color3.fromRGB(116, 170, 86)
 local FENCE = Color3.fromRGB(252, 252, 250)
 local STEEL = Color3.fromRGB(205, 210, 216)
@@ -5912,12 +6293,14 @@ end
 -- Ground: a lawn, the tiled plaza, a white picket fence and invisible walls.
 ----------------------------------------------------------------------------------------------------
 local function buildGround(parent: Instance)
+	-- Safety floor under everything (the real ground is Terrain, see buildTerrain).
 	mkPart("Part", {
-		Name = "Lawn",
+		Name = "SafetyFloor",
 		Size = Vector3.new(700, 2, 700),
-		CFrame = at(0, -1, -20),
+		CFrame = at(0, -3, -20),
 		Color = GRASS,
-		Material = Enum.Material.Grass,
+		Transparency = 1,
+		CastShadow = false,
 	}, parent)
 
 	-- Plaza: large two-tone tiles (few parts, still reads as a tiled floor).
@@ -5940,7 +6323,7 @@ local function buildGround(parent: Instance)
 		Name = "Path",
 		Size = Vector3.new(14, 0.1, 110),
 		CFrame = at(0, FLOOR_Y + 0.05, -30),
-		Color = Color3.fromRGB(190, 220, 240),
+		Color = Color3.fromRGB(150, 188, 212),
 		Material = Enum.Material.SmoothPlastic,
 		CanCollide = false,
 		CastShadow = false,
@@ -5996,30 +6379,67 @@ end
 -- Spawn: built FIRST so a player who spawns mid-build has a floor.
 ----------------------------------------------------------------------------------------------------
 local function buildSpawn(parent: Instance)
+	-- A stepped round platform: navy base, marble top, the game's emblem on it, and four bubble
+	-- lamps around the edge. No two faces share a plane.
 	mkPart("Part", {
-		Name = "SpawnPad",
+		Name = "SpawnBase",
 		Shape = Enum.PartType.Cylinder,
-		Size = Vector3.new(1, 26, 26),
-		CFrame = upright(SPAWN.X, 0.5, SPAWN.Z),
-		Color = Color3.fromRGB(255, 255, 255),
-		Material = Enum.Material.SmoothPlastic,
-	}, parent)
-	mkPart("Part", {
-		Name = "SpawnRing",
-		Shape = Enum.PartType.Cylinder,
-		Size = Vector3.new(0.9, 27.5, 27.5),
+		Size = Vector3.new(0.7, 28, 28),
 		CFrame = upright(SPAWN.X, 0.45, SPAWN.Z),
-		Color = Color3.fromRGB(120, 200, 250),
+		Color = Color3.fromRGB(38, 78, 128),
 		Material = Enum.Material.SmoothPlastic,
-		CanCollide = false,
 	}, parent)
+	mkPart("Part", {
+		Name = "SpawnTop",
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(0.5, 24, 24),
+		CFrame = upright(SPAWN.X, 0.9, SPAWN.Z),
+		Color = Color3.fromRGB(236, 240, 244),
+		Material = Enum.Material.Marble,
+	}, parent)
+	local emblem = mkPart("Part", {
+		Name = "SpawnEmblem",
+		Size = Vector3.new(18, 0.05, 18),
+		CFrame = at(SPAWN.X, 1.2, SPAWN.Z),
+		Transparency = 1,
+		CanCollide = false,
+		CastShadow = false,
+	}, parent)
+	local gui = mk("SurfaceGui", { Face = Enum.NormalId.Top, CanvasSize = Vector2.new(600, 600), LightInfluence = 0.3 }, emblem)
+	local circle = mk("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromScale(0.96, 0.96),
+		BackgroundColor3 = Color3.fromRGB(120, 200, 250),
+		BackgroundTransparency = 0.35,
+	}, gui)
+	mk("UICorner", { CornerRadius = UDim.new(0.5, 0) }, circle)
+	mk("UIStroke", { Thickness = 10, Color = Color3.fromRGB(255, 255, 255) }, circle)
+	local title = mk("TextLabel", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromScale(0.8, 0.36),
+		BackgroundTransparency = 1,
+		Text = "🧼\n" .. string.upper(Config.GameName),
+		Font = Enum.Font.FredokaOne,
+		TextScaled = true,
+		TextColor3 = Color3.new(1, 1, 1),
+	}, gui)
+	mk("UIStroke", { Thickness = 6, Color = Color3.fromRGB(20, 60, 110) }, title)
+	for i = 1, 4 do
+		local a = (i - 0.5) / 4 * math.pi * 2
+		local px, pz = SPAWN.X + math.cos(a) * 12.5, SPAWN.Z + math.sin(a) * 12.5
+		mkPart("Part", { Name = "LampPost", Shape = Enum.PartType.Cylinder, Size = Vector3.new(3, 0.8, 0.8), CFrame = upright(px, 2.3, pz), Color = Color3.fromRGB(230, 234, 240), Material = Enum.Material.Metal }, parent)
+		local bulb = mkPart("Part", decor({ Name = "Bubble", Shape = Enum.PartType.Ball, Size = Vector3.new(2, 2, 2), CFrame = at(px, 4.6, pz), Color = if i % 2 == 0 then Color3.fromRGB(150, 220, 255) else Color3.fromRGB(255, 170, 215), Material = Enum.Material.Neon, Transparency = 0.2 }), parent)
+		mk("PointLight", { Range = 12, Brightness = 0.8, Color = bulb.Color }, bulb)
+	end
 	for i = 1, 4 do
 		local angle = (i - 1) / 4 * math.pi * 2 + math.pi / 4
-		local pos = Vector3.new(SPAWN.X + math.cos(angle) * 6, 1.5, SPAWN.Z + math.sin(angle) * 6)
+		local pos = Vector3.new(SPAWN.X + math.cos(angle) * 6, 1.8, SPAWN.Z + math.sin(angle) * 6)
 		mkPart("SpawnLocation", {
 			Name = "Spawn" .. i,
 			Size = Vector3.new(5, 1, 5),
-			CFrame = at(pos.X, pos.Y, pos.Z) * CFrame.Angles(0, 0, 0),
+			CFrame = at(pos.X, pos.Y, pos.Z),
 			Neutral = true,
 			Duration = 0,
 			Transparency = 1,
@@ -6027,6 +6447,47 @@ local function buildSpawn(parent: Instance)
 		}, parent)
 	end
 end
+
+-- Terrain around the plaza: rolling grass, hills, and a ring of snowy mountains on the horizon.
+-- Built in the background after the lobby (it's a lot of voxels), with small yields.
+local function buildTerrain()
+	local terrain = workspace.Terrain
+	pcall(function()
+		terrain:Clear()
+	end)
+	local o = ORIGIN
+	-- Grass ground, top at Y = 0 (a voxel boundary).
+	terrain:FillBlock(CFrame.new(o.X, o.Y - 8, o.Z - 20), Vector3.new(1600, 16, 1600), Enum.Material.Grass)
+	task.wait()
+	local rng = Random.new(7)
+	-- Rolling hills just outside the fence.
+	for i = 1, 22 do
+		local a = i / 22 * math.pi * 2 + rng:NextNumber(-0.1, 0.1)
+		local dist = rng:NextNumber(180, 290)
+		local r = rng:NextNumber(35, 70)
+		terrain:FillBall(Vector3.new(o.X + math.cos(a) * dist, o.Y - r * 0.55, o.Z - 20 + math.sin(a) * dist), r, Enum.Material.Grass)
+		if i % 4 == 0 then
+			task.wait()
+		end
+	end
+	-- Mountains: rock bodies with snow on top, two ranges deep so the horizon has layers.
+	for i = 1, 16 do
+		local a = i / 16 * math.pi * 2 + rng:NextNumber(-0.08, 0.08)
+		local dist = rng:NextNumber(520, 640)
+		local r = rng:NextNumber(110, 170)
+		local c = Vector3.new(o.X + math.cos(a) * dist, o.Y - r * 0.25, o.Z - 20 + math.sin(a) * dist)
+		terrain:FillBall(c, r, Enum.Material.Rock)
+		terrain:FillBall(c + Vector3.new(rng:NextNumber(-60, 60), -r * 0.2, rng:NextNumber(-60, 60)), r * 0.8, Enum.Material.Rock)
+		terrain:FillBall(c + Vector3.new(0, r * 0.62, 0), r * 0.42, Enum.Material.Snow)
+		-- Grassy foothill in front of it.
+		terrain:FillBall(c - (c - Vector3.new(o.X, c.Y, o.Z)).Unit * r * 0.8 - Vector3.new(0, r * 0.3, 0), r * 0.6, Enum.Material.Grass)
+		task.wait()
+	end
+	pcall(function()
+		(terrain :: any).Decoration = true
+	end)
+end
+
 
 ----------------------------------------------------------------------------------------------------
 -- Party pads: flat circles with a low see-through ring (it only blocks party members, so they stay
@@ -6531,6 +6992,45 @@ local function tree(parent: Instance, x: number, z: number, scale: number)
 	end
 end
 
+-- Rank Shrine: a floating, spinning crystal over a pedestal. Opens the Ranks window.
+local function buildRankShrine(parent: Instance)
+	local x, z = -30, 30
+	local base = mkPart("Part", { Name = "ShrineBase", Shape = Enum.PartType.Cylinder, Size = Vector3.new(1.6, 12, 12), CFrame = upright(x, 1, z), Color = Color3.fromRGB(60, 40, 110), Material = Enum.Material.SmoothPlastic }, parent)
+	mkPart("Part", { Name = "ShrinePillar", Shape = Enum.PartType.Cylinder, Size = Vector3.new(4, 5, 5), CFrame = upright(x, 3.8, z), Color = Color3.fromRGB(235, 225, 250), Material = Enum.Material.Marble }, parent)
+	mkPart("Part", decor({ Name = "ShrineRing", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.3, 13, 13), CFrame = upright(x, 1.65, z), Color = Color3.fromRGB(255, 120, 200), Material = Enum.Material.Neon }), parent)
+	local crystal = mkPart("Part", decor({
+		Name = "Crystal",
+		Size = Vector3.new(4, 4, 4),
+		CFrame = at(x, 10, z) * CFrame.Angles(math.rad(45), 0, math.rad(45)),
+		Color = Color3.fromRGB(190, 120, 255),
+		Material = Enum.Material.Glass,
+		Transparency = 0.15,
+		CastShadow = false,
+	}), parent)
+	crystal:SetAttribute("SpinSpeed", 0.8)
+	CollectionService:AddTag(crystal, "SpinY")
+	mk("PointLight", { Range = 16, Brightness = 1, Color = Color3.fromRGB(200, 140, 255) }, crystal)
+	mk("ParticleEmitter", {
+		Texture = "rbxasset://textures/particles/sparkles_main.dds",
+		Color = ColorSequence.new(Color3.fromRGB(230, 190, 255)),
+		Size = NumberSequence.new(0.6, 0),
+		Lifetime = NumberRange.new(0.8, 1.4),
+		Rate = 8,
+		Speed = NumberRange.new(1, 3),
+		SpreadAngle = Vector2.new(180, 180),
+	}, crystal)
+	worldSign(base, "💎 RANKS", 10, 2.6, 15.5, Color3.fromRGB(230, 190, 255))
+	worldSign(base, string.format("Roll for %d 💎", Config.RankRoll.Cost), 8, 1.6, 13.4, Color3.fromRGB(255, 255, 255))
+	local prompt = mk("ProximityPrompt", {
+		ActionText = "Roll Ranks",
+		ObjectText = "Rank Shrine",
+		RequiresLineOfSight = false,
+		HoldDuration = 0,
+		MaxActivationDistance = 12,
+	}, base) :: ProximityPrompt
+	prompt:SetAttribute("OpenWindow", "Ranks")
+end
+
 local function buildDecorations(parent: Instance)
 	for _, spot in { { -85, -90, 1.3 }, { 85, -90, 1.3 }, { -88, 52, 1 }, { 88, 52, 1 }, { -130, -30, 1.6 }, { 130, -30, 1.6 }, { -120, 70, 1.4 }, { 120, 70, 1.4 }, { 0, -140, 1.8 } } do
 		tree(parent, spot[1], spot[2], spot[3])
@@ -6540,8 +7040,8 @@ local function buildDecorations(parent: Instance)
 		mkPart("Part", decor({ Name = "Hedge", Size = Vector3.new(40, 5, 5), CFrame = at(x, 2.5, PLAZA_Z0 + 3), Color = Color3.fromRGB(80, 150, 70), Material = Enum.Material.Grass }), parent)
 	end
 	-- Giant sponge and soap bars around the spawn.
-	mkPart("Part", { Name = "GiantSponge", Size = Vector3.new(12, 5, 8), CFrame = at(-30, 2.7, 30) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(255, 215, 90), Material = Enum.Material.Sand }, parent)
-	mkPart("Part", decor({ Name = "SpongeScrub", Size = Vector3.new(12.2, 1.6, 8.2), CFrame = at(-30, 5.9, 30) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(80, 180, 100), Material = Enum.Material.Fabric }), parent)
+	mkPart("Part", { Name = "GiantSponge", Size = Vector3.new(12, 5, 8), CFrame = at(-80, 2.7, 46) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(255, 215, 90), Material = Enum.Material.Sand }, parent)
+	mkPart("Part", decor({ Name = "SpongeScrub", Size = Vector3.new(12.2, 1.6, 8.2), CFrame = at(-80, 5.9, 46) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(80, 180, 100), Material = Enum.Material.Fabric }), parent)
 	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(10, 3.5, 6), CFrame = at(30, 2, 30) * CFrame.Angles(0, math.rad(-15), 0), Color = Color3.fromRGB(190, 230, 255), Material = Enum.Material.SmoothPlastic }, parent)
 	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(8, 3, 5), CFrame = at(31, 5.3, 30) * CFrame.Angles(0, math.rad(10), 0), Color = Color3.fromRGB(255, 190, 220), Material = Enum.Material.SmoothPlastic }, parent)
 
@@ -6584,17 +7084,17 @@ local function getOrMake(className: string): Instance
 end
 
 local function setupLighting()
-	Lighting.ClockTime = 14.5
-	Lighting.Brightness = 1.8
-	Lighting.ExposureCompensation = -0.2
-	Lighting.Ambient = Color3.fromRGB(95, 100, 112)
-	Lighting.OutdoorAmbient = Color3.fromRGB(120, 125, 138)
+	Lighting.ClockTime = 15
+	Lighting.Brightness = 1.3
+	Lighting.ExposureCompensation = -0.35
+	Lighting.Ambient = Color3.fromRGB(80, 84, 94)
+	Lighting.OutdoorAmbient = Color3.fromRGB(100, 104, 116)
 	Lighting.GlobalShadows = true
-	Lighting.EnvironmentDiffuseScale = 0.6
-	Lighting.EnvironmentSpecularScale = 0.5
+	Lighting.EnvironmentDiffuseScale = 0.45
+	Lighting.EnvironmentSpecularScale = 0.35
 
 	local atmo = getOrMake("Atmosphere") :: Atmosphere
-	atmo.Density = 0.25
+	atmo.Density = 0.3
 	atmo.Offset = 0.1
 	atmo.Color = Color3.fromRGB(199, 218, 240)
 	atmo.Decay = Color3.fromRGB(120, 150, 190)
@@ -6607,9 +7107,9 @@ local function setupLighting()
 	bloom.Threshold = 2
 
 	local cc = getOrMake("ColorCorrectionEffect") :: ColorCorrectionEffect
-	cc.Saturation = 0.08
-	cc.Contrast = 0.06
-	cc.Brightness = 0
+	cc.Saturation = 0.1
+	cc.Contrast = 0.08
+	cc.Brightness = -0.02
 
 	local rays = getOrMake("SunRaysEffect") :: SunRaysEffect
 	rays.Intensity = 0.03
@@ -6658,6 +7158,7 @@ function LobbyBuilder.Build(): Lobby
 	local dishesBoard = buildBoard(model, 28, BOARD_Z, "Most Dishes Cleaned")
 	buildHowToPlay(model, 0, BOARD_Z + 3)
 
+	buildRankShrine(model)
 	buildDecorations(model)
 	setupLighting()
 
@@ -6667,6 +7168,12 @@ function LobbyBuilder.Build(): Lobby
 		Boards = { Times = timesBoard, Dishes = dishesBoard },
 	}
 	lobby = built
+	task.spawn(function()
+		local ok, err = pcall(buildTerrain)
+		if not ok then
+			warn("[LobbyBuilder] terrain failed: " .. tostring(err))
+		end
+	end)
 	return built
 end
 
@@ -6683,7 +7190,7 @@ function LobbyBuilder.GetSpawnCFrame(): CFrame
 end
 
 return LobbyBuilder</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000013"><Properties><string name="Name">MarketService</string><ProtectedString name="Source">-- MarketService: Robux purchases.
+<Item class="ModuleScript" referent="RBX00000014"><Properties><string name="Name">MarketService</string><ProtectedString name="Source">-- MarketService: Robux purchases.
 --
 -- Game passes (Config.GamePasses, only entries with Id ~= 0):
 --   * When a profile loads, ownership is checked with UserOwnsGamePassAsync and recorded with
@@ -6693,8 +7200,9 @@ return LobbyBuilder</ProtectedString></Properties></Item>
 --     PetService (slot count) listen to. We can't call RoundService from here: it requires
 --     DataService, and MarketService may only require DataService.
 --
--- Developer products: none exist yet (Bubbles are never sold for Robux, see DESIGN.md section 7).
--- ProcessReceipt already implements the idempotent pattern so adding one later is one table entry:
+-- Developer products (Config.DevProducts, entries with Id ~= 0): Bubbles, Gems and in-run Coins packs.
+-- MarketService.GrantProduct gives the goods; ShopService also uses it for Studio test purchases.
+-- ProcessReceipt implements the idempotent pattern:
 --   1. unknown product / player not here / save not writable  -&gt; NotProcessedYet (Roblox retries)
 --   2. PurchaseId already in profile.Receipts (and saved)      -&gt; PurchaseGranted, grant nothing
 --   3. otherwise grant, append PurchaseId to Receipts, save now; PurchaseGranted only once saved
@@ -6708,6 +7216,7 @@ local Config = require(Shared:WaitForChild("Config"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 
 local DataService = require(script.Parent:WaitForChild("DataService"))
+local RoundService = require(script.Parent:WaitForChild("RoundService"))
 
 local MarketService = {}
 
@@ -6731,6 +7240,35 @@ type Receipt = {
 --       -- give the item here
 --   end,
 local PRODUCTS: { [number]: (Player, any, Receipt) -&gt; () } = {}
+
+-- Gives a developer product's goods. Never yields. Coins only make sense inside a run; bought
+-- anywhere else (e.g. the run ended while the prompt was open) they turn into Bubbles instead.
+function MarketService.GrantProduct(player: Player, product: any): boolean
+	if type(product) ~= "table" or type(product.Amount) ~= "number" then
+		return false
+	end
+	if product.Kind == "Bubbles" then
+		return DataService.AddBubbles(player, product.Amount, "Product")
+	elseif product.Kind == "Gems" then
+		return DataService.AddGems(player, product.Amount)
+	elseif product.Kind == "Coins" then
+		if RoundService.AddCoins(player, product.Amount) then
+			return true
+		end
+		return DataService.AddBubbles(player, math.floor(product.Amount / 2), "ProductCoinsFallback")
+	end
+	return false
+end
+
+for _, product in Config.DevProducts or {} do
+	if type(product.Id) == "number" and product.Id ~= 0 then
+		PRODUCTS[product.Id] = function(player: Player, _profile: any, _receipt: Receipt)
+			if not MarketService.GrantProduct(player, product) then
+				error("grant failed")
+			end
+		end
+	end
+end
 
 local checked: { [Player]: boolean } = {}
 local boughtThisSession: { [Player]: { [string]: boolean } } = {} -- never downgraded by a stale check
@@ -6983,7 +7521,7 @@ function MarketService.Start()
 end
 
 return MarketService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000014"><Properties><string name="Name">PartyService</string><ProtectedString name="Source">-- Party pads: walk-in matchmaking in the lobby. One party per pad, fully server-authoritative.
+<Item class="ModuleScript" referent="RBX00000015"><Properties><string name="Name">PartyService</string><ProtectedString name="Source">-- Party pads: walk-in matchmaking in the lobby. One party per pad, fully server-authoritative.
 --
 --   * A poll loop (Config.Party.PollInterval) tests every free player's HumanoidRootPart against each
 --     pad's Zone box, in the Zone's own space so rotated pads work.
@@ -8042,7 +8580,7 @@ function PartyService.RemovePlayer(player: Player)
 end
 
 return PartyService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000015"><Properties><string name="Name">PetService</string><ProtectedString name="Source">-- PetService: pet inventory (Hatch / Equip / Unequip / EquipBest / Delete), the EquippedPets
+<Item class="ModuleScript" referent="RBX00000016"><Properties><string name="Name">PetService</string><ProtectedString name="Source">-- PetService: pet inventory (Hatch / Equip / Unequip / EquipBest / Delete), the EquippedPets
 -- folders clients render from, and the pet auto-clean loop inside runs.
 --
 --   * Every inventory op validates everything first, then writes the profile with no yield in
@@ -8987,7 +9525,7 @@ function PetService.Start()
 end
 
 return PetService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000016"><Properties><string name="Name">RoundService</string><ProtectedString name="Source">-- RoundService: owns every run (one party inside one dishwasher).
+<Item class="ModuleScript" referent="RBX00000017"><Properties><string name="Name">RoundService</string><ProtectedString name="Source">-- RoundService: owns every run (one party inside one dishwasher).
 --
 -- A run's life:
 --   StartRound  -&gt; claim an arena slot, ArenaBuilder.Build (yields), index the grime, create a
@@ -9015,6 +9553,7 @@ local ArenaBuilder = require(script.Parent:WaitForChild("ArenaBuilder"))
 local DishFactory = require(script.Parent:WaitForChild("DishFactory"))
 local LobbyBuilder = require(script.Parent:WaitForChild("LobbyBuilder"))
 local Characters = require(script.Parent:WaitForChild("Characters"))
+local ToolModels = require(Shared:WaitForChild("ToolModels"))
 
 local RoundService = {}
 
@@ -9064,8 +9603,10 @@ type DishState = {
 type PlayerRun = {
 	Coins: number,
 	Tank: number,
-	Upgrades: Types.RunUpgrades,
-	ToolIndex: number,
+	Upgrades: Types.RunUpgrades, -- global upgrades (TankSize, Sneakers); per-tool ones live in ToolUpgrades
+	ToolIndex: number, -- the tool in hand
+	OwnedTools: { boolean },
+	ToolUpgrades: { Types.RunUpgrades }, -- [toolIndex] = that tool's HandSize / ScrubPower levels
 	Stats: Types.RunStats,
 	GrimeCleaned: number,
 	LastScrubAt: number, -- os.clock() of the last accepted Scrub packet
@@ -9243,6 +9784,87 @@ local function newUpgrades(): Types.RunUpgrades
 	return upgrades
 end
 
+-- The upgrade levels that apply right now: the global ones plus the tool-in-hand's own.
+local function effectiveUpgrades(pr: PlayerRun): Types.RunUpgrades
+	local merged = table.clone(pr.Upgrades) :: any
+	local own = pr.ToolUpgrades[pr.ToolIndex] :: any
+	for _, def in Config.Upgrades do
+		if def.PerTool then
+			merged[def.Id] = (own and own[def.Id]) or 0
+		end
+	end
+	return merged
+end
+
+local function newToolState(): ({ boolean }, { Types.RunUpgrades })
+	local owned, ups = {}, {}
+	for i in Config.Tools do
+		owned[i] = i == 1 -- everyone starts with Bare Hands
+		ups[i] = newUpgrades()
+	end
+	return owned, ups
+end
+
+-- Puts a model of the tool in hand into the character's right hand (everyone can see it).
+local function attachHeldTool(player: Player, toolIndex: number)
+	local character = player.Character
+	if not character then
+		return
+	end
+	local old = character:FindFirstChild("HeldTool")
+	if old then
+		old:Destroy()
+	end
+	character:SetAttribute("HeldToolIndex", toolIndex)
+	if toolIndex &lt;= 1 then
+		return
+	end
+	local hand = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
+	if not hand or not hand:IsA("BasePart") then
+		return
+	end
+	local ok, model = pcall(ToolModels.Build, toolIndex, 0.42)
+	if not ok or not model then
+		return
+	end
+	model.Name = "HeldTool"
+	local grip = model.PrimaryPart :: BasePart
+	local offset = ToolModels.HoldOffset(toolIndex)
+	if hand.Name == "Right Arm" then
+		offset = CFrame.new(0, -1, 0) * offset
+	end
+	model:PivotTo(hand.CFrame * offset)
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") then
+			d.Anchored = false
+			d.Massless = true
+			if d ~= grip then
+				local weld = Instance.new("WeldConstraint")
+				weld.Part0 = grip
+				weld.Part1 = d
+				weld.Parent = d
+			end
+		end
+	end
+	local weld = Instance.new("Weld")
+	weld.Part0 = hand
+	weld.Part1 = grip
+	weld.C0 = offset
+	weld.Parent = grip
+	model.Parent = character
+end
+
+local function detachHeldTool(player: Player)
+	local character = player.Character
+	local old = character and character:FindFirstChild("HeldTool")
+	if old then
+		old:Destroy()
+	end
+	if character then
+		character:SetAttribute("HeldToolIndex", nil)
+	end
+end
+
 local function rebuildMemberIds(run: Run)
 	table.clear(run.MemberIds)
 	for _, member in run.Order do
@@ -9264,7 +9886,9 @@ local function buildState(run: Run, pr: PlayerRun): Types.RunState
 		Tank = pr.Tank,
 		TankMax = pr.Stats.TankMax,
 		ToolIndex = pr.ToolIndex,
-		Upgrades = pr.Upgrades,
+		OwnedTools = pr.OwnedTools,
+		ToolUpgrades = pr.ToolUpgrades,
+		Upgrades = effectiveUpgrades(pr),
 		Stats = pr.Stats,
 		DrainPosition = run.Arena.DrainPosition,
 		StationPosition = run.Arena.StationPosition or run.Arena.DrainPosition,
@@ -9333,7 +9957,8 @@ local function computeStats(levelIndex: number, player: Player, pr: PlayerRun): 
 		local ok, bonus = safe(Config.PetCoinBonus, profile.Pets, profile.Equipped)
 		petBonus = (ok and positive(bonus)) or 0
 	end
-	return Config.GetRunStats(levelIndex, pr.Upgrades, pr.ToolIndex, perks, getPasses(player), petBonus)
+	local rank = profile and profile.Rank or nil
+	return Config.GetRunStats(levelIndex, effectiveUpgrades(pr), pr.ToolIndex, perks, getPasses(player), petBonus, rank)
 end
 
 -- Recomputes a member's stats from their upgrades, tool, perks, passes and pets, and re-applies
@@ -9409,6 +10034,12 @@ local function retireGrime(run: Run, part: BasePart, entry: GrimeEntry, cleaner:
 		gained = math.min(entry.Units, math.max(0, pr.Stats.TankMax - pr.Tank))
 		pr.Tank += gained
 		pr.GrimeCleaned += 1
+
+		local gems = if entry.Golden then Config.Gems.GoldenDrop elseif rng:NextNumber() &lt; Config.Gems.DropChance then 1 else 0
+		if gems &gt; 0 then
+			safe(DataService.AddGems, rewardPlayer, gems)
+			notify(rewardPlayer, string.format("💎 You found %d Gem%s!", gems, if gems == 1 then "" else "s"), "Good")
+		end
 
 		if entry.Golden then
 			local range = R.GoldenBubbles
@@ -9488,8 +10119,10 @@ local function damageEntry(run: Run, player: Player, pr: PlayerRun, part: BasePa
 	if pr.Tank &gt;= pr.Stats.TankMax then
 		return true -- tank full: the player (or pet) has to go sell first
 	end
-	if not fromPet and pr.ToolIndex &lt; entry.MinTool then
-		return true -- too tough for this tool (pets ignore MinTool)
+	if not fromPet and (pr.Stats.Tier or pr.ToolIndex) &lt; entry.MinTool then
+		-- Too tough for this tool: it still works, just slowly (so nobody can get stuck without the
+		-- coins for a better tool). Pets ignore MinTool.
+		amount *= R.UnderTierMult
 	end
 
 	run.LastDamageAt = os.clock()
@@ -9632,6 +10265,7 @@ local function rewardRun(run: Run, members: { Player }, seconds: number, returnA
 			bubbles = math.floor(bubbles)
 
 			safe(DataService.AddBubbles, p, bubbles, "RunClear")
+			safe(DataService.AddGems, p, Config.Gems.PerClear * run.Level)
 			safe(DataService.AddStat, p, "GrimeCleaned", pr.GrimeCleaned)
 			safe(DataService.PushMeta, p)
 
@@ -9812,12 +10446,15 @@ local function joinRun(run: Run, player: Player, index: number)
 		Tank = 0,
 		Upgrades = newUpgrades(),
 		ToolIndex = 1,
+		OwnedTools = {},
+		ToolUpgrades = {},
 		Stats = nil :: any,
 		GrimeCleaned = 0,
 		LastScrubAt = 0,
 		LastFullFX = 0,
 		Results = nil,
 	}
+	pr.OwnedTools, pr.ToolUpgrades = newToolState()
 	pr.Stats = computeStats(run.Level, player, pr)
 
 	run.Players[player] = pr
@@ -9871,6 +10508,10 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 		local lucky = profile and profile.Perks and positive(profile.Perks.LuckySuds) or 0
 		bestLucky = math.max(bestLucky, lucky)
 		charm = charm or getPasses(p).LuckyCharm == true
+		local rank = profile and Config.GetRank(profile.Rank)
+		if rank and rank.Effects.Golden then
+			charm = true
+		end
 	end
 	local luckyPerk = Config.GetPerk("LuckySuds")
 	local goldenChance = level.GoldenChance + bestLucky * (if luckyPerk then luckyPerk.PerLevel else 0.01)
@@ -10000,6 +10641,7 @@ function RoundService.RemoveFromRun(player: Player, reason: string?)
 	rebuildMemberIds(run)
 
 	if reason ~= LEFT_GAME and isHere(player) then
+		detachHeldTool(player)
 		player:SetAttribute("InRun", false)
 		player:SetAttribute("RunArena", "")
 		Characters.SetWalkSpeed(player, nil)
@@ -10063,6 +10705,18 @@ end
 
 -- Recomputes a player's run stats (perks, passes, pets). Called after pet equip changes, perk
 -- purchases and pass grants; harmless when the player isn't in a run.
+-- Coin packs (MarketService): adds coins to the player's current run. False if not in a run.
+function RoundService.AddCoins(player: Player, amount: number): boolean
+	local run = runOf[player]
+	local pr = run and run.Players[player]
+	if not run or not pr or run.Ended or type(amount) ~= "number" or amount ~= amount or amount &lt;= 0 then
+		return false
+	end
+	pr.Coins += math.floor(amount * Config.GetLevel(run.Level).Mult + 0.5)
+	queuePush(player)
+	return true
+end
+
 function RoundService.RefreshStats(player: Player)
 	local run = runOf[player]
 	local pr = run and run.Players[player]
@@ -10177,12 +10831,14 @@ local function handleRunRequest(player: Player, action: any, value: any): Types.
 		if run.Phase ~= "Playing" then
 			return fail("The dishwasher is already sparkling clean!")
 		end
-		if type(value) ~= "string" or not Config.GetUpgrade(value) then
+		local def = if type(value) == "string" then Config.GetUpgrade(value) else nil
+		if not def then
 			return fail("That upgrade doesn't exist.")
 		end
-		local upgrades = pr.Upgrades :: any
-		local current = upgrades[value] or 0
-		local cost = Config.UpgradeCost(value, current, run.Level)
+		-- Per-tool upgrades belong to the tool in hand; the rest are global.
+		local upgrades = (if def.PerTool then pr.ToolUpgrades[pr.ToolIndex] else pr.Upgrades) :: any
+		local current = upgrades[def.Id] or 0
+		local cost = Config.UpgradeCost(def.Id, current, run.Level, pr.ToolIndex)
 		if not cost then
 			return fail("Already maxed!")
 		end
@@ -10190,7 +10846,7 @@ local function handleRunRequest(player: Player, action: any, value: any): Types.
 			return fail("Not enough coins!")
 		end
 		pr.Coins -= cost
-		upgrades[value] = current + 1
+		upgrades[def.Id] = current + 1
 		recomputeStats(run, player, pr)
 		queuePush(player)
 		return OK
@@ -10201,11 +10857,8 @@ local function handleRunRequest(player: Player, action: any, value: any): Types.
 		if type(value) ~= "number" or value % 1 ~= 0 or not Config.Tools[value] then
 			return fail("That tool doesn't exist.")
 		end
-		if value &lt;= pr.ToolIndex then
+		if pr.OwnedTools[value] then
 			return fail("You already have that tool!")
-		end
-		if value ~= pr.ToolIndex + 1 then
-			return fail("Buy the tools in order!")
 		end
 		local cost = Config.ToolCost(value, run.Level)
 		if not cost then
@@ -10215,9 +10868,22 @@ local function handleRunRequest(player: Player, action: any, value: any): Types.
 			return fail("Not enough coins!")
 		end
 		pr.Coins -= cost
-		pr.ToolIndex = value
+		pr.OwnedTools[value] = true
+		pr.ToolIndex = value -- a new tool goes straight into your hand
 		recomputeStats(run, player, pr)
+		attachHeldTool(player, value)
 		queuePush(player)
+		return OK
+	elseif action == "EquipTool" then
+		if type(value) ~= "number" or value % 1 ~= 0 or not pr.OwnedTools[value] then
+			return fail("You don't have that tool yet.")
+		end
+		if pr.ToolIndex ~= value then
+			pr.ToolIndex = value
+			recomputeStats(run, player, pr)
+			attachHeldTool(player, value)
+			queuePush(player)
+		end
 		return OK
 	elseif action == "Leave" then
 		RoundService.RemoveFromRun(player, "Leave")
@@ -10263,10 +10929,15 @@ local function watchdogStep()
 	local now = os.clock()
 	for _, run in runs do
 		if not run.Ended then
-			for player in run.Players do
+			for player, pr in run.Players do
 				local root = Characters.GetRoot(player)
 				if root and root.Position.Y &lt; run.KillY then
 					Characters.Teleport(player, randomSpawn(run))
+				end
+				-- Re-attach the tool in hand after a respawn (a new character has none).
+				local character = player.Character
+				if root and character and character:GetAttribute("HeldToolIndex") ~= pr.ToolIndex then
+					attachHeldTool(player, pr.ToolIndex)
 				end
 			end
 			if
@@ -10367,7 +11038,7 @@ function RoundService.Start()
 end
 
 return RoundService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000017"><Properties><string name="Name">ShopService</string><ProtectedString name="Source">-- ShopService: owns the MetaRequest RemoteFunction (permanent purchases and pet management).
+<Item class="ModuleScript" referent="RBX00000018"><Properties><string name="Name">ShopService</string><ProtectedString name="Source">-- ShopService: owns the MetaRequest RemoteFunction (permanent purchases and pet management).
 --
 --   "BuyPerk"   (perkId)                     handled here: price from Config.PerkCost, pay with
 --                                            DataService.SpendBubbles, level up, push MetaState, and
@@ -10451,6 +11122,10 @@ local function normalize(result: any): Types.RequestResult
 	if type(result.Pets) == "table" then
 		out.Pets = result.Pets
 	end
+	if type(result.Rank) == "string" then
+		out.Rank = result.Rank
+		out.Equipped = result.Equipped == true
+	end
 	return out
 end
 
@@ -10528,6 +11203,12 @@ local function petAction(name: string): (Player, any) -&gt; Types.RequestResult
 	end
 end
 
+-- Free "test purchases" of passes/products without an Id: Studio only, unless Config says otherwise.
+local function testAllowed(): boolean
+	local rules = Config.TestPasses or {}
+	return if RunService:IsStudio() then rules.AllowInStudio == true else rules.AllowInLiveGame == true
+end
+
 -- Test mode for game passes that don't have an Id yet (see Config.GamePasses): grants the pass for
 -- this session only, and only in Studio unless Config.TestPasses.AllowInLiveGame is on.
 local function testPass(player: Player, value: any): Types.RequestResult
@@ -10541,18 +11222,82 @@ local function testPass(player: Player, value: any): Types.RequestResult
 	if type(pass.Id) == "number" and pass.Id ~= 0 then
 		return fail("This pass is on sale for real. Use the purchase prompt!")
 	end
-	local rules = Config.TestPasses or {}
-	local allowed = if RunService:IsStudio() then rules.AllowInStudio == true else rules.AllowInLiveGame == true
-	if not allowed then
+	if not testAllowed() then
 		return fail("Coming soon!")
 	end
 	DataService.SetPass(player, pass.Key, true)
 	return { Ok = true }
 end
 
+-- Test mode for developer products without an Id: gives the goods for free (Studio only).
+local function testProduct(player: Player, value: any): Types.RequestResult
+	local product = if type(value) == "string" then Config.GetProduct(value) else nil
+	if not product then
+		return fail("That item doesn't exist.")
+	end
+	if type(product.Id) == "number" and product.Id ~= 0 then
+		return fail("This is on sale for real. Use the purchase prompt!")
+	end
+	if not testAllowed() then
+		return fail("Coming soon!")
+	end
+	local MarketService = require(script.Parent:WaitForChild("MarketService")) :: any
+	if not MarketService.GrantProduct(player, product) then
+		return fail("Couldn't give that right now.")
+	end
+	return { Ok = true }
+end
+
+-- Rank roll: spend gems, pick a weighted random rank (x2 Luck pass boosts Rare+), keep it, and
+-- equip it if it's rarer than the one you have on.
+local rankRng = Random.new()
+local function rollRank(player: Player, _value: any): Types.RequestResult
+	local cost = Config.RankRoll.Cost
+	local profile = DataService.Get(player)
+	if not profile then
+		return fail(ERR_LOADING)
+	end
+	if profile.Gems &lt; cost then
+		return fail(string.format("You need %d 💎 to roll!", cost))
+	end
+	if not DataService.SpendGems(player, cost) then
+		return fail(ERR_GENERIC)
+	end
+	local weights, total = Config.RankWeights(DataService.GetPasses(player).DoubleLuck == true)
+	local r = rankRng:NextNumber() * total
+	local picked = weights[#weights].Rank
+	for _, entry in weights do
+		r -= entry.Weight
+		if r &lt;= 0 then
+			picked = entry.Rank
+			break
+		end
+	end
+	DataService.AddRank(player, picked.Id)
+	local current = Config.GetRank(profile.Rank)
+	local better = not current or Config.RankRarities[picked.Rarity].Order &gt; Config.RankRarities[current.Rarity].Order
+	if better then
+		DataService.SetRank(player, picked.Id)
+	end
+	return { Ok = true, Rank = picked.Id, Equipped = better }
+end
+
+local function equipRank(player: Player, value: any): Types.RequestResult
+	if type(value) ~= "string" then
+		return fail(ERR_UNKNOWN)
+	end
+	if not DataService.SetRank(player, value) then
+		return fail("You don't have that rank yet.")
+	end
+	return { Ok = true }
+end
+
 local HANDLERS: { [string]: (Player, any) -&gt; Types.RequestResult } = {
 	BuyPerk = buyPerk,
 	TestPass = testPass,
+	TestProduct = testProduct,
+	RollRank = rollRank,
+	EquipRank = equipRank,
 	Hatch = hatch,
 	Equip = petAction("Equip"),
 	Unequip = petAction("Unequip"),
@@ -10613,7 +11358,7 @@ end
 
 return ShopService</ProtectedString></Properties></Item>
 </Item>
-<Item class="Script" referent="RBX00000018"><Properties><string name="Name">Main</string><bool name="Disabled">false</bool><token name="RunContext">1</token><ProtectedString name="Source">-- Rinse Cycle server entry point. Builds the world, then starts every service in order.
+<Item class="Script" referent="RBX00000019"><Properties><string name="Name">Main</string><bool name="Disabled">false</bool><token name="RunContext">1</token><ProtectedString name="Source">-- Rinse Cycle server entry point. Builds the world, then starts every service in order.
 -- Each service module exposes Init() (set up state and remote handlers, no long yields)
 -- and Start() (spawn loops). See DESIGN.md for what each one owns.
 
@@ -10714,10 +11459,10 @@ end
 print(string.format("[%s] v%s server ready", Config.GameName, Config.Version))</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="StarterPlayer" referent="RBX00000019"><Properties><string name="Name">StarterPlayer</string></Properties>
-<Item class="StarterPlayerScripts" referent="RBX0000001A"><Properties><string name="Name">StarterPlayerScripts</string></Properties>
-<Item class="Folder" referent="RBX0000001B"><Properties><string name="Name">Client</string></Properties>
-<Item class="LocalScript" referent="RBX0000001C"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
+<Item class="StarterPlayer" referent="RBX0000001A"><Properties><string name="Name">StarterPlayer</string></Properties>
+<Item class="StarterPlayerScripts" referent="RBX0000001B"><Properties><string name="Name">StarterPlayerScripts</string></Properties>
+<Item class="Folder" referent="RBX0000001C"><Properties><string name="Name">Client</string></Properties>
+<Item class="LocalScript" referent="RBX0000001D"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
 -- Each module exposes Init(); anything that fails is reported without stopping the others.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -10731,6 +11476,7 @@ local HUD = require(Client:WaitForChild("HUD"))
 local PartyUI = require(Client:WaitForChild("PartyUI"))
 local UpgradesUI = require(Client:WaitForChild("UpgradesUI"))
 local ShopUI = require(Client:WaitForChild("ShopUI"))
+local RanksUI = require(Client:WaitForChild("RanksUI"))
 local PetsUI = require(Client:WaitForChild("PetsUI"))
 local SprayController = require(Client:WaitForChild("SprayController"))
 local PetRenderer = require(Client:WaitForChild("PetRenderer"))
@@ -10754,11 +11500,12 @@ step("HUD", HUD.Init)
 step("PartyUI", PartyUI.Init)
 step("UpgradesUI", UpgradesUI.Init)
 step("ShopUI", ShopUI.Init)
+step("RanksUI", RanksUI.Init)
 step("PetsUI", PetsUI.Init)
 step("SprayController", SprayController.Init)
 step("PetRenderer", PetRenderer.Init)
 step("Effects", Effects.Init)</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001D"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
+<Item class="ModuleScript" referent="RBX0000001E"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
 -- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
 -- Changed instead of each hooking the remotes themselves.
 
@@ -10880,7 +11627,7 @@ function ClientState.LocalPlayer(): Player
 end
 
 return ClientState</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001E"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
+<Item class="ModuleScript" referent="RBX0000001F"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
 -- numbers, dish/sale celebrations), CollectionService-driven decoration (spinning arms, lift
 -- pads), the drain guide beam, remaining-dirt sparkle markers, prompt routing (windows and the
 -- in-arena tool shop), and a little lobby ambience.
@@ -11416,12 +12163,11 @@ local function updateShopDisplays()
 		if not index or not tool then
 			continue
 		end
-		local owned = run.ToolIndex &gt;= index
-		local isNext = index == run.ToolIndex + 1
+		local owned = run.OwnedTools ~= nil and run.OwnedTools[index] == true
 		if display then
 			local prompt = inst:FindFirstChildOfClass("ProximityPrompt")
 			if prompt then
-				prompt.Enabled = isNext
+				prompt.Enabled = not owned
 			end
 		else
 			local gui = inst:FindFirstChildOfClass("SurfaceGui")
@@ -11431,12 +12177,9 @@ local function updateShopDisplays()
 				if owned then
 					price.Text = "✅ Owned"
 					price.TextColor3 = UIKit.Theme.Colors.Good
-				elseif isNext then
+				else
 					price.Text = "💰 " .. UIKit.Short(cost)
 					price.TextColor3 = if run.Coins &gt;= cost then UIKit.Theme.Colors.Coin else UIKit.Theme.Colors.Bad
-				else
-					price.Text = "🔒 💰 " .. UIKit.Short(cost)
-					price.TextColor3 = UIKit.Theme.Colors.TextDim
 				end
 			end
 		end
@@ -11543,7 +12286,7 @@ function Effects.Init()
 end
 
 return Effects</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001F"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
+<Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
 --   * top centre: the Bubbles pill with a green "+" (opens the Shop)
 --   * right side: big square buttons (Shop/Pets in the lobby, Upgrades/Pets/Leave in a run) with
 --     key hints for keyboard (Tab/G/P) or gamepad (Y/LB)
@@ -11629,11 +12372,7 @@ function HUD.Init()
 		CornerRadius = 10,
 		Parent = topCurrency,
 		OnClick = function()
-			if ClientState.Run then
-				UIKit.ToggleWindow("Upgrades")
-			else
-				UIKit.ToggleWindow("Shop")
-			end
+			UIKit.ToggleWindow("Shop")
 		end,
 	})
 
@@ -11659,6 +12398,38 @@ function HUD.Init()
 		bubblesShown = value
 		if increased then
 			UIKit.Bounce(topCurrency)
+		end
+	end
+
+	-- Gems pill, to the right of the Bubbles pill.
+	local gemsPill = Instance.new("Frame")
+	gemsPill.Name = "Gems"
+	gemsPill.AnchorPoint = Vector2.new(0, 0)
+	gemsPill.Size = UDim2.fromOffset(130, 44)
+	gemsPill.BackgroundColor3 = Color3.new(1, 1, 1)
+	gemsPill.BorderSizePixel = 0
+	UIKit.Corner(gemsPill, 14)
+	UIKit.Gradient(gemsPill, Color3.fromRGB(150, 100, 200), Color3.fromRGB(90, 55, 140))
+	UIKit.Stroke(gemsPill, Colors.Ink, 3)
+	gemsPill.Parent = root
+	UIKit.Label({ Text = "💎", TextSize = 28, Position = UDim2.fromOffset(6, 0), Size = UDim2.fromOffset(38, 44), Stroke = false, Parent = gemsPill })
+	local gemsValue = UIKit.Label({
+		Text = "0",
+		TextSize = 28,
+		Position = UDim2.fromOffset(44, 0),
+		Size = UDim2.new(1, -52, 1, 0),
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Parent = gemsPill,
+	})
+	local gemsShown = -1
+	local function setGems(value: number)
+		value = math.max(0, math.floor(tonumber(value) or 0))
+		if value ~= gemsShown then
+			if gemsShown &gt;= 0 and value &gt; gemsShown then
+				UIKit.Bounce(gemsPill)
+			end
+			gemsShown = value
+			gemsValue.Text = UIKit.Commas(value)
 		end
 	end
 
@@ -11713,9 +12484,95 @@ function HUD.Init()
 	local petsButton = sideButton("🐾", "Pets", Colors.Warning, "P", "LB", function()
 		UIKit.ToggleWindow("Pets")
 	end)
+	local ranksButton = sideButton("💎", "Ranks", Colors.Accent, "R", "RB", function()
+		UIKit.ToggleWindow("Ranks")
+	end)
 	local leaveButton = sideButton("🚪", "Leave", Colors.PanelLight, "", "", function()
 		UIKit.OpenWindow("LeaveConfirm")
 	end)
+
+	--------------------------------------------------------------------------------------------------
+	-- Hotbar (in a run): one slot per tool. Owned tools can be put in your hand (click / tap, keys
+	-- 1-6, gamepad D-pad left/right); locked ones show a lock and open the Upgrade Book.
+	--------------------------------------------------------------------------------------------------
+	local SLOT = 68
+	local hotbar = Instance.new("Frame")
+	hotbar.Name = "Hotbar"
+	hotbar.AnchorPoint = Vector2.new(0.5, 1)
+	hotbar.Size = UDim2.fromOffset(#Config.Tools * (SLOT + 8), SLOT + 18)
+	hotbar.BackgroundTransparency = 1
+	hotbar.Visible = false
+	hotbar.Parent = root
+	local hotbarLayout = Instance.new("UIListLayout")
+	hotbarLayout.FillDirection = Enum.FillDirection.Horizontal
+	hotbarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	hotbarLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	hotbarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	hotbarLayout.Padding = UDim.new(0, 8)
+	hotbarLayout.Parent = hotbar
+
+	local equipping = false
+	local function equipTool(index: number)
+		local run = ClientState.Run :: Types.RunState?
+		if not run or equipping then
+			return
+		end
+		if not (run.OwnedTools and run.OwnedTools[index]) then
+			UIKit.OpenWindow("Upgrades")
+			return
+		end
+		if run.ToolIndex == index then
+			return
+		end
+		equipping = true
+		local result = ClientState.RunRequest("EquipTool", index)
+		equipping = false
+		if not result.Ok then
+			UIKit.Toast(result.Error or "Can't use that yet.", "Bad")
+		end
+	end
+
+	local slots: { TextButton } = {}
+	for i, tool in Config.Tools do
+		local slot = UIKit.IconButton({
+			Name = "Slot" .. i,
+			Icon = tool.Icon,
+			Label = "",
+			Color = Colors.PanelLight,
+			Size = UDim2.fromOffset(SLOT, SLOT),
+			LayoutOrder = i,
+			Parent = hotbar,
+			OnClick = function()
+				task.spawn(equipTool, i)
+			end,
+		})
+		local num = UIKit.Label({ Name = "Key", Text = tostring(i), TextSize = 16, Position = UDim2.fromOffset(6, 2), Size = UDim2.fromOffset(16, 18), ZIndex = 8, Parent = slot })
+		num.TextXAlignment = Enum.TextXAlignment.Left
+		slots[i] = slot
+	end
+
+	local function refreshHotbar()
+		local run = ClientState.Run :: Types.RunState?
+		for i, slot in slots do
+			local owned = run ~= nil and run.OwnedTools ~= nil and run.OwnedTools[i] == true
+			local inHand = run ~= nil and run.ToolIndex == i
+			slot.BackgroundColor3 = if inHand then Colors.Good elseif owned then Colors.Primary else Colors.PanelDark
+			slot:SetAttribute("Icon", if owned then Config.Tools[i].Icon else "🔒")
+			UIKit.Bounce(slot)
+		end
+	end
+	local lastHotbarKey = ""
+	local function hotbarKey(): string
+		local run = ClientState.Run :: Types.RunState?
+		if not run then
+			return ""
+		end
+		local parts = { tostring(run.ToolIndex) }
+		for i in Config.Tools do
+			table.insert(parts, if run.OwnedTools and run.OwnedTools[i] then "1" else "0")
+		end
+		return table.concat(parts)
+	end
 
 	local function refreshHints()
 		local touch = UIKit.IsTouch()
@@ -11853,6 +12710,8 @@ function HUD.Init()
 		-- The pill sits in the topbar row itself (the middle of Roblox's topbar is empty), like the
 		-- big simulators do; the run's progress bar goes right under it.
 		topCurrency.Position = UDim2.new(0.5, 0, 0, 2)
+		gemsPill.Position = UDim2.new(0.5, 133, 0, 7)
+		hotbar.Position = UDim2.new(0.5, 0, 1, -(if touch then 24 else 12) - safe.Bottom)
 		topBar.Position = UDim2.new(0.5, 0, 0, 66)
 
 		-- Right column: vertically centred, but on touch kept above the jump button.
@@ -12313,6 +13172,7 @@ function HUD.Init()
 		local meta = ClientState.Meta :: Types.MetaState?
 		local bubbles = if meta then meta.Bubbles else (LocalPlayer:GetAttribute("Bubbles") :: number?) or 0
 		setBubbles(bubbles)
+		setGems(if meta then meta.Gems or 0 else 0)
 	end
 
 	local function refreshMode()
@@ -12325,14 +13185,23 @@ function HUD.Init()
 		timerLabel.Visible = playing
 		topBar.Visible = playing
 
-		shopButton.Visible = not inRun
+		-- The Shop is always there (Robux items work in a run too); Ranks only in the lobby.
+		shopButton.Visible = true
 		upgradesButton.Visible = inRun
 		leaveButton.Visible = inRun
+		ranksButton.Visible = not inRun
 		upgradesButton.LayoutOrder = 1
-		shopButton.LayoutOrder = 1
-		petsButton.LayoutOrder = 2
-		leaveButton.LayoutOrder = 3
-		plusButton.Visible = not inRun
+		shopButton.LayoutOrder = 2
+		petsButton.LayoutOrder = 3
+		ranksButton.LayoutOrder = 4
+		leaveButton.LayoutOrder = 5
+		plusButton.Visible = true
+		hotbar.Visible = playing
+		local key = hotbarKey()
+		if key ~= lastHotbarKey then
+			lastHotbarKey = key
+			refreshHotbar()
+		end
 		-- In a run Tab opens the Upgrade Book, so the player list (also on Tab) steps aside.
 		pcall(function()
 			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not inRun)
@@ -12440,6 +13309,28 @@ function HUD.Init()
 			UIKit.ToggleWindow("Shop")
 		elseif key == Enum.KeyCode.ButtonY then
 			UIKit.ToggleWindow(if inRun then "Upgrades" else "Shop")
+		elseif (key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonR1) and not inRun then
+			UIKit.ToggleWindow("Ranks")
+		elseif inRun and (key == Enum.KeyCode.DPadLeft or key == Enum.KeyCode.DPadRight) then
+			local run = ClientState.Run :: Types.RunState?
+			if run and run.OwnedTools then
+				local step = if key == Enum.KeyCode.DPadRight then 1 else -1
+				local n = #Config.Tools
+				local i = run.ToolIndex
+				for _ = 1, n do
+					i = ((i - 1 + step) % n) + 1
+					if run.OwnedTools[i] then
+						task.spawn(equipTool, i)
+						break
+					end
+				end
+			end
+		elseif inRun then
+			local numbers = { Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four, Enum.KeyCode.Five, Enum.KeyCode.Six }
+			local index = table.find(numbers, key)
+			if index and Config.Tools[index] then
+				task.spawn(equipTool, index)
+			end
 		end
 	end)
 
@@ -12452,7 +13343,7 @@ function HUD.Init()
 end
 
 return HUD</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
 	PartyUI - everything shown while ClientState.Party ~= nil (standing in a lobby pad).
 
 	Two screens, Search-for-the-Needle style:
@@ -12604,7 +13495,9 @@ local function listLayout(parent: Instance, dir: Enum.FillDirection, pad: number
 	l.FillDirection = dir
 	l.Padding = UDim.new(0, pad)
 	l.HorizontalAlignment = hAlign or Enum.HorizontalAlignment.Center
-	l.VerticalAlignment = Enum.VerticalAlignment.Center
+	-- Scrolling lists must be top-aligned: a centred list taller than its frame spills above the
+	-- top, where it can't be scrolled to (that's what cut off the first dishwasher card).
+	l.VerticalAlignment = if parent:IsA("ScrollingFrame") then Enum.VerticalAlignment.Top else Enum.VerticalAlignment.Center
 	l.Parent = parent
 	return l
 end
@@ -13083,7 +13976,7 @@ function PartyUI.Init()
 end
 
 return PartyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
+<Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
 -- state (EquippedPets/&lt;slot&gt; StringValue = pet id, its Target ObjectValue = the grime part being
 -- cleaned); this module is the only thing that actually builds and moves pet models. See
 -- DESIGN.md section 6 ("PetRenderer") and section 4 ("Equipped pets for rendering").
@@ -13507,7 +14400,7 @@ function PetRenderer.Init()
 end
 
 return PetRenderer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
+<Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
 -- reveal animation. Everything here is built with UIKit; see DESIGN.md section 6 ("PetsUI") for
 -- the contract. Both windows rebuild their contents from ClientState.Meta whenever it changes and
 -- the relevant window is open, so a purchase/hatch/equip anywhere refreshes what's on screen.
@@ -14636,7 +15529,344 @@ function PetsUI.Init()
 end
 
 return PetsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
+	RanksUI - the "Ranks" window (Rank Shrine in the lobby, the HUD's Ranks button, R / gamepad RB).
+
+	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
+	Config.RankRoll.Cost gems, a slot-machine reel that spins while the server rolls, and your gems.
+	Right: every rank with its exact odds (x2 Luck applied if you own the pass: gems can be bought with
+	Robux, so the odds are always shown before rolling), its perk, and Equip for the ones you own.
+
+	All rolling happens on the server (MetaRequest "RollRank"); equipping is MetaRequest "EquipRank".
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+local Types = require(Shared:WaitForChild("Types"))
+
+local Client = script.Parent
+local ClientState = require(Client:WaitForChild("ClientState"))
+local UIKit = require(Client:WaitForChild("UIKit"))
+
+local Colors = UIKit.Theme.Colors
+
+local RanksUI = {}
+
+local WINDOW_SIZE = Vector2.new(900, 560)
+
+local initialized = false
+local rolling = false
+
+local leftPanel: Frame
+local list: ScrollingFrame
+local reel: TextLabel
+local rollButton: TextButton
+local gemsLabel: TextLabel
+
+local function rarityColor(rarity: string): Color3
+	local r = Config.RankRarities[rarity]
+	return if r then r.Color else Colors.Text
+end
+
+local function clear(frame: Instance)
+	for _, child in frame:GetChildren() do
+		if child:IsA("GuiObject") then
+			child:Destroy()
+		end
+	end
+end
+
+----------------------------------------------------------------------------------------------------
+-- Left panel: current rank + roll
+----------------------------------------------------------------------------------------------------
+
+local currentCard: Frame
+
+local function renderCurrent()
+	clear(currentCard)
+	local meta = ClientState.Meta :: Types.MetaState?
+	local rank = meta and Config.GetRank(meta.Rank)
+	local color = if rank then rarityColor(rank.Rarity) else Colors.TextDim
+	local old = currentCard:FindFirstChildOfClass("UIGradient")
+	if old then
+		old:Destroy()
+	end
+	UIKit.Gradient(currentCard, UIKit.Lighten(color, 0.15), UIKit.Darken(color, 0.45))
+	UIKit.Label({ Text = "YOUR RANK", TextSize = 18, Position = UDim2.fromOffset(0, 8), Size = UDim2.new(1, 0, 0, 22), Parent = currentCard })
+	UIKit.Label({ Text = if rank then rank.Icon else "❔", TextSize = 64, Position = UDim2.fromOffset(0, 32), Size = UDim2.new(1, 0, 0, 70), Stroke = false, Parent = currentCard })
+	UIKit.Label({
+		Text = if rank then rank.Name else "No rank yet",
+		TextSize = 30,
+		Position = UDim2.fromOffset(8, 104),
+		Size = UDim2.new(1, -16, 0, 34),
+		TextScaled = true,
+		Parent = currentCard,
+	})
+	UIKit.Label({
+		Text = if rank then string.format("%s  •  %s", rank.Rarity, rank.Desc) else "Roll to get your first rank!",
+		TextSize = 16,
+		Position = UDim2.fromOffset(8, 140),
+		Size = UDim2.new(1, -16, 0, 40),
+		TextWrapped = true,
+		Parent = currentCard,
+	})
+end
+
+local function renderGems()
+	local meta = ClientState.Meta :: Types.MetaState?
+	local gems = if meta then meta.Gems or 0 else 0
+	local luck = meta ~= nil and meta.Passes.DoubleLuck == true
+	gemsLabel.Text = string.format("You have 💎 %s%s", UIKit.Commas(gems), if luck then "   🍀 x2 Luck!" else "")
+	UIKit.SetDisabled(rollButton, rolling or gems &lt; Config.RankRoll.Cost)
+end
+
+----------------------------------------------------------------------------------------------------
+-- Right panel: odds list
+----------------------------------------------------------------------------------------------------
+
+local function renderList()
+	clear(list)
+	local meta = ClientState.Meta :: Types.MetaState?
+	local luck = meta ~= nil and meta.Passes.DoubleLuck == true
+	local weights, total = Config.RankWeights(luck)
+	for i, entry in weights do
+		local rank = entry.Rank
+		local owned = meta ~= nil and table.find(meta.Ranks or {}, rank.Id) ~= nil
+		local equipped = meta ~= nil and meta.Rank == rank.Id
+		local color = rarityColor(rank.Rarity)
+		local row = UIKit.Card({ Size = UDim2.new(1, -8, 0, 68), LayoutOrder = i, Parent = list })
+		UIKit.Stroke(row, color, if equipped then 3 else 1.5)
+		UIKit.Label({ Text = rank.Icon, TextSize = 30, Position = UDim2.fromOffset(6, 0), Size = UDim2.fromOffset(44, 68), Stroke = false, Parent = row })
+		UIKit.Label({
+			Text = rank.Name,
+			TextSize = 20,
+			TextColor3 = color,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Position = UDim2.fromOffset(54, 6),
+			Size = UDim2.new(1, -250, 0, 24),
+			TextScaled = true,
+			Parent = row,
+		})
+		UIKit.Label({
+			Text = rank.Desc,
+			TextSize = 14,
+			TextColor3 = Colors.TextDim,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Position = UDim2.fromOffset(54, 34),
+			Size = UDim2.new(1, -250, 0, 26),
+			TextWrapped = true,
+			Parent = row,
+		})
+		UIKit.Label({
+			Text = string.format("%s\n%.1f%%", rank.Rarity, entry.Weight / total * 100),
+			TextSize = 15,
+			TextColor3 = color,
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -112, 0.5, 0),
+			Size = UDim2.fromOffset(84, 44),
+			Parent = row,
+		})
+		if equipped then
+			UIKit.Label({ Text = "✅ On", TextSize = 18, TextColor3 = Colors.Good, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(96, 36), Parent = row })
+		elseif owned then
+			UIKit.Button({
+				Text = "Equip",
+				Size = UDim2.fromOffset(96, 40),
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -10, 0.5, 0),
+				Color = Colors.Primary,
+				Parent = row,
+				OnClick = function()
+					local result = ClientState.MetaRequest("EquipRank", rank.Id)
+					if not result.Ok then
+						UIKit.Toast(result.Error or "Couldn't equip that.", "Bad")
+					end
+				end,
+			})
+		else
+			UIKit.Label({ Text = "🔒", TextSize = 22, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(96, 36), Parent = row })
+		end
+	end
+end
+
+local function render()
+	renderCurrent()
+	renderGems()
+	renderList()
+end
+
+----------------------------------------------------------------------------------------------------
+-- Rolling
+----------------------------------------------------------------------------------------------------
+
+local function roll()
+	if rolling then
+		return
+	end
+	rolling = true
+	renderGems()
+	-- Spin the reel while the server decides.
+	local spinning = true
+	task.spawn(function()
+		local i = 0
+		while spinning do
+			i += 1
+			local r = Config.Ranks[(i % #Config.Ranks) + 1]
+			reel.Text = r.Icon .. " " .. r.Name
+			reel.TextColor3 = rarityColor(r.Rarity)
+			UIKit.PlaySound("Click", 1 + (i % 5) * 0.05)
+			task.wait(0.07)
+		end
+	end)
+	local result = ClientState.MetaRequest("RollRank")
+	task.wait(0.9)
+	spinning = false
+	rolling = false
+	if not result.Ok or not result.Rank then
+		reel.Text = "🎲 Roll again!"
+		reel.TextColor3 = Colors.Text
+		UIKit.Toast(result.Error or "Couldn't roll right now.", "Bad")
+		renderGems()
+		return
+	end
+	local rank = Config.GetRank(result.Rank)
+	if rank then
+		reel.Text = rank.Icon .. " " .. rank.Name .. "!"
+		reel.TextColor3 = rarityColor(rank.Rarity)
+		UIKit.Bounce(reel)
+		UIKit.PlaySound("Hatch")
+		local order = Config.RankRarities[rank.Rarity].Order
+		if order &gt;= 4 then
+			UIKit.Confetti(if order &gt;= 5 then 140 else 90)
+		end
+		UIKit.Toast(string.format("%s %s (%s)%s", rank.Icon, rank.Name, rank.Rarity, if result.Equipped then " equipped!" else ""), if order &gt;= 3 then "Good" else "Info")
+	end
+	render()
+end
+
+function RanksUI.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+
+	local _gui, screenRoot = UIKit.CreateScreen("RanksUI", 10)
+	local _window, content = UIKit.Window({
+		Name = "Ranks",
+		Title = "Ranks",
+		Icon = "💎",
+		Size = WINDOW_SIZE,
+		Parent = screenRoot,
+	})
+
+	leftPanel = Instance.new("Frame")
+	leftPanel.Name = "Left"
+	leftPanel.BackgroundTransparency = 1
+	leftPanel.Size = UDim2.new(0, 330, 1, 0)
+	leftPanel.Parent = content
+
+	currentCard = Instance.new("Frame")
+	currentCard.Name = "Current"
+	currentCard.Size = UDim2.new(1, 0, 0, 190)
+	currentCard.BackgroundColor3 = Color3.new(1, 1, 1)
+	currentCard.BorderSizePixel = 0
+	UIKit.Corner(currentCard, 16)
+	UIKit.Stroke(currentCard, Colors.Ink, 3)
+	currentCard.Parent = leftPanel
+
+	reel = UIKit.Label({
+		Name = "Reel",
+		Text = "🎲 Try your luck!",
+		TextSize = 26,
+		Position = UDim2.fromOffset(0, 202),
+		Size = UDim2.new(1, 0, 0, 40),
+		TextScaled = true,
+		Parent = leftPanel,
+	})
+
+	rollButton = UIKit.Button({
+		Text = string.format("🎲 ROLL   💎 %d", Config.RankRoll.Cost),
+		Size = UDim2.new(1, 0, 0, 70),
+		Position = UDim2.fromOffset(0, 252),
+		Color = Colors.Accent,
+		TextSize = 30,
+		Parent = leftPanel,
+		OnClick = function()
+			task.spawn(roll)
+		end,
+	})
+
+	gemsLabel = UIKit.Label({
+		Text = "",
+		TextSize = 20,
+		Position = UDim2.fromOffset(0, 330),
+		Size = UDim2.new(1, 0, 0, 26),
+		Parent = leftPanel,
+	})
+
+	UIKit.Button({
+		Text = "💎 Get more Gems",
+		Size = UDim2.new(1, 0, 0, 48),
+		Position = UDim2.fromOffset(0, 364),
+		Color = Colors.Good,
+		TextSize = 22,
+		Parent = leftPanel,
+		OnClick = function()
+			UIKit.OpenWindow("Shop", "Gems")
+		end,
+	})
+	UIKit.Label({
+		Text = "Gems drop rarely while cleaning, from golden dirt, and for every clear.",
+		TextSize = 14,
+		TextColor3 = Colors.TextDim,
+		TextWrapped = true,
+		Position = UDim2.fromOffset(0, 420),
+		Size = UDim2.new(1, 0, 0, 40),
+		Parent = leftPanel,
+	})
+
+	local right = Instance.new("Frame")
+	right.Name = "Odds"
+	right.BackgroundTransparency = 1
+	right.Position = UDim2.fromOffset(346, 0)
+	right.Size = UDim2.new(1, -346, 1, 0)
+	right.Parent = content
+	UIKit.Label({ Text = "ALL RANKS &amp; ODDS", TextSize = 20, Size = UDim2.new(1, 0, 0, 26), Parent = right })
+	list = Instance.new("ScrollingFrame")
+	list.Position = UDim2.fromOffset(0, 32)
+	list.Size = UDim2.new(1, 0, 1, -32)
+	list.BackgroundTransparency = 1
+	list.BorderSizePixel = 0
+	list.ScrollBarThickness = 8
+	list.ScrollBarImageColor3 = Colors.Accent
+	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	list.CanvasSize = UDim2.new()
+	list.Parent = right
+	local layout = Instance.new("UIListLayout")
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 8)
+	layout.Parent = list
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 4)
+	pad.PaddingLeft = UDim.new(0, 4)
+	pad.Parent = list
+
+	UIKit.RegisterWindow("Ranks", {
+		Open = function()
+			render()
+		end,
+	})
+	ClientState.Changed:Connect(function(kind)
+		if kind == "Meta" and UIKit.IsWindowOpen("Ranks") and not rolling then
+			render()
+		end
+	end)
+end
+
+return RanksUI</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
 	ShopUI - the lobby "Shop" window: Perks (bought with Bubbles, permanent) and Robux (game passes).
 	Opened from the Soap Shop ProximityPrompt (routed by Effects via OpenWindow="Shop"), the HUD [🛒 Shop]
 	button, or the G key - all outside our scope, they just call UIKit.OpenWindow("Shop").
@@ -14661,16 +15891,23 @@ local LocalPlayer = Players.LocalPlayer
 
 local ShopUI = {}
 
-local WINDOW_SIZE = Vector2.new(820, 540)
+local WINDOW_SIZE = Vector2.new(880, 560)
 
 local initialized = false
-local activeTab: "Perks" | "Robux" = "Perks"
+type Tab = "Perks" | "Passes" | "Bubbles" | "Gems" | "Coins"
+local activeTab: Tab = "Perks"
+local TABS: { { Key: Tab, Text: string, Color: Color3 } } = {
+	{ Key = "Perks", Text = "🧼 Perks", Color = Colors.Bubble },
+	{ Key = "Passes", Text = "👑 Passes", Color = Colors.Good },
+	{ Key = "Bubbles", Text = "🧼 Bubbles", Color = Colors.Primary },
+	{ Key = "Gems", Text = "💎 Gems", Color = Colors.Accent },
+	{ Key = "Coins", Text = "💰 Coins", Color = Colors.Coin },
+}
+local tabButtons: { [string]: TextButton } = {}
 
 local content: Frame
 local tabsRow: Frame
 local list: ScrollingFrame
-local perksTabButton: TextButton
-local robuxTabButton: TextButton
 
 ----------------------------------------------------------------------------------------------------
 -- Perks tab
@@ -14836,16 +16073,88 @@ local function buildPassRow(def: any): Frame
 end
 
 ----------------------------------------------------------------------------------------------------
+-- Developer products (Bubbles / Gems / Coins packs)
+----------------------------------------------------------------------------------------------------
+
+local function buildProductRow(def: any): Frame
+	local run = ClientState.Run
+	local row = UIKit.Card({ Size = UDim2.new(1, 0, 0, 84), Name = def.Key })
+	UIKit.Label({
+		Text = def.Icon,
+		TextSize = 32,
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 12, 0.5, 0),
+		Size = UDim2.fromOffset(44, 44),
+		Parent = row,
+	})
+	local amount = def.Amount
+	local unit = if def.Kind == "Gems" then "💎" elseif def.Kind == "Coins" then "💰" else "🧼"
+	local note = ""
+	if def.Kind == "Coins" then
+		if run then
+			amount = math.floor(def.Amount * Config.GetLevel(run.Level).Mult + 0.5)
+			note = "  (added to this run)"
+		else
+			note = "  (buy inside a dishwasher)"
+		end
+	end
+	UIKit.Label({
+		Text = def.Name,
+		TextSize = 18,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Position = UDim2.fromOffset(66, 10),
+		Size = UDim2.new(1, -226, 0, 22),
+		Parent = row,
+	})
+	UIKit.Label({
+		Text = string.format("+%s %s%s", UIKit.Commas(amount), unit, note),
+		TextSize = 20,
+		TextColor3 = if def.Kind == "Gems" then Color3.fromRGB(220, 180, 255) elseif def.Kind == "Coins" then Colors.Coin else Colors.Bubble,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Position = UDim2.fromOffset(66, 40),
+		Size = UDim2.new(1, -226, 0, 26),
+		Parent = row,
+	})
+	UIKit.Button({
+		Text = "R$ " .. tostring(def.Price),
+		Size = UDim2.fromOffset(130, 46),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -14, 0.5, 0),
+		Color = Colors.Good,
+		Disabled = def.Kind == "Coins" and not run,
+		Parent = row,
+		OnClick = function()
+			if type(def.Id) == "number" and def.Id ~= 0 then
+				pcall(function()
+					MarketplaceService:PromptProductPurchase(LocalPlayer, def.Id)
+				end)
+				return
+			end
+			-- No Id yet: test mode (Studio only by default). See Config.DevProducts.
+			local result = ClientState.MetaRequest("TestProduct", def.Key)
+			if result.Ok then
+				UIKit.Confetti(50)
+				UIKit.Toast(string.format("+%s %s!", UIKit.Commas(amount), unit), "Good")
+				UIKit.Bounce(row)
+			else
+				UIKit.Toast(result.Error or "Coming soon!", "Info")
+			end
+		end,
+	})
+	return row
+end
+
+----------------------------------------------------------------------------------------------------
 -- Render
 ----------------------------------------------------------------------------------------------------
 
-local function styleTab(button: TextButton, active: boolean)
-	UIKit.SetButtonColor(button, if active then Colors.Primary else Colors.PanelLight)
-end
-
 local function render()
-	styleTab(perksTabButton, activeTab == "Perks")
-	styleTab(robuxTabButton, activeTab == "Robux")
+	for _, tab in TABS do
+		local button = tabButtons[tab.Key]
+		if button then
+			UIKit.SetButtonColor(button, if activeTab == tab.Key then tab.Color else Colors.PanelLight)
+		end
+	end
 
 	list:ClearAllChildren()
 	local layout = Instance.new("UIListLayout")
@@ -14868,6 +16177,14 @@ local function render()
 		for _, def in Config.Perks do
 			buildPerkRow(def).Parent = list
 		end
+	elseif activeTab ~= "Passes" then
+		for i, def in Config.DevProducts or {} do
+			if def.Kind == activeTab then
+				local row = buildProductRow(def)
+				row.LayoutOrder = i
+				row.Parent = list
+			end
+		end
 	else
 		local shown = 0
 		for i, def in Config.GamePasses do
@@ -14889,7 +16206,7 @@ local function render()
 	end
 end
 
-local function setTab(tab: "Perks" | "Robux")
+local function setTab(tab: Tab)
 	if activeTab == tab then
 		return
 	end
@@ -14907,7 +16224,7 @@ function ShopUI.Init()
 
 	local _window, windowContent = UIKit.Window({
 		Name = "Shop",
-		Title = "Soap Shop",
+		Title = "Shop",
 		Icon = "🛒",
 		Size = WINDOW_SIZE,
 		Parent = screenRoot,
@@ -14925,24 +16242,19 @@ function ShopUI.Init()
 	tabsLayout.Padding = UDim.new(0, 10)
 	tabsLayout.Parent = tabsRow
 
-	perksTabButton = UIKit.Button({
-		Text = "🧼 Perks",
-		Size = UDim2.fromOffset(160, 44),
-		CornerRadius = 10,
-		Parent = tabsRow,
-		OnClick = function()
-			setTab("Perks")
-		end,
-	})
-	robuxTabButton = UIKit.Button({
-		Text = "💎 Robux",
-		Size = UDim2.fromOffset(160, 44),
-		CornerRadius = 10,
-		Parent = tabsRow,
-		OnClick = function()
-			setTab("Robux")
-		end,
-	})
+	for i, tab in TABS do
+		tabButtons[tab.Key] = UIKit.Button({
+			Text = tab.Text,
+			Size = UDim2.fromOffset(146, 44),
+			CornerRadius = 10,
+			TextSize = 20,
+			LayoutOrder = i,
+			Parent = tabsRow,
+			OnClick = function()
+				setTab(tab.Key)
+			end,
+		})
+	end
 
 	list = Instance.new("ScrollingFrame")
 	list.Name = "List"
@@ -14956,11 +16268,22 @@ function ShopUI.Init()
 	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	list.Parent = content
 
+	-- The Shop opens on the tab that's most useful where you are: Coins in a run, Perks outside.
 	UIKit.RegisterWindow("Shop", {
-		Open = function()
+		Open = function(arg)
+			if type(arg) == "string" then
+				activeTab = arg :: Tab
+			elseif ClientState.Run then
+				activeTab = "Coins"
+			end
 			render()
 		end,
 	})
+	ClientState.Changed:Connect(function(kind)
+		if kind == "Run" and UIKit.IsWindowOpen("Shop") then
+			render()
+		end
+	end)
 
 	-- Celebrate a pass the moment it becomes owned (a real purchase or a test grant).
 	local ownedBefore: { [string]: boolean }? = nil
@@ -14989,7 +16312,7 @@ function ShopUI.Init()
 end
 
 return ShopUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
+<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
 -- Aim comes from the mouse on PC, or the screen centre (with a crosshair) on touch/gamepad, cast
@@ -15412,9 +16735,14 @@ end
 -- Sending
 ----------------------------------------------------------------------------------------------------
 
-local function toolName(index: number): string
-	local tool = Config.Tools[index]
-	return if tool then tool.Name else "a bigger tool"
+-- The cheapest tool that can clean dirt needing `tier`.
+local function toolName(tier: number): string
+	for _, tool in Config.Tools do
+		if (tool.Tier or 1) &gt;= tier then
+			return tool.Name
+		end
+	end
+	return "a bigger tool"
 end
 
 local function sendScrub(hitPosition: Vector3, holding: boolean, pitchJitter: number)
@@ -15483,17 +16811,17 @@ local function onHeartbeat(dt: number)
 
 	-- MinTool lock hint: shown whenever the aimed part needs a tool we don't have yet.
 	local minTool = hitPart:GetAttribute("MinTool")
-	local needsTool = type(minTool) == "number" and minTool &gt; stats.ToolIndex
+	local needsTool = type(minTool) == "number" and minTool &gt; (stats.Tier or stats.ToolIndex)
 	if needsTool and hintAnchor and hintBillboard and hintLabel then
 		hintAnchor.CFrame = CFrame.new(hitPos)
-		hintLabel.Text = "🔒 Needs " .. toolName(minTool :: number)
+		hintLabel.Text = "🐢 A " .. toolName(minTool :: number) .. " cleans this much faster"
 		hintBillboard.Enabled = true
 	elseif hintBillboard then
 		hintBillboard.Enabled = false
 	end
 
 	local tankFull = run.Tank &gt;= run.TankMax
-	local canSend = pressed and inReach and not needsTool and not tankFull
+	local canSend = pressed and inReach and not tankFull
 
 	local now = os.clock()
 	local sending = false
@@ -15551,9 +16879,7 @@ local function onPressBegan()
 		return
 	end
 	local distance = (result.Position - (root :: BasePart).Position).Magnitude
-	local minTool = result.Instance:GetAttribute("MinTool")
-	local needsTool = type(minTool) == "number" and (minTool :: number) &gt; run.Stats.ToolIndex
-	if distance &gt; run.Stats.Reach or needsTool or run.Tank &gt;= run.TankMax then
+	if distance &gt; run.Stats.Reach or run.Tank &gt;= run.TankMax then
 		return
 	end
 
@@ -15671,7 +16997,7 @@ function SprayController.Init()
 end
 
 return SprayController</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -18087,16 +19413,16 @@ function UIKit.Init()
 end
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button
-	  * right page: the tool ladder (Sponge -&gt; Cannon). Owned tools are ticked, the next one has a buy
-	    button, later ones are "???" until they're next, and "your money" sits at the bottom
+	  * right page: every tool. Buy any of them in any order; owned ones go in your hand with Equip
+	    (or the hotbar, keys 1-6). Power and Size are per tool; Tank and Sneakers count for all.
 
 	Only meaningful inside a run, so it closes itself the moment ClientState.Run goes nil. Everything it
 	shows comes from ClientState.Run (server-authoritative) and Config's pure helpers.
-	Open it with the HUD button, Tab/Q, gamepad Y, or the Upgrade Book on the dishwasher door.
+	Open it with the HUD button, Tab/Q, or gamepad Y.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18217,7 +19543,7 @@ local function upgradeCard(parent: Instance, def: any, run: Types.RunState, orde
 		Parent = card,
 	})
 	ink({
-		Text = string.format("Lv %d/%d", level, def.Max),
+		Text = string.format("Lv %d/%d  •  %s", level, def.Max, if def.PerTool then "this tool" else "all tools"),
 		TextSize = 15,
 		TextColor3 = INK_DIM,
 		Position = UDim2.fromOffset(52, 28),
@@ -18265,7 +19591,7 @@ local function upgradeCard(parent: Instance, def: any, run: Types.RunState, orde
 		Parent = card,
 	})
 
-	local cost = Config.UpgradeCost(def.Id, level, run.Level)
+	local cost = Config.UpgradeCost(def.Id, level, run.Level, run.ToolIndex)
 	UIKit.Button({
 		Text = if cost then "💰 " .. UIKit.Short(cost) else "MAX",
 		Size = UDim2.new(1, -20, 0, 42),
@@ -18287,7 +19613,7 @@ end
 local function renderLeft(run: Types.RunState)
 	clear(leftPage)
 	local tool = Config.Tools[run.ToolIndex] or Config.Tools[1]
-	ink({ Text = "Hand", TextSize = 34, Size = UDim2.new(1, 0, 0, 38), Parent = leftPage })
+	ink({ Text = "In your hand", TextSize = 34, Size = UDim2.new(1, 0, 0, 38), Parent = leftPage })
 
 	-- Current tool banner.
 	local banner = tile(leftPage, UDim2.new(1, 0, 0, 92), UDim2.fromOffset(0, 42), Color3.fromRGB(255, 252, 240))
@@ -18345,19 +19671,18 @@ end
 
 local function toolCard(parent: Instance, index: number, run: Types.RunState): Frame
 	local tool = Config.Tools[index]
-	local owned = index &lt;= run.ToolIndex
-	local isNext = index == run.ToolIndex + 1
-	local revealed = owned or isNext
+	local owned = run.OwnedTools ~= nil and run.OwnedTools[index] == true
+	local inHand = index == run.ToolIndex
 	local card = tile(parent, UDim2.fromOffset(120, 140), UDim2.new(), if owned then Color3.fromRGB(225, 250, 230) else Color3.fromRGB(255, 252, 240))
 	card.LayoutOrder = index
-	if index == run.ToolIndex then
+	if inHand then
 		UIKit.Stroke(card, Colors.Good, 3)
 	end
 
-	local iconTile = tile(card, UDim2.fromOffset(72, 58), UDim2.new(0.5, -36, 0, 8), if revealed then tool.Color else Color3.fromRGB(80, 84, 96))
-	UIKit.Label({ Text = if revealed then tool.Icon else "🔒", TextSize = 38, Size = UDim2.fromScale(1, 1), Stroke = false, Parent = iconTile })
+	local iconTile = tile(card, UDim2.fromOffset(72, 58), UDim2.new(0.5, -36, 0, 8), tool.Color)
+	UIKit.Label({ Text = tool.Icon, TextSize = 38, Size = UDim2.fromScale(1, 1), Stroke = false, Parent = iconTile })
 	ink({
-		Text = if revealed then tool.Name else "???",
+		Text = tool.Name,
 		TextSize = 16,
 		Position = UDim2.fromOffset(4, 68),
 		Size = UDim2.new(1, -8, 0, 20),
@@ -18365,9 +19690,9 @@ local function toolCard(parent: Instance, index: number, run: Types.RunState): F
 		Parent = card,
 	})
 
-	if owned then
+	if inHand then
 		ink({
-			Text = if index == run.ToolIndex then "✅ Using" else "✅ Owned",
+			Text = "✅ In hand",
 			TextSize = 16,
 			TextColor3 = Color3.fromRGB(40, 150, 80),
 			AnchorPoint = Vector2.new(0.5, 1),
@@ -18375,7 +19700,19 @@ local function toolCard(parent: Instance, index: number, run: Types.RunState): F
 			Size = UDim2.new(1, -8, 0, 22),
 			Parent = card,
 		})
-	elseif isNext then
+	elseif owned then
+		UIKit.Button({
+			Text = "Equip",
+			Size = UDim2.new(1, -14, 0, 40),
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.new(0.5, 0, 1, -6),
+			Color = Colors.Primary,
+			Parent = card,
+			OnClick = function()
+				buy("EquipTool", index, card)
+			end,
+		})
+	else
 		local cost = Config.ToolCost(index, run.Level) or 0
 		UIKit.Button({
 			Text = "💰 " .. UIKit.Short(cost),
@@ -18390,23 +19727,13 @@ local function toolCard(parent: Instance, index: number, run: Types.RunState): F
 				buy("BuyTool", index, card)
 			end,
 		})
-	else
-		ink({
-			Text = "?",
-			TextSize = 28,
-			TextColor3 = INK_DIM,
-			AnchorPoint = Vector2.new(0.5, 1),
-			Position = UDim2.new(0.5, 0, 1, -10),
-			Size = UDim2.fromOffset(40, 30),
-			Parent = card,
-		})
 	end
 	return card
 end
 
 local function renderRight(run: Types.RunState)
 	clear(rightPage)
-	ink({ Text = "Tools", TextSize = 34, Size = UDim2.new(1, 0, 0, 38), Parent = rightPage })
+	ink({ Text = "Tools (any order!)", TextSize = 30, Size = UDim2.new(1, 0, 0, 38), Parent = rightPage })
 
 	local grid = Instance.new("Frame")
 	grid.BackgroundTransparency = 1
