@@ -12,6 +12,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
@@ -158,8 +159,31 @@ local function petAction(name: string): (Player, any) -> Types.RequestResult
 	end
 end
 
+-- Test mode for game passes that don't have an Id yet (see Config.GamePasses): grants the pass for
+-- this session only, and only in Studio unless Config.TestPasses.AllowInLiveGame is on.
+local function testPass(player: Player, value: any): Types.RequestResult
+	if type(value) ~= "string" then
+		return fail(ERR_UNKNOWN)
+	end
+	local pass = Config.GetPass(value)
+	if not pass then
+		return fail("That pass doesn't exist.")
+	end
+	if type(pass.Id) == "number" and pass.Id ~= 0 then
+		return fail("This pass is on sale for real. Use the purchase prompt!")
+	end
+	local rules = Config.TestPasses or {}
+	local allowed = if RunService:IsStudio() then rules.AllowInStudio == true else rules.AllowInLiveGame == true
+	if not allowed then
+		return fail("Coming soon!")
+	end
+	DataService.SetPass(player, pass.Key, true)
+	return { Ok = true }
+end
+
 local HANDLERS: { [string]: (Player, any) -> Types.RequestResult } = {
 	BuyPerk = buyPerk,
+	TestPass = testPass,
 	Hatch = hatch,
 	Equip = petAction("Equip"),
 	Unequip = petAction("Unequip"),

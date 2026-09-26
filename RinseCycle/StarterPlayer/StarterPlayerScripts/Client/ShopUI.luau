@@ -171,16 +171,25 @@ local function buildPassRow(def: any): Frame
 		})
 	else
 		UIKit.Button({
-			Text = "Buy",
+			Text = "R$ " .. tostring(def.Price or "?"),
 			Size = UDim2.fromOffset(130, 46),
 			AnchorPoint = Vector2.new(1, 0.5),
 			Position = UDim2.new(1, -14, 0.5, 0),
-			Color = Colors.Primary,
+			Color = Colors.Good,
 			Parent = row,
 			OnClick = function()
-				pcall(function()
-					MarketplaceService:PromptGamePassPurchase(LocalPlayer, def.Id)
-				end)
+				if type(def.Id) == "number" and def.Id ~= 0 then
+					-- A real pass: Roblox's purchase prompt; MarketService grants it when bought.
+					pcall(function()
+						MarketplaceService:PromptGamePassPurchase(LocalPlayer, def.Id)
+					end)
+					return
+				end
+				-- No Id yet: test mode (Studio only by default). See Config.GamePasses.
+				local result = ClientState.MetaRequest("TestPass", def.Key)
+				if not result.Ok then
+					UIKit.Toast(result.Error or "Coming soon!", "Info")
+				end
 			end,
 		})
 	end
@@ -223,11 +232,11 @@ local function render()
 		end
 	else
 		local shown = 0
-		for _, def in Config.GamePasses do
-			if def.Id ~= 0 then
-				buildPassRow(def).Parent = list
-				shown += 1
-			end
+		for i, def in Config.GamePasses do
+			local row = buildPassRow(def)
+			row.LayoutOrder = i
+			row.Parent = list
+			shown += 1
 		end
 		if shown == 0 then
 			UIKit.Label({
@@ -315,8 +324,27 @@ function ShopUI.Init()
 		end,
 	})
 
+	-- Celebrate a pass the moment it becomes owned (a real purchase or a test grant).
+	local ownedBefore: { [string]: boolean }? = nil
 	ClientState.Changed:Connect(function(kind)
-		if kind == "Meta" and UIKit.IsWindowOpen("Shop") then
+		if kind ~= "Meta" then
+			return
+		end
+		local meta = ClientState.Meta
+		if meta then
+			local now = table.clone(meta.Passes or {})
+			if ownedBefore then
+				for key, owned in now do
+					if owned and not ownedBefore[key] then
+						local pass = Config.GetPass(key)
+						UIKit.Confetti()
+						UIKit.Toast(string.format("%s %s unlocked!", pass and pass.Icon or "🎉", pass and pass.Name or key), "Good")
+					end
+				end
+			end
+			ownedBefore = now
+		end
+		if UIKit.IsWindowOpen("Shop") then
 			render()
 		end
 	end)

@@ -9,6 +9,7 @@
 -- besides the ones this module owns for its whole lifetime.
 
 local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
@@ -47,7 +48,7 @@ function HUD.Init()
 	local topCurrency = Instance.new("Frame")
 	topCurrency.Name = "TopCurrency"
 	topCurrency.AnchorPoint = Vector2.new(0.5, 0)
-	topCurrency.Size = UDim2.fromOffset(250, 58)
+	topCurrency.Size = UDim2.fromOffset(250, 54)
 	topCurrency.BackgroundColor3 = Color3.new(1, 1, 1)
 	topCurrency.BorderSizePixel = 0
 	UIKit.Corner(topCurrency, 16)
@@ -304,8 +305,10 @@ function HUD.Init()
 		local safe = UIKit.SafeInsets()
 		local touch = UIKit.IsTouch()
 
-		topCurrency.Position = UDim2.new(0.5, 0, 0, math.floor(inset + 8))
-		topBar.Position = UDim2.new(0.5, 0, 0, math.floor(inset + 74))
+		-- The pill sits in the topbar row itself (the middle of Roblox's topbar is empty), like the
+		-- big simulators do; the run's progress bar goes right under it.
+		topCurrency.Position = UDim2.new(0.5, 0, 0, 2)
+		topBar.Position = UDim2.new(0.5, 0, 0, 66)
 
 		-- Right column: vertically centred, but on touch kept above the jump button.
 		local colH = rightColumn.AbsoluteSize.Y / UIKit.GetScale()
@@ -367,8 +370,11 @@ function HUD.Init()
 		Parent = banner,
 	})
 
+	-- The banner shows in the middle of the screen (a quarter of the way down), well below the
+	-- Bubbles pill and the progress bar, so nothing ever overlaps.
 	local function relayoutBanner()
-		banner.Position = UDim2.new(0.5, 0, 0, math.floor(UIKit.TopInset() + 40))
+		local canvas = UIKit.CanvasSize()
+		banner.Position = UDim2.new(0.5, 0, 0, math.floor(math.max(170, canvas.Y * 0.26)))
 	end
 
 	local bannerToken = 0
@@ -782,6 +788,10 @@ function HUD.Init()
 		petsButton.LayoutOrder = 2
 		leaveButton.LayoutOrder = 3
 		plusButton.Visible = not inRun
+		-- In a run Tab opens the Upgrade Book, so the player list (also on Tab) steps aside.
+		pcall(function()
+			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not inRun)
+		end)
 
 		if playing and run then
 			local level = Config.GetLevel(run.Level)
@@ -868,11 +878,15 @@ function HUD.Init()
 	end)
 
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
-		if processed or UserInputService:GetFocusedTextBox() ~= nil then
+		if UserInputService:GetFocusedTextBox() ~= nil then
 			return
 		end
 		local key = input.KeyCode
 		local inRun = ClientState.Run ~= nil
+		-- Roblox's player list marks Tab as processed, so Tab (and gamepad Y) skip that check.
+		if processed and not (inRun and key == Enum.KeyCode.Tab) and key ~= Enum.KeyCode.ButtonY then
+			return
+		end
 		if (key == Enum.KeyCode.Q or key == Enum.KeyCode.Tab) and inRun then
 			UIKit.ToggleWindow("Upgrades")
 		elseif key == Enum.KeyCode.P or key == Enum.KeyCode.ButtonL1 then

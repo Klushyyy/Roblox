@@ -18,6 +18,7 @@ local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
+local CollectionService = game:GetService("CollectionService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
@@ -63,7 +64,7 @@ local PAD_X = 60
 local PAD_Z = { -34, -6, 22 }
 local PAD_WALL_HEIGHT = 8
 
-local BOARD_Z = -40
+local BOARD_Z = 56 -- behind the spawn, facing into the plaza, so they never hide the shops
 local HATCHERY_Z = -76 -- front face of the dishwasher building (it faces +Z, toward the spawn)
 local EGG_Z = -66
 local SHOP_X = -40
@@ -143,15 +144,28 @@ local function decor(props: { [string]: any }): { [string]: any }
 end
 
 -- A world-sized floating sign (scales with distance like a real object; never fills the screen).
-local function worldSign(parent: Instance, text: string, width: number, height: number, offsetY: number, color: Color3?): TextLabel
+-- It hangs off its own unrotated, invisible anchor part placed `offsetY` above `parent`: cylinders
+-- are rotated 90 degrees internally, and a BillboardGui's offset follows that rotation, which is
+-- what used to push signs sideways into the floor.
+local function worldSign(parent: BasePart, text: string, width: number, height: number, offsetY: number, color: Color3?): TextLabel
+	local anchor = Instance.new("Part")
+	anchor.Name = "SignAnchor"
+	anchor.Size = Vector3.new(0.2, 0.2, 0.2)
+	anchor.CFrame = CFrame.new(parent.Position + Vector3.new(0, offsetY, 0))
+	anchor.Transparency = 1
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.CanQuery = false
+	anchor.CanTouch = false
+	anchor.CastShadow = false
+	anchor.Parent = parent.Parent
 	local gui = mk("BillboardGui", {
 		Name = "Sign",
 		Size = UDim2.fromScale(width, height),
-		StudsOffsetWorldSpace = Vector3.new(0, offsetY, 0),
 		LightInfluence = 0,
 		MaxDistance = 140,
 		AlwaysOnTop = false,
-	}, parent)
+	}, anchor)
 	local label = mk("TextLabel", {
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
@@ -306,14 +320,50 @@ local function buildPad(parent: Instance, id: number): PadInfo
 		Color = Color3.fromRGB(125, 195, 255),
 		Material = Enum.Material.SmoothPlastic,
 	}, model)
+	-- White rim ring: wider than the floor but lower (top at +0.2 vs the floor's +0.4), so no two
+	-- faces share a plane.
 	mkPart("Part", {
 		Name = "Rim",
 		Shape = Enum.PartType.Cylinder,
-		Size = Vector3.new(0.5, PAD_RADIUS * 2 + 1.2, PAD_RADIUS * 2 + 1.2),
-		CFrame = upright(cx, FLOOR_Y + 0.15, cz),
+		Size = Vector3.new(0.3, PAD_RADIUS * 2 + 1.2, PAD_RADIUS * 2 + 1.2),
+		CFrame = upright(cx, FLOOR_Y + 0.05, cz),
 		Color = Color3.fromRGB(255, 255, 255),
 		Material = Enum.Material.SmoothPlastic,
 		CanCollide = false,
+	}, model)
+	-- A dishwasher spray arm lying on the pad: a hub and two arms with nozzle dots, spun by the
+	-- client (tag SpinY). It floats a hair above the floor and never touches another face.
+	local spinner = mkPart("Part", {
+		Name = "SprayArm",
+		Size = Vector3.new(PAD_RADIUS * 1.7, 0.2, 1.6),
+		CFrame = at(cx, FLOOR_Y + 0.55, cz),
+		Color = Color3.fromRGB(255, 255, 255),
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+		CastShadow = false,
+	}, model)
+	spinner:SetAttribute("SpinSpeed", 1.2)
+	CollectionService:AddTag(spinner, "SpinY")
+	local cross = mkPart("Part", {
+		Name = "SprayArm",
+		Size = Vector3.new(1.6, 0.18, PAD_RADIUS * 1.7),
+		CFrame = at(cx, FLOOR_Y + 0.54, cz),
+		Color = Color3.fromRGB(255, 255, 255),
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+		CastShadow = false,
+	}, model)
+	cross:SetAttribute("SpinSpeed", 1.2)
+	CollectionService:AddTag(cross, "SpinY")
+	mkPart("Part", {
+		Name = "SprayHub",
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(0.5, 3, 3),
+		CFrame = upright(cx, FLOOR_Y + 0.6, cz),
+		Color = Color3.fromRGB(120, 200, 250),
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+		CastShadow = false,
 	}, model)
 
 	-- A ring of glass panels; CollisionGroup PadBarrier collides only with PartyMember.
@@ -335,6 +385,32 @@ local function buildPad(parent: Instance, id: number): PadInfo
 		}, model)
 		table.insert(barriers, b)
 	end
+	-- A genuinely invisible, much taller ring behind the glass so party members can't jump out
+	-- (PadBarrier only blocks party members; everyone else walks straight through).
+	local tallWalls = 18
+	for i = 1, tallWalls do
+		local a = (i - 0.5) / tallWalls * math.pi * 2
+		local px, pz = cx + math.cos(a) * (PAD_RADIUS + 0.9), cz + math.sin(a) * (PAD_RADIUS + 0.9)
+		local wallW = 2 * math.pi * (PAD_RADIUS + 0.9) / tallWalls + 0.4
+		local b = mkPart("Part", {
+			Name = "InvisibleWall",
+			Size = Vector3.new(wallW, 60, 0.6),
+			CFrame = CFrame.lookAt(at(px, 30, pz).Position, at(cx, 30, cz).Position),
+			Transparency = 1,
+			CastShadow = false,
+			CollisionGroup = "PadBarrier",
+		}, model)
+		table.insert(barriers, b)
+	end
+	-- And a lid, so nobody escapes by jumping straight up either.
+	table.insert(barriers, mkPart("Part", {
+		Name = "InvisibleLid",
+		Size = Vector3.new(PAD_RADIUS * 2 + 3, 1, PAD_RADIUS * 2 + 3),
+		CFrame = at(cx, 60.5, cz),
+		Transparency = 1,
+		CastShadow = false,
+		CollisionGroup = "PadBarrier",
+	}, model))
 
 	-- The box a player's root must be in to count as "on the pad" (inscribed in the circle).
 	local zoneHalf = PAD_RADIUS * 0.72
@@ -489,8 +565,8 @@ local function buildSoapShop(parent: Instance)
 	mkPart("Part", decor({ Name = "BottleCap", Shape = Enum.PartType.Cylinder, Size = Vector3.new(3, 5, 5), CFrame = upright(x, 17.5, z - 8), Color = Color3.new(1, 1, 1) }), parent)
 	mkPart("Part", decor({ Name = "PumpNeck", Size = Vector3.new(1.2, 4, 1.2), CFrame = at(x, 20.5, z - 8), Color = Color3.fromRGB(220, 220, 225), Material = Enum.Material.Metal }), parent)
 	mkPart("Part", decor({ Name = "PumpHead", Size = Vector3.new(4.5, 1.2, 1.4), CFrame = at(x + 1.6, 22.8, z - 8), Color = Color3.new(1, 1, 1) }), parent)
-	worldSign(counter, "🧴 SOAP SHOP", 14, 3, 12.5, Color3.fromRGB(255, 235, 140))
-	worldSign(counter, "Perks", 8, 1.8, 10, Color3.fromRGB(220, 235, 255))
+	worldSign(counter, "🧴 SOAP SHOP", 14, 3, 16.5, Color3.fromRGB(255, 235, 140))
+	worldSign(counter, "Perks", 8, 1.8, 14, Color3.fromRGB(220, 235, 255))
 
 	local prompt = mk("ProximityPrompt", {
 		ActionText = "Open Shop",
@@ -573,11 +649,11 @@ local function buildEggHatchery(parent: Instance)
 			end
 		end
 
-		local label = worldSign(pedestal, egg.Name, 10, 2.2, 14.5)
+		local label = worldSign(pedestal, egg.Name, 10, 2.2, 18.5)
 		label.Name = "EggName"
-		worldSign(pedestal, "🧼 " .. tostring(egg.Cost), 7, 1.8, 12.3, Color3.fromRGB(255, 210, 120))
+		worldSign(pedestal, "🧼 " .. tostring(egg.Cost), 7, 1.8, 16.3, Color3.fromRGB(255, 210, 120))
 		if egg.RequiredLevel and egg.RequiredLevel > 1 then
-			worldSign(pedestal, "🔒 Level " .. tostring(egg.RequiredLevel), 7, 1.5, 10.5, Color3.fromRGB(255, 160, 160))
+			worldSign(pedestal, "🔒 Level " .. tostring(egg.RequiredLevel), 7, 1.5, 14.4, Color3.fromRGB(255, 160, 160))
 		end
 
 		local prompt = mk("ProximityPrompt", {
@@ -616,15 +692,15 @@ end
 -- Boards: two leaderboards and How to Play, facing the spawn (+Z).
 ----------------------------------------------------------------------------------------------------
 local function boardShell(parent: Instance, x: number, z: number, w: number, h: number, name: string): BasePart
-	local facing = CFrame.Angles(0, math.pi, 0) -- an unrotated part's Front faces -Z; turn it to face +Z
+	-- An unrotated part's Front face points -Z: toward the plaza from here.
 	local boardPart = mkPart("Part", {
 		Name = name,
 		Size = Vector3.new(w, h, 1),
-		CFrame = at(x, h / 2 + 3, z) * facing,
+		CFrame = at(x, h / 2 + 3, z),
 		Color = NAVY,
 		Material = Enum.Material.SmoothPlastic,
 	}, parent)
-	mkPart("Part", decor({ Name = "Trim", Size = Vector3.new(w + 1.4, h + 1.4, 0.6), CFrame = at(x, h / 2 + 3, z - 0.6), Color = Color3.new(1, 1, 1) }), parent)
+	mkPart("Part", decor({ Name = "Trim", Size = Vector3.new(w + 1.4, h + 1.4, 0.6), CFrame = at(x, h / 2 + 3, z + 0.7), Color = Color3.new(1, 1, 1) }), parent)
 	for _, dx in { -w / 2 + 2, w / 2 - 2 } do
 		mkPart("Part", { Name = "Leg", Size = Vector3.new(1.2, 3.2, 1.2), CFrame = at(x + dx, 1.6, z), Color = Color3.fromRGB(150, 155, 160), Material = Enum.Material.Metal }, parent)
 	end
@@ -734,10 +810,10 @@ local function buildDecorations(parent: Instance)
 		mkPart("Part", decor({ Name = "Hedge", Size = Vector3.new(40, 5, 5), CFrame = at(x, 2.5, PLAZA_Z0 + 3), Color = Color3.fromRGB(80, 150, 70), Material = Enum.Material.Grass }), parent)
 	end
 	-- Giant sponge and soap bars around the spawn.
-	mkPart("Part", { Name = "GiantSponge", Size = Vector3.new(12, 5, 8), CFrame = at(-26, 2.7, 46) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(255, 215, 90), Material = Enum.Material.Sand }, parent)
-	mkPart("Part", decor({ Name = "SpongeScrub", Size = Vector3.new(12.2, 1.6, 8.2), CFrame = at(-26, 5.9, 46) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(80, 180, 100), Material = Enum.Material.Fabric }), parent)
-	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(10, 3.5, 6), CFrame = at(26, 2, 48) * CFrame.Angles(0, math.rad(-15), 0), Color = Color3.fromRGB(190, 230, 255), Material = Enum.Material.SmoothPlastic }, parent)
-	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(8, 3, 5), CFrame = at(29, 5.2, 47) * CFrame.Angles(0, math.rad(10), 0), Color = Color3.fromRGB(255, 190, 220), Material = Enum.Material.SmoothPlastic }, parent)
+	mkPart("Part", { Name = "GiantSponge", Size = Vector3.new(12, 5, 8), CFrame = at(-30, 2.7, 30) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(255, 215, 90), Material = Enum.Material.Sand }, parent)
+	mkPart("Part", decor({ Name = "SpongeScrub", Size = Vector3.new(12.2, 1.6, 8.2), CFrame = at(-30, 5.9, 30) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(80, 180, 100), Material = Enum.Material.Fabric }), parent)
+	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(10, 3.5, 6), CFrame = at(30, 2, 30) * CFrame.Angles(0, math.rad(-15), 0), Color = Color3.fromRGB(190, 230, 255), Material = Enum.Material.SmoothPlastic }, parent)
+	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(8, 3, 5), CFrame = at(31, 5.3, 30) * CFrame.Angles(0, math.rad(10), 0), Color = Color3.fromRGB(255, 190, 220), Material = Enum.Material.SmoothPlastic }, parent)
 
 	-- Floating soap bubbles bobbing on cheap tween loops.
 	local bubbleFolder = mk("Folder", { Name = "Bubbles" }, parent)
@@ -850,7 +926,7 @@ function LobbyBuilder.Build(): Lobby
 
 	local timesBoard = buildBoard(model, -28, BOARD_Z, "Fastest Clean")
 	local dishesBoard = buildBoard(model, 28, BOARD_Z, "Most Dishes Cleaned")
-	buildHowToPlay(model, 0, BOARD_Z - 4)
+	buildHowToPlay(model, 0, BOARD_Z + 3)
 
 	buildDecorations(model)
 	setupLighting()

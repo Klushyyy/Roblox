@@ -343,15 +343,33 @@ Config.Eggs = {
 }
 
 ----------------------------------------------------------------------------------------------------
--- Robux. Create the passes on the Creator Dashboard and paste their IDs here.
--- Anything with Id = 0 is hidden from the shop.
+-- ROBUX GAME PASSES  -  PASTE YOUR PASS IDS HERE
+--
+-- How to sell one:
+--   1. Creator Dashboard -&gt; your experience -&gt; Monetization -&gt; Passes -&gt; Create a Pass.
+--      Give it the same name and price as below (Price is only what the shop shows).
+--   2. Copy the pass's ID (the number in its URL) and paste it over the 0 in `Id = 0` below.
+--   3. Republish. That's it: the Buy button now opens Roblox's real purchase prompt, and owners get
+--      the perk automatically every time they join.
+--
+-- While an Id is still 0 the pass is in TEST MODE: pressing Buy in Studio gives it to you for that
+-- play session (with confetti) so you can try it out. Test mode never works in the live game unless
+-- you set Config.TestPasses.AllowInLiveGame = true (don't!).
 ----------------------------------------------------------------------------------------------------
 Config.GamePasses = {
-	{ Key = "DoubleCoins", Id = 0, Name = "2x Coins", Icon = "💰", Desc = "Double coins from the drain in every run." },
-	{ Key = "MegaTank", Id = 0, Name = "Mega Tank", Icon = "🛢️", Desc = "Your tank holds twice as much." },
-	{ Key = "AutoDrain", Id = 0, Name = "Auto Drain", Icon = "🌀", Desc = "Your tank sells itself the moment it's full." },
-	{ Key = "PetSlots", Id = 0, Name = "+2 Pet Slots", Icon = "🐾", Desc = "Equip two more pets." },
-	{ Key = "DoubleBubbles", Id = 0, Name = "2x Bubbles", Icon = "🧼", Desc = "Double Bubbles from every finished run." },
+	{ Key = "DoubleCoins", Id = 0, Price = 99, Name = "2x Coins", Icon = "💰", Desc = "Double coins from the drain in every run." },
+	{ Key = "SuperScrub", Id = 0, Price = 129, Name = "Super Scrub", Icon = "💪", Desc = "Scrub 50% faster in every run." },
+	{ Key = "MegaTank", Id = 0, Price = 149, Name = "Mega Tank", Icon = "🛢️", Desc = "Your tank holds twice as much." },
+	{ Key = "LuckyCharm", Id = 0, Price = 99, Name = "Lucky Charm", Icon = "🍀", Desc = "Twice as much golden dirt in your dishwasher." },
+	{ Key = "PetSlots", Id = 0, Price = 149, Name = "+2 Pet Slots", Icon = "🐾", Desc = "Equip two more pets." },
+	{ Key = "AutoDrain", Id = 0, Price = 199, Name = "Auto Drain", Icon = "🌀", Desc = "Your tank sells itself the moment it's full. No more walking!" },
+	{ Key = "DoubleBubbles", Id = 0, Price = 249, Name = "2x Bubbles", Icon = "🧼", Desc = "Double Bubbles from every finished run." },
+	{ Key = "VIP", Id = 0, Price = 299, Name = "VIP", Icon = "👑", Desc = "+25% coins and +25% Bubbles, forever." },
+}
+
+Config.TestPasses = {
+	AllowInStudio = true, -- Id = 0 passes can be "bought" for free in Studio play tests
+	AllowInLiveGame = false, -- keep false: otherwise anyone could take unfinished passes for free
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -490,6 +508,9 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 
 	local radius = (b.Radius + b.RadiusPerLevel * (upgrades.HandSize or 0)) * tool.Radius
 	local power = b.Power * (b.PowerGrowth ^ (upgrades.ScrubPower or 0)) * tool.Power * level.Mult
+	if passes.SuperScrub then
+		power *= 1.5
+	end
 	local tank = b.Tank * (b.TankGrowth ^ (upgrades.TankSize or 0)) * level.Mult
 	tank *= 1 + (perks.DeepTank or 0) * Config.GetPerk("DeepTank").PerLevel
 	if passes.MegaTank then
@@ -498,6 +519,9 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 	local coinMult = 1 + (perks.CoinSoap or 0) * Config.GetPerk("CoinSoap").PerLevel + (petCoinBonus or 0)
 	if passes.DoubleCoins then
 		coinMult *= 2
+	end
+	if passes.VIP then
+		coinMult *= 1.25
 	end
 
 	return {
@@ -2096,7 +2120,7 @@ local ROOM_HALF_X = 420
 local ROOM_Z_FRONT, ROOM_Z_BACK = -520, 76
 local ROOM_HEIGHT = 520
 
-local DRAIN_POS = Vector3.new(0, 0, -47)
+local DRAIN_POS = Vector3.new(0, 0, -49) -- clear of the rack ramp (Z -41..-36)
 
 local BOTTOM_RACK_Y = 4
 local TOP_RACK_Y = 50
@@ -2130,7 +2154,7 @@ local LIFTS = {
 	{ from = Vector3.new(-47, 0, -45), to = Vector3.new(-47, TOP_RACK_Y, -34) },
 	{ from = Vector3.new(47, 0, -45), to = Vector3.new(47, TOP_RACK_Y, -34) },
 }
-local CHUTE = { from = Vector3.new(0, TOP_RACK_Y, -36), to = Vector3.new(0, 0, -47) }
+local CHUTE = { from = Vector3.new(0, TOP_RACK_Y, -36), to = Vector3.new(0, 0, -49) }
 
 -- Tool shop counter on the left of the open door.
 local SHOP_X = -44
@@ -2233,11 +2257,24 @@ local function noCollide(): { [string]: any }
 end
 
 -- A world-sized sign (it scales with distance like a real object, so it never fills the screen).
+-- It hangs off its own unrotated, invisible anchor `offsetY` above `parent`: cylinders are rotated
+-- 90 degrees internally and a BillboardGui's offset follows that rotation, which is what used to
+-- bury signs in the floor.
 local function sign(parent: BasePart, text: string, widthStuds: number, heightStuds: number, offsetY: number, color: Color3?): TextLabel
+	local anchor = Instance.new("Part")
+	anchor.Name = "SignAnchor"
+	anchor.Size = Vector3.new(0.2, 0.2, 0.2)
+	anchor.CFrame = CFrame.new(parent.Position + Vector3.new(0, offsetY, 0))
+	anchor.Transparency = 1
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.CanQuery = false
+	anchor.CanTouch = false
+	anchor.CastShadow = false
+	anchor.Parent = parent.Parent
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "Sign"
 	gui.Size = UDim2.fromScale(widthStuds, heightStuds)
-	gui.StudsOffsetWorldSpace = Vector3.new(0, offsetY, 0)
 	gui.LightInfluence = 0
 	gui.MaxDistance = 160
 	gui.AlwaysOnTop = false
@@ -2253,7 +2290,7 @@ local function sign(parent: BasePart, text: string, widthStuds: number, heightSt
 	stroke.Color = Color3.fromRGB(12, 30, 60)
 	stroke.Parent = label
 	label.Parent = gui
-	gui.Parent = parent
+	gui.Parent = anchor
 	return label
 end
 
@@ -2413,12 +2450,13 @@ local function buildTub(b: Builder, theme)
 	span(b, "Heater", -40, 40, 0.4, 1.4, 49.4, 50.6, Color3.fromRGB(90, 90, 95), Enum.Material.Metal, noCollide())
 
 	-- Front frame around the opening, the machine's side panels, and the toe kick under the door.
-	span(b, "FrameTop", -TUB_HALF_X - 6, TUB_HALF_X + 6, TUB_HEIGHT, COUNTER_TOP_Y - 6, TUB_Z_MIN - 3, TUB_Z_MIN + 2, K.Frame, Enum.Material.Metal)
+	-- (Offsets of 0.2 keep every face off its neighbours' planes, so nothing flickers.)
+	span(b, "FrameTop", -TUB_HALF_X - 6.2, TUB_HALF_X + 6.2, TUB_HEIGHT - 0.2, COUNTER_TOP_Y - 6, TUB_Z_MIN - 3.2, TUB_Z_MIN + 2, K.Frame, Enum.Material.Metal)
 	for _, side in { -1, 1 } do
-		span(b, "FrameSide", side * TUB_HALF_X, side * (TUB_HALF_X + 6), KITCHEN_FLOOR_Y, TUB_HEIGHT, TUB_Z_MIN - 3, TUB_Z_MIN + 2, K.Frame, Enum.Material.Metal)
-		span(b, "Gasket", side * TUB_HALF_X, side * (TUB_HALF_X + 1), 0, TUB_HEIGHT, TUB_Z_MIN - 0.5, TUB_Z_MIN + 1, Color3.fromRGB(50, 50, 55), nil, noCollide())
+		span(b, "FrameSide", side * (TUB_HALF_X - 0.2), side * (TUB_HALF_X + 6), KITCHEN_FLOOR_Y, TUB_HEIGHT, TUB_Z_MIN - 3, TUB_Z_MIN + 2, K.Frame, Enum.Material.Metal)
+		span(b, "Gasket", side * (TUB_HALF_X - 0.4), side * TUB_HALF_X, 0, TUB_HEIGHT - 0.4, TUB_Z_MIN - 0.5, TUB_Z_MIN + 1, Color3.fromRGB(50, 50, 55), nil, noCollide())
 	end
-	span(b, "UnderTub", -TUB_HALF_X - 6, TUB_HALF_X + 6, KITCHEN_FLOOR_Y + 12, -2, TUB_Z_MIN, TUB_Z_MAX, Color3.fromRGB(90, 90, 95), Enum.Material.Metal)
+	span(b, "UnderTub", -TUB_HALF_X - 5.8, TUB_HALF_X + 5.8, KITCHEN_FLOOR_Y + 12, -2.2, TUB_Z_MIN + 1, TUB_Z_MAX, Color3.fromRGB(90, 90, 95), Enum.Material.Metal)
 	span(b, "ToeKick", -TUB_HALF_X, TUB_HALF_X, KITCHEN_FLOOR_Y, KITCHEN_FLOOR_Y + 12, TUB_Z_MIN + 6, TUB_Z_MAX, K.Kick)
 
 	-- Interior lights so the load is easy to see (PointLight range tops out at 60 studs).
@@ -2462,14 +2500,17 @@ local function buildDoor(b: Builder, theme)
 	for _, side in { -1, 1 } do
 		span(b, "DoorEdge", side * (TUB_HALF_X - 2), side * TUB_HALF_X, 0, 2, DOOR_Z_FAR, DOOR_Z_NEAR, theme.Metal, Enum.Material.Metal)
 		-- Invisible safety wall so nobody walks off the side.
-		span(b, "SafetyWall", side * TUB_HALF_X, side * (TUB_HALF_X + 1), 0, 14, DOOR_Z_FAR - 6, DOOR_Z_NEAR, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
+		-- Invisible safety wall, as tall as the tub, so nobody can jump off the door.
+		span(b, "SafetyWall", side * TUB_HALF_X, side * (TUB_HALF_X + 1), 0, TUB_HEIGHT, DOOR_Z_FAR - 6, DOOR_Z_NEAR, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
 		-- Hinge.
 		cyl(b, "Hinge", 6, 5, side * (TUB_HALF_X - 6), -2, DOOR_Z_NEAR + 1, K.Steel, Enum.Material.Metal, noCollide())
 	end
-	span(b, "SafetyWall", -TUB_HALF_X, TUB_HALF_X, 0, 14, DOOR_Z_FAR - 7, DOOR_Z_FAR - 6, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
+	span(b, "SafetyWall", -TUB_HALF_X - 1, TUB_HALF_X + 1, 0, TUB_HEIGHT, DOOR_Z_FAR - 7, DOOR_Z_FAR - 6, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
+	-- A lid over the door area as well, level with the tub ceiling.
+	span(b, "SafetyLid", -TUB_HALF_X - 1, TUB_HALF_X + 1, TUB_HEIGHT, TUB_HEIGHT + 1, DOOR_Z_FAR - 7, DOOR_Z_NEAR - 3.2, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
 
 	-- Control strip along the far edge (the top of the door when it's closed), with buttons.
-	span(b, "ControlStrip", -TUB_HALF_X - 4, TUB_HALF_X + 4, -DOOR_THICK, 3, DOOR_Z_FAR - 6, DOOR_Z_FAR, Color3.fromRGB(40, 44, 52), Enum.Material.SmoothPlastic)
+	span(b, "ControlStrip", -TUB_HALF_X - 4.3, TUB_HALF_X + 4.3, -DOOR_THICK - 0.3, 3, DOOR_Z_FAR - 6.3, DOOR_Z_FAR, Color3.fromRGB(40, 44, 52), Enum.Material.SmoothPlastic)
 	for i = -3, 3 do
 		local lit = i == 0
 		box(b, "Button", Vector3.new(4, 0.6, 3), i * 9, 3.3, DOOR_Z_FAR - 3, if lit then theme.Accent else Color3.fromRGB(90, 95, 105), if lit then Enum.Material.Neon else nil, noCollide())
@@ -2598,9 +2639,8 @@ local function buildLifts(b: Builder, theme)
 end
 
 local function buildDrain(b: Builder, theme): Vector3
-	local radius = Config.Round.DrainRadius
-	cyl(b, "DrainGrate", 0.5, radius * 2, DRAIN_POS.X, 0.25, DRAIN_POS.Z, Color3.fromRGB(70, 75, 80), Enum.Material.DiamondPlate)
-	local ring = cyl(b, "DrainSwirl", 0.2, radius * 1.7, DRAIN_POS.X, 0.6, DRAIN_POS.Z, theme.Accent, Enum.Material.ForceField, noCollide())
+	cyl(b, "DrainGrate", 0.5, 15, DRAIN_POS.X, 0.25, DRAIN_POS.Z, Color3.fromRGB(70, 75, 80), Enum.Material.DiamondPlate)
+	local ring = cyl(b, "DrainSwirl", 0.2, 13, DRAIN_POS.X, 0.6, DRAIN_POS.Z, theme.Accent, Enum.Material.ForceField, noCollide())
 	ring:SetAttribute("SpinSpeed", 2.4)
 	CollectionService:AddTag(ring, "SpinY")
 	local post = box(b, "DrainSign", Vector3.new(0.6, 0.6, 0.6), DRAIN_POS.X, 1, DRAIN_POS.Z, Color3.new(1, 1, 1), nil, { Transparency = 1, CanCollide = false })
@@ -2612,69 +2652,196 @@ end
 -- Tool shop on the door (walk up to a tool and press the prompt to buy it) and the upgrade book.
 ----------------------------------------------------------------------------------------------------
 
--- Little display models for each tool, built around `at` (the pedestal top centre).
-local function toolModel(b: Builder, index: number, x: number, y: number, z: number, color: Color3)
-	local props = noCollide()
-	if index == 2 then -- Sponge
-		box(b, "Sponge", Vector3.new(3.4, 1.6, 2.2), x, y + 0.8, z, Color3.fromRGB(255, 221, 87), Enum.Material.Sand, props)
-		box(b, "SpongeScrub", Vector3.new(3.4, 0.6, 2.2), x, y + 1.9, z, Color3.fromRGB(80, 170, 80), Enum.Material.Fabric, props)
-	elseif index == 3 then -- Brush
-		box(b, "BrushHandle", Vector3.new(0.6, 3.6, 0.6), x, y + 2.4, z, Color3.fromRGB(150, 105, 70), Enum.Material.Wood, props)
-		box(b, "BrushHead", Vector3.new(3, 0.8, 1.6), x, y + 0.9, z, color, nil, props)
-		box(b, "Bristles", Vector3.new(2.8, 0.5, 1.4), x, y + 0.25, z, Color3.new(1, 1, 1), Enum.Material.Fabric, props)
-	elseif index == 4 then -- Nozzle
-		box(b, "NozzleGrip", Vector3.new(0.8, 2, 1), x, y + 1, z, Color3.fromRGB(50, 50, 55), nil, props)
-		box(b, "NozzleBody", Vector3.new(0.9, 0.9, 3.4), x, y + 2.3, z - 0.8, color, nil, props)
-		cyl(b, "NozzleTip", 0.8, 0.6, x, y + 2.3, z - 2.8, Color3.fromRGB(200, 205, 212), Enum.Material.Metal, props).CFrame = footprint(b.origin, x, y + 2.3, z - 2.8) * CFrame.Angles(0, math.rad(90), 0)
-	elseif index == 5 then -- Pressure washer
-		box(b, "WasherBody", Vector3.new(2.6, 2.4, 3), x, y + 1.2, z, color, nil, props)
-		box(b, "WasherWand", Vector3.new(0.4, 0.4, 4), x + 1.6, y + 2.6, z - 1, Color3.fromRGB(60, 60, 65), Enum.Material.Metal, props)
-		cyl(b, "WasherWheel", 0.5, 1.4, x - 1.4, y + 0.7, z + 1, Color3.fromRGB(40, 40, 44), nil, props).CFrame = footprint(b.origin, x - 1.4, y + 0.7, z + 1)
-	else -- Foam cannon
-		cyl(b, "CannonTank", 2.4, 2.4, x, y + 1.2, z, color, nil, props)
-		box(b, "CannonBarrel", Vector3.new(1, 1, 4), x, y + 2.6, z - 1.2, Color3.fromRGB(230, 230, 235), nil, props)
-		local foam = box(b, "CannonFoam", Vector3.new(1.6, 1.6, 1.6), x, y + 2.6, z - 3.6, Color3.new(1, 1, 1), Enum.Material.SmoothPlastic, props)
-		foam.Shape = Enum.PartType.Ball
+-- One part of a display model, placed relative to `base` (the pedestal top, facing the players)
+-- and scaled by `scale`. Cylinders use Roblox's X axis as their length axis.
+local function mp(b: Builder, base: CFrame, scale: number, name: string, shape: Enum.PartType?, size: Vector3, offset: Vector3, rot: CFrame?, color: Color3, material: Enum.Material?, transparency: number?): Part
+	local p = Instance.new("Part")
+	p.Name = name
+	if shape then
+		p.Shape = shape
 	end
+	p.Size = size * scale
+	p.CFrame = base * CFrame.new(offset * scale) * (rot or CFrame.identity)
+	p.Color = color
+	p.Material = material or Enum.Material.SmoothPlastic
+	p.Transparency = transparency or 0
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	p.Parent = b.model
+	b.count += 1
+	return p
+end
+
+local UPRIGHT = CFrame.Angles(0, 0, math.rad(90)) -- cylinder axis -&gt; up
+local ALONG_Z = CFrame.Angles(0, math.rad(90), 0) -- cylinder axis -&gt; front/back
+local DARK = Color3.fromRGB(45, 45, 52)
+local WHITE = Color3.fromRGB(245, 247, 250)
+local CHROME = Color3.fromRGB(205, 210, 218)
+
+-- Display models for each tool. `base` sits on the pedestal top; local -Z faces the players.
+local function toolModel(b: Builder, index: number, base: CFrame, color: Color3)
+	local S = 1.6
+	if index == 2 then -- Sponge: yellow foam, green scrubber, a few pores
+		mp(b, base, S, "Sponge", nil, Vector3.new(3.4, 1.6, 2.2), Vector3.new(0, 0.8, 0), nil, Color3.fromRGB(255, 221, 87), Enum.Material.Sand)
+		mp(b, base, S, "Scrubber", nil, Vector3.new(3.4, 0.5, 2.2), Vector3.new(0, 1.85, 0), nil, Color3.fromRGB(70, 165, 80), Enum.Material.Fabric)
+		for _, o in { Vector3.new(-1, 0.6, -1.05), Vector3.new(0.4, 1.05, -1.05), Vector3.new(1.1, 0.5, -1.05), Vector3.new(-0.3, 0.35, -1.05) } do
+			mp(b, base, S, "Pore", Enum.PartType.Ball, Vector3.new(0.32, 0.32, 0.32), o, nil, Color3.fromRGB(215, 175, 55), Enum.Material.Sand)
+		end
+	elseif index == 3 then -- Scrub brush: coloured head, white bristle rows, angled wooden handle
+		mp(b, base, S, "BrushHead", nil, Vector3.new(3.2, 0.9, 1.6), Vector3.new(0, 1.0, 0), nil, color)
+		for i = -2, 2 do
+			mp(b, base, S, "Bristles", nil, Vector3.new(0.4, 0.7, 1.3), Vector3.new(i * 0.6, 0.35, 0), nil, WHITE, Enum.Material.Fabric)
+		end
+		mp(b, base, S, "Handle", nil, Vector3.new(0.6, 0.6, 3), Vector3.new(0, 2.0, 1.4), CFrame.Angles(math.rad(28), 0, 0), Color3.fromRGB(160, 110, 70), Enum.Material.Wood)
+		mp(b, base, S, "Knob", Enum.PartType.Ball, Vector3.new(0.9, 0.9, 0.9), Vector3.new(0, 2.75, 2.75), nil, Color3.fromRGB(160, 110, 70), Enum.Material.Wood)
+	elseif index == 4 then -- Spray nozzle: pistol grip, barrel, chrome tip, trigger, hose
+		mp(b, base, S, "Grip", nil, Vector3.new(0.8, 2, 1), Vector3.new(0, 1.1, 0.7), CFrame.Angles(math.rad(-15), 0, 0), DARK)
+		mp(b, base, S, "Barrel", Enum.PartType.Cylinder, Vector3.new(3.2, 1, 1), Vector3.new(0, 2.3, -0.4), ALONG_Z, color)
+		mp(b, base, S, "Tip", Enum.PartType.Cylinder, Vector3.new(0.9, 0.6, 0.6), Vector3.new(0, 2.3, -2.4), ALONG_Z, CHROME, Enum.Material.Metal)
+		mp(b, base, S, "Trigger", nil, Vector3.new(0.3, 0.8, 0.3), Vector3.new(0, 1.6, -0.2), nil, DARK)
+		mp(b, base, S, "Hose", Enum.PartType.Cylinder, Vector3.new(2, 0.45, 0.45), Vector3.new(0, 0.3, 1.9), ALONG_Z, Color3.fromRGB(60, 120, 60))
+	elseif index == 5 then -- Pressure washer: rounded body, wheels, handle, wand with a gun
+		mp(b, base, S, "Body", nil, Vector3.new(2.8, 1.6, 3.2), Vector3.new(0, 1.4, 0.4), nil, color)
+		mp(b, base, S, "Top", Enum.PartType.Cylinder, Vector3.new(3.2, 2.8, 2.8), Vector3.new(0, 2.2, 0.4), ALONG_Z, color)
+		mp(b, base, S, "Badge", nil, Vector3.new(1.4, 0.6, 0.1), Vector3.new(0, 1.6, -1.25), nil, WHITE)
+		for _, x in { -1.5, 1.5 } do
+			mp(b, base, S, "Wheel", Enum.PartType.Cylinder, Vector3.new(0.5, 1.4, 1.4), Vector3.new(x, 0.7, 1.3), nil, DARK)
+			mp(b, base, S, "HandlePost", nil, Vector3.new(0.3, 2.4, 0.3), Vector3.new(x * 0.75, 3.4, 1.9), nil, DARK)
+		end
+		mp(b, base, S, "HandleBar", nil, Vector3.new(2.6, 0.35, 0.35), Vector3.new(0, 4.6, 1.9), nil, DARK)
+		mp(b, base, S, "Gun", nil, Vector3.new(0.6, 1, 0.9), Vector3.new(1.9, 1.3, -0.3), nil, DARK)
+		mp(b, base, S, "Wand", Enum.PartType.Cylinder, Vector3.new(3.6, 0.3, 0.3), Vector3.new(1.9, 1.7, -2.4), ALONG_Z, CHROME, Enum.Material.Metal)
+	else -- Foam cannon: see-through soap tank, white barrel and bell, foam spilling out
+		mp(b, base, S, "Tank", Enum.PartType.Cylinder, Vector3.new(2.6, 2.2, 2.2), Vector3.new(0, 1.3, 0.7), UPRIGHT, color, Enum.Material.Glass, 0.25)
+		mp(b, base, S, "Soap", Enum.PartType.Cylinder, Vector3.new(1.6, 1.9, 1.9), Vector3.new(0, 0.85, 0.7), UPRIGHT, Color3.fromRGB(255, 150, 220), Enum.Material.SmoothPlastic, 0.1)
+		mp(b, base, S, "Barrel", Enum.PartType.Cylinder, Vector3.new(3.4, 1.1, 1.1), Vector3.new(0, 2.9, -0.6), ALONG_Z, WHITE)
+		mp(b, base, S, "Bell", Enum.PartType.Cylinder, Vector3.new(0.8, 1.9, 1.9), Vector3.new(0, 2.9, -2.6), ALONG_Z, WHITE)
+		for _, f in { { Vector3.new(0, 2.9, -3.5), 1.3 }, { Vector3.new(0.6, 3.5, -3.9), 0.9 }, { Vector3.new(-0.5, 3.4, -3.8), 0.8 } } do
+			mp(b, base, S, "Foam", Enum.PartType.Ball, Vector3.new(f[2], f[2], f[2]), f[1], nil, WHITE)
+		end
+	end
+end
+
+-- A SurfaceGui sign on a real part, facing `facing` (so it never floats, sinks or flickers).
+local function signBoard(b: Builder, name: string, size: Vector3, pos: Vector3, facing: Vector3, color: Color3): (Part, SurfaceGui)
+	local p = Instance.new("Part")
+	p.Name = name
+	p.Size = size
+	p.CFrame = CFrame.lookAt(pos, pos + facing)
+	p.Color = color
+	p.Material = Enum.Material.SmoothPlastic
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.Parent = b.model
+	b.count += 1
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Front
+	gui.LightInfluence = 0
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 60
+	gui.Parent = p
+	return p, gui
+end
+
+local function guiText(parent: Instance, name: string, text: string, pos: UDim2, size: UDim2, color: Color3): TextLabel
+	local label = Instance.new("TextLabel")
+	label.Name = name
+	label.BackgroundTransparency = 1
+	label.Position = pos
+	label.Size = size
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.TextColor3 = color
+	label.Text = text
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 3
+	stroke.Color = Color3.fromRGB(12, 30, 60)
+	stroke.Parent = label
+	label.Parent = parent
+	return label
 end
 
 local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 	local z0, z1 = SHOP_Z[1], SHOP_Z[2]
 	local x0, x1 = SHOP_X - 7, SHOP_X + 7
-	-- Wooden counter with a front lip and a striped awning sign.
-	span(b, "ShopCounter", x0, x1, 0, SHOP_HEIGHT, z0, z1, Color3.fromRGB(165, 112, 70), Enum.Material.Wood)
-	span(b, "ShopCounterTop", x0 - 0.5, x1 + 0.5, SHOP_HEIGHT, SHOP_HEIGHT + 0.5, z0 - 0.5, z1 + 0.5, Color3.fromRGB(120, 78, 48), Enum.Material.Wood)
-	span(b, "ShopBackboard", x0 - 1, x0, SHOP_HEIGHT, SHOP_HEIGHT + 14, z0, z1, Color3.fromRGB(150, 100, 62), Enum.Material.WoodPlanks)
-	for i = 0, 7 do
-		local zz = z0 + (z1 - z0) / 8 * (i + 0.5)
-		span(b, "Awning", x0 - 1, x1 + 1, SHOP_HEIGHT + 14, SHOP_HEIGHT + 15.5, zz - (z1 - z0) / 16, zz + (z1 - z0) / 16, if i % 2 == 0 then theme.Accent else Color3.new(1, 1, 1), nil, noCollide())
-	end
-	local header = box(b, "ShopHeader", Vector3.new(1, 1, 1), SHOP_X, SHOP_HEIGHT + 17, (z0 + z1) / 2, Color3.new(1, 1, 1), nil, { Transparency = 1, CanCollide = false })
-	sign(header, "🧽 TOOL SHOP", 22, 4, 2, Color3.fromRGB(255, 230, 120))
+	local toPlayers = b.origin.RightVector -- the shop faces +x, toward the middle of the door
+	local wood = Color3.fromRGB(176, 120, 76)
+	local darkWood = Color3.fromRGB(120, 78, 48)
+	local top = SHOP_HEIGHT + 0.6
 
+	-- Rug, counter with inset front panels, countertop.
+	span(b, "ShopRug", x0 - 1, x1 + 10, 0, 0.12, z0 - 2, z1 + 2, Color3.fromRGB(190, 70, 70), Enum.Material.Fabric, noCollide())
+	span(b, "ShopCounter", x0, x1, 0.12, SHOP_HEIGHT, z0, z1, wood, Enum.Material.Wood)
+	span(b, "ShopCounterTop", x0 - 0.5, x1 + 0.8, SHOP_HEIGHT, top, z0 - 0.5, z1 + 0.5, darkWood, Enum.Material.Wood)
+	local panels = 5
+	for i = 0, panels - 1 do
+		local pz0 = z0 + 1 + (z1 - z0 - 2) / panels * i
+		local pz1 = pz0 + (z1 - z0 - 2) / panels - 1
+		span(b, "CounterPanel", x1, x1 + 0.25, 1, SHOP_HEIGHT - 1, pz0, pz1, Color3.fromRGB(205, 150, 100), Enum.Material.Wood, noCollide())
+	end
+
+	-- Back wall, corner posts and a striped awning with a scalloped edge.
+	local awningY = 22
+	span(b, "ShopBackWall", x0 - 2, x0 - 0.6, 0.12, awningY, z0 - 1, z1 + 1, Color3.fromRGB(235, 220, 190), Enum.Material.WoodPlanks)
+	for _, z in { z0 - 0.5, z1 + 0.5 } do
+		span(b, "ShopPost", x1 + 0.9, x1 + 1.9, top, awningY, z - 0.5, z + 0.5, darkWood, Enum.Material.Wood)
+	end
+	local stripes = 12
+	for i = 0, stripes - 1 do
+		local sz0 = z0 - 1 + (z1 - z0 + 2) / stripes * i
+		local sz1 = sz0 + (z1 - z0 + 2) / stripes
+		local color = if i % 2 == 0 then theme.Accent else Color3.new(1, 1, 1)
+		span(b, "Awning", x0 - 2, x1 + 3, awningY, awningY + 0.8, sz0, sz1, color, nil, noCollide())
+		local scallop = cyl(b, "Scallop", 0.4, (sz1 - sz0), x1 + 3.2, awningY + 0.1, (sz0 + sz1) / 2, color, nil, noCollide())
+		scallop.CFrame = footprint(b.origin, x1 + 3.2, awningY + 0.1, (sz0 + sz1) / 2)
+	end
+
+	-- Sign board on top of the awning.
+	local _, headerGui = signBoard(b, "ShopSign", Vector3.new(30, 5, 0.6), worldPoint(b.origin, x1 + 2.5, awningY + 3.4, (z0 + z1) / 2), toPlayers, Color3.fromRGB(40, 90, 170))
+	guiText(headerGui, "Title", "🧽 TOOL SHOP", UDim2.fromScale(0.05, 0.08), UDim2.fromScale(0.9, 0.84), Color3.fromRGB(255, 230, 120))
+
+	-- Two hanging lamps.
+	for _, z in { z0 + (z1 - z0) * 0.3, z0 + (z1 - z0) * 0.7 } do
+		span(b, "LampCord", SHOP_X - 0.1, SHOP_X + 0.1, 16, awningY, z - 0.1, z + 0.1, DARK, nil, noCollide())
+		local shade = cyl(b, "LampShade", 1.4, 3, SHOP_X, 15.4, z, theme.Accent, nil, noCollide())
+		local light = Instance.new("PointLight")
+		light.Range = 18
+		light.Brightness = 1.2
+		light.Color = Color3.fromRGB(255, 235, 200)
+		light.Parent = shade
+	end
+
+	-- The tools: pedestal + model + price tag + buy prompt.
 	local count = #Config.Tools - 1
 	for i = 2, #Config.Tools do
 		local tool = Config.Tools[i]
 		local z = z1 - 6 - (i - 2) * ((z1 - z0 - 12) / math.max(1, count - 1))
-		local y = SHOP_HEIGHT + 0.5
-		local pedestal = cyl(b, "Pedestal", 0.8, 5, SHOP_X, y + 0.4, z, Color3.new(1, 1, 1), nil, noCollide())
+		local pedestal = cyl(b, "Pedestal", 0.8, 6, SHOP_X - 1, top + 0.4, z, WHITE, nil, noCollide())
 		pedestal.Name = "ToolDisplay_" .. i
-		toolModel(b, i, SHOP_X, y + 0.8, z, tool.Color)
+		cyl(b, "PedestalGlow", 0.2, 6.6, SHOP_X - 1, top + 0.1, z, tool.Color, Enum.Material.Neon, noCollide())
+		local basePos = worldPoint(b.origin, SHOP_X - 1, top + 0.8, z)
+		toolModel(b, i, CFrame.lookAt(basePos, basePos - toPlayers) * CFrame.Angles(0, math.rad(180), 0), tool.Color)
 
 		local cost = Config.ToolCost(i, levelIndex) or 0
+		local tag, tagGui = signBoard(b, "PriceTag_" .. i, Vector3.new(6.5, 3, 0.3), worldPoint(b.origin, x1 + 0.4, top + 1.6, z), toPlayers, Color3.fromRGB(255, 250, 235))
+		tag:SetAttribute("ToolIndex", i)
+		guiText(tagGui, "Title", tool.Icon .. " " .. tool.Name, UDim2.fromScale(0.04, 0.05), UDim2.fromScale(0.92, 0.45), Color3.new(1, 1, 1))
+		guiText(tagGui, "Price", "💰 " .. Format.Short(cost), UDim2.fromScale(0.04, 0.52), UDim2.fromScale(0.92, 0.43), Color3.fromRGB(255, 210, 60))
+
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = "Buy"
 		prompt.ObjectText = string.format("%s  💰%s", tool.Name, Format.Short(cost))
 		prompt.HoldDuration = 0
 		prompt.RequiresLineOfSight = false
-		prompt.MaxActivationDistance = 11
-		prompt.Style = Enum.ProximityPromptStyle.Default
+		prompt.MaxActivationDistance = 15
 		prompt:SetAttribute("BuyTool", i)
 		prompt.Parent = pedestal
-		local label = sign(pedestal, string.format("%s %s\n💰 %s", tool.Icon, tool.Name, Format.Short(cost)), 9, 3, 6.5)
-		label.Name = "PriceLabel"
-		label:SetAttribute("ToolIndex", i)
-		label:SetAttribute("Price", cost)
 	end
 
 	-- Upgrade book on a lectern across the door.
@@ -4523,8 +4690,8 @@ end
 -- Per-kind builders. Each returns (parts: {BasePart}, primaryIndex: number).
 ----------------------------------------------------------------------------------------------------
 
--- Plate standing on its edge: coloured edge band, white rim, slightly recessed well, and a foot ring
--- on the back. Face normal = anchor.LookVector.
+-- Plate standing on its edge: a coloured edge band with a thicker white face in front of it, so the
+-- band shows as a rim ring. Face normal = anchor.LookVector. No two faces share a plane.
 local function buildPlate(anchor: CFrame, theme, _rng: Random)
 	local s = SIZE.Plate
 	local r = s.Diameter / 2
@@ -4533,15 +4700,8 @@ local function buildPlate(anchor: CFrame, theme, _rng: Random)
 	local t = s.Thickness
 	local parts = {
 		newPart(Enum.PartType.Cylinder, Vector3.new(t, s.Diameter, s.Diameter), cf, theme.PlateRim), -- edge band
-		newPart(Enum.PartType.Cylinder, Vector3.new(t + 0.12, s.Diameter * 0.94, s.Diameter * 0.94), cf, theme.Plate), -- rim
-		newPart(Enum.PartType.Cylinder, Vector3.new(t - 0.2, s.Diameter * 0.64, s.Diameter * 0.64), cf, theme.Plate), -- recessed well
+		newPart(Enum.PartType.Cylinder, Vector3.new(t + 0.3, s.Diameter * 0.88, s.Diameter * 0.88), cf, theme.Plate), -- face
 	}
-	-- A thin decorative line around the well on both faces.
-	for _, side in { 1, -1 } do
-		local ringCF = cf * CFrame.new(side * (t / 2 + 0.03), 0, 0)
-		table.insert(parts, decor(newPart(Enum.PartType.Cylinder, Vector3.new(0.04, s.Diameter * 0.7, s.Diameter * 0.7), ringCF, theme.PlateRim)))
-		table.insert(parts, decor(newPart(Enum.PartType.Cylinder, Vector3.new(0.06, s.Diameter * 0.66, s.Diameter * 0.66), ringCF * CFrame.new(side * 0.01, 0, 0), theme.Plate)))
-	end
 	return parts, 2
 end
 
@@ -4923,8 +5083,10 @@ local function disc(cf: CFrame, diameter: number, thickness: number, color: Colo
 	return p
 end
 
+-- Child splats are thinner than the main disc and centred slightly lower, so their top faces sit
+-- 0.04+ studs under the main disc's (no two faces share a plane, so nothing flickers).
 local function childDisc(cf: CFrame, dy: number, dz: number, diameter: number, thickness: number, color: Color3, material: Enum.Material): BasePart
-	return decor(disc(cf * CFrame.new(0.01, dy, dz), diameter, thickness, color, material))
+	return decor(disc(cf * CFrame.new(-0.02, dy, dz), diameter, math.min(thickness, 0.12), color, material))
 end
 
 local function darker(c: Color3, f: number): Color3
@@ -4947,7 +5109,7 @@ local function shapeBlob(cf: CFrame, size: number, color: Color3, material: Enum
 		table.insert(kids, childDisc(cf, math.cos(a) * d, math.sin(a) * d, size * rng:NextNumber(0.1, 0.18), 0.16, color, material))
 	end
 	-- A slightly darker centre makes it read as a thick dollop.
-	table.insert(kids, childDisc(cf * CFrame.new(0.03, 0, 0), 0, 0, size * 0.45, 0.2, darker(color, 0.85), material))
+	table.insert(kids, decor(disc(cf * CFrame.new(0.08, 0, 0), size * 0.45, 0.2, darker(color, 0.85), material)))
 	return main, kids
 end
 
@@ -5077,7 +5239,9 @@ function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, leve
 				part.CanQuery = true
 				part.CanCollide = false
 				part.CastShadow = false
-				part.CollisionGroup = "NoCollide"
+				-- Stay in the Default collision group: spatial queries (the server's scrub overlap,
+				-- raycasts) skip parts whose group can't collide with the query's group, so a
+				-- "collides with nothing" group would make dirt impossible to clean.
 
 				local hp = math.max(1, math.floor(grimeType.HP * levelMult + 0.5))
 				local units = math.max(1, math.floor(grimeType.Units * levelMult + 0.5))
@@ -5114,7 +5278,6 @@ function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, leve
 				part:SetAttribute("BaseTransparency", part.Transparency)
 
 				for _, child in children do
-					child.CollisionGroup = "NoCollide"
 					child:SetAttribute("BaseSize", child.Size)
 					child.Parent = part
 				end
@@ -5585,6 +5748,7 @@ local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
+local CollectionService = game:GetService("CollectionService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
@@ -5630,7 +5794,7 @@ local PAD_X = 60
 local PAD_Z = { -34, -6, 22 }
 local PAD_WALL_HEIGHT = 8
 
-local BOARD_Z = -40
+local BOARD_Z = 56 -- behind the spawn, facing into the plaza, so they never hide the shops
 local HATCHERY_Z = -76 -- front face of the dishwasher building (it faces +Z, toward the spawn)
 local EGG_Z = -66
 local SHOP_X = -40
@@ -5710,15 +5874,28 @@ local function decor(props: { [string]: any }): { [string]: any }
 end
 
 -- A world-sized floating sign (scales with distance like a real object; never fills the screen).
-local function worldSign(parent: Instance, text: string, width: number, height: number, offsetY: number, color: Color3?): TextLabel
+-- It hangs off its own unrotated, invisible anchor part placed `offsetY` above `parent`: cylinders
+-- are rotated 90 degrees internally, and a BillboardGui's offset follows that rotation, which is
+-- what used to push signs sideways into the floor.
+local function worldSign(parent: BasePart, text: string, width: number, height: number, offsetY: number, color: Color3?): TextLabel
+	local anchor = Instance.new("Part")
+	anchor.Name = "SignAnchor"
+	anchor.Size = Vector3.new(0.2, 0.2, 0.2)
+	anchor.CFrame = CFrame.new(parent.Position + Vector3.new(0, offsetY, 0))
+	anchor.Transparency = 1
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.CanQuery = false
+	anchor.CanTouch = false
+	anchor.CastShadow = false
+	anchor.Parent = parent.Parent
 	local gui = mk("BillboardGui", {
 		Name = "Sign",
 		Size = UDim2.fromScale(width, height),
-		StudsOffsetWorldSpace = Vector3.new(0, offsetY, 0),
 		LightInfluence = 0,
 		MaxDistance = 140,
 		AlwaysOnTop = false,
-	}, parent)
+	}, anchor)
 	local label = mk("TextLabel", {
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
@@ -5873,14 +6050,50 @@ local function buildPad(parent: Instance, id: number): PadInfo
 		Color = Color3.fromRGB(125, 195, 255),
 		Material = Enum.Material.SmoothPlastic,
 	}, model)
+	-- White rim ring: wider than the floor but lower (top at +0.2 vs the floor's +0.4), so no two
+	-- faces share a plane.
 	mkPart("Part", {
 		Name = "Rim",
 		Shape = Enum.PartType.Cylinder,
-		Size = Vector3.new(0.5, PAD_RADIUS * 2 + 1.2, PAD_RADIUS * 2 + 1.2),
-		CFrame = upright(cx, FLOOR_Y + 0.15, cz),
+		Size = Vector3.new(0.3, PAD_RADIUS * 2 + 1.2, PAD_RADIUS * 2 + 1.2),
+		CFrame = upright(cx, FLOOR_Y + 0.05, cz),
 		Color = Color3.fromRGB(255, 255, 255),
 		Material = Enum.Material.SmoothPlastic,
 		CanCollide = false,
+	}, model)
+	-- A dishwasher spray arm lying on the pad: a hub and two arms with nozzle dots, spun by the
+	-- client (tag SpinY). It floats a hair above the floor and never touches another face.
+	local spinner = mkPart("Part", {
+		Name = "SprayArm",
+		Size = Vector3.new(PAD_RADIUS * 1.7, 0.2, 1.6),
+		CFrame = at(cx, FLOOR_Y + 0.55, cz),
+		Color = Color3.fromRGB(255, 255, 255),
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+		CastShadow = false,
+	}, model)
+	spinner:SetAttribute("SpinSpeed", 1.2)
+	CollectionService:AddTag(spinner, "SpinY")
+	local cross = mkPart("Part", {
+		Name = "SprayArm",
+		Size = Vector3.new(1.6, 0.18, PAD_RADIUS * 1.7),
+		CFrame = at(cx, FLOOR_Y + 0.54, cz),
+		Color = Color3.fromRGB(255, 255, 255),
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+		CastShadow = false,
+	}, model)
+	cross:SetAttribute("SpinSpeed", 1.2)
+	CollectionService:AddTag(cross, "SpinY")
+	mkPart("Part", {
+		Name = "SprayHub",
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(0.5, 3, 3),
+		CFrame = upright(cx, FLOOR_Y + 0.6, cz),
+		Color = Color3.fromRGB(120, 200, 250),
+		Material = Enum.Material.SmoothPlastic,
+		CanCollide = false,
+		CastShadow = false,
 	}, model)
 
 	-- A ring of glass panels; CollisionGroup PadBarrier collides only with PartyMember.
@@ -5902,6 +6115,32 @@ local function buildPad(parent: Instance, id: number): PadInfo
 		}, model)
 		table.insert(barriers, b)
 	end
+	-- A genuinely invisible, much taller ring behind the glass so party members can't jump out
+	-- (PadBarrier only blocks party members; everyone else walks straight through).
+	local tallWalls = 18
+	for i = 1, tallWalls do
+		local a = (i - 0.5) / tallWalls * math.pi * 2
+		local px, pz = cx + math.cos(a) * (PAD_RADIUS + 0.9), cz + math.sin(a) * (PAD_RADIUS + 0.9)
+		local wallW = 2 * math.pi * (PAD_RADIUS + 0.9) / tallWalls + 0.4
+		local b = mkPart("Part", {
+			Name = "InvisibleWall",
+			Size = Vector3.new(wallW, 60, 0.6),
+			CFrame = CFrame.lookAt(at(px, 30, pz).Position, at(cx, 30, cz).Position),
+			Transparency = 1,
+			CastShadow = false,
+			CollisionGroup = "PadBarrier",
+		}, model)
+		table.insert(barriers, b)
+	end
+	-- And a lid, so nobody escapes by jumping straight up either.
+	table.insert(barriers, mkPart("Part", {
+		Name = "InvisibleLid",
+		Size = Vector3.new(PAD_RADIUS * 2 + 3, 1, PAD_RADIUS * 2 + 3),
+		CFrame = at(cx, 60.5, cz),
+		Transparency = 1,
+		CastShadow = false,
+		CollisionGroup = "PadBarrier",
+	}, model))
 
 	-- The box a player's root must be in to count as "on the pad" (inscribed in the circle).
 	local zoneHalf = PAD_RADIUS * 0.72
@@ -6056,8 +6295,8 @@ local function buildSoapShop(parent: Instance)
 	mkPart("Part", decor({ Name = "BottleCap", Shape = Enum.PartType.Cylinder, Size = Vector3.new(3, 5, 5), CFrame = upright(x, 17.5, z - 8), Color = Color3.new(1, 1, 1) }), parent)
 	mkPart("Part", decor({ Name = "PumpNeck", Size = Vector3.new(1.2, 4, 1.2), CFrame = at(x, 20.5, z - 8), Color = Color3.fromRGB(220, 220, 225), Material = Enum.Material.Metal }), parent)
 	mkPart("Part", decor({ Name = "PumpHead", Size = Vector3.new(4.5, 1.2, 1.4), CFrame = at(x + 1.6, 22.8, z - 8), Color = Color3.new(1, 1, 1) }), parent)
-	worldSign(counter, "🧴 SOAP SHOP", 14, 3, 12.5, Color3.fromRGB(255, 235, 140))
-	worldSign(counter, "Perks", 8, 1.8, 10, Color3.fromRGB(220, 235, 255))
+	worldSign(counter, "🧴 SOAP SHOP", 14, 3, 16.5, Color3.fromRGB(255, 235, 140))
+	worldSign(counter, "Perks", 8, 1.8, 14, Color3.fromRGB(220, 235, 255))
 
 	local prompt = mk("ProximityPrompt", {
 		ActionText = "Open Shop",
@@ -6140,11 +6379,11 @@ local function buildEggHatchery(parent: Instance)
 			end
 		end
 
-		local label = worldSign(pedestal, egg.Name, 10, 2.2, 14.5)
+		local label = worldSign(pedestal, egg.Name, 10, 2.2, 18.5)
 		label.Name = "EggName"
-		worldSign(pedestal, "🧼 " .. tostring(egg.Cost), 7, 1.8, 12.3, Color3.fromRGB(255, 210, 120))
+		worldSign(pedestal, "🧼 " .. tostring(egg.Cost), 7, 1.8, 16.3, Color3.fromRGB(255, 210, 120))
 		if egg.RequiredLevel and egg.RequiredLevel &gt; 1 then
-			worldSign(pedestal, "🔒 Level " .. tostring(egg.RequiredLevel), 7, 1.5, 10.5, Color3.fromRGB(255, 160, 160))
+			worldSign(pedestal, "🔒 Level " .. tostring(egg.RequiredLevel), 7, 1.5, 14.4, Color3.fromRGB(255, 160, 160))
 		end
 
 		local prompt = mk("ProximityPrompt", {
@@ -6183,15 +6422,15 @@ end
 -- Boards: two leaderboards and How to Play, facing the spawn (+Z).
 ----------------------------------------------------------------------------------------------------
 local function boardShell(parent: Instance, x: number, z: number, w: number, h: number, name: string): BasePart
-	local facing = CFrame.Angles(0, math.pi, 0) -- an unrotated part's Front faces -Z; turn it to face +Z
+	-- An unrotated part's Front face points -Z: toward the plaza from here.
 	local boardPart = mkPart("Part", {
 		Name = name,
 		Size = Vector3.new(w, h, 1),
-		CFrame = at(x, h / 2 + 3, z) * facing,
+		CFrame = at(x, h / 2 + 3, z),
 		Color = NAVY,
 		Material = Enum.Material.SmoothPlastic,
 	}, parent)
-	mkPart("Part", decor({ Name = "Trim", Size = Vector3.new(w + 1.4, h + 1.4, 0.6), CFrame = at(x, h / 2 + 3, z - 0.6), Color = Color3.new(1, 1, 1) }), parent)
+	mkPart("Part", decor({ Name = "Trim", Size = Vector3.new(w + 1.4, h + 1.4, 0.6), CFrame = at(x, h / 2 + 3, z + 0.7), Color = Color3.new(1, 1, 1) }), parent)
 	for _, dx in { -w / 2 + 2, w / 2 - 2 } do
 		mkPart("Part", { Name = "Leg", Size = Vector3.new(1.2, 3.2, 1.2), CFrame = at(x + dx, 1.6, z), Color = Color3.fromRGB(150, 155, 160), Material = Enum.Material.Metal }, parent)
 	end
@@ -6301,10 +6540,10 @@ local function buildDecorations(parent: Instance)
 		mkPart("Part", decor({ Name = "Hedge", Size = Vector3.new(40, 5, 5), CFrame = at(x, 2.5, PLAZA_Z0 + 3), Color = Color3.fromRGB(80, 150, 70), Material = Enum.Material.Grass }), parent)
 	end
 	-- Giant sponge and soap bars around the spawn.
-	mkPart("Part", { Name = "GiantSponge", Size = Vector3.new(12, 5, 8), CFrame = at(-26, 2.7, 46) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(255, 215, 90), Material = Enum.Material.Sand }, parent)
-	mkPart("Part", decor({ Name = "SpongeScrub", Size = Vector3.new(12.2, 1.6, 8.2), CFrame = at(-26, 5.9, 46) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(80, 180, 100), Material = Enum.Material.Fabric }), parent)
-	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(10, 3.5, 6), CFrame = at(26, 2, 48) * CFrame.Angles(0, math.rad(-15), 0), Color = Color3.fromRGB(190, 230, 255), Material = Enum.Material.SmoothPlastic }, parent)
-	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(8, 3, 5), CFrame = at(29, 5.2, 47) * CFrame.Angles(0, math.rad(10), 0), Color = Color3.fromRGB(255, 190, 220), Material = Enum.Material.SmoothPlastic }, parent)
+	mkPart("Part", { Name = "GiantSponge", Size = Vector3.new(12, 5, 8), CFrame = at(-30, 2.7, 30) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(255, 215, 90), Material = Enum.Material.Sand }, parent)
+	mkPart("Part", decor({ Name = "SpongeScrub", Size = Vector3.new(12.2, 1.6, 8.2), CFrame = at(-30, 5.9, 30) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(80, 180, 100), Material = Enum.Material.Fabric }), parent)
+	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(10, 3.5, 6), CFrame = at(30, 2, 30) * CFrame.Angles(0, math.rad(-15), 0), Color = Color3.fromRGB(190, 230, 255), Material = Enum.Material.SmoothPlastic }, parent)
+	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(8, 3, 5), CFrame = at(31, 5.3, 30) * CFrame.Angles(0, math.rad(10), 0), Color = Color3.fromRGB(255, 190, 220), Material = Enum.Material.SmoothPlastic }, parent)
 
 	-- Floating soap bubbles bobbing on cheap tween loops.
 	local bubbleFolder = mk("Folder", { Name = "Bubbles" }, parent)
@@ -6417,7 +6656,7 @@ function LobbyBuilder.Build(): Lobby
 
 	local timesBoard = buildBoard(model, -28, BOARD_Z, "Fastest Clean")
 	local dishesBoard = buildBoard(model, 28, BOARD_Z, "Most Dishes Cleaned")
-	buildHowToPlay(model, 0, BOARD_Z - 4)
+	buildHowToPlay(model, 0, BOARD_Z + 3)
 
 	buildDecorations(model)
 	setupLighting()
@@ -9387,6 +9626,9 @@ local function rewardRun(run: Run, members: { Player }, seconds: number, returnA
 			if getPasses(p).DoubleBubbles then
 				bubbles *= 2
 			end
+			if getPasses(p).VIP then
+				bubbles *= 1.25
+			end
 			bubbles = math.floor(bubbles)
 
 			safe(DataService.AddBubbles, p, bubbles, "RunClear")
@@ -9623,15 +9865,21 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 
 	local level = Config.GetLevel(levelIndex)
 	local bestLucky = 0
+	local charm = false
 	for _, p in members do
 		local profile = getProfile(p)
 		local lucky = profile and profile.Perks and positive(profile.Perks.LuckySuds) or 0
 		bestLucky = math.max(bestLucky, lucky)
+		charm = charm or getPasses(p).LuckyCharm == true
 	end
 	local luckyPerk = Config.GetPerk("LuckySuds")
+	local goldenChance = level.GoldenChance + bestLucky * (if luckyPerk then luckyPerk.PerLevel else 0.01)
+	if charm then
+		goldenChance *= 2 -- Lucky Charm pass: anyone in the party having it doubles the whole load's gold
+	end
 	local options = {
 		GrimeScale = 1 + R.PartyGrimeScale * (#members - 1),
-		GoldenChance = level.GoldenChance + bestLucky * (if luckyPerk then luckyPerk.PerLevel else 0.01),
+		GoldenChance = goldenChance,
 	}
 
 	for _, p in members do
@@ -10133,6 +10381,7 @@ return RoundService</ProtectedString></Properties></Item>
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
@@ -10279,8 +10528,31 @@ local function petAction(name: string): (Player, any) -&gt; Types.RequestResult
 	end
 end
 
+-- Test mode for game passes that don't have an Id yet (see Config.GamePasses): grants the pass for
+-- this session only, and only in Studio unless Config.TestPasses.AllowInLiveGame is on.
+local function testPass(player: Player, value: any): Types.RequestResult
+	if type(value) ~= "string" then
+		return fail(ERR_UNKNOWN)
+	end
+	local pass = Config.GetPass(value)
+	if not pass then
+		return fail("That pass doesn't exist.")
+	end
+	if type(pass.Id) == "number" and pass.Id ~= 0 then
+		return fail("This pass is on sale for real. Use the purchase prompt!")
+	end
+	local rules = Config.TestPasses or {}
+	local allowed = if RunService:IsStudio() then rules.AllowInStudio == true else rules.AllowInLiveGame == true
+	if not allowed then
+		return fail("Coming soon!")
+	end
+	DataService.SetPass(player, pass.Key, true)
+	return { Ok = true }
+end
+
 local HANDLERS: { [string]: (Player, any) -&gt; Types.RequestResult } = {
 	BuyPerk = buyPerk,
+	TestPass = testPass,
 	Hatch = hatch,
 	Equip = petAction("Equip"),
 	Unequip = petAction("Unequip"),
@@ -11134,33 +11406,38 @@ local function updateShopDisplays()
 		return
 	end
 	for _, inst in arena:GetChildren() do
-		if not inst:IsA("BasePart") or string.sub(inst.Name, 1, 12) ~= "ToolDisplay_" then
+		if not inst:IsA("BasePart") then
 			continue
 		end
-		local index = tonumber(string.sub(inst.Name, 13))
+		local display = string.match(inst.Name, "^ToolDisplay_(%d+)$")
+		local tag = string.match(inst.Name, "^PriceTag_(%d+)$")
+		local index = tonumber(display or tag)
 		local tool = index and Config.Tools[index]
 		if not index or not tool then
 			continue
 		end
-		local sign = inst:FindFirstChild("Sign")
-		local label = sign and sign:FindFirstChildOfClass("TextLabel")
-		local prompt = inst:FindFirstChildOfClass("ProximityPrompt")
-		local price = Config.ToolCost(index, run.Level) or 0
 		local owned = run.ToolIndex &gt;= index
 		local isNext = index == run.ToolIndex + 1
-		if prompt then
-			prompt.Enabled = isNext
-		end
-		if label then
-			if owned then
-				label.Text = string.format("%s %s\n✅ Owned", tool.Icon, tool.Name)
-				label.TextColor3 = UIKit.Theme.Colors.Good
-			elseif isNext then
-				label.Text = string.format("%s %s\n💰 %s", tool.Icon, tool.Name, UIKit.Short(price))
-				label.TextColor3 = if run.Coins &gt;= price then UIKit.Theme.Colors.Coin else UIKit.Theme.Colors.Bad
-			else
-				label.Text = string.format("🔒 %s\n💰 %s", tool.Name, UIKit.Short(price))
-				label.TextColor3 = UIKit.Theme.Colors.TextDim
+		if display then
+			local prompt = inst:FindFirstChildOfClass("ProximityPrompt")
+			if prompt then
+				prompt.Enabled = isNext
+			end
+		else
+			local gui = inst:FindFirstChildOfClass("SurfaceGui")
+			local price = gui and gui:FindFirstChild("Price") :: TextLabel?
+			if price then
+				local cost = Config.ToolCost(index, run.Level) or 0
+				if owned then
+					price.Text = "✅ Owned"
+					price.TextColor3 = UIKit.Theme.Colors.Good
+				elseif isNext then
+					price.Text = "💰 " .. UIKit.Short(cost)
+					price.TextColor3 = if run.Coins &gt;= cost then UIKit.Theme.Colors.Coin else UIKit.Theme.Colors.Bad
+				else
+					price.Text = "🔒 💰 " .. UIKit.Short(cost)
+					price.TextColor3 = UIKit.Theme.Colors.TextDim
+				end
 			end
 		end
 	end
@@ -11277,6 +11554,7 @@ return Effects</ProtectedString></Properties></Item>
 -- besides the ones this module owns for its whole lifetime.
 
 local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
@@ -11315,7 +11593,7 @@ function HUD.Init()
 	local topCurrency = Instance.new("Frame")
 	topCurrency.Name = "TopCurrency"
 	topCurrency.AnchorPoint = Vector2.new(0.5, 0)
-	topCurrency.Size = UDim2.fromOffset(250, 58)
+	topCurrency.Size = UDim2.fromOffset(250, 54)
 	topCurrency.BackgroundColor3 = Color3.new(1, 1, 1)
 	topCurrency.BorderSizePixel = 0
 	UIKit.Corner(topCurrency, 16)
@@ -11572,8 +11850,10 @@ function HUD.Init()
 		local safe = UIKit.SafeInsets()
 		local touch = UIKit.IsTouch()
 
-		topCurrency.Position = UDim2.new(0.5, 0, 0, math.floor(inset + 8))
-		topBar.Position = UDim2.new(0.5, 0, 0, math.floor(inset + 74))
+		-- The pill sits in the topbar row itself (the middle of Roblox's topbar is empty), like the
+		-- big simulators do; the run's progress bar goes right under it.
+		topCurrency.Position = UDim2.new(0.5, 0, 0, 2)
+		topBar.Position = UDim2.new(0.5, 0, 0, 66)
 
 		-- Right column: vertically centred, but on touch kept above the jump button.
 		local colH = rightColumn.AbsoluteSize.Y / UIKit.GetScale()
@@ -11635,8 +11915,11 @@ function HUD.Init()
 		Parent = banner,
 	})
 
+	-- The banner shows in the middle of the screen (a quarter of the way down), well below the
+	-- Bubbles pill and the progress bar, so nothing ever overlaps.
 	local function relayoutBanner()
-		banner.Position = UDim2.new(0.5, 0, 0, math.floor(UIKit.TopInset() + 40))
+		local canvas = UIKit.CanvasSize()
+		banner.Position = UDim2.new(0.5, 0, 0, math.floor(math.max(170, canvas.Y * 0.26)))
 	end
 
 	local bannerToken = 0
@@ -12050,6 +12333,10 @@ function HUD.Init()
 		petsButton.LayoutOrder = 2
 		leaveButton.LayoutOrder = 3
 		plusButton.Visible = not inRun
+		-- In a run Tab opens the Upgrade Book, so the player list (also on Tab) steps aside.
+		pcall(function()
+			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not inRun)
+		end)
 
 		if playing and run then
 			local level = Config.GetLevel(run.Level)
@@ -12136,11 +12423,15 @@ function HUD.Init()
 	end)
 
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
-		if processed or UserInputService:GetFocusedTextBox() ~= nil then
+		if UserInputService:GetFocusedTextBox() ~= nil then
 			return
 		end
 		local key = input.KeyCode
 		local inRun = ClientState.Run ~= nil
+		-- Roblox's player list marks Tab as processed, so Tab (and gamepad Y) skip that check.
+		if processed and not (inRun and key == Enum.KeyCode.Tab) and key ~= Enum.KeyCode.ButtonY then
+			return
+		end
 		if (key == Enum.KeyCode.Q or key == Enum.KeyCode.Tab) and inRun then
 			UIKit.ToggleWindow("Upgrades")
 		elseif key == Enum.KeyCode.P or key == Enum.KeyCode.ButtonL1 then
@@ -12349,7 +12640,7 @@ local function renderLevelList()
 		local card = Instance.new("TextButton")
 		card.Name = "Level" .. i
 		card.LayoutOrder = i
-		card.Size = UDim2.new(1, -12, 0, 118)
+		card.Size = UDim2.new(1, -8, 0, 112)
 		card.AutoButtonColor = false
 		card.Text = ""
 		card.BackgroundTransparency = 1
@@ -12399,29 +12690,29 @@ function renderCreate()
 	end
 	local level = Config.GetLevel(selLevel)
 
-	local art = levelArt(leftCard, selLevel, UDim2.new(1, -24, 0, 236), 120, false)
+	local art = levelArt(leftCard, selLevel, UDim2.new(1, -24, 0, 190), 110, false)
 	art.Position = UDim2.fromOffset(12, 12)
 	UIKit.Label({
 		Text = string.upper(level.Name),
-		TextSize = 46,
+		TextSize = 44,
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 256),
+		Position = UDim2.new(0.5, 0, 0, 208),
 		Size = UDim2.new(1, -24, 0, 50),
 		TextScaled = true,
 		Parent = leftCard,
 	})
 	UIKit.Label({
 		Text = "CREATE PARTY",
-		TextSize = 28,
+		TextSize = 26,
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 304),
+		Position = UDim2.new(0.5, 0, 0, 254),
 		Size = UDim2.new(1, -24, 0, 32),
 		Parent = leftCard,
 	})
 	local divider = Instance.new("Frame")
 	divider.Size = UDim2.new(0.8, 0, 0, 3)
 	divider.AnchorPoint = Vector2.new(0.5, 0)
-	divider.Position = UDim2.new(0.5, 0, 0, 342)
+	divider.Position = UDim2.new(0.5, 0, 0, 288)
 	divider.BackgroundColor3 = Color3.new(1, 1, 1)
 	divider.BorderSizePixel = 0
 	divider.Parent = leftCard
@@ -12430,7 +12721,7 @@ function renderCreate()
 	local privacyRow = Instance.new("Frame")
 	privacyRow.BackgroundTransparency = 1
 	privacyRow.AnchorPoint = Vector2.new(0.5, 0)
-	privacyRow.Position = UDim2.new(0.5, 0, 0, 356)
+	privacyRow.Position = UDim2.new(0.5, 0, 0, 298)
 	privacyRow.Size = UDim2.new(1, -24, 0, 50)
 	privacyRow.Parent = leftCard
 	listLayout(privacyRow, Enum.FillDirection.Horizontal, 10)
@@ -12454,15 +12745,15 @@ function renderCreate()
 		Text = "Party Size:",
 		TextSize = 28,
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 414),
+		Position = UDim2.new(0.5, 0, 0, 350),
 		Size = UDim2.new(1, -24, 0, 32),
 		Parent = leftCard,
 	})
 	local sizeRow = Instance.new("Frame")
 	sizeRow.BackgroundTransparency = 1
 	sizeRow.AnchorPoint = Vector2.new(0.5, 0)
-	sizeRow.Position = UDim2.new(0.5, 0, 0, 450)
-	sizeRow.Size = UDim2.new(1, -24, 0, 54)
+	sizeRow.Position = UDim2.new(0.5, 0, 0, 382)
+	sizeRow.Size = UDim2.new(1, -24, 0, 52)
 	sizeRow.Parent = leftCard
 	listLayout(sizeRow, Enum.FillDirection.Horizontal, 16)
 	UIKit.Button({
@@ -12497,7 +12788,7 @@ function renderCreate()
 		Text = "CREATE",
 		Size = UDim2.fromOffset(300, 60),
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -16),
+		Position = UDim2.new(0.5, 0, 1, -14),
 		Color = Colors.Good,
 		TextSize = 32,
 		Parent = leftCard,
@@ -12557,9 +12848,10 @@ local function buildCreateScreen()
 	levelList.Parent = right
 	listLayout(levelList, Enum.FillDirection.Vertical, 10, Enum.HorizontalAlignment.Left)
 	local listPad = Instance.new("UIPadding")
-	listPad.PaddingTop = UDim.new(0, 4)
-	listPad.PaddingBottom = UDim.new(0, 4)
-	listPad.PaddingLeft = UDim.new(0, 4)
+	listPad.PaddingTop = UDim.new(0, 8)
+	listPad.PaddingBottom = UDim.new(0, 8)
+	listPad.PaddingLeft = UDim.new(0, 6)
+	listPad.PaddingRight = UDim.new(0, 6)
 	listPad.Parent = levelList
 
 	UIKit.Button({
@@ -14517,16 +14809,25 @@ local function buildPassRow(def: any): Frame
 		})
 	else
 		UIKit.Button({
-			Text = "Buy",
+			Text = "R$ " .. tostring(def.Price or "?"),
 			Size = UDim2.fromOffset(130, 46),
 			AnchorPoint = Vector2.new(1, 0.5),
 			Position = UDim2.new(1, -14, 0.5, 0),
-			Color = Colors.Primary,
+			Color = Colors.Good,
 			Parent = row,
 			OnClick = function()
-				pcall(function()
-					MarketplaceService:PromptGamePassPurchase(LocalPlayer, def.Id)
-				end)
+				if type(def.Id) == "number" and def.Id ~= 0 then
+					-- A real pass: Roblox's purchase prompt; MarketService grants it when bought.
+					pcall(function()
+						MarketplaceService:PromptGamePassPurchase(LocalPlayer, def.Id)
+					end)
+					return
+				end
+				-- No Id yet: test mode (Studio only by default). See Config.GamePasses.
+				local result = ClientState.MetaRequest("TestPass", def.Key)
+				if not result.Ok then
+					UIKit.Toast(result.Error or "Coming soon!", "Info")
+				end
 			end,
 		})
 	end
@@ -14569,11 +14870,11 @@ local function render()
 		end
 	else
 		local shown = 0
-		for _, def in Config.GamePasses do
-			if def.Id ~= 0 then
-				buildPassRow(def).Parent = list
-				shown += 1
-			end
+		for i, def in Config.GamePasses do
+			local row = buildPassRow(def)
+			row.LayoutOrder = i
+			row.Parent = list
+			shown += 1
 		end
 		if shown == 0 then
 			UIKit.Label({
@@ -14661,8 +14962,27 @@ function ShopUI.Init()
 		end,
 	})
 
+	-- Celebrate a pass the moment it becomes owned (a real purchase or a test grant).
+	local ownedBefore: { [string]: boolean }? = nil
 	ClientState.Changed:Connect(function(kind)
-		if kind == "Meta" and UIKit.IsWindowOpen("Shop") then
+		if kind ~= "Meta" then
+			return
+		end
+		local meta = ClientState.Meta
+		if meta then
+			local now = table.clone(meta.Passes or {})
+			if ownedBefore then
+				for key, owned in now do
+					if owned and not ownedBefore[key] then
+						local pass = Config.GetPass(key)
+						UIKit.Confetti()
+						UIKit.Toast(string.format("%s %s unlocked!", pass and pass.Icon or "🎉", pass and pass.Name or key), "Good")
+					end
+				end
+			end
+			ownedBefore = now
+		end
+		if UIKit.IsWindowOpen("Shop") then
 			render()
 		end
 	end)
@@ -14745,6 +15065,10 @@ local splashEmitter: ParticleEmitter? = nil
 local hintAnchor: BasePart? = nil
 local hintBillboard: BillboardGui? = nil
 local hintLabel: TextLabel? = nil
+-- Health bar over the dirt spot under the aim (drains as the server's HP attribute drops).
+local hpAnchor: BasePart? = nil
+local hpBillboard: BillboardGui? = nil
+local hpFill: Frame? = nil
 
 -- Touch-only UI.
 local touchGui: ScreenGui? = nil
@@ -14862,6 +15186,65 @@ local function ensureBeam(character: Model)
 		b.Parent = origin
 		beam = b
 	end
+end
+
+local function ensureHealthBar()
+	if hpAnchor and hpAnchor.Parent then
+		return
+	end
+	local part = Instance.new("Part")
+	part.Name = "DirtHealthAnchor"
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.CastShadow = false
+	part.Transparency = 1
+	part.Size = Vector3.new(0.2, 0.2, 0.2)
+	part.Parent = workspace
+	hpAnchor = part
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "DirtHealth"
+	billboard.Size = UDim2.fromOffset(90, 14)
+	billboard.StudsOffsetWorldSpace = Vector3.new(0, 1.6, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Enabled = false
+	billboard.Parent = part
+	hpBillboard = billboard
+
+	local back = Instance.new("Frame")
+	back.Size = UDim2.fromScale(1, 1)
+	back.BackgroundColor3 = UIKit.Theme.Colors.PanelDark
+	back.BorderSizePixel = 0
+	UIKit.Corner(back, 999)
+	UIKit.Stroke(back, UIKit.Theme.Colors.Ink, 2)
+	back.Parent = billboard
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.fromScale(1, 1)
+	fill.BackgroundColor3 = UIKit.Theme.Colors.Good
+	fill.BorderSizePixel = 0
+	UIKit.Corner(fill, 999)
+	fill.Parent = back
+	hpFill = fill
+end
+
+-- Shows the bar over `part` if it's a dirt spot (it carries HP/MaxHP attributes), else hides it.
+local function updateHealthBar(part: BasePart?)
+	if not hpBillboard or not hpAnchor or not hpFill then
+		return
+	end
+	local hp = part and part:GetAttribute("HP")
+	local maxHp = part and part:GetAttribute("MaxHP")
+	if not part or not part.Parent or type(hp) ~= "number" or type(maxHp) ~= "number" or maxHp &lt;= 0 then
+		hpBillboard.Enabled = false
+		return
+	end
+	local fraction = math.clamp(hp / maxHp, 0, 1)
+	hpAnchor.CFrame = CFrame.new(part.Position)
+	hpFill.Size = UDim2.fromScale(math.max(fraction, 0.04), 1)
+	hpFill.BackgroundColor3 = UIKit.Theme.Colors.Bad:Lerp(UIKit.Theme.Colors.Good, fraction)
+	hpBillboard.Enabled = true
 end
 
 local function ensureHint()
@@ -14983,6 +15366,9 @@ local function hideVisuals()
 	if hintBillboard then
 		hintBillboard.Enabled = false
 	end
+	if hpBillboard then
+		hpBillboard.Enabled = false
+	end
 end
 
 local function cleanupForRunEnd()
@@ -15061,6 +15447,7 @@ local function onHeartbeat(dt: number)
 	ensureBeam(character)
 	ensureRing()
 	ensureHint()
+	ensureHealthBar()
 
 	raycastParams.FilterDescendantsInstances = aimTargets(arenaModel :: Model)
 	local ray = aimRay(camera)
@@ -15091,6 +15478,8 @@ local function onHeartbeat(dt: number)
 		r.Color = UIKit.Theme.Colors.Bad
 		r.Transparency = 0.5
 	end
+
+	updateHealthBar(hitPart)
 
 	-- MinTool lock hint: shown whenever the aimed part needs a tool we don't have yet.
 	local minTool = hitPart:GetAttribute("MinTool")
@@ -17090,6 +17479,51 @@ local function armToast(t: ToastRecord)
 			dismissToast(t, false)
 		end
 	end)
+end
+
+-- A burst of confetti across the whole screen (a pass bought, something big unlocked). Purely
+-- cosmetic; every piece cleans itself up after it lands.
+local CONFETTI_COLORS = {
+	Color3.fromRGB(255, 90, 110),
+	Color3.fromRGB(255, 200, 60),
+	Color3.fromRGB(90, 220, 140),
+	Color3.fromRGB(80, 170, 255),
+	Color3.fromRGB(190, 120, 255),
+	Color3.fromRGB(255, 255, 255),
+}
+function UIKit.Confetti(pieces: number?)
+	local player = Players.LocalPlayer
+	local playerGui = player and player:FindFirstChildOfClass("PlayerGui")
+	if not playerGui then
+		return
+	end
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "Confetti"
+	gui.IgnoreGuiInset = true
+	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 100
+	gui.Parent = playerGui
+	local count = pieces or 90
+	for _ = 1, count do
+		local piece = Instance.new("Frame")
+		local w = math.random(8, 14)
+		piece.Size = UDim2.fromOffset(w, math.floor(w * (0.5 + math.random())))
+		piece.AnchorPoint = Vector2.new(0.5, 0.5)
+		piece.Position = UDim2.new(math.random(), 0, 0, -math.random(10, 200))
+		piece.Rotation = math.random(0, 360)
+		piece.BackgroundColor3 = CONFETTI_COLORS[math.random(1, #CONFETTI_COLORS)]
+		piece.BorderSizePixel = 0
+		piece.Parent = gui
+		local fall = 1.6 + math.random() * 1.6
+		TweenService:Create(piece, TweenInfo.new(fall, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Position = UDim2.new(piece.Position.X.Scale + (math.random() - 0.5) * 0.25, 0, 1.1, 0),
+			Rotation = piece.Rotation + math.random(-540, 540),
+		}):Play()
+	end
+	task.delay(3.5, function()
+		gui:Destroy()
+	end)
+	UIKit.PlaySound("Sparkle")
 end
 
 -- Pill notification, top-centre below the topbar. Newest on top, max 4, ~3 s each (longer for long

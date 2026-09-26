@@ -637,6 +637,9 @@ local function rewardRun(run: Run, members: { Player }, seconds: number, returnA
 			if getPasses(p).DoubleBubbles then
 				bubbles *= 2
 			end
+			if getPasses(p).VIP then
+				bubbles *= 1.25
+			end
 			bubbles = math.floor(bubbles)
 
 			safe(DataService.AddBubbles, p, bubbles, "RunClear")
@@ -873,15 +876,21 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 
 	local level = Config.GetLevel(levelIndex)
 	local bestLucky = 0
+	local charm = false
 	for _, p in members do
 		local profile = getProfile(p)
 		local lucky = profile and profile.Perks and positive(profile.Perks.LuckySuds) or 0
 		bestLucky = math.max(bestLucky, lucky)
+		charm = charm or getPasses(p).LuckyCharm == true
 	end
 	local luckyPerk = Config.GetPerk("LuckySuds")
+	local goldenChance = level.GoldenChance + bestLucky * (if luckyPerk then luckyPerk.PerLevel else 0.01)
+	if charm then
+		goldenChance *= 2 -- Lucky Charm pass: anyone in the party having it doubles the whole load's gold
+	end
 	local options = {
 		GrimeScale = 1 + R.PartyGrimeScale * (#members - 1),
-		GoldenChance = level.GoldenChance + bestLucky * (if luckyPerk then luckyPerk.PerLevel else 0.01),
+		GoldenChance = goldenChance,
 	}
 
 	for _, p in members do

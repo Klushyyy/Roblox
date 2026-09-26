@@ -179,8 +179,8 @@ end
 -- Per-kind builders. Each returns (parts: {BasePart}, primaryIndex: number).
 ----------------------------------------------------------------------------------------------------
 
--- Plate standing on its edge: coloured edge band, white rim, slightly recessed well, and a foot ring
--- on the back. Face normal = anchor.LookVector.
+-- Plate standing on its edge: a coloured edge band with a thicker white face in front of it, so the
+-- band shows as a rim ring. Face normal = anchor.LookVector. No two faces share a plane.
 local function buildPlate(anchor: CFrame, theme, _rng: Random)
 	local s = SIZE.Plate
 	local r = s.Diameter / 2
@@ -189,15 +189,8 @@ local function buildPlate(anchor: CFrame, theme, _rng: Random)
 	local t = s.Thickness
 	local parts = {
 		newPart(Enum.PartType.Cylinder, Vector3.new(t, s.Diameter, s.Diameter), cf, theme.PlateRim), -- edge band
-		newPart(Enum.PartType.Cylinder, Vector3.new(t + 0.12, s.Diameter * 0.94, s.Diameter * 0.94), cf, theme.Plate), -- rim
-		newPart(Enum.PartType.Cylinder, Vector3.new(t - 0.2, s.Diameter * 0.64, s.Diameter * 0.64), cf, theme.Plate), -- recessed well
+		newPart(Enum.PartType.Cylinder, Vector3.new(t + 0.3, s.Diameter * 0.88, s.Diameter * 0.88), cf, theme.Plate), -- face
 	}
-	-- A thin decorative line around the well on both faces.
-	for _, side in { 1, -1 } do
-		local ringCF = cf * CFrame.new(side * (t / 2 + 0.03), 0, 0)
-		table.insert(parts, decor(newPart(Enum.PartType.Cylinder, Vector3.new(0.04, s.Diameter * 0.7, s.Diameter * 0.7), ringCF, theme.PlateRim)))
-		table.insert(parts, decor(newPart(Enum.PartType.Cylinder, Vector3.new(0.06, s.Diameter * 0.66, s.Diameter * 0.66), ringCF * CFrame.new(side * 0.01, 0, 0), theme.Plate)))
-	end
 	return parts, 2
 end
 
@@ -579,8 +572,10 @@ local function disc(cf: CFrame, diameter: number, thickness: number, color: Colo
 	return p
 end
 
+-- Child splats are thinner than the main disc and centred slightly lower, so their top faces sit
+-- 0.04+ studs under the main disc's (no two faces share a plane, so nothing flickers).
 local function childDisc(cf: CFrame, dy: number, dz: number, diameter: number, thickness: number, color: Color3, material: Enum.Material): BasePart
-	return decor(disc(cf * CFrame.new(0.01, dy, dz), diameter, thickness, color, material))
+	return decor(disc(cf * CFrame.new(-0.02, dy, dz), diameter, math.min(thickness, 0.12), color, material))
 end
 
 local function darker(c: Color3, f: number): Color3
@@ -603,7 +598,7 @@ local function shapeBlob(cf: CFrame, size: number, color: Color3, material: Enum
 		table.insert(kids, childDisc(cf, math.cos(a) * d, math.sin(a) * d, size * rng:NextNumber(0.1, 0.18), 0.16, color, material))
 	end
 	-- A slightly darker centre makes it read as a thick dollop.
-	table.insert(kids, childDisc(cf * CFrame.new(0.03, 0, 0), 0, 0, size * 0.45, 0.2, darker(color, 0.85), material))
+	table.insert(kids, decor(disc(cf * CFrame.new(0.08, 0, 0), size * 0.45, 0.2, darker(color, 0.85), material)))
 	return main, kids
 end
 
@@ -733,7 +728,9 @@ function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, leve
 				part.CanQuery = true
 				part.CanCollide = false
 				part.CastShadow = false
-				part.CollisionGroup = "NoCollide"
+				-- Stay in the Default collision group: spatial queries (the server's scrub overlap,
+				-- raycasts) skip parts whose group can't collide with the query's group, so a
+				-- "collides with nothing" group would make dirt impossible to clean.
 
 				local hp = math.max(1, math.floor(grimeType.HP * levelMult + 0.5))
 				local units = math.max(1, math.floor(grimeType.Units * levelMult + 0.5))
@@ -770,7 +767,6 @@ function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, leve
 				part:SetAttribute("BaseTransparency", part.Transparency)
 
 				for _, child in children do
-					child.CollisionGroup = "NoCollide"
 					child:SetAttribute("BaseSize", child.Size)
 					child.Parent = part
 				end

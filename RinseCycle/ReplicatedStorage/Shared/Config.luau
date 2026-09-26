@@ -339,15 +339,33 @@ Config.Eggs = {
 }
 
 ----------------------------------------------------------------------------------------------------
--- Robux. Create the passes on the Creator Dashboard and paste their IDs here.
--- Anything with Id = 0 is hidden from the shop.
+-- ROBUX GAME PASSES  -  PASTE YOUR PASS IDS HERE
+--
+-- How to sell one:
+--   1. Creator Dashboard -> your experience -> Monetization -> Passes -> Create a Pass.
+--      Give it the same name and price as below (Price is only what the shop shows).
+--   2. Copy the pass's ID (the number in its URL) and paste it over the 0 in `Id = 0` below.
+--   3. Republish. That's it: the Buy button now opens Roblox's real purchase prompt, and owners get
+--      the perk automatically every time they join.
+--
+-- While an Id is still 0 the pass is in TEST MODE: pressing Buy in Studio gives it to you for that
+-- play session (with confetti) so you can try it out. Test mode never works in the live game unless
+-- you set Config.TestPasses.AllowInLiveGame = true (don't!).
 ----------------------------------------------------------------------------------------------------
 Config.GamePasses = {
-	{ Key = "DoubleCoins", Id = 0, Name = "2x Coins", Icon = "💰", Desc = "Double coins from the drain in every run." },
-	{ Key = "MegaTank", Id = 0, Name = "Mega Tank", Icon = "🛢️", Desc = "Your tank holds twice as much." },
-	{ Key = "AutoDrain", Id = 0, Name = "Auto Drain", Icon = "🌀", Desc = "Your tank sells itself the moment it's full." },
-	{ Key = "PetSlots", Id = 0, Name = "+2 Pet Slots", Icon = "🐾", Desc = "Equip two more pets." },
-	{ Key = "DoubleBubbles", Id = 0, Name = "2x Bubbles", Icon = "🧼", Desc = "Double Bubbles from every finished run." },
+	{ Key = "DoubleCoins", Id = 0, Price = 99, Name = "2x Coins", Icon = "💰", Desc = "Double coins from the drain in every run." },
+	{ Key = "SuperScrub", Id = 0, Price = 129, Name = "Super Scrub", Icon = "💪", Desc = "Scrub 50% faster in every run." },
+	{ Key = "MegaTank", Id = 0, Price = 149, Name = "Mega Tank", Icon = "🛢️", Desc = "Your tank holds twice as much." },
+	{ Key = "LuckyCharm", Id = 0, Price = 99, Name = "Lucky Charm", Icon = "🍀", Desc = "Twice as much golden dirt in your dishwasher." },
+	{ Key = "PetSlots", Id = 0, Price = 149, Name = "+2 Pet Slots", Icon = "🐾", Desc = "Equip two more pets." },
+	{ Key = "AutoDrain", Id = 0, Price = 199, Name = "Auto Drain", Icon = "🌀", Desc = "Your tank sells itself the moment it's full. No more walking!" },
+	{ Key = "DoubleBubbles", Id = 0, Price = 249, Name = "2x Bubbles", Icon = "🧼", Desc = "Double Bubbles from every finished run." },
+	{ Key = "VIP", Id = 0, Price = 299, Name = "VIP", Icon = "👑", Desc = "+25% coins and +25% Bubbles, forever." },
+}
+
+Config.TestPasses = {
+	AllowInStudio = true, -- Id = 0 passes can be "bought" for free in Studio play tests
+	AllowInLiveGame = false, -- keep false: otherwise anyone could take unfinished passes for free
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -486,6 +504,9 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 
 	local radius = (b.Radius + b.RadiusPerLevel * (upgrades.HandSize or 0)) * tool.Radius
 	local power = b.Power * (b.PowerGrowth ^ (upgrades.ScrubPower or 0)) * tool.Power * level.Mult
+	if passes.SuperScrub then
+		power *= 1.5
+	end
 	local tank = b.Tank * (b.TankGrowth ^ (upgrades.TankSize or 0)) * level.Mult
 	tank *= 1 + (perks.DeepTank or 0) * Config.GetPerk("DeepTank").PerLevel
 	if passes.MegaTank then
@@ -494,6 +515,9 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 	local coinMult = 1 + (perks.CoinSoap or 0) * Config.GetPerk("CoinSoap").PerLevel + (petCoinBonus or 0)
 	if passes.DoubleCoins then
 		coinMult *= 2
+	end
+	if passes.VIP then
+		coinMult *= 1.25
 	end
 
 	return {

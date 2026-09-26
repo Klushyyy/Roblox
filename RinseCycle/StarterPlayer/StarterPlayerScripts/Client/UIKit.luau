@@ -1808,6 +1808,51 @@ local function armToast(t: ToastRecord)
 	end)
 end
 
+-- A burst of confetti across the whole screen (a pass bought, something big unlocked). Purely
+-- cosmetic; every piece cleans itself up after it lands.
+local CONFETTI_COLORS = {
+	Color3.fromRGB(255, 90, 110),
+	Color3.fromRGB(255, 200, 60),
+	Color3.fromRGB(90, 220, 140),
+	Color3.fromRGB(80, 170, 255),
+	Color3.fromRGB(190, 120, 255),
+	Color3.fromRGB(255, 255, 255),
+}
+function UIKit.Confetti(pieces: number?)
+	local player = Players.LocalPlayer
+	local playerGui = player and player:FindFirstChildOfClass("PlayerGui")
+	if not playerGui then
+		return
+	end
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "Confetti"
+	gui.IgnoreGuiInset = true
+	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 100
+	gui.Parent = playerGui
+	local count = pieces or 90
+	for _ = 1, count do
+		local piece = Instance.new("Frame")
+		local w = math.random(8, 14)
+		piece.Size = UDim2.fromOffset(w, math.floor(w * (0.5 + math.random())))
+		piece.AnchorPoint = Vector2.new(0.5, 0.5)
+		piece.Position = UDim2.new(math.random(), 0, 0, -math.random(10, 200))
+		piece.Rotation = math.random(0, 360)
+		piece.BackgroundColor3 = CONFETTI_COLORS[math.random(1, #CONFETTI_COLORS)]
+		piece.BorderSizePixel = 0
+		piece.Parent = gui
+		local fall = 1.6 + math.random() * 1.6
+		TweenService:Create(piece, TweenInfo.new(fall, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Position = UDim2.new(piece.Position.X.Scale + (math.random() - 0.5) * 0.25, 0, 1.1, 0),
+			Rotation = piece.Rotation + math.random(-540, 540),
+		}):Play()
+	end
+	task.delay(3.5, function()
+		gui:Destroy()
+	end)
+	UIKit.PlaySound("Sparkle")
+end
+
 -- Pill notification, top-centre below the topbar. Newest on top, max 4, ~3 s each (longer for long
 -- messages). Repeating a message that is still showing restarts its timer instead of stacking.
 function UIKit.Toast(text: string, kind: string?)

@@ -35,13 +35,23 @@ works, but Bubbles and pets reset when you stop.
 - **Workspace.StreamingEnabled** is already **off** in this place file. If you ever copy the scripts
   into a different place, untick it in the Workspace properties.
 
-## Game passes (optional)
+## Game passes (Robux)
 
-`ReplicatedStorage/Shared/Config.luau` has a `Config.GamePasses` list: 2x Coins, Mega Tank,
-Auto Drain, +2 Pet Slots and 2x Bubbles. They're hidden while their `Id` is `0`. To sell one:
+All eight passes live in one block at `ReplicatedStorage/Shared/Config.luau`, under the heading
+**ROBUX GAME PASSES - PASTE YOUR PASS IDS HERE**: 2x Coins (R$99), Super Scrub (R$129), Mega Tank
+(R$149), Lucky Charm (R$99), +2 Pet Slots (R$149), Auto Drain (R$199), 2x Bubbles (R$249) and VIP
+(R$299). Every pass already works in-game; only the IDs are missing.
 
-1. Creator Dashboard → your experience → **Monetization → Passes → Create a Pass**.
-2. Copy the pass ID into the matching `Id = 0` in `Config.GamePasses`.
+**Testing before you have IDs:** open the Shop, go to the Robux tab and press a price. In Studio
+that gives you the pass for the play session, with confetti, so you can check it works. (It is off
+in the live game; see `Config.TestPasses`.)
+
+**Selling one for real:**
+1. Creator Dashboard → your experience → **Monetization → Passes → Create a Pass**, with the same
+   name and price.
+2. Copy the pass ID (the number in its URL) and paste it over the `0` in that pass's `Id = 0`.
+3. Republish. The button now opens Roblox's purchase prompt, and owners get the perk every time they
+   join.
 
 Eggs can only be bought with Bubbles, and Bubbles can't be bought with Robux. That keeps eggs out of
 Roblox's "paid random items" rules. The odds are shown before every hatch anyway.

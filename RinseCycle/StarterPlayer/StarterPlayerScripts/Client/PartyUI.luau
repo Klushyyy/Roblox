@@ -186,7 +186,7 @@ local function renderLevelList()
 		local card = Instance.new("TextButton")
 		card.Name = "Level" .. i
 		card.LayoutOrder = i
-		card.Size = UDim2.new(1, -12, 0, 118)
+		card.Size = UDim2.new(1, -8, 0, 112)
 		card.AutoButtonColor = false
 		card.Text = ""
 		card.BackgroundTransparency = 1
@@ -236,29 +236,29 @@ function renderCreate()
 	end
 	local level = Config.GetLevel(selLevel)
 
-	local art = levelArt(leftCard, selLevel, UDim2.new(1, -24, 0, 236), 120, false)
+	local art = levelArt(leftCard, selLevel, UDim2.new(1, -24, 0, 190), 110, false)
 	art.Position = UDim2.fromOffset(12, 12)
 	UIKit.Label({
 		Text = string.upper(level.Name),
-		TextSize = 46,
+		TextSize = 44,
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 256),
+		Position = UDim2.new(0.5, 0, 0, 208),
 		Size = UDim2.new(1, -24, 0, 50),
 		TextScaled = true,
 		Parent = leftCard,
 	})
 	UIKit.Label({
 		Text = "CREATE PARTY",
-		TextSize = 28,
+		TextSize = 26,
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 304),
+		Position = UDim2.new(0.5, 0, 0, 254),
 		Size = UDim2.new(1, -24, 0, 32),
 		Parent = leftCard,
 	})
 	local divider = Instance.new("Frame")
 	divider.Size = UDim2.new(0.8, 0, 0, 3)
 	divider.AnchorPoint = Vector2.new(0.5, 0)
-	divider.Position = UDim2.new(0.5, 0, 0, 342)
+	divider.Position = UDim2.new(0.5, 0, 0, 288)
 	divider.BackgroundColor3 = Color3.new(1, 1, 1)
 	divider.BorderSizePixel = 0
 	divider.Parent = leftCard
@@ -267,7 +267,7 @@ function renderCreate()
 	local privacyRow = Instance.new("Frame")
 	privacyRow.BackgroundTransparency = 1
 	privacyRow.AnchorPoint = Vector2.new(0.5, 0)
-	privacyRow.Position = UDim2.new(0.5, 0, 0, 356)
+	privacyRow.Position = UDim2.new(0.5, 0, 0, 298)
 	privacyRow.Size = UDim2.new(1, -24, 0, 50)
 	privacyRow.Parent = leftCard
 	listLayout(privacyRow, Enum.FillDirection.Horizontal, 10)
@@ -291,15 +291,15 @@ function renderCreate()
 		Text = "Party Size:",
 		TextSize = 28,
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 414),
+		Position = UDim2.new(0.5, 0, 0, 350),
 		Size = UDim2.new(1, -24, 0, 32),
 		Parent = leftCard,
 	})
 	local sizeRow = Instance.new("Frame")
 	sizeRow.BackgroundTransparency = 1
 	sizeRow.AnchorPoint = Vector2.new(0.5, 0)
-	sizeRow.Position = UDim2.new(0.5, 0, 0, 450)
-	sizeRow.Size = UDim2.new(1, -24, 0, 54)
+	sizeRow.Position = UDim2.new(0.5, 0, 0, 382)
+	sizeRow.Size = UDim2.new(1, -24, 0, 52)
 	sizeRow.Parent = leftCard
 	listLayout(sizeRow, Enum.FillDirection.Horizontal, 16)
 	UIKit.Button({
@@ -334,7 +334,7 @@ function renderCreate()
 		Text = "CREATE",
 		Size = UDim2.fromOffset(300, 60),
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -16),
+		Position = UDim2.new(0.5, 0, 1, -14),
 		Color = Colors.Good,
 		TextSize = 32,
 		Parent = leftCard,
@@ -394,9 +394,10 @@ local function buildCreateScreen()
 	levelList.Parent = right
 	listLayout(levelList, Enum.FillDirection.Vertical, 10, Enum.HorizontalAlignment.Left)
 	local listPad = Instance.new("UIPadding")
-	listPad.PaddingTop = UDim.new(0, 4)
-	listPad.PaddingBottom = UDim.new(0, 4)
-	listPad.PaddingLeft = UDim.new(0, 4)
+	listPad.PaddingTop = UDim.new(0, 8)
+	listPad.PaddingBottom = UDim.new(0, 8)
+	listPad.PaddingLeft = UDim.new(0, 6)
+	listPad.PaddingRight = UDim.new(0, 6)
 	listPad.Parent = levelList
 
 	UIKit.Button({

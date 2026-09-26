@@ -524,33 +524,38 @@ local function updateShopDisplays()
 		return
 	end
 	for _, inst in arena:GetChildren() do
-		if not inst:IsA("BasePart") or string.sub(inst.Name, 1, 12) ~= "ToolDisplay_" then
+		if not inst:IsA("BasePart") then
 			continue
 		end
-		local index = tonumber(string.sub(inst.Name, 13))
+		local display = string.match(inst.Name, "^ToolDisplay_(%d+)$")
+		local tag = string.match(inst.Name, "^PriceTag_(%d+)$")
+		local index = tonumber(display or tag)
 		local tool = index and Config.Tools[index]
 		if not index or not tool then
 			continue
 		end
-		local sign = inst:FindFirstChild("Sign")
-		local label = sign and sign:FindFirstChildOfClass("TextLabel")
-		local prompt = inst:FindFirstChildOfClass("ProximityPrompt")
-		local price = Config.ToolCost(index, run.Level) or 0
 		local owned = run.ToolIndex >= index
 		local isNext = index == run.ToolIndex + 1
-		if prompt then
-			prompt.Enabled = isNext
-		end
-		if label then
-			if owned then
-				label.Text = string.format("%s %s\n✅ Owned", tool.Icon, tool.Name)
-				label.TextColor3 = UIKit.Theme.Colors.Good
-			elseif isNext then
-				label.Text = string.format("%s %s\n💰 %s", tool.Icon, tool.Name, UIKit.Short(price))
-				label.TextColor3 = if run.Coins >= price then UIKit.Theme.Colors.Coin else UIKit.Theme.Colors.Bad
-			else
-				label.Text = string.format("🔒 %s\n💰 %s", tool.Name, UIKit.Short(price))
-				label.TextColor3 = UIKit.Theme.Colors.TextDim
+		if display then
+			local prompt = inst:FindFirstChildOfClass("ProximityPrompt")
+			if prompt then
+				prompt.Enabled = isNext
+			end
+		else
+			local gui = inst:FindFirstChildOfClass("SurfaceGui")
+			local price = gui and gui:FindFirstChild("Price") :: TextLabel?
+			if price then
+				local cost = Config.ToolCost(index, run.Level) or 0
+				if owned then
+					price.Text = "✅ Owned"
+					price.TextColor3 = UIKit.Theme.Colors.Good
+				elseif isNext then
+					price.Text = "💰 " .. UIKit.Short(cost)
+					price.TextColor3 = if run.Coins >= cost then UIKit.Theme.Colors.Coin else UIKit.Theme.Colors.Bad
+				else
+					price.Text = "🔒 💰 " .. UIKit.Short(cost)
+					price.TextColor3 = UIKit.Theme.Colors.TextDim
+				end
 			end
 		end
 	end

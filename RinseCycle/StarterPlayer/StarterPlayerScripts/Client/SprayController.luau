@@ -74,6 +74,10 @@ local splashEmitter: ParticleEmitter? = nil
 local hintAnchor: BasePart? = nil
 local hintBillboard: BillboardGui? = nil
 local hintLabel: TextLabel? = nil
+-- Health bar over the dirt spot under the aim (drains as the server's HP attribute drops).
+local hpAnchor: BasePart? = nil
+local hpBillboard: BillboardGui? = nil
+local hpFill: Frame? = nil
 
 -- Touch-only UI.
 local touchGui: ScreenGui? = nil
@@ -191,6 +195,65 @@ local function ensureBeam(character: Model)
 		b.Parent = origin
 		beam = b
 	end
+end
+
+local function ensureHealthBar()
+	if hpAnchor and hpAnchor.Parent then
+		return
+	end
+	local part = Instance.new("Part")
+	part.Name = "DirtHealthAnchor"
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.CastShadow = false
+	part.Transparency = 1
+	part.Size = Vector3.new(0.2, 0.2, 0.2)
+	part.Parent = workspace
+	hpAnchor = part
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "DirtHealth"
+	billboard.Size = UDim2.fromOffset(90, 14)
+	billboard.StudsOffsetWorldSpace = Vector3.new(0, 1.6, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Enabled = false
+	billboard.Parent = part
+	hpBillboard = billboard
+
+	local back = Instance.new("Frame")
+	back.Size = UDim2.fromScale(1, 1)
+	back.BackgroundColor3 = UIKit.Theme.Colors.PanelDark
+	back.BorderSizePixel = 0
+	UIKit.Corner(back, 999)
+	UIKit.Stroke(back, UIKit.Theme.Colors.Ink, 2)
+	back.Parent = billboard
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.fromScale(1, 1)
+	fill.BackgroundColor3 = UIKit.Theme.Colors.Good
+	fill.BorderSizePixel = 0
+	UIKit.Corner(fill, 999)
+	fill.Parent = back
+	hpFill = fill
+end
+
+-- Shows the bar over `part` if it's a dirt spot (it carries HP/MaxHP attributes), else hides it.
+local function updateHealthBar(part: BasePart?)
+	if not hpBillboard or not hpAnchor or not hpFill then
+		return
+	end
+	local hp = part and part:GetAttribute("HP")
+	local maxHp = part and part:GetAttribute("MaxHP")
+	if not part or not part.Parent or type(hp) ~= "number" or type(maxHp) ~= "number" or maxHp <= 0 then
+		hpBillboard.Enabled = false
+		return
+	end
+	local fraction = math.clamp(hp / maxHp, 0, 1)
+	hpAnchor.CFrame = CFrame.new(part.Position)
+	hpFill.Size = UDim2.fromScale(math.max(fraction, 0.04), 1)
+	hpFill.BackgroundColor3 = UIKit.Theme.Colors.Bad:Lerp(UIKit.Theme.Colors.Good, fraction)
+	hpBillboard.Enabled = true
 end
 
 local function ensureHint()
@@ -312,6 +375,9 @@ local function hideVisuals()
 	if hintBillboard then
 		hintBillboard.Enabled = false
 	end
+	if hpBillboard then
+		hpBillboard.Enabled = false
+	end
 end
 
 local function cleanupForRunEnd()
@@ -390,6 +456,7 @@ local function onHeartbeat(dt: number)
 	ensureBeam(character)
 	ensureRing()
 	ensureHint()
+	ensureHealthBar()
 
 	raycastParams.FilterDescendantsInstances = aimTargets(arenaModel :: Model)
 	local ray = aimRay(camera)
@@ -420,6 +487,8 @@ local function onHeartbeat(dt: number)
 		r.Color = UIKit.Theme.Colors.Bad
 		r.Transparency = 0.5
 	end
+
+	updateHealthBar(hitPart)
 
 	-- MinTool lock hint: shown whenever the aimed part needs a tool we don't have yet.
 	local minTool = hitPart:GetAttribute("MinTool")
