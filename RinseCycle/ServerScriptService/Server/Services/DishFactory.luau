@@ -217,14 +217,14 @@ local function buildBowl(anchor: CFrame, theme, _rng: Random)
 	else
 		local r = s.Diameter / 2
 		table.insert(parts, newPart(Enum.PartType.Cylinder, Vector3.new(0.8, r * 1.1, r * 1.1), upright(anchor, 0.4), theme.Bowl))
-		local slats = 12
+		local slats = 20
 		for i = 1, slats do
 			local theta = (i - 1) / slats * math.pi * 2
 			local nx, nz = math.cos(theta), math.sin(theta)
 			local pos = localPos(anchor, nx * r * 0.78, s.Depth * 0.5, nz * r * 0.78)
 			local out = localDir(anchor, nx, 0, nz)
 			local cf = CFrame.lookAt(pos, pos + out, anchor.UpVector) * CFrame.Angles(math.rad(28), 0, 0)
-			table.insert(parts, newPart(nil, Vector3.new(r * 0.52, s.Depth * 1.05, WALL), cf, theme.Bowl))
+			table.insert(parts, newPart(nil, Vector3.new(r * 0.3, s.Depth * 1.05, WALL), cf, theme.Bowl))
 		end
 	end
 	-- Foot ring, and a coloured band hugging the outside of the rim.
