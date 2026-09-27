@@ -369,96 +369,80 @@ local function stepLiftBubbles(dt: number)
 	end
 end
 
--- Bubble columns (like Minecraft's bubble elevators). Step into a lift's column and the bubbles take
--- you on a ride: you float straight up the middle of the column (the character is moved directly,
--- so nothing can stall it), rise a little above the top rack, then drift across onto it and land.
--- Physics comes back the moment the ride ends.
-local LIFT_RISE_SPEED = 20 -- studs per second
-local LIFT_OVERSHOOT = 4 -- rise this far above the landing height before drifting across
-local LIFT_ACROSS_SPEED = 16
+-- Bubble columns (like Minecraft's bubble elevators). Anywhere inside a lift's column (walking in,
+-- jumping in, or flying in with the bubble jets) the bubbles push you up; you keep full control
+-- of your movement the whole way, so you can steer around or out. At the top you bob just above
+-- the rack's height and, if you're not steering, drift gently onto the rack.
+local LIFT_RISE_SPEED = 22 -- studs per second upward inside the column
+local LIFT_OVERSHOOT = 4 -- the column's top is this far above the landing height
+local LIFT_DRIFT_SPEED = 8 -- drift toward the landing at the top when you're not steering
+local LIFT_TOP_EXTRA = 3 -- the column keeps you hovering this far above its top before letting go
 
-type LiftRide = { Pad: BasePart, Target: Vector3, Phase: "Up" | "Across", X: number, Z: number, Y: number }
-local ride: LiftRide? = nil
-local liftCooldownUntil = 0
+local inColumn: BasePart? = nil
 
-local function endRide(rootPart: BasePart?)
-	ride = nil
-	liftCooldownUntil = os.clock() + 1
-	if rootPart then
-		rootPart.AssemblyLinearVelocity = Vector3.new(0, -2, 0)
-	end
-end
-
-local function stepLift(dt: number)
+local function stepLift(_dt: number)
 	local character = LocalPlayer.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	if not character or not root or not root:IsA("BasePart") or not humanoid then
-		ride = nil
+	if not character or not root or not root:IsA("BasePart") or not humanoid or humanoid.Health <= 0 then
+		inColumn = nil
 		return
 	end
 	local rootPart = root :: BasePart
-	local now = os.clock()
-
-	local r = ride
-	if r then
-		if not r.Pad.Parent or humanoid.Health <= 0 then
-			endRide(rootPart)
-			return
-		end
-		local topY = r.Target.Y + LIFT_OVERSHOOT
-		if r.Phase == "Up" then
-			r.Y = math.min(topY, r.Y + LIFT_RISE_SPEED * dt)
-			-- Ease into the middle of the column on the way up.
-			local k = math.min(1, 5 * dt)
-			r.X += (r.Pad.Position.X - r.X) * k
-			r.Z += (r.Pad.Position.Z - r.Z) * k
-			if r.Y >= topY then
-				r.Phase = "Across"
-				popBubbles(Vector3.new(r.X, r.Y, r.Z), 6, 2)
-			end
-		else
-			local to = Vector3.new(r.Target.X - r.X, 0, r.Target.Z - r.Z)
-			local step = LIFT_ACROSS_SPEED * dt
-			if to.Magnitude <= step then
-				r.X, r.Z = r.Target.X, r.Target.Z
-				local facing = rootPart.CFrame.Rotation
-				character:PivotTo(CFrame.new(r.X, r.Y, r.Z) * facing)
-				endRide(rootPart) -- drop the last few studs onto the rack
-				return
-			end
-			local d = to.Unit * step
-			r.X += d.X
-			r.Z += d.Z
-		end
-		local facing = rootPart.CFrame.Rotation
-		character:PivotTo(CFrame.new(r.X, r.Y, r.Z) * facing)
-		rootPart.AssemblyLinearVelocity = Vector3.zero
-		return
-	end
-
-	if now < liftCooldownUntil then
-		return
-	end
 	local pos = rootPart.Position
+
+	-- Which column (if any) are we in?
+	local column: BasePart? = nil
+	local target: Vector3? = nil
 	for pad in liftPads do
 		if not pad.Parent then
 			liftPads[pad] = nil
 			continue
 		end
-		local target = pad:GetAttribute("LiftTo")
-		if typeof(target) ~= "Vector3" then
+		local to = pad:GetAttribute("LiftTo")
+		if typeof(to) ~= "Vector3" then
 			continue
 		end
 		local d = pos - pad.Position
-		if Vector3.new(d.X, 0, d.Z).Magnitude <= LIFT_RADIUS and d.Y > -1 and d.Y < 8 then
-			ride = { Pad = pad, Target = target, Phase = "Up", X = pos.X, Z = pos.Z, Y = pos.Y }
-			humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
-			popBubbles(pad.Position + Vector3.new(0, 2, 0), 10, 3)
-			UIKit.PlaySound("Splash", 1.3)
+		local topY = to.Y + LIFT_OVERSHOOT
+		if Vector3.new(d.X, 0, d.Z).Magnitude <= LIFT_RADIUS and d.Y > -1 and pos.Y < topY + LIFT_TOP_EXTRA then
+			column, target = pad, to
 			break
 		end
 	end
+
+	if not column or not target then
+		inColumn = nil
+		return
+	end
+	if inColumn ~= column then
+		-- Just entered: a splash of bubbles, and off the ground if we were standing.
+		inColumn = column
+		popBubbles(pos, 8, 2.5)
+		UIKit.PlaySound("Splash", 1.3)
+		if humanoid:GetState() ~= Enum.HumanoidStateType.Freefall then
+			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+		end
+	end
+
+	local topY = target.Y + LIFT_OVERSHOOT
+	local v = rootPart.AssemblyLinearVelocity
+	local vy: number
+	if pos.Y < topY - 1 then
+		vy = math.max(v.Y, LIFT_RISE_SPEED) -- never slows down the bubble jets
+	else
+		vy = (topY - pos.Y) * 4 + math.sin(os.clock() * 4) * 1.5 -- bob at the top
+	end
+	-- Horizontal movement is the player's own (air control); at the top, drift onto the rack
+	-- unless they're steering somewhere else.
+	local horizontal = Vector3.new(v.X, 0, v.Z)
+	if pos.Y >= topY - 2 and humanoid.MoveDirection.Magnitude < 0.1 then
+		local to = Vector3.new(target.X - pos.X, 0, target.Z - pos.Z)
+		if to.Magnitude > 0.5 then
+			horizontal = to.Unit * math.min(LIFT_DRIFT_SPEED, to.Magnitude * 3)
+		end
+	end
+	rootPart.AssemblyLinearVelocity = Vector3.new(horizontal.X, vy, horizontal.Z)
 end
 
 ----------------------------------------------------------------------------------------------------

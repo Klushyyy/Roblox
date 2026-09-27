@@ -215,7 +215,7 @@ function Cutscene.Init()
 	black.Parent = root
 	skipButton = UIKit.Button({
 		Name = "Skip",
-		Text = "Skip  ⏭",
+		Text = "Skip",
 		Size = UDim2.fromOffset(170, 56),
 		AnchorPoint = Vector2.new(1, 1),
 		Position = UDim2.new(1, -24, 1, -24),

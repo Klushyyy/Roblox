@@ -1,10 +1,11 @@
 --[[
 	HoldPose - how a held cleaning tool looks, for every player on this client.
 
-	  * Anyone holding a tool (character attribute HeldToolIndex > 1, R15 rigs) holds it out in
-	    front: the right shoulder is raised forward and the elbow and wrist are straightened, set
-	    every frame after the animations run. The server welds the tool with a matching offset
-	    (ToolModels.HoldOffset), so it points forward and not at the floor.
+	  * Anyone holding a tool (character attribute HeldToolIndex > 1) holds it out in front: the
+	    right shoulder is raised forward and the elbow and wrist are straightened, set every frame
+	    after the animations run (R15 and R6; Motor6D or the newer AnimationConstraint joints).
+	    The tool itself is welded to the torso by the server, so it points forward even if a rig
+	    can't be posed.
 	  * In first person Roblox hides your whole character, tool included. The held tool and your
 	    right arm are shown again after the camera's update, so you can see what you're holding.
 ]]
@@ -17,7 +18,8 @@ local HoldPose = {}
 
 local LocalPlayer = Players.LocalPlayer
 local RAISE = CFrame.Angles(math.rad(90), 0, 0)
-local ARM_PARTS = { "RightUpperArm", "RightLowerArm", "RightHand" }
+local RAISE_R6 = CFrame.Angles(0, 0, math.rad(90)) -- the R6 shoulder's joint axis is turned
+local ARM_PARTS = { "RightUpperArm", "RightLowerArm", "RightHand", "Right Arm" }
 
 local initialized = false
 
@@ -29,8 +31,8 @@ end
 local function setJoint(character: Model, partName: string, jointName: string, cf: CFrame)
 	local part = character:FindFirstChild(partName)
 	local joint = part and part:FindFirstChild(jointName)
-	if joint and joint:IsA("Motor6D") then
-		joint.Transform = cf
+	if joint and (joint:IsA("Motor6D") or joint:IsA("AnimationConstraint")) then
+		(joint :: any).Transform = cf
 	end
 end
 
@@ -38,10 +40,14 @@ end
 local function poseAll()
 	for _, player in Players:GetPlayers() do
 		local character = player.Character
-		if character and character:FindFirstChild("RightUpperArm") and holding(character) then
-			setJoint(character, "RightUpperArm", "RightShoulder", RAISE)
-			setJoint(character, "RightLowerArm", "RightElbow", CFrame.identity)
-			setJoint(character, "RightHand", "RightWrist", CFrame.identity)
+		if character and holding(character) then
+			if character:FindFirstChild("RightUpperArm") then
+				setJoint(character, "RightUpperArm", "RightShoulder", RAISE)
+				setJoint(character, "RightLowerArm", "RightElbow", CFrame.identity)
+				setJoint(character, "RightHand", "RightWrist", CFrame.identity)
+			else
+				setJoint(character, "Torso", "Right Shoulder", RAISE_R6)
+			end
 		end
 	end
 end

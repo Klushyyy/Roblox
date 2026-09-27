@@ -403,12 +403,15 @@ end
 -- Sponge Pup: the body is a kitchen sponge (yellow block with a green scrubber layer and pores),
 -- with a round puppy head, floppy scrubber-green ears and a little tongue.
 BUILDERS.Pup = function(ctx, body, accent)
-	addPart(ctx, "Body", "Block", Vector3.new(2.0, 1.3, 2.5), CFrame.new(0, -0.55, 0.35), body, GLOSSY)
-	addPart(ctx, "Scrubber", "Block", Vector3.new(2.06, 0.34, 2.56), CFrame.new(0, 0.26, 0.35), accent)
-	local pore = shade(body, 0.2)
-	for side = -1, 1, 2 do
-		ellipsoid(ctx, "Pore", Vector3.new(0.1, 0.3, 0.36), CFrame.new(side * 1.0, -0.4, 0.15), pore)
-		ellipsoid(ctx, "Pore", Vector3.new(0.1, 0.22, 0.26), CFrame.new(side * 1.0, -0.85, 0.95), pore)
+	-- A soft, rounded sponge body (no hard box corners) with its green scrub pad draped over the
+	-- back like a saddle, and sponge pores dotted on the sides.
+	local bodyC, bodyS = Vector3.new(0, -0.5, 0.4), Vector3.new(2.0, 1.5, 2.45)
+	ellipsoid(ctx, "Body", bodyS, CFrame.new(bodyC), body, GLOSSY)
+	ellipsoid(ctx, "Scrubber", Vector3.new(1.86, 0.5, 2.2), CFrame.new(0, 0.05, 0.5), accent, GLOSSY)
+	local pore = shade(body, 0.22)
+	for _, dir in { Vector3.new(1, -0.1, 0.25), Vector3.new(1, -0.45, -0.25), Vector3.new(-1, -0.1, 0.3), Vector3.new(-1, -0.45, -0.2) } do
+		local p, n = surface(bodyC, bodyS, dir)
+		decal(ctx, "Pore", p, n, Vector3.new(0.26, 0.2, 0.1), pore, -0.02)
 	end
 
 	local headC, headS = Vector3.new(0, 0.6, -0.85), Vector3.new(1.85, 1.7, 1.7)
@@ -427,8 +430,8 @@ BUILDERS.Pup = function(ctx, body, accent)
 	for side = -1, 1, 2 do
 		-- Floppy ears: the tops lean in, so the bottoms swing out.
 		ellipsoid(ctx, "Ear", Vector3.new(0.4, 1.0, 0.62), CFrame.new(side * 0.98, 0.45, -0.8) * CFrame.Angles(0, 0, side * math.rad(22)), accent)
-		for _, z in { -0.4, 1.1 } do
-			ellipsoid(ctx, "Leg", Vector3.new(0.6, 0.55, 0.62), CFrame.new(side * 0.62, -1.3, z), shade(body, 0.08), GLOSSY)
+		for _, z in { -0.15, 1.2 } do
+			ellipsoid(ctx, "Leg", Vector3.new(0.6, 0.6, 0.62), CFrame.new(side * 0.62, -1.22, z), shade(body, 0.08), GLOSSY)
 		end
 	end
 	ellipsoid(ctx, "Tail", Vector3.new(0.28, 0.7, 0.28), CFrame.new(0, 0.55, 1.62) * CFrame.Angles(math.rad(35), 0, 0), accent)

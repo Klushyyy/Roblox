@@ -283,7 +283,7 @@ local function refreshDetailPanel(meta: Types.MetaState?)
 	detailRarity.Text = entry.Def.Rarity
 	detailRarity.TextColor3 = UIKit.RarityColor(entry.Def.Rarity)
 	detailPower.Text = powerText(entry.Id, entry.Tier)
-	detailCoin.Text = "Higher power = cleans faster and earns more coins"
+	detailCoin.Text = "Higher = cleans faster, earns more"
 
 	local equipped = isEquipped(meta :: Types.MetaState, entry.Uid)
 	equipButton.Text = if equipped then "Unequip" else "Equip"
@@ -632,7 +632,8 @@ local function buildPetsWindow()
 	})
 	detailCoin = UIKit.Label({
 		Text = "",
-		Size = UDim2.new(1, -24, 0, 24),
+		TextScaled = true, -- always fits the panel
+		Size = UDim2.new(1, -24, 0, 22),
 		Position = UDim2.new(0.5, 0, 0, 252),
 		AnchorPoint = Vector2.new(0.5, 0),
 		TextSize = 16,

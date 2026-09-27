@@ -758,8 +758,8 @@ local function onHeartbeat(dt: number)
 		else
 			sending = true
 		end
-		-- Scrubbing tools froth up suds right on the dish.
-		if sending and mode == "Scrub" and now - lastSudsAt > 0.12 then
+		-- Scrubbing tools froth up suds right on the dish (bare hands don't: no soap).
+		if sending and mode == "Scrub" and stats.ToolIndex > 1 and now - lastSudsAt > 0.12 then
 			lastSudsAt = now
 			Bubbles.Emit(hitPos + normal * 0.3, { Count = 4, Spread = stats.Radius * 0.7, Velocity = normal * 1.5 + Vector3.new(0, 0.8, 0), Jitter = 1, Size = { 0.25, 0.8 }, Life = { 1.4, 2.6 }, Rise = 1.2 })
 		end

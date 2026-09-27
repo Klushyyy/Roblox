@@ -17,6 +17,7 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local PetModels = require(Shared:WaitForChild("PetModels"))
+local ClientState = require(script.Parent:WaitForChild("ClientState"))
 
 local PetRenderer = {}
 
@@ -25,9 +26,9 @@ local PetRenderer = {}
 ----------------------------------------------------------------------------------------------------
 
 local HOVER_OFFSET = 2.5 -- studs off the grime part along its surface normal (XVector, per DESIGN)
-local FORMATION_MIN_DIST = 5
-local FORMATION_MAX_DIST = 7
-local FORMATION_ARC = math.rad(70) -- total angular spread of the formation, centred behind the owner
+local FORMATION_BACK = 3.5 -- studs from the owner to the front edge of the first row of pets
+local FORMATION_GAP = 1.0 -- clear space between neighbouring pets (sideways and between rows)
+local FORMATION_ROW = 3 -- pets per row behind the owner
 local BOB_SPEED = 3
 local BOB_HEIGHT = 0.4
 local LERP_RATE = 10 -- pivot:Lerp(target, 1 - exp(-LERP_RATE * dt))
@@ -48,6 +49,7 @@ type Slot = {
 	LastPos: Vector3?,
 	BasePivot: CFrame?, -- the smoothed pose without tilt (tilt is re-applied each frame, never compounded)
 	Tilt: Vector2?, -- smoothed (pitch, roll)
+	Size: Vector3?, -- the model's bounding size, so the formation can space pets so they never touch
 	Conns: { RBXScriptConnection },
 }
 
@@ -137,6 +139,14 @@ local function addBagMeter(slot: Slot, model: Model)
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "BagMeter"
 	gui.Size = UDim2.fromScale(2.4, 0.32) -- studs, so it scales like the pet itself
+	-- A 🎒 at the left says what the bar is: the dirt the pet is carrying to the drain.
+	local icon = Instance.new("TextLabel")
+	icon.BackgroundTransparency = 1
+	icon.Size = UDim2.fromScale(0.3, 2)
+	icon.Position = UDim2.fromScale(-0.32, -0.5)
+	icon.Text = "🎒"
+	icon.TextScaled = true
+	icon.Parent = gui
 	gui.StudsOffsetWorldSpace = Vector3.new(0, 2.2, 0)
 	gui.MaxDistance = 60
 	gui.LightInfluence = 0
@@ -162,10 +172,16 @@ local function addBagMeter(slot: Slot, model: Model)
 		local f = math.clamp(tonumber(slot.Value:GetAttribute("Bag")) or 0, 0, 1)
 		fill.Size = UDim2.fromScale(f, 1)
 		fill.BackgroundColor3 = if f >= 1 then Color3.fromRGB(110, 230, 120) else Color3.fromRGB(255, 205, 70)
-		gui.Enabled = f > 0
+		-- Only while cleaning: in the lobby the bag means nothing.
+		gui.Enabled = f > 0 and ClientState.InRun()
 	end
 	update()
 	table.insert(slot.Conns, slot.Value:GetAttributeChangedSignal("Bag"):Connect(update))
+	table.insert(slot.Conns, ClientState.Changed:Connect(function(kind)
+		if kind == "Run" then
+			update()
+		end
+	end))
 end
 
 local function buildModel(slot: Slot, petId: string)
@@ -189,6 +205,7 @@ local function buildModel(slot: Slot, petId: string)
 	end
 	model.Parent = ensureClientPetsFolder()
 	slot.Model = model
+	slot.Size = model:GetExtentsSize()
 	addBagMeter(slot, model)
 	slot.Hidden = nil -- force the next setHidden call to actually apply
 	slot.LastPos = nil
@@ -412,12 +429,21 @@ local function updateOwner(ownerState: OwnerState, dt: number, camPos: Vector3)
 		end
 
 		if not targetCFrame then
+			-- Rows of up to FORMATION_ROW behind the owner, spaced by the biggest pet's size so no two
+			-- pets ever overlap (bigger pets simply spread out more).
 			local root = ownerRoot :: BasePart
-			local frac = if count > 1 then (i - 1) / (count - 1) else 0.5
-			local dist = FORMATION_MIN_DIST + (FORMATION_MAX_DIST - FORMATION_MIN_DIST) * frac
-			local angle = (frac - 0.5) * FORMATION_ARC
+			local cell = 0
+			for _, other in orderScratch do
+				local size = other.Size or Vector3.new(3, 3, 3)
+				cell = math.max(cell, size.X, size.Z)
+			end
+			local rowIndex = (i - 1) // FORMATION_ROW
+			local col = (i - 1) % FORMATION_ROW
+			local inRow = math.min(FORMATION_ROW, count - rowIndex * FORMATION_ROW)
+			local x = (col - (inRow - 1) / 2) * (cell + FORMATION_GAP)
+			local z = FORMATION_BACK + cell / 2 + rowIndex * (cell + FORMATION_GAP)
 			local bob = math.sin(elapsed * BOB_SPEED + i) * BOB_HEIGHT
-			local localOffset = CFrame.Angles(0, angle, 0) * CFrame.new(0, 0, dist)
+			local localOffset = CFrame.new(x, 0, z)
 			local worldPos = (root.CFrame * localOffset).Position + Vector3.new(0, bob, 0)
 			-- Face the same way as the owner (a sidekick formation), not rotated by the arc angle.
 			targetCFrame = CFrame.new(worldPos) * (root.CFrame - root.CFrame.Position)

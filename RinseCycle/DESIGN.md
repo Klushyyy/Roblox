@@ -998,6 +998,25 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - The door dissolves as the camera pushes in. The capped crew appears only once the door is shut:
   they turn, salute with their sponges and start scrubbing.
 
+## 6f. Round 8 (v0.7): polish
+
+- **Held tools** are welded to the torso at the raised right hand's spot (RoundService
+  `attachHeldTool`), so they always point where you face, in first person too, whatever the rig
+  or animations do. HoldPose raises the arm to meet the tool (R15/R6, Motor6D or
+  AnimationConstraint).
+- **Bubble column** (Effects `stepLift`): anywhere inside a lift column, walking, jumping or
+  flying, you're pushed up at 22 studs/s with full air control. At the top you bob just above the
+  rack and drift onto it unless you steer.
+- **Pets:** rows of three behind you, spaced by the biggest pet's size (no overlap). The 🎒 bag
+  bar shows only in runs. The Sponge Pup was rebuilt (rounded body, scrub-pad saddle).
+- **Cutscene meals:** spaghetti and meatballs with bread, pepperoni pizzas, and a roast dinner
+  with a turkey platter.
+- **Cutscene collisions:** checked with an offline 0.1 s collision scan. Seated thighs rest on the
+  seats and forearms on the table. Mum stands up clear of the table legs. Plates leave the stack
+  sideways and slide straight into the rack.
+- **No suds when scrubbing with bare hands.** In Studio, a pass without an ID is given free with
+  a clear "Studio test" message.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

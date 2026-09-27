@@ -312,8 +312,11 @@ local function attachHeldTool(player: Player, toolIndex: number)
 		return
 	end
 	-- Only mark it attached once it really is, so the watchdog retries while the character loads.
-	local hand = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
-	if not hand or not hand:IsA("BasePart") then
+	-- The tool hangs off the torso, held out in front at the right hand's height, so it always
+	-- points where you face (in first person too) whatever the animations are doing. Clients raise
+	-- the right arm to meet it (HoldPose).
+	local torso = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
+	if not torso or not torso:IsA("BasePart") then
 		return
 	end
 	local ok, model = pcall(ToolModels.Build, toolIndex, 0.42, true)
@@ -323,15 +326,14 @@ local function attachHeldTool(player: Player, toolIndex: number)
 	character:SetAttribute("HeldToolIndex", toolIndex)
 	model.Name = "HeldTool"
 	local grip = model.PrimaryPart :: BasePart
-	local offset = ToolModels.HoldOffset(toolIndex)
-	if hand.Name == "Right Arm" then
-		offset = CFrame.new(0, -1, 0) * offset
-	else
-		-- R15: every client raises the right arm forward while a tool is held (HoldPose), so undo
-		-- that rotation here and the tool still stands upright with its business end forward.
-		offset = CFrame.Angles(-math.pi / 2, 0, 0) * offset
-	end
-	model:PivotTo(hand.CFrame * offset)
+	-- Where a raised right hand ends up relative to the torso (R15 and R6 are close enough), scaled
+	-- with the avatar.
+	local r15 = torso.Name == "UpperTorso"
+	local sx = torso.Size.X / 2
+	local sy = torso.Size.Y / (if r15 then 1.6 else 2)
+	local handPoint = CFrame.new(1.5 * sx, (if r15 then 0.55 else 0.5) * sy, -1.9 * sy)
+	local offset = handPoint * ToolModels.HoldOffset(toolIndex)
+	model:PivotTo(torso.CFrame * offset)
 	for _, d in model:GetDescendants() do
 		if d:IsA("BasePart") then
 			d.Anchored = false
@@ -345,7 +347,7 @@ local function attachHeldTool(player: Player, toolIndex: number)
 		end
 	end
 	local weld = Instance.new("Weld")
-	weld.Part0 = hand
+	weld.Part0 = torso
 	weld.Part1 = grip
 	weld.C0 = offset
 	weld.Parent = grip

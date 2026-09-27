@@ -263,8 +263,11 @@ function ShopUI.BuyPass(key: string)
 		end)
 		return
 	end
+	-- No Id pasted yet: in Studio this gives the pass free for the test (never in the live game).
 	local result = ClientState.MetaRequest("TestPass", def.Key)
-	if not result.Ok then
+	if result.Ok then
+		UIKit.Toast(string.format("🧪 Studio test: the %s pass has no ID yet, so you got it free. In the live game this is the Robux prompt.", def.Name), "Info")
+	else
 		UIKit.Toast(result.Error or "Coming soon!", "Info")
 	end
 end
