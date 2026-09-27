@@ -21,6 +21,7 @@ local Types = require(Shared:WaitForChild("Types"))
 local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
 local UIKit = require(Client:WaitForChild("UIKit"))
+local Bubbles = require(Client:WaitForChild("Bubbles"))
 
 local Effects = {}
 
@@ -34,7 +35,6 @@ local initialized = false
 local MAX_FLOATERS = 24 -- floating +N labels alive at once (local player's own numbers)
 local FLOATER_RISE = 3 -- studs
 local FLOATER_TIME = 0.7
-local MAX_LOBBY_BUBBLES = 10
 local DRAIN_FULL_FRACTION = 0.95
 
 -- Floating "+N" labels currently alive, oldest first (capped, so a spam of Cleaned FX can't leak).
@@ -119,25 +119,16 @@ local function burst(position: Vector3, color: Color3, texture: string, count: n
 	Debris:AddItem(anchor, lifetime + 1)
 end
 
--- A few tiny transient bubble balls that pop upward and fade (used for "Cleaned" and lobby ambience).
+-- A little cloud of soap bubbles that pops out of `position` and drifts up (see Bubbles).
 local function popBubbles(position: Vector3, count: number, spread: number)
-	for _ = 1, count do
-		local ball = Instance.new("Part")
-		ball.Shape = Enum.PartType.Ball
-		ball.Material = Enum.Material.Glass
-		ball.Color = Color3.new(1, 1, 1)
-		ball.Transparency = 0.35
-		ball.Size = Vector3.new(1, 1, 1) * (0.15 + math.random() * 0.2)
-		ball.CanCollide = false
-		ball.CanTouch = false
-		ball.CanQuery = false
-		ball.CastShadow = false
-		ball.Anchored = false
-		ball.CFrame = CFrame.new(position + Vector3.new((math.random() - 0.5) * spread, 0, (math.random() - 0.5) * spread))
-		ball.Parent = workspace
-		ball.AssemblyLinearVelocity = Vector3.new((math.random() - 0.5) * 4, 4 + math.random() * 4, (math.random() - 0.5) * 4)
-		Debris:AddItem(ball, 1.2)
-	end
+	Bubbles.Emit(position, {
+		Count = count,
+		Spread = spread * 0.5,
+		Velocity = Vector3.new(0, 5, 0),
+		Jitter = 2.5,
+		Size = { 0.3, 0.85 },
+		Life = { 0.9, 1.7 },
+	})
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -257,6 +248,35 @@ end
 
 local function removeLiftPart(inst: Instance)
 	liftPads[inst :: BasePart] = nil
+end
+
+-- Bubbles streaming up every lift column near the camera.
+local liftBubbleClock = 0
+local function stepLiftBubbles(dt: number)
+	liftBubbleClock += dt
+	if liftBubbleClock < 0.12 then
+		return
+	end
+	liftBubbleClock = 0
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	for pad in liftPads do
+		if pad.Parent and (pad.Position - camera.CFrame.Position).Magnitude < 180 then
+			local target = pad:GetAttribute("LiftTo")
+			local height = if typeof(target) == "Vector3" then math.max(8, target.Y - pad.Position.Y) else 30
+			Bubbles.Emit(pad.Position + Vector3.new(0, 0.8, 0), {
+				Count = 1,
+				Spread = 2.2,
+				Velocity = Vector3.new(0, height * 1.4, 0),
+				Jitter = 0.8,
+				Size = { 0.4, 1.2 },
+				Life = { 2.2, 3.2 },
+				Rise = 3,
+			})
+		end
+	end
 end
 
 local function stepLift(_dt: number)
@@ -609,13 +629,74 @@ end
 -- Lobby ambience: a handful of floating bubbles drifting near the camera.
 ----------------------------------------------------------------------------------------------------
 
-local lobbyBubbles: { BasePart } = {}
 local lastLobbyAmbienceAt = 0
 
+-- The lobby's big floating bubbles (tag "FloatBubble", placed by the server): bobbed here, locally,
+-- each with a glowing glint on its camera-facing side.
+type FloatBubble = { Part: BasePart, Glint: Part, Base: Vector3, Phase: number, Speed: number }
+local floatBubbles: { [BasePart]: FloatBubble } = {}
+
+local function addFloatBubble(inst: Instance)
+	if not inst:IsA("BasePart") or floatBubbles[inst] then
+		return
+	end
+	local glint = Instance.new("Part")
+	glint.Name = "BubbleGlint"
+	glint.Shape = Enum.PartType.Ball
+	glint.Material = Enum.Material.Neon
+	glint.Color = Color3.new(1, 1, 1)
+	glint.Transparency = 0.15
+	glint.Size = Vector3.one * math.max(inst.Size.X * 0.18, 0.1)
+	glint.Anchored = true
+	glint.CanCollide = false
+	glint.CanQuery = false
+	glint.CanTouch = false
+	glint.CastShadow = false
+	glint.Parent = workspace.CurrentCamera
+	floatBubbles[inst] = { Part = inst, Glint = glint, Base = inst.Position, Phase = math.random() * math.pi * 2, Speed = 0.35 + math.random() * 0.25 }
+end
+
+local function removeFloatBubble(inst: Instance)
+	local fb = floatBubbles[inst :: BasePart]
+	if fb then
+		fb.Glint:Destroy()
+		floatBubbles[inst :: BasePart] = nil
+	end
+end
+
+local floatParts: { BasePart } = {}
+local floatCFrames: { CFrame } = {}
+local floatClock = 0
+local function stepFloatBubbles(dt: number)
+	floatClock += dt
+	local camera = workspace.CurrentCamera
+	if not camera or next(floatBubbles) == nil then
+		return
+	end
+	local camCF = camera.CFrame
+	table.clear(floatParts)
+	table.clear(floatCFrames)
+	for inst, fb in floatBubbles do
+		if not inst.Parent then
+			removeFloatBubble(inst)
+			continue
+		end
+		local t = floatClock * fb.Speed + fb.Phase
+		local pos = fb.Base + Vector3.new(math.sin(t) * 2.2, math.sin(t * 1.3) * 1.8, math.cos(t * 0.9) * 2.2)
+		local size = inst.Size.X
+		local toCam = camCF.Position - pos
+		toCam = if toCam.Magnitude > 1e-3 then toCam.Unit else Vector3.zAxis
+		table.insert(floatParts, inst)
+		table.insert(floatCFrames, CFrame.new(pos))
+		table.insert(floatParts, fb.Glint)
+		table.insert(floatCFrames, CFrame.new(pos + (toCam * 0.3 + camCF.UpVector * 0.25 - camCF.RightVector * 0.22) * size))
+	end
+	workspace:BulkMoveTo(floatParts, floatCFrames, Enum.BulkMoveMode.FireCFrameChanged)
+end
+
+-- Big, slow soap bubbles drifting up around the camera while you're in the lobby.
 local function stepLobbyAmbience()
-	local run = ClientState.Run :: Types.RunState?
-	if run ~= nil then
-		-- In a run: let any leftover lobby bubbles finish naturally (Debris already scheduled).
+	if ClientState.Run ~= nil then
 		return
 	end
 	local camera = workspace.CurrentCamera
@@ -623,35 +704,28 @@ local function stepLobbyAmbience()
 		return
 	end
 	local now = os.clock()
-	if now - lastLobbyAmbienceAt < 0.9 or #lobbyBubbles >= MAX_LOBBY_BUBBLES then
+	if now - lastLobbyAmbienceAt < 0.45 then
 		return
 	end
 	lastLobbyAmbienceAt = now
-
-	local offset = Vector3.new((math.random() - 0.5) * 30, math.random() * 6, (math.random() - 0.5) * 30 - 12)
-	local position = camera.CFrame.Position + offset
-	local ball = Instance.new("Part")
-	ball.Shape = Enum.PartType.Ball
-	ball.Material = Enum.Material.Glass
-	ball.Color = Color3.new(1, 1, 1)
-	ball.Transparency = 0.5
-	ball.Size = Vector3.new(1, 1, 1) * (0.25 + math.random() * 0.35)
-	ball.Anchored = false
-	ball.CanCollide = false
-	ball.CanTouch = false
-	ball.CanQuery = false
-	ball.CastShadow = false
-	ball.CFrame = CFrame.new(position)
-	ball.AssemblyLinearVelocity = Vector3.new((math.random() - 0.5) * 1.5, 2 + math.random() * 1.5, (math.random() - 0.5) * 1.5)
-	ball.Parent = workspace
-	table.insert(lobbyBubbles, ball)
-	Debris:AddItem(ball, 6)
-	task.delay(6, function()
-		local i = table.find(lobbyBubbles, ball)
-		if i then
-			table.remove(lobbyBubbles, i)
-		end
-	end)
+	local look = camera.CFrame.LookVector
+	local flat = Vector3.new(look.X, 0, look.Z)
+	flat = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.new(0, 0, -1)
+	-- Mostly ahead of the camera, spread left/right, starting near the floor.
+	local right = Vector3.new(-flat.Z, 0, flat.X)
+	local ahead = 10 + math.random() * 35
+	local side = (math.random() - 0.5) * 50
+	local position = camera.CFrame.Position + flat * ahead + right * side
+	position = Vector3.new(position.X, math.max(1, camera.CFrame.Position.Y - 8 + math.random() * 6), position.Z)
+	Bubbles.Emit(position, {
+		Count = 1,
+		Spread = 0,
+		Velocity = Vector3.new(0, 1.5, 0),
+		Jitter = 0.6,
+		Size = { 0.8, 2.2 },
+		Life = { 6, 9 },
+		Rise = 0.6,
+	})
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -703,9 +777,19 @@ function Effects.Init()
 	RunService.Heartbeat:Connect(function(dt)
 		stepSpin(dt)
 		stepLift(dt)
+		stepLiftBubbles(dt)
 		updateDrainGuide()
 		stepLobbyAmbience()
 	end)
+	RunService.RenderStepped:Connect(function(dt)
+		stepFloatBubbles(dt)
+	end)
+
+	for _, inst in CollectionService:GetTagged("FloatBubble") do
+		addFloatBubble(inst)
+	end
+	CollectionService:GetInstanceAddedSignal("FloatBubble"):Connect(addFloatBubble)
+	CollectionService:GetInstanceRemovedSignal("FloatBubble"):Connect(removeFloatBubble)
 
 	-- Grime count changes on every Cleaned/Sold push; the marker set only needs to react to those
 	-- and to Run replacing wholesale (onStateChanged already covers both via ClientState.Changed).

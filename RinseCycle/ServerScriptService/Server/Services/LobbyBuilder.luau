@@ -17,7 +17,6 @@
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
-local TweenService = game:GetService("TweenService")
 local CollectionService = game:GetService("CollectionService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -1035,6 +1034,7 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 			Color = Color3.fromRGB(255, 200, 60),
 			Material = Enum.Material.SmoothPlastic,
 			CanCollide = false,
+			CanQuery = true, -- ClickDetectors need the mouse ray to hit the part
 		}, boardPart)
 		arrow:SetAttribute("Dir", dir)
 		CollectionService:AddTag(arrow, "BoardArrow")
@@ -1090,12 +1090,13 @@ local function buildHowToPlay(parent: Instance, x: number, z: number, faceX: num
 		"Aim at the dirt and HOLD to scrub it off.",
 		"Stand in the drain to sell your tank for coins.",
 		"Buy better tools and upgrades on the door.",
+		"Hold jump in the air to fly on bubbles!",
 		"Clean every dish, earn 🧼 and hatch pets!",
 	}
 	for i, text in steps do
 		mk("TextLabel", {
 			Name = "Step" .. i,
-			Size = UDim2.new(1, 0, 0, 62),
+			Size = UDim2.new(1, 0, 0, 56),
 			BackgroundTransparency = 1,
 			Text = tostring(i) .. ". " .. text,
 			Font = Enum.Font.GothamBold,
@@ -1133,7 +1134,7 @@ local function shaker(parent: Instance, x: number, z: number, body: Color3, hole
 	hex(parent, "ShakerCap", x, FLOOR_Y + 11, z, 6.4, 2.6, Color3.fromRGB(200, 205, 212), false)
 	for k = 0, 2 do
 		local a = k / 3 * math.pi * 2
-		mkPart("Part", decor({ Name = "ShakerHole", Size = Vector3.new(0.7, 0.1, 0.7), CFrame = at(x + math.cos(a) * 1.4, FLOOR_Y + 13.65, z + math.sin(a) * 1.4), Color = holes, Material = LOW }), parent)
+		mkPart("Part", decor({ Name = "ShakerHole", Size = Vector3.new(0.7, 0.1, 0.7), CFrame = at(x + math.cos(a) * 1.4, FLOOR_Y + 13.63, z + math.sin(a) * 1.4), Color = holes, Material = LOW }), parent)
 	end
 end
 
@@ -1156,7 +1157,7 @@ local function coffeeCup(parent: Instance, x: number, z: number)
 	hex(parent, "Cup", x, FLOOR_Y + 0.8, z, 8, 8, Color3.fromRGB(245, 245, 240))
 	hex(parent, "Coffee", x, FLOOR_Y + 8.7, z, 6.6, 0.2, Color3.fromRGB(110, 70, 45), false)
 	mkPart("Part", { Name = "CupHandle", Size = Vector3.new(3, 5, 1.2), CFrame = at(x + 5.3, FLOOR_Y + 4.8, z), Color = Color3.fromRGB(245, 245, 240), Material = LOW }, parent)
-	mkPart("Part", decor({ Name = "CupBand", Size = Vector3.new(8.2, 1.2, 4.8), CFrame = at(x, FLOOR_Y + 6.4, z), Color = Color3.fromRGB(90, 170, 230), Material = LOW }), parent)
+	hex(parent, "CupBand", x, FLOOR_Y + 5.8, z, 8.3, 1.2, Color3.fromRGB(90, 170, 230), false)
 end
 
 -- Cutlery lying flat in the table's margin (outside the invisible walls, just to look at).
@@ -1187,34 +1188,25 @@ local function buildDecorations(parent: Instance)
 	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(10, 3.5, 6), CFrame = at(78, 2, 44) * CFrame.Angles(0, math.rad(-15), 0), Color = Color3.fromRGB(190, 230, 255), Material = LOW }, parent)
 	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(8, 3, 5), CFrame = at(79, 5.3, 44) * CFrame.Angles(0, math.rad(10), 0), Color = Color3.fromRGB(255, 190, 220), Material = LOW }, parent)
 
-	-- Floating soap bubbles bobbing on cheap tween loops.
+	-- Big floating soap bubbles over the table. The server only places them (tag "FloatBubble");
+	-- every client bobs them locally (Effects), so they move smoothly with no network traffic.
 	local bubbleFolder = mk("Folder", { Name = "Bubbles" }, parent)
-	for i = 1, 12 do
-		local pos = at(math.random(-80, 80), 14 + math.random(0, 16), math.random(-80, 50)).Position
-		local size = 2 + math.random() * 2
+	local tints = { Color3.fromRGB(165, 225, 255), Color3.fromRGB(255, 195, 238), Color3.fromRGB(200, 255, 232), Color3.fromRGB(226, 208, 255) }
+	local rng = Random.new(11)
+	for i = 1, 14 do
+		local pos = at(rng:NextNumber(-85, 85), rng:NextNumber(12, 30), rng:NextNumber(-85, 50)).Position
+		local size = rng:NextNumber(2.2, 4.2)
 		local bubble = mkPart("Part", {
 			Name = "Bubble" .. i,
 			Shape = Enum.PartType.Ball,
 			Size = Vector3.new(size, size, size),
 			CFrame = CFrame.new(pos),
-			Color = Color3.fromRGB(255, 255, 255),
+			Color = tints[(i - 1) % #tints + 1],
 			Material = Enum.Material.ForceField,
-			Transparency = 0.4,
 			CanCollide = false,
 			CastShadow = false,
 		}, bubbleFolder)
-		task.spawn(function()
-			local base = bubble.Position
-			while bubble.Parent do
-				local tw = TweenService:Create(
-					bubble,
-					TweenInfo.new(3 + math.random() * 2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-					{ Position = base + Vector3.new(math.random(-3, 3), math.random(-2, 5), math.random(-3, 3)) }
-				)
-				tw:Play()
-				tw.Completed:Wait()
-			end
-		end)
+		CollectionService:AddTag(bubble, "FloatBubble")
 	end
 end
 

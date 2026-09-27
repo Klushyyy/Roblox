@@ -506,6 +506,11 @@ sized so the player is a tiny person in a real dishwasher: plates are about four
   tagged `LiftPad` with a Vector3 attribute `LiftTo`; the client teleports its own character when it
   steps on one. To come down you just jump off. **Bubble jets** (client `BubbleJets`): in a run,
   hold jump in the air to fly up; ~2.6 s of fuel refills on the ground, shown as a bar under the tank.
+- **Bubbles** (client `Bubbles`): one pooled system (200 bubbles, anchored ForceField spheres with a
+  camera-facing glint, moved with `BulkMoveTo`) for every soap bubble in the game: the bubble-jet
+  trail, cleaning pops, lift columns, and lobby ambience. They pop in, drift up with a wobble and
+  pop out; nothing is physics-simulated or replicated. The lobby's big floating bubbles (tag
+  `FloatBubble`) are placed by the server and bobbed by each client.
 - **Rooms:** every level uses the same dishwasher in a different room: 1 Family Dinner (family
   kitchen), 2 Pizza Party (pizzeria: brick, checker floor, pizza oven, neon sign), 3 Royal Banquet
   (castle hall: stone, banners, red carpet, banquet table, chandeliers, fireplace). Levels 2 and 3

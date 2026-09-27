@@ -6666,7 +6666,6 @@ return LeaderboardService</ProtectedString></Properties></Item>
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
-local TweenService = game:GetService("TweenService")
 local CollectionService = game:GetService("CollectionService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -7684,6 +7683,7 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 			Color = Color3.fromRGB(255, 200, 60),
 			Material = Enum.Material.SmoothPlastic,
 			CanCollide = false,
+			CanQuery = true, -- ClickDetectors need the mouse ray to hit the part
 		}, boardPart)
 		arrow:SetAttribute("Dir", dir)
 		CollectionService:AddTag(arrow, "BoardArrow")
@@ -7739,12 +7739,13 @@ local function buildHowToPlay(parent: Instance, x: number, z: number, faceX: num
 		"Aim at the dirt and HOLD to scrub it off.",
 		"Stand in the drain to sell your tank for coins.",
 		"Buy better tools and upgrades on the door.",
+		"Hold jump in the air to fly on bubbles!",
 		"Clean every dish, earn 🧼 and hatch pets!",
 	}
 	for i, text in steps do
 		mk("TextLabel", {
 			Name = "Step" .. i,
-			Size = UDim2.new(1, 0, 0, 62),
+			Size = UDim2.new(1, 0, 0, 56),
 			BackgroundTransparency = 1,
 			Text = tostring(i) .. ". " .. text,
 			Font = Enum.Font.GothamBold,
@@ -7782,7 +7783,7 @@ local function shaker(parent: Instance, x: number, z: number, body: Color3, hole
 	hex(parent, "ShakerCap", x, FLOOR_Y + 11, z, 6.4, 2.6, Color3.fromRGB(200, 205, 212), false)
 	for k = 0, 2 do
 		local a = k / 3 * math.pi * 2
-		mkPart("Part", decor({ Name = "ShakerHole", Size = Vector3.new(0.7, 0.1, 0.7), CFrame = at(x + math.cos(a) * 1.4, FLOOR_Y + 13.65, z + math.sin(a) * 1.4), Color = holes, Material = LOW }), parent)
+		mkPart("Part", decor({ Name = "ShakerHole", Size = Vector3.new(0.7, 0.1, 0.7), CFrame = at(x + math.cos(a) * 1.4, FLOOR_Y + 13.63, z + math.sin(a) * 1.4), Color = holes, Material = LOW }), parent)
 	end
 end
 
@@ -7805,7 +7806,7 @@ local function coffeeCup(parent: Instance, x: number, z: number)
 	hex(parent, "Cup", x, FLOOR_Y + 0.8, z, 8, 8, Color3.fromRGB(245, 245, 240))
 	hex(parent, "Coffee", x, FLOOR_Y + 8.7, z, 6.6, 0.2, Color3.fromRGB(110, 70, 45), false)
 	mkPart("Part", { Name = "CupHandle", Size = Vector3.new(3, 5, 1.2), CFrame = at(x + 5.3, FLOOR_Y + 4.8, z), Color = Color3.fromRGB(245, 245, 240), Material = LOW }, parent)
-	mkPart("Part", decor({ Name = "CupBand", Size = Vector3.new(8.2, 1.2, 4.8), CFrame = at(x, FLOOR_Y + 6.4, z), Color = Color3.fromRGB(90, 170, 230), Material = LOW }), parent)
+	hex(parent, "CupBand", x, FLOOR_Y + 5.8, z, 8.3, 1.2, Color3.fromRGB(90, 170, 230), false)
 end
 
 -- Cutlery lying flat in the table's margin (outside the invisible walls, just to look at).
@@ -7836,34 +7837,25 @@ local function buildDecorations(parent: Instance)
 	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(10, 3.5, 6), CFrame = at(78, 2, 44) * CFrame.Angles(0, math.rad(-15), 0), Color = Color3.fromRGB(190, 230, 255), Material = LOW }, parent)
 	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(8, 3, 5), CFrame = at(79, 5.3, 44) * CFrame.Angles(0, math.rad(10), 0), Color = Color3.fromRGB(255, 190, 220), Material = LOW }, parent)
 
-	-- Floating soap bubbles bobbing on cheap tween loops.
+	-- Big floating soap bubbles over the table. The server only places them (tag "FloatBubble");
+	-- every client bobs them locally (Effects), so they move smoothly with no network traffic.
 	local bubbleFolder = mk("Folder", { Name = "Bubbles" }, parent)
-	for i = 1, 12 do
-		local pos = at(math.random(-80, 80), 14 + math.random(0, 16), math.random(-80, 50)).Position
-		local size = 2 + math.random() * 2
+	local tints = { Color3.fromRGB(165, 225, 255), Color3.fromRGB(255, 195, 238), Color3.fromRGB(200, 255, 232), Color3.fromRGB(226, 208, 255) }
+	local rng = Random.new(11)
+	for i = 1, 14 do
+		local pos = at(rng:NextNumber(-85, 85), rng:NextNumber(12, 30), rng:NextNumber(-85, 50)).Position
+		local size = rng:NextNumber(2.2, 4.2)
 		local bubble = mkPart("Part", {
 			Name = "Bubble" .. i,
 			Shape = Enum.PartType.Ball,
 			Size = Vector3.new(size, size, size),
 			CFrame = CFrame.new(pos),
-			Color = Color3.fromRGB(255, 255, 255),
+			Color = tints[(i - 1) % #tints + 1],
 			Material = Enum.Material.ForceField,
-			Transparency = 0.4,
 			CanCollide = false,
 			CastShadow = false,
 		}, bubbleFolder)
-		task.spawn(function()
-			local base = bubble.Position
-			while bubble.Parent do
-				local tw = TweenService:Create(
-					bubble,
-					TweenInfo.new(3 + math.random() * 2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-					{ Position = base + Vector3.new(math.random(-3, 3), math.random(-2, 5), math.random(-3, 3)) }
-				)
-				tw:Play()
-				tw.Completed:Wait()
-			end
-		end)
+		CollectionService:AddTag(bubble, "FloatBubble")
 	end
 end
 
@@ -12328,11 +12320,13 @@ local UserInputService = game:GetService("UserInputService")
 
 local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
+local Bubbles = require(Client:WaitForChild("Bubbles"))
 
 local FUEL_SECONDS = 2.6 -- full tank of flight
 local REFILL_PER_SECOND = 1.3 -- seconds of flight regained per second on the ground
 local RISE_SPEED = 34 -- studs/s upward while jetting
 local HOLD_WINDOW = 0.2 -- JumpRequest repeats while jump is held; this bridges the gaps
+local BUBBLES_PER_SECOND = 38
 
 local BubbleJets = {}
 local initialized = false
@@ -12340,7 +12334,8 @@ local initialized = false
 local player = Players.LocalPlayer
 local fuel = FUEL_SECONDS
 local lastJumpRequest = -1
-local emitter: ParticleEmitter? = nil
+local emitAccumulator = 0
+local lastFuelShown: number? = nil
 
 local function jumpHeld(): boolean
 	if UserInputService:GetFocusedTextBox() then
@@ -12353,26 +12348,40 @@ local function jumpHeld(): boolean
 	return os.clock() - lastJumpRequest &lt; HOLD_WINDOW
 end
 
-local function ensureEmitter(root: BasePart): ParticleEmitter
-	local e = emitter
-	if e and e.Parent == root then
-		return e
+-- A stream of real 3D bubbles pouring out under the character (see Bubbles).
+local function emitJet(root: BasePart, dt: number)
+	emitAccumulator += dt * BUBBLES_PER_SECOND
+	local n = math.floor(emitAccumulator)
+	if n &lt;= 0 then
+		return
 	end
-	local new = Instance.new("ParticleEmitter")
-	new.Name = "BubbleJet"
-	new.Texture = "rbxasset://textures/particles/forcefield_glow_main.dds"
-	new.Color = ColorSequence.new(Color3.fromRGB(200, 240, 255), Color3.fromRGB(150, 210, 255))
-	new.Transparency = NumberSequence.new(0.2, 1)
-	new.Size = NumberSequence.new(1.2, 0.3)
-	new.Lifetime = NumberRange.new(0.5, 0.9)
-	new.Speed = NumberRange.new(10, 16)
-	new.SpreadAngle = Vector2.new(25, 25)
-	new.EmissionDirection = Enum.NormalId.Bottom
-	new.Rate = 0
-	new.LightEmission = 0.4
-	new.Parent = root
-	emitter = new
-	return new
+	emitAccumulator -= n
+	local v = root.AssemblyLinearVelocity
+	Bubbles.Emit(root.Position - Vector3.new(0, 2.6, 0) - root.CFrame.LookVector * 0.6, {
+		Count = n,
+		Spread = 0.45,
+		Velocity = Vector3.new(v.X * 0.25, -9, v.Z * 0.25),
+		Jitter = 2.2,
+		Size = { 0.35, 1.0 },
+		Life = { 0.8, 1.5 },
+		Rise = 4,
+	})
+end
+
+local function setFuel(value: number?)
+	-- Only write the attribute when the shown value changes (the HUD listens to it).
+	if value == nil then
+		if lastFuelShown ~= nil then
+			lastFuelShown = nil
+			player:SetAttribute("JetFuel", nil)
+		end
+		return
+	end
+	local rounded = math.floor(value * 50 + 0.5) / 50
+	if rounded ~= lastFuelShown then
+		lastFuelShown = rounded
+		player:SetAttribute("JetFuel", rounded)
+	end
 end
 
 local function step(dt: number)
@@ -12381,10 +12390,8 @@ local function step(dt: number)
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not ClientState.InRun() or not humanoid or not root or not root:IsA("BasePart") or humanoid.Health &lt;= 0 then
 		fuel = FUEL_SECONDS
-		player:SetAttribute("JetFuel", nil)
-		if emitter then
-			emitter.Rate = 0
-		end
+		emitAccumulator = 0
+		setFuel(nil)
 		return
 	end
 
@@ -12392,13 +12399,19 @@ local function step(dt: number)
 	local jetting = airborne and jumpHeld() and fuel &gt; 0
 	if jetting then
 		fuel = math.max(0, fuel - dt)
+		-- Ease up to the climb speed (a smooth lift-off rather than a snap).
 		local v = root.AssemblyLinearVelocity
-		root.AssemblyLinearVelocity = Vector3.new(v.X, math.max(v.Y, RISE_SPEED), v.Z)
+		local vy = if v.Y &lt; RISE_SPEED then v.Y + (RISE_SPEED - v.Y) * math.min(1, 12 * dt) else v.Y
+		root.AssemblyLinearVelocity = Vector3.new(v.X, vy, v.Z)
 	elseif not airborne then
 		fuel = math.min(FUEL_SECONDS, fuel + REFILL_PER_SECOND * dt)
 	end
-	ensureEmitter(root).Rate = if jetting then 40 else 0
-	player:SetAttribute("JetFuel", fuel / FUEL_SECONDS)
+	if jetting then
+		emitJet(root, dt)
+	else
+		emitAccumulator = 0
+	end
+	setFuel(fuel / FUEL_SECONDS)
 end
 
 function BubbleJets.Init()
@@ -12418,7 +12431,220 @@ function BubbleJets.Init()
 end
 
 return BubbleJets</ProtectedString></Properties></Item>
-<Item class="LocalScript" referent="RBX0000001E"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
+<Item class="ModuleScript" referent="RBX0000001E"><Properties><string name="Name">Bubbles</string><ProtectedString name="Source">-- Bubbles: pooled, client-only 3D soap bubbles. Every bubble is an anchored ForceField sphere (the
+-- shimmering, see-through film with a bright rim) plus a tiny glowing glint that always sits on
+-- the camera-facing, upper-left side, like a real reflection.
+--
+-- A bubble pops in (grows from nothing), drifts upward with a gentle wobble, slows with drag, and
+-- pops (a quick swell and vanish) at the end of its life. Nothing is physics-simulated or
+-- replicated: one RenderStepped loop moves the whole pool with BulkMoveTo, so hundreds of bubbles
+-- cost almost nothing and never fall like rocks.
+--
+-- Bubbles.Emit(position, options?) with options:
+--   Count (1), Spread (radius, 0.5), Velocity (Vector3, (0, 3, 0)), Jitter (random speed added, 1.5),
+--   Size ({ min, max }, { 0.35, 0.9 }), Life ({ min, max }, { 1.6, 2.8 }), Rise (buoyancy, 2.5)
+
+local RunService = game:GetService("RunService")
+
+local Bubbles = {}
+
+local POOL_SIZE = 200
+local GROW_TIME = 0.14
+local POP_TIME = 0.1
+local DRAG = 1.6
+
+local TINTS = {
+	Color3.fromRGB(165, 225, 255),
+	Color3.fromRGB(255, 195, 238),
+	Color3.fromRGB(200, 255, 232),
+	Color3.fromRGB(226, 208, 255),
+	Color3.fromRGB(255, 240, 190),
+}
+
+type Bubble = {
+	Shell: Part,
+	Glint: Part,
+	Active: boolean,
+	Pos: Vector3,
+	Vel: Vector3,
+	Age: number,
+	Life: number,
+	Size: number,
+	Rise: number,
+	Phase: number,
+	Wobble: number,
+	ShownSize: number,
+}
+
+local pool: { Bubble } = {}
+local cursor = 0
+local folder: Folder? = nil
+local initialized = false
+local FAR = CFrame.new(0, -10000, 0)
+
+local function newPart(name: string): Part
+	local p = Instance.new("Part")
+	p.Name = name
+	p.Shape = Enum.PartType.Ball
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.CastShadow = false
+	p.Size = Vector3.one * 0.2
+	p.CFrame = FAR
+	p.Transparency = 1
+	return p
+end
+
+local function ensurePool()
+	if folder and folder.Parent then
+		return
+	end
+	local f = Instance.new("Folder")
+	f.Name = "ClientBubbles"
+	f.Parent = workspace
+	folder = f
+	table.clear(pool)
+	for i = 1, POOL_SIZE do
+		local shell = newPart("Bubble")
+		shell.Material = Enum.Material.ForceField
+		local glint = newPart("Glint")
+		glint.Material = Enum.Material.Neon
+		glint.Color = Color3.new(1, 1, 1)
+		shell.Parent = f
+		glint.Parent = f
+		pool[i] = {
+			Shell = shell,
+			Glint = glint,
+			Active = false,
+			Pos = Vector3.zero,
+			Vel = Vector3.zero,
+			Age = 0,
+			Life = 1,
+			Size = 1,
+			Rise = 2.5,
+			Phase = 0,
+			Wobble = 0,
+			ShownSize = 0,
+		}
+	end
+end
+
+local function hide(b: Bubble)
+	b.Active = false
+	b.Shell.Transparency = 1
+	b.Glint.Transparency = 1
+	b.Shell.CFrame = FAR
+	b.Glint.CFrame = FAR
+end
+
+local function range(r: { number }?, default: { number }): number
+	local t = r or default
+	return t[1] + math.random() * (t[2] - t[1])
+end
+
+function Bubbles.Emit(position: Vector3, options: { [string]: any }?)
+	ensurePool()
+	local o = options or {}
+	local count = math.clamp(math.floor(tonumber(o.Count) or 1), 1, 40)
+	local spread = tonumber(o.Spread) or 0.5
+	local velocity: Vector3 = if typeof(o.Velocity) == "Vector3" then o.Velocity else Vector3.new(0, 3, 0)
+	local jitter = tonumber(o.Jitter) or 1.5
+	for _ = 1, count do
+		cursor = cursor % POOL_SIZE + 1
+		local b = pool[cursor] -- the oldest slot gets recycled when the pool is full
+		local offset = Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * 2 * spread
+		b.Active = true
+		b.Pos = position + offset
+		b.Vel = velocity + Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * 2 * jitter
+		b.Age = 0
+		b.Life = range(o.Life, { 1.6, 2.8 })
+		b.Size = range(o.Size, { 0.35, 0.9 })
+		b.Rise = tonumber(o.Rise) or 2.5
+		b.Phase = math.random() * math.pi * 2
+		b.Wobble = 0.25 + math.random() * 0.35
+		b.ShownSize = -1
+		b.Shell.Color = TINTS[math.random(1, #TINTS)]
+		b.Shell.Transparency = 0
+		b.Glint.Transparency = 0.15
+	end
+end
+
+local moveParts: { BasePart } = {}
+local moveCFrames: { CFrame } = {}
+
+local function step(dt: number)
+	if not folder then
+		return
+	end
+	local camera = workspace.CurrentCamera
+	local camCF = if camera then camera.CFrame else CFrame.identity
+	table.clear(moveParts)
+	table.clear(moveCFrames)
+	for _, b in pool do
+		if not b.Active then
+			continue
+		end
+		b.Age += dt
+		if b.Age &gt;= b.Life + POP_TIME then
+			hide(b)
+			continue
+		end
+		-- Motion: drag, buoyancy, and a sideways wobble.
+		b.Vel = b.Vel * math.max(0, 1 - DRAG * dt) + Vector3.new(0, b.Rise * dt, 0)
+		b.Pos += b.Vel * dt
+		local t = b.Age * 2.2 + b.Phase
+		local pos = b.Pos + Vector3.new(math.sin(t) * b.Wobble, 0, math.cos(t * 0.8) * b.Wobble)
+
+		-- Size: pop in, hold with a faint breathing wobble, then swell and vanish.
+		local size
+		if b.Age &lt; GROW_TIME then
+			size = b.Size * (b.Age / GROW_TIME)
+		elseif b.Age &gt; b.Life then
+			local k = (b.Age - b.Life) / POP_TIME
+			size = b.Size * (1 + 0.35 * k)
+			b.Shell.Transparency = k
+			b.Glint.Transparency = 0.15 + 0.85 * k
+		else
+			size = b.Size * (1 + 0.04 * math.sin(t * 3))
+		end
+		size = math.max(size, 0.05)
+		if math.abs(size - b.ShownSize) &gt; 0.01 then
+			b.ShownSize = size
+			b.Shell.Size = Vector3.one * size
+			b.Glint.Size = Vector3.one * math.max(size * 0.2, 0.05)
+		end
+		-- Glint on the camera-facing, upper-left side of the film.
+		local toCam = (camCF.Position - pos)
+		toCam = if toCam.Magnitude &gt; 1e-3 then toCam.Unit else Vector3.zAxis
+		local glintPos = pos + (toCam * 0.3 + camCF.UpVector * 0.25 - camCF.RightVector * 0.22) * size
+		table.insert(moveParts, b.Shell)
+		table.insert(moveCFrames, CFrame.new(pos))
+		table.insert(moveParts, b.Glint)
+		table.insert(moveCFrames, CFrame.new(glintPos))
+	end
+	if #moveParts &gt; 0 then
+		workspace:BulkMoveTo(moveParts, moveCFrames, Enum.BulkMoveMode.FireCFrameChanged)
+	end
+end
+
+function Bubbles.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+	ensurePool()
+	RunService.RenderStepped:Connect(function(dt)
+		local ok, err = pcall(step, math.min(dt, 0.1))
+		if not ok then
+			warn("[Bubbles] " .. tostring(err))
+		end
+	end)
+end
+
+return Bubbles</ProtectedString></Properties></Item>
+<Item class="LocalScript" referent="RBX0000001F"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
 -- Each module exposes Init(); anything that fails is reported without stopping the others.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -12438,6 +12664,7 @@ local SprayController = require(Client:WaitForChild("SprayController"))
 local PetRenderer = require(Client:WaitForChild("PetRenderer"))
 local Effects = require(Client:WaitForChild("Effects"))
 local BubbleJets = require(Client:WaitForChild("BubbleJets"))
+local Bubbles = require(Client:WaitForChild("Bubbles"))
 
 local function step(name: string, fn: () -&gt; ())
 	local ok, err = xpcall(fn, debug.traceback)
@@ -12461,9 +12688,10 @@ step("RanksUI", RanksUI.Init)
 step("PetsUI", PetsUI.Init)
 step("SprayController", SprayController.Init)
 step("PetRenderer", PetRenderer.Init)
+step("Bubbles", Bubbles.Init)
 step("Effects", Effects.Init)
 step("BubbleJets", BubbleJets.Init)</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001F"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
+<Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
 -- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
 -- Changed instead of each hooking the remotes themselves.
 
@@ -12585,7 +12813,7 @@ function ClientState.LocalPlayer(): Player
 end
 
 return ClientState</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
+<Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
 -- numbers, dish/sale celebrations), CollectionService-driven decoration (spinning arms, lift
 -- pads), the drain guide beam, remaining-dirt sparkle markers, prompt routing (windows and the
 -- in-arena tool shop), and a little lobby ambience.
@@ -12608,6 +12836,7 @@ local Types = require(Shared:WaitForChild("Types"))
 local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
 local UIKit = require(Client:WaitForChild("UIKit"))
+local Bubbles = require(Client:WaitForChild("Bubbles"))
 
 local Effects = {}
 
@@ -12621,7 +12850,6 @@ local initialized = false
 local MAX_FLOATERS = 24 -- floating +N labels alive at once (local player's own numbers)
 local FLOATER_RISE = 3 -- studs
 local FLOATER_TIME = 0.7
-local MAX_LOBBY_BUBBLES = 10
 local DRAIN_FULL_FRACTION = 0.95
 
 -- Floating "+N" labels currently alive, oldest first (capped, so a spam of Cleaned FX can't leak).
@@ -12706,25 +12934,16 @@ local function burst(position: Vector3, color: Color3, texture: string, count: n
 	Debris:AddItem(anchor, lifetime + 1)
 end
 
--- A few tiny transient bubble balls that pop upward and fade (used for "Cleaned" and lobby ambience).
+-- A little cloud of soap bubbles that pops out of `position` and drifts up (see Bubbles).
 local function popBubbles(position: Vector3, count: number, spread: number)
-	for _ = 1, count do
-		local ball = Instance.new("Part")
-		ball.Shape = Enum.PartType.Ball
-		ball.Material = Enum.Material.Glass
-		ball.Color = Color3.new(1, 1, 1)
-		ball.Transparency = 0.35
-		ball.Size = Vector3.new(1, 1, 1) * (0.15 + math.random() * 0.2)
-		ball.CanCollide = false
-		ball.CanTouch = false
-		ball.CanQuery = false
-		ball.CastShadow = false
-		ball.Anchored = false
-		ball.CFrame = CFrame.new(position + Vector3.new((math.random() - 0.5) * spread, 0, (math.random() - 0.5) * spread))
-		ball.Parent = workspace
-		ball.AssemblyLinearVelocity = Vector3.new((math.random() - 0.5) * 4, 4 + math.random() * 4, (math.random() - 0.5) * 4)
-		Debris:AddItem(ball, 1.2)
-	end
+	Bubbles.Emit(position, {
+		Count = count,
+		Spread = spread * 0.5,
+		Velocity = Vector3.new(0, 5, 0),
+		Jitter = 2.5,
+		Size = { 0.3, 0.85 },
+		Life = { 0.9, 1.7 },
+	})
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -12844,6 +13063,35 @@ end
 
 local function removeLiftPart(inst: Instance)
 	liftPads[inst :: BasePart] = nil
+end
+
+-- Bubbles streaming up every lift column near the camera.
+local liftBubbleClock = 0
+local function stepLiftBubbles(dt: number)
+	liftBubbleClock += dt
+	if liftBubbleClock &lt; 0.12 then
+		return
+	end
+	liftBubbleClock = 0
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	for pad in liftPads do
+		if pad.Parent and (pad.Position - camera.CFrame.Position).Magnitude &lt; 180 then
+			local target = pad:GetAttribute("LiftTo")
+			local height = if typeof(target) == "Vector3" then math.max(8, target.Y - pad.Position.Y) else 30
+			Bubbles.Emit(pad.Position + Vector3.new(0, 0.8, 0), {
+				Count = 1,
+				Spread = 2.2,
+				Velocity = Vector3.new(0, height * 1.4, 0),
+				Jitter = 0.8,
+				Size = { 0.4, 1.2 },
+				Life = { 2.2, 3.2 },
+				Rise = 3,
+			})
+		end
+	end
 end
 
 local function stepLift(_dt: number)
@@ -13196,13 +13444,74 @@ end
 -- Lobby ambience: a handful of floating bubbles drifting near the camera.
 ----------------------------------------------------------------------------------------------------
 
-local lobbyBubbles: { BasePart } = {}
 local lastLobbyAmbienceAt = 0
 
+-- The lobby's big floating bubbles (tag "FloatBubble", placed by the server): bobbed here, locally,
+-- each with a glowing glint on its camera-facing side.
+type FloatBubble = { Part: BasePart, Glint: Part, Base: Vector3, Phase: number, Speed: number }
+local floatBubbles: { [BasePart]: FloatBubble } = {}
+
+local function addFloatBubble(inst: Instance)
+	if not inst:IsA("BasePart") or floatBubbles[inst] then
+		return
+	end
+	local glint = Instance.new("Part")
+	glint.Name = "BubbleGlint"
+	glint.Shape = Enum.PartType.Ball
+	glint.Material = Enum.Material.Neon
+	glint.Color = Color3.new(1, 1, 1)
+	glint.Transparency = 0.15
+	glint.Size = Vector3.one * math.max(inst.Size.X * 0.18, 0.1)
+	glint.Anchored = true
+	glint.CanCollide = false
+	glint.CanQuery = false
+	glint.CanTouch = false
+	glint.CastShadow = false
+	glint.Parent = workspace.CurrentCamera
+	floatBubbles[inst] = { Part = inst, Glint = glint, Base = inst.Position, Phase = math.random() * math.pi * 2, Speed = 0.35 + math.random() * 0.25 }
+end
+
+local function removeFloatBubble(inst: Instance)
+	local fb = floatBubbles[inst :: BasePart]
+	if fb then
+		fb.Glint:Destroy()
+		floatBubbles[inst :: BasePart] = nil
+	end
+end
+
+local floatParts: { BasePart } = {}
+local floatCFrames: { CFrame } = {}
+local floatClock = 0
+local function stepFloatBubbles(dt: number)
+	floatClock += dt
+	local camera = workspace.CurrentCamera
+	if not camera or next(floatBubbles) == nil then
+		return
+	end
+	local camCF = camera.CFrame
+	table.clear(floatParts)
+	table.clear(floatCFrames)
+	for inst, fb in floatBubbles do
+		if not inst.Parent then
+			removeFloatBubble(inst)
+			continue
+		end
+		local t = floatClock * fb.Speed + fb.Phase
+		local pos = fb.Base + Vector3.new(math.sin(t) * 2.2, math.sin(t * 1.3) * 1.8, math.cos(t * 0.9) * 2.2)
+		local size = inst.Size.X
+		local toCam = camCF.Position - pos
+		toCam = if toCam.Magnitude &gt; 1e-3 then toCam.Unit else Vector3.zAxis
+		table.insert(floatParts, inst)
+		table.insert(floatCFrames, CFrame.new(pos))
+		table.insert(floatParts, fb.Glint)
+		table.insert(floatCFrames, CFrame.new(pos + (toCam * 0.3 + camCF.UpVector * 0.25 - camCF.RightVector * 0.22) * size))
+	end
+	workspace:BulkMoveTo(floatParts, floatCFrames, Enum.BulkMoveMode.FireCFrameChanged)
+end
+
+-- Big, slow soap bubbles drifting up around the camera while you're in the lobby.
 local function stepLobbyAmbience()
-	local run = ClientState.Run :: Types.RunState?
-	if run ~= nil then
-		-- In a run: let any leftover lobby bubbles finish naturally (Debris already scheduled).
+	if ClientState.Run ~= nil then
 		return
 	end
 	local camera = workspace.CurrentCamera
@@ -13210,35 +13519,28 @@ local function stepLobbyAmbience()
 		return
 	end
 	local now = os.clock()
-	if now - lastLobbyAmbienceAt &lt; 0.9 or #lobbyBubbles &gt;= MAX_LOBBY_BUBBLES then
+	if now - lastLobbyAmbienceAt &lt; 0.45 then
 		return
 	end
 	lastLobbyAmbienceAt = now
-
-	local offset = Vector3.new((math.random() - 0.5) * 30, math.random() * 6, (math.random() - 0.5) * 30 - 12)
-	local position = camera.CFrame.Position + offset
-	local ball = Instance.new("Part")
-	ball.Shape = Enum.PartType.Ball
-	ball.Material = Enum.Material.Glass
-	ball.Color = Color3.new(1, 1, 1)
-	ball.Transparency = 0.5
-	ball.Size = Vector3.new(1, 1, 1) * (0.25 + math.random() * 0.35)
-	ball.Anchored = false
-	ball.CanCollide = false
-	ball.CanTouch = false
-	ball.CanQuery = false
-	ball.CastShadow = false
-	ball.CFrame = CFrame.new(position)
-	ball.AssemblyLinearVelocity = Vector3.new((math.random() - 0.5) * 1.5, 2 + math.random() * 1.5, (math.random() - 0.5) * 1.5)
-	ball.Parent = workspace
-	table.insert(lobbyBubbles, ball)
-	Debris:AddItem(ball, 6)
-	task.delay(6, function()
-		local i = table.find(lobbyBubbles, ball)
-		if i then
-			table.remove(lobbyBubbles, i)
-		end
-	end)
+	local look = camera.CFrame.LookVector
+	local flat = Vector3.new(look.X, 0, look.Z)
+	flat = if flat.Magnitude &gt; 1e-3 then flat.Unit else Vector3.new(0, 0, -1)
+	-- Mostly ahead of the camera, spread left/right, starting near the floor.
+	local right = Vector3.new(-flat.Z, 0, flat.X)
+	local ahead = 10 + math.random() * 35
+	local side = (math.random() - 0.5) * 50
+	local position = camera.CFrame.Position + flat * ahead + right * side
+	position = Vector3.new(position.X, math.max(1, camera.CFrame.Position.Y - 8 + math.random() * 6), position.Z)
+	Bubbles.Emit(position, {
+		Count = 1,
+		Spread = 0,
+		Velocity = Vector3.new(0, 1.5, 0),
+		Jitter = 0.6,
+		Size = { 0.8, 2.2 },
+		Life = { 6, 9 },
+		Rise = 0.6,
+	})
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -13290,16 +13592,26 @@ function Effects.Init()
 	RunService.Heartbeat:Connect(function(dt)
 		stepSpin(dt)
 		stepLift(dt)
+		stepLiftBubbles(dt)
 		updateDrainGuide()
 		stepLobbyAmbience()
 	end)
+	RunService.RenderStepped:Connect(function(dt)
+		stepFloatBubbles(dt)
+	end)
+
+	for _, inst in CollectionService:GetTagged("FloatBubble") do
+		addFloatBubble(inst)
+	end
+	CollectionService:GetInstanceAddedSignal("FloatBubble"):Connect(addFloatBubble)
+	CollectionService:GetInstanceRemovedSignal("FloatBubble"):Connect(removeFloatBubble)
 
 	-- Grime count changes on every Cleaned/Sold push; the marker set only needs to react to those
 	-- and to Run replacing wholesale (onStateChanged already covers both via ClientState.Changed).
 end
 
 return Effects</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
+<Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
 --   * top centre: the Bubbles pill with a green "+" (opens the Shop)
 --   * right side: big square buttons (Shop/Pets in the lobby, Upgrades/Pets/Leave in a run) with
 --     key hints for keyboard (Tab/G/P) or gamepad (Y/LB)
@@ -14408,7 +14720,7 @@ function HUD.Init()
 end
 
 return HUD</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
 	PartyUI - everything shown while ClientState.Party ~= nil (standing in a lobby pad).
 
 	Two screens, Search-for-the-Needle style:
@@ -15041,7 +15353,7 @@ function PartyUI.Init()
 end
 
 return PartyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
+<Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
 -- state (EquippedPets/&lt;slot&gt; StringValue = pet id, its Target ObjectValue = the grime part being
 -- cleaned); this module is the only thing that actually builds and moves pet models. See
 -- DESIGN.md section 6 ("PetRenderer") and section 4 ("Equipped pets for rendering").
@@ -15473,7 +15785,7 @@ function PetRenderer.Init()
 end
 
 return PetRenderer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
+<Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
 -- reveal animation. Everything here is built with UIKit; see DESIGN.md section 6 ("PetsUI") for
 -- the contract. Both windows rebuild their contents from ClientState.Meta whenever it changes and
 -- the relevant window is open, so a purchase/hatch/equip anywhere refreshes what's on screen.
@@ -16602,7 +16914,7 @@ function PetsUI.Init()
 end
 
 return PetsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
 	RanksUI - the "Ranks" window (Rank Shrine in the lobby, the HUD's Ranks button, R / gamepad RB).
 
 	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
@@ -16939,7 +17251,7 @@ function RanksUI.Init()
 end
 
 return RanksUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
 	ShopUI - the lobby "Shop" window: Perks (bought with Bubbles, permanent) and Robux (game passes).
 	Opened from the Soap Shop ProximityPrompt (routed by Effects via OpenWindow="Shop"), the HUD [🛒 Shop]
 	button, or the G key - all outside our scope, they just call UIKit.OpenWindow("Shop").
@@ -17385,7 +17697,7 @@ function ShopUI.Init()
 end
 
 return ShopUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
+<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
 -- Aim comes from the mouse on PC, or the screen centre (with a crosshair) on touch/gamepad, cast
@@ -18070,7 +18382,7 @@ function SprayController.Init()
 end
 
 return SprayController</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -20486,7 +20798,7 @@ function UIKit.Init()
 end
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button
