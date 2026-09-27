@@ -344,14 +344,14 @@ local function claimGroup(player: Player, _value: any): Types.RequestResult
 	return { Ok = true, Message = Config.RewardText(Config.Social.GroupReward) }
 end
 
--- Follow / Like: marks the reward pending; it's checked (follow) or paid (like) on the next join.
+-- Follow / Like: checked right away (SocialService.CheckNow).
 local function socialDone(player: Player, value: any): Types.RequestResult
 	local SocialService = require(script.Parent:WaitForChild("SocialService")) :: any
-	local ok, err = SocialService.MarkDone(player, if type(value) == "string" then value else "")
+	local ok, message = SocialService.CheckNow(player, if type(value) == "string" then value else "")
 	if not ok then
-		return fail(err or ERR_GENERIC)
+		return fail(message)
 	end
-	return { Ok = true }
+	return { Ok = true, Message = message }
 end
 
 local HANDLERS: { [string]: (Player, any) -> Types.RequestResult } = {

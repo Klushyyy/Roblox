@@ -401,10 +401,10 @@ local function familyProps(b: Builder, k: RoomStyle)
 	sky.CastShadow = false
 	span(b, "WindowSill", wx0 - 8, wx1 + 8, wy0 - 6, wy0, ROOM_Z_BACK - 10, ROOM_Z_BACK, Color3.new(1, 1, 1), nil, noCollide())
 	for _, x in { wx0, (wx0 + wx1) / 2, wx1 } do
-		span(b, "WindowBar", x - 3, x + 3, wy0, wy1, ROOM_Z_BACK - 3, ROOM_Z_BACK, Color3.new(1, 1, 1), nil, noCollide())
+		span(b, "WindowBar", x - 3, x + 3, wy0 + 0.5, wy1 - 0.5, ROOM_Z_BACK - 3, ROOM_Z_BACK, Color3.new(1, 1, 1), nil, noCollide())
 	end
 	for _, y in { wy0, (wy0 + wy1) / 2, wy1 } do
-		span(b, "WindowBar", wx0, wx1, y - 3, y + 3, ROOM_Z_BACK - 3, ROOM_Z_BACK, Color3.new(1, 1, 1), nil, noCollide())
+		span(b, "WindowBar", wx0 + 0.5, wx1 - 0.5, y - 3, y + 3, ROOM_Z_BACK - 3, ROOM_Z_BACK, Color3.new(1, 1, 1), nil, noCollide())
 	end
 
 	local sinkX = (wx0 + wx1) / 2
@@ -427,7 +427,7 @@ local function familyProps(b: Builder, k: RoomStyle)
 	span(b, "Fridge", 300, ROOM_HALF_X, fy, fy + 380, -260, -120, Color3.fromRGB(235, 238, 242), Enum.Material.SmoothPlastic)
 	box(b, "FridgeHandle", Vector3.new(3, 90, 3), 297, fy + 230, -150, K.Handle, Enum.Material.Metal, noCollide())
 	box(b, "FridgeHandle", Vector3.new(3, 60, 3), 297, fy + 110, -150, K.Handle, Enum.Material.Metal, noCollide())
-	box(b, "FridgeSeam", Vector3.new(1, 2, 140), 299.8, fy + 170, -190, Color3.fromRGB(180, 185, 190), nil, noCollide())
+	box(b, "FridgeSeam", Vector3.new(1, 2, 139.6), 299.8, fy + 170, -190, Color3.fromRGB(180, 185, 190), nil, noCollide())
 
 	local tz = -330
 	local tyTop = diningSet(b, tz, 150, K.Wood, Enum.Material.Wood, 2)

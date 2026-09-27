@@ -68,6 +68,9 @@ local lastTankFullToastAt = 0
 local ring: BasePart? = nil
 local ringAttachment: Attachment? = nil
 local beam: Beam? = nil
+local beamOuter: Beam? = nil -- the soft outer body of the water stream around the bright core
+local muzzleMist: ParticleEmitter? = nil -- fine spray puffing out right at the nozzle
+local lineJet: Beam? = nil -- the washer's hard, bright jet to the middle of its line
 local handAttachment: Attachment? = nil
 local handPart: BasePart? = nil
 local splashEmitter: ParticleEmitter? = nil
@@ -81,6 +84,7 @@ local hpFill: Frame? = nil
 -- Pressure Washer line: a thin glowing blade on the surface, with two beams fanning out to its ends.
 local linePart: BasePart? = nil
 local lineEnds: { Attachment } = {}
+local lineCenter: Attachment? = nil
 local lineBeams: { Beam } = {}
 local lastSudsAt = 0
 -- Spray Nozzle water: droplets flying from the nozzle to the target, and a splash where it lands.
@@ -198,22 +202,49 @@ local function ensureBeam(character: Model)
 		handAttachment = origin
 
 		ensureRing()
+		-- The water stream: a bright, fast-flowing core inside a softer, wider body.
 		local b = Instance.new("Beam")
 		b.Name = "SprayBeam"
 		b.Attachment0 = origin
 		b.Attachment1 = ringAttachment
-		b.Width0 = 0.25
-		b.Width1 = 0.25
-		b.LightEmission = 1
-		b.LightInfluence = 0
+		b.Width0 = 0.12
+		b.Width1 = 0.3
+		b.Segments = 12
+		b.LightEmission = 0.7
+		b.LightInfluence = 0.2
 		b.FaceCamera = true
+		b.Color = ColorSequence.new(Color3.fromRGB(235, 248, 255), Color3.fromRGB(140, 200, 255))
+		b.Transparency = NumberSequence.new(0.05, 0.3)
 		b.Texture = "rbxasset://textures/particles/smoke_main.dds"
 		b.TextureMode = Enum.TextureMode.Wrap
-		b.TextureLength = 0.6
-		b.TextureSpeed = 2.5
+		b.TextureLength = 1.2
+		b.TextureSpeed = 7
 		b.Enabled = false
 		b.Parent = origin
 		beam = b
+		local outer = b:Clone()
+		outer.Name = "SprayBeamOuter"
+		outer.Width0 = 0.3
+		outer.Width1 = 1.0
+		outer.LightEmission = 0.35
+		outer.Transparency = NumberSequence.new(0.55, 0.85)
+		outer.TextureSpeed = 4.5
+		outer.Parent = origin
+		beamOuter = outer
+		local mist = Instance.new("ParticleEmitter")
+		mist.Name = "MuzzleMist"
+		mist.Texture = "rbxasset://textures/particles/smoke_main.dds"
+		mist.Color = ColorSequence.new(Color3.fromRGB(235, 248, 255), Color3.fromRGB(140, 200, 255))
+		mist.LightEmission = 0.4
+		mist.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.12), NumberSequenceKeypoint.new(1, 0.55) })
+		mist.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(1, 1) })
+		mist.Lifetime = NumberRange.new(0.15, 0.3)
+		mist.Speed = NumberRange.new(4, 9)
+		mist.SpreadAngle = Vector2.new(25, 25)
+		mist.EmissionDirection = Enum.NormalId.Front
+		mist.Rate = 0
+		mist.Parent = origin
+		muzzleMist = mist
 	end
 end
 
@@ -241,31 +272,64 @@ local function ensureLine()
 			a.Parent = part
 			lineEnds[i] = a
 		end
+		local c = Instance.new("Attachment")
+		c.Name = "LineCenter"
+		c.Parent = part
+		lineCenter = c
 	end
 	for _, b in lineBeams do
 		b:Destroy()
 	end
 	table.clear(lineBeams)
+	if lineJet then
+		lineJet:Destroy()
+		lineJet = nil
+	end
 	if not handAttachment then
 		return
 	end
+	-- A thin, fanned sheet of water out to both ends of the line...
 	for i = 1, 2 do
 		local b = Instance.new("Beam")
 		b.Attachment0 = handAttachment
 		b.Attachment1 = lineEnds[i]
-		b.Width0 = 0.15
-		b.Width1 = 0.35
-		b.LightEmission = 1
-		b.LightInfluence = 0
+		b.Width0 = 0.04
+		b.Width1 = 0.25
+		b.Segments = 10
+		b.LightEmission = 0.8
+		b.LightInfluence = 0.1
 		b.FaceCamera = true
-		b.Transparency = NumberSequence.new(0.1, 0.5)
+		b.Color = ColorSequence.new(Color3.fromRGB(235, 248, 255), Color3.fromRGB(140, 200, 255))
+		b.Transparency = NumberSequence.new(0.35, 0.75)
 		b.Texture = "rbxasset://textures/particles/smoke_main.dds"
 		b.TextureMode = Enum.TextureMode.Wrap
-		b.TextureLength = 0.5
-		b.TextureSpeed = 4
+		b.TextureLength = 0.8
+		b.TextureSpeed = 12
 		b.Enabled = false
 		b.Parent = handAttachment
 		lineBeams[i] = b
+	end
+	-- ...around one hard, bright, fast jet straight down the middle.
+	if lineCenter then
+		local jet = Instance.new("Beam")
+		jet.Name = "WasherJet"
+		jet.Attachment0 = handAttachment
+		jet.Attachment1 = lineCenter
+		jet.Width0 = 0.07
+		jet.Width1 = 0.16
+		jet.Segments = 10
+		jet.LightEmission = 1
+		jet.LightInfluence = 0
+		jet.FaceCamera = true
+		jet.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(190, 230, 255))
+		jet.Transparency = NumberSequence.new(0, 0.2)
+		jet.Texture = "rbxasset://textures/particles/smoke_main.dds"
+		jet.TextureMode = Enum.TextureMode.Wrap
+		jet.TextureLength = 1.5
+		jet.TextureSpeed = 16
+		jet.Enabled = false
+		jet.Parent = handAttachment
+		lineJet = jet
 	end
 end
 
@@ -282,15 +346,18 @@ local function ensureWater(hand: BasePart)
 	sprayAttachment = a
 	local drops = Instance.new("ParticleEmitter")
 	drops.Name = "Droplets"
-	drops.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	drops.Color = ColorSequence.new(Color3.fromRGB(200, 235, 255), Color3.fromRGB(120, 190, 255))
-	drops.LightEmission = 0.5
-	drops.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.18), NumberSequenceKeypoint.new(1, 0.35) })
-	drops.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(1, 0.8) })
+	-- Water droplets drawn as streaks along their flight (not sparkles), so they read as spray.
+	drops.Texture = "rbxasset://textures/particles/smoke_main.dds"
+	drops.Color = ColorSequence.new(Color3.fromRGB(235, 248, 255), Color3.fromRGB(140, 200, 255))
+	drops.LightEmission = 0.45
+	drops.Orientation = Enum.ParticleOrientation.VelocityParallel
+	drops.Squash = NumberSequence.new(1.6)
+	drops.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.07), NumberSequenceKeypoint.new(1, 0.14) })
+	drops.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.15), NumberSequenceKeypoint.new(1, 0.85) })
 	drops.Lifetime = NumberRange.new(0.3, 0.45)
-	drops.Speed = NumberRange.new(70, 85)
-	drops.SpreadAngle = Vector2.new(5, 5)
-	drops.Acceleration = Vector3.new(0, -60, 0)
+	drops.Speed = NumberRange.new(65, 80)
+	drops.SpreadAngle = Vector2.new(3, 3)
+	drops.Acceleration = Vector3.new(0, -40, 0)
 	drops.EmissionDirection = Enum.NormalId.Front
 	drops.Rate = 0
 	drops.Parent = a
@@ -321,6 +388,9 @@ local function hideLine()
 	end
 	for _, b in lineBeams do
 		b.Enabled = false
+	end
+	if lineJet then
+		lineJet.Enabled = false
 	end
 end
 
@@ -567,6 +637,12 @@ local function hideVisuals()
 	if beam then
 		beam.Enabled = false
 	end
+	if beamOuter then
+		beamOuter.Enabled = false
+	end
+	if muzzleMist then
+		muzzleMist.Rate = 0
+	end
 	if hintBillboard then
 		hintBillboard.Enabled = false
 	end
@@ -770,33 +846,40 @@ local function onHeartbeat(dt: number)
 		end
 	end
 
-	-- Spray Nozzle: a real spray of droplets from the hand to the target, splashing where it lands.
+	-- Spray Nozzle (and the washer): a real spray of droplets from the nozzle to the target,
+	-- splashing where it lands.
+	local jetting = sending and mode == "Line"
 	local spraying = sending and mode == "Spray"
 	if handPart then
 		ensureWater(handPart)
 	end
-	if sprayAttachment and spraying then
+	if sprayAttachment and (spraying or jetting) then
 		sprayAttachment.WorldCFrame = CFrame.lookAt(sprayAttachment.WorldPosition, hitPos)
 	end
 	if sprayDrops then
-		sprayDrops.Rate = if spraying then 90 else 0
+		sprayDrops.Rate = if spraying then 140 elseif jetting then 90 else 0
+		sprayDrops.Speed = if jetting then NumberRange.new(100, 120) else NumberRange.new(65, 80)
 	end
 	if waterSplash then
-		waterSplash.Rate = if spraying then 40 else 0
+		waterSplash.Rate = if spraying then 45 elseif jetting then 70 else 0
+	end
+	if muzzleMist then
+		muzzleMist.Rate = if spraying then 30 elseif jetting then 45 else 0
 	end
 
 	-- Water stream: only the Spray nozzle has one; the washer fans out to its line; scrubbing tools
 	-- work right on the dish.
 	if beam then
-		local b = beam :: Beam
-		b.Enabled = sending and mode == "Spray"
-		b.Width0 = 0.35
-		b.Width1 = 0.9
-		b.Color = ColorSequence.new(toolColor)
+		(beam :: Beam).Enabled = spraying
+	end
+	if beamOuter then
+		(beamOuter :: Beam).Enabled = spraying
 	end
 	for _, lb in lineBeams do
-		lb.Enabled = sending and mode == "Line"
-		lb.Color = ColorSequence.new(toolColor:Lerp(Color3.new(1, 1, 1), 0.4))
+		lb.Enabled = jetting
+	end
+	if lineJet then
+		lineJet.Enabled = jetting
 	end
 end
 

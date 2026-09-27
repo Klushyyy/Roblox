@@ -43,6 +43,13 @@ local topBar: Frame
 local bottomBar: Frame
 local skipButton: TextButton
 
+-- Tells the server we're in: the run clock starts with the first player to get past the intro.
+local function reportLoaded()
+	task.spawn(function()
+		pcall(ClientState.RunRequest, "Loaded")
+	end)
+end
+
 local function tweenBlack(to: number, seconds: number)
 	UIKit.Tween(black, { BackgroundTransparency = to }, seconds)
 	task.wait(seconds)
@@ -105,6 +112,7 @@ local function play(levelIndex: number)
 		scene = Scene.Build(levelIndex, SCENE_ORIGIN, Workspace)
 	end)
 	if not ok or not scene or not camera then
+		reportLoaded()
 		restoreHud()
 		setControls(true)
 		tweenBlack(1, FADE)
@@ -167,6 +175,7 @@ local function play(levelIndex: number)
 	setControls(true)
 	UIKit.Tween(topBar, { Size = UDim2.new(1, 0, 0, 0) }, 0.4)
 	UIKit.Tween(bottomBar, { Size = UDim2.new(1, 0, 0, 0) }, 0.4)
+	reportLoaded()
 	tweenBlack(1, FADE + 0.15)
 	gui.Enabled = false
 	playing = false
@@ -259,6 +268,8 @@ function Cutscene.Init()
 		local age = Workspace:GetServerTimeNow() - (tonumber(run.StartedAt) or 0)
 		if run.Phase == "Playing" and age < MAX_START_AGE then
 			task.spawn(play, run.Level)
+		elseif run.Phase == "Playing" then
+			reportLoaded() -- joined too late for the intro: we're in straight away
 		end
 	end)
 end

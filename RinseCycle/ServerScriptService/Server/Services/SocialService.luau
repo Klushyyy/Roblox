@@ -1,7 +1,7 @@
 -- SocialService: settles the Follow / Like rewards (Config.Social) when a player joins.
 --
--- The Free Rewards window's "I followed!" / "I liked it!" buttons only mark the reward as pending
--- (MetaRequest "SocialDone"); the player then leaves and rejoins, and on load:
+-- The Free Rewards window's buttons check straight away (CheckNow). A follow Roblox can't show us
+-- yet stays pending and is checked again automatically on the next join:
 --   * Follow: the player's public following list is read (friends API, through Config.Social.
 --     ProxyDomain because games can't call roblox.com directly). The dev on it = reward. Not on it =
 --     the pending mark is cleared and they're told to follow first. The check failing (HTTP off,
@@ -82,18 +82,41 @@ local function settle(player: Player)
 	end
 end
 
--- MetaRequest "SocialDone": "Follow" or "Like".
-function SocialService.MarkDone(player: Player, kind: string): (boolean, string?)
-	if kind ~= "Follow" and kind ~= "Like" then
-		return false, "That reward doesn't exist."
-	end
-	if kind == "Like" and not Config.Social.LikeReward then
-		return false, "That reward isn't available."
-	end
-	if not DataService.SetSocialPending(player, kind, true) then
+-- MetaRequest "SocialDone": the Free Rewards button. Follow is checked right now (and, if the
+-- check can't see it yet, again automatically next time they join); Like can't be checked by any
+-- game, so it's paid on the click. Returns (ok, message).
+function SocialService.CheckNow(player: Player, kind: string): (boolean, string)
+	local profile = DataService.Get(player)
+	if not profile then
 		return false, "Your data is still loading."
 	end
-	return true, nil
+	if kind == "Like" then
+		if not Config.Social.LikeReward then
+			return false, "That reward isn't available."
+		end
+		if profile.LikeReward then
+			return false, "You already got this reward. Thank you! 💙"
+		end
+		DataService.GrantSocialReward(player, "Like")
+		return true, "👍 Thanks for liking the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!"
+	elseif kind == "Follow" then
+		if profile.FollowReward then
+			return false, "You already got this reward. Thank you! 💙"
+		end
+		local result = follows(player.UserId, Config.Social.CreatorUserId)
+		if result == true then
+			DataService.GrantSocialReward(player, "Follow")
+			return true, "⭐ Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!"
+		end
+		-- Roblox can take a little while to show a new follow: keep it pending so the next join
+		-- checks again by itself.
+		DataService.SetSocialPending(player, "Follow", true)
+		if result == false then
+			return false, "We can't see your follow yet. If you followed and it's not working, please leave and rejoin the game."
+		end
+		return false, "Couldn't check right now. If you followed, please leave and rejoin the game."
+	end
+	return false, "That reward doesn't exist."
 end
 
 function SocialService.Init()

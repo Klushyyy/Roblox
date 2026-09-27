@@ -165,8 +165,10 @@ local function checkPasses(player: Player, isRetry: boolean)
 		else
 			-- A purchase that landed while this check was in flight wins over a cached "not owned".
 			local bought = boughtThisSession[player]
-			if owned or not (bought and bought[pass.Key]) then
-				DataService.SetPass(player, pass.Key, owned)
+			-- A pass the owner gifted with the admin panel (:givegamepass) stays on too.
+			local gifted = player:GetAttribute("GP_" .. pass.Key) == true
+			if owned or gifted or not (bought and bought[pass.Key]) then
+				DataService.SetPass(player, pass.Key, owned or gifted)
 			end
 		end
 	end

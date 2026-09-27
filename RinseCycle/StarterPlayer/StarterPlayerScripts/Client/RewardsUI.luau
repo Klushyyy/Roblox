@@ -7,8 +7,8 @@
 	      - Join the community: JOIN opens Roblox's own join prompt in game
 	        (GroupService:PromptJoinAsync); as soon as it closes, the server checks membership live
 	        and pays out. No rejoin needed.
-	      - Follow the dev / Like the game: press "I followed!" / "I liked it!", then leave and
-	        rejoin. On join the server checks the follow (SocialService) and pays the like.
+	      - Follow the dev / Like the game: the button checks straight away (SocialService). A
+	        follow Roblox can't show yet says to leave and rejoin (it's re-checked on join).
 ]]
 
 local GroupService = game:GetService("GroupService")
@@ -139,11 +139,11 @@ local function refreshSocial()
 			UIKit.SetButtonColor(rowParts.Button, Colors.Disabled)
 			rowParts.Status.Text = "Thank you! 💙"
 		elseif state == "Pending" then
-			rowParts.Button.Text = "Rejoin to claim"
+			rowParts.Button.Text = "Check again"
 			UIKit.SetButtonColor(rowParts.Button, Colors.Warning)
-			rowParts.Status.Text = "Leave and rejoin to get it!"
+			rowParts.Status.Text = "Not working? Leave and rejoin."
 		else
-			rowParts.Button.Text = if kind == "Follow" then "I followed!" else "I liked it!"
+			rowParts.Button.Text = if kind == "Follow" then "I followed! ✔" else "I liked it! ✔"
 			UIKit.SetButtonColor(rowParts.Button, Colors.Good)
 			rowParts.Status.Text = "Reward: " .. Config.RewardText(reward :: any)
 		end
@@ -156,19 +156,19 @@ local function markDone(kind: string)
 	if busy or state == "Claimed" then
 		return
 	end
-	if state == "Pending" then
-		UIKit.Toast("Leave and rejoin the game to get this reward!", "Info")
-		return
-	end
 	busy = true
+	local row = socialRows[kind]
+	if row then
+		row.Button.Text = "Checking..."
+	end
 	local result = ClientState.MetaRequest("SocialDone", kind)
 	busy = false
 	if result.Ok then
-		UIKit.Toast(if kind == "Follow"
-			then "⭐ Nice! Leave and rejoin: we'll check your follow and give you the reward."
-			else "👍 Thank you! Leave and rejoin to get your reward.", "Good")
+		UIKit.PlaySound("Sparkle")
+		UIKit.Confetti(50)
+		UIKit.Toast(result.Message or "Reward claimed!", "Good")
 	else
-		UIKit.Toast(result.Error or "Couldn't do that.", "Bad")
+		UIKit.Toast(result.Error or "Couldn't do that.", "Info")
 	end
 	refreshSocial()
 end
@@ -270,13 +270,13 @@ local function buildFree(screenRoot: Instance)
 
 	-- Like the game: press 👍 on the game page, then the button, then rejoin.
 	if Config.Social.LikeReward then
-		local like = card(list, 2, "👍", "Like the game", "Press 👍 on the game page, tap the button, then rejoin.")
+		local like = card(list, 2, "👍", "Like the game", "Press 👍 on the game page, then tap the button.")
 		socialButton(like, "Like")
 	end
 
 	-- Follow the dev (their headshot and name): follow, tap the button, rejoin (checked on join).
 	local creatorId = Config.Social.CreatorUserId
-	local follow = card(list, 3, "", "Follow the dev", "Follow on their Roblox profile, tap the button, then rejoin.")
+	local follow = card(list, 3, "", "Follow the dev", "Follow on their Roblox profile, then tap the button to check.")
 	local shot = Instance.new("ImageLabel")
 	shot.BackgroundTransparency = 1
 	shot.Size = UDim2.fromOffset(70, 70)

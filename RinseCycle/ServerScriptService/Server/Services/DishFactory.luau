@@ -685,9 +685,9 @@ local function disc(cf: CFrame, diameter: number, thickness: number, color: Colo
 end
 
 -- Child splats are thinner than the main disc and centred slightly lower, so their top faces sit
--- 0.04+ studs under the main disc's (no two faces share a plane, so nothing flickers).
+-- 0.03 above the lift, under the main disc's (no two faces share a plane, so nothing flickers).
 local function childDisc(cf: CFrame, dy: number, dz: number, diameter: number, thickness: number, color: Color3, material: Enum.Material): BasePart
-	return decor(disc(cf * CFrame.new(-0.02, dy, dz), diameter, math.min(thickness, 0.12), color, material))
+	return decor(disc(cf * CFrame.new(-0.03, dy, dz), diameter, math.min(thickness, 0.12), color, material))
 end
 
 local function darker(c: Color3, f: number): Color3
@@ -696,7 +696,7 @@ end
 
 -- Sauce splat: a round blob with smaller splats and droplets around its edge.
 local function shapeBlob(cf: CFrame, size: number, color: Color3, material: Enum.Material, rng: Random)
-	local main = disc(cf, size, 0.2, color, material)
+	local main = disc(cf, size, 0.24, color, material)
 	main.Reflectance = 0.08
 	local kids = {}
 	for _ = 1, rng:NextInteger(3, 5) do
@@ -710,7 +710,7 @@ local function shapeBlob(cf: CFrame, size: number, color: Color3, material: Enum
 		table.insert(kids, childDisc(cf, math.cos(a) * d, math.sin(a) * d, size * rng:NextNumber(0.1, 0.18), 0.16, color, material))
 	end
 	-- A slightly darker centre makes it read as a thick dollop.
-	table.insert(kids, decor(disc(cf * CFrame.new(0.08, 0, 0), size * 0.45, 0.2, darker(color, 0.85), material)))
+	table.insert(kids, decor(disc(cf * CFrame.new(0.06, 0, 0), size * 0.45, 0.24, darker(color, 0.85), material)))
 	return main, kids
 end
 
@@ -763,6 +763,33 @@ end
 local GOLDEN_COLOR = Color3.fromRGB(255, 213, 80)
 local RAY_ATTEMPTS = 14
 local MIN_SPACING = 1.2 -- spots on the same dish don't pile on top of each other
+-- Every outward face of a splat sits a multiple of 0.03 above its spot's lift (child tops 0.03,
+-- crumb patch 0.06, streak 0.09, blob 0.12, dollop 0.18). An overlapping spot on a parallel surface
+-- gets a lift whose face planes land between the other spot's (as close to 0.015 off as possible,
+-- measured from its real plane, so curved dishes count), so splats never flicker through each other.
+type Spot = { Pos: Vector3, Normal: Vector3, Radius: number, Lift: number }
+
+local function pickLift(pos: Vector3, normal: Vector3, radius: number, placed: { Spot }): number
+	local offsets = {}
+	for _, other in placed do
+		if (other.Pos - pos).Magnitude < other.Radius + radius and other.Normal:Dot(normal) > 0.95 then
+			table.insert(offsets, (other.Pos - pos):Dot(normal) + other.Lift)
+		end
+	end
+	local best, bestGap = 0.1, -1
+	for step = 0, 29 do
+		local lift = 0.1 + step * 0.001
+		local gap = math.huge
+		for _, o in offsets do
+			local r = (lift - o) % 0.03
+			gap = math.min(gap, r, 0.03 - r)
+		end
+		if gap > bestGap + 1e-6 then
+			best, bestGap = lift, gap
+		end
+	end
+	return best
+end
 local FIT_TOLERANCE = 0.35 -- how far the dish surface may drift from a spot's plane at its edge
 
 -- The dish surface under `pos` along `normal` (a short ray back down onto the dish), or nil.
@@ -823,6 +850,7 @@ function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, leve
 
 	local placed: { BasePart } = {}
 	local used: { Vector3 } = {}
+	local spots: { Spot } = {}
 	count = math.max(1, count)
 
 	for _ = 1, count do
@@ -866,7 +894,12 @@ function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, leve
 			table.insert(used, hitPos)
 			local golden = rng:NextNumber() < goldenChance
 			local hint = if math.abs(hitNormal:Dot(Vector3.new(0, 1, 0))) > 0.9 then anchor.RightVector else Vector3.new(0, 1, 0)
-			local cf = axisCFrame(hitPos + hitNormal * 0.08, hitNormal, hint)
+			-- Where two splats overlap they sit at different heights whose faces never line up and flicker.
+			-- Streaks trail up to ~2.6 sizes from their centre; blobs' outer droplets reach ~1 size.
+			local reach = size * (if grimeType.Shape == "Streak" then 2.6 else 1.0)
+			local lift = pickLift(hitPos, hitNormal, reach, spots)
+			table.insert(spots, { Pos = hitPos, Normal = hitNormal, Radius = reach, Lift = lift })
+			local cf = axisCFrame(hitPos + hitNormal * lift, hitNormal, hint)
 			cf = cf * CFrame.Angles(rng:NextNumber() * math.pi * 2, 0, 0)
 
 			local color = if golden then GOLDEN_COLOR else grimeType.Color

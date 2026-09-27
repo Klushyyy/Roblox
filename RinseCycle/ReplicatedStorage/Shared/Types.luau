@@ -80,6 +80,7 @@ export type RunState = {
 	Level: number,
 	ArenaName: string, -- child of workspace.Arenas
 	StartedAt: number, -- server time
+	ClockAt: number, -- server time the run clock started (0 = still waiting on the intro cutscene)
 	Phase: "Playing" | "Complete",
 	Coins: number,
 	Tank: number,

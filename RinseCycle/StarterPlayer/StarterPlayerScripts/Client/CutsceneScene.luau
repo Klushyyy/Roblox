@@ -74,8 +74,16 @@ end
 function Scene:part(name: string, size: Vector3, cf: CFrame, color: Color3, material: Enum.Material?, shape: Enum.PartType?): Part
 	local p = Instance.new("Part")
 	p.Name = name
-	if shape then
+	-- A Ball part is always perfectly round (Roblox uses its smallest side), so a squashed ball
+	-- (a pasta mound, a roast, a balloon) is a block wearing a sphere mesh instead.
+	local stretched = shape == Enum.PartType.Ball and (math.abs(size.X - size.Y) > 1e-3 or math.abs(size.Y - size.Z) > 1e-3)
+	if shape and not stretched then
 		p.Shape = shape
+	end
+	if stretched then
+		local mesh = Instance.new("SpecialMesh")
+		mesh.MeshType = Enum.MeshType.Sphere
+		mesh.Parent = p
 	end
 	p.Size = size
 	p.CFrame = self.Origin * cf
@@ -198,19 +206,22 @@ function Scene:plate(x: number, z: number)
 		add(self:disc(name, h, d, x + dx, top + dy, z + dz, color), kind)
 	end
 	if th.Food == "Spaghetti" then
-		-- Spaghetti and meatballs: a golden nest of pasta, tomato sauce on top, three meatballs,
-		-- parmesan and a basil leaf.
-		flat("Pasta", 0.1, 1.25, 0, 0.05, 0, Color3.fromRGB(240, 205, 120), "Food")
-		ball("PastaNest", Vector3.new(1.1, 0.34, 1.05), 0, 0.14, 0, Color3.fromRGB(245, 212, 130), "Food")
-		ball("TomatoSauce", Vector3.new(0.78, 0.16, 0.72), 0.02, 0.3, -0.02, Color3.fromRGB(196, 42, 30), "Food")
+		-- Spaghetti and meatballs: a low, wide nest of noodles (a flat base with swirled strands on
+		-- top, not a ball), a pool of tomato sauce, and three meatballs sitting down in the sauce,
+		-- with parmesan and a basil leaf.
+		local noodle = Color3.fromRGB(245, 212, 130)
+		flat("Pasta", 0.08, 1.3, 0, 0.04, 0, Color3.fromRGB(238, 202, 118), "Food")
+		ball("PastaNest", Vector3.new(1.15, 0.34, 1.1), 0, 0.14, 0, noodle, "Food")
+		ball("PastaTop", Vector3.new(0.8, 0.26, 0.76), -0.04, 0.22, 0.03, Color3.fromRGB(250, 220, 145), "Food")
+		ball("TomatoSauce", Vector3.new(0.74, 0.14, 0.68), 0.02, 0.33, -0.02, Color3.fromRGB(196, 42, 30), "Food")
 		for i = 0, 2 do
 			local a = i / 3 * math.pi * 2 + 0.4
-			ball("Meatball", Vector3.one * 0.26, math.cos(a) * 0.2, 0.4, math.sin(a) * 0.2, Color3.fromRGB(115, 58, 36), "Food")
+			ball("Meatball", Vector3.one * 0.24, math.cos(a) * 0.17, 0.38, math.sin(a) * 0.17, Color3.fromRGB(115, 58, 36), "Food")
 		end
 		for i = 0, 3 do
-			ball("Parmesan", Vector3.one * 0.06, (i % 2 - 0.5) * 0.3, 0.46, (i // 2 - 0.5) * 0.25, Color3.fromRGB(252, 248, 230), "Food")
+			ball("Parmesan", Vector3.one * 0.05, (i % 2 - 0.5) * 0.36, 0.39, (i // 2 - 0.5) * 0.3, Color3.fromRGB(252, 248, 230), "Food")
 		end
-		add(self:part("Basil", Vector3.new(0.22, 0.03, 0.13), CFrame.new(x - 0.05, top + 0.53, z + 0.08) * CFrame.Angles(0, math.rad(35), 0), Color3.fromRGB(60, 150, 60)), "Food")
+		add(self:part("Basil", Vector3.new(0.22, 0.03, 0.13), CFrame.new(x + 0.05, top + 0.51, z - 0.05) * CFrame.Angles(0, math.rad(35), 0), Color3.fromRGB(60, 150, 60)), "Food")
 	elseif th.Food == "Pizza" then
 		-- A personal pepperoni pizza cut into quarters: crust, cheese, pepperoni, cut lines.
 		flat("PizzaCrust", 0.1, 1.5, 0, 0.05, 0, Color3.fromRGB(214, 160, 90), "Food")

@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "0.7.0"
+Config.Version = "0.8.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -43,6 +43,7 @@ Config.Party = {
 ----------------------------------------------------------------------------------------------------
 Config.Round = {
 	ResultsSeconds = 20, -- results screen time before everyone is sent back to the lobby
+	IntroMaxSeconds = 22, -- the run clock starts by this long after the start even if no one reports in
 	ScrubSendInterval = 0.1, -- client send rate while holding spray
 	ClickPulseSeconds = 0.25, -- a single tap (not held) deals this many seconds of power
 	MinClickInterval = 0.11, -- server ignores clicks faster than this (about 9 per second)

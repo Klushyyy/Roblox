@@ -123,6 +123,12 @@ local function knob(ctx: Ctx, name: string, cf: CFrame, length: number, diameter
 end
 
 local BUILDERS: { [string]: (Ctx, Color3) -> () } = {}
+
+-- An invisible marker at a tool's business end: sprays, jets and foam come out of it.
+local function muzzle(ctx: Ctx, pos: Vector3)
+	local m = part(ctx, "Muzzle", nil, Vector3.new(0.1, 0.1, 0.1) / ctx.Scale, pos, nil, WHITE)
+	m.Transparency = 1
+end
 local HELD_BUILDERS: { [string]: (Ctx, Color3) -> () } = {}
 
 -- Sponge: a rounded block of yellow foam with dimpled pores, a glue line, and a green scouring pad
@@ -204,6 +210,7 @@ BUILDERS.Nozzle = function(ctx, color)
 	knob(ctx, "Dial", dialCF, 0.45, 1.05, color, shade(color, 0.7))
 	part(ctx, "Tip", Enum.PartType.Cylinder, Vector3.new(0.2, 0.45, 0.45), Vector3.new(0, y, -2.45), ALONG_Z, CHROME, Enum.Material.Metal)
 	part(ctx, "TipHole", Enum.PartType.Cylinder, Vector3.new(0.05, 0.18, 0.18), Vector3.new(0, y, -2.56), ALONG_Z, DARK)
+	muzzle(ctx, Vector3.new(0, y, -2.7))
 	-- Pistol grip with finger ridges.
 	local gripCF = CFrame.new(0, 1.2, 0.85) * CFrame.Angles(math.rad(-14), 0, 0)
 	roundedBox(ctx, "Grip", Vector3.new(0.8, 2.0, 0.95), gripCF, 0.38, RUBBER)
@@ -290,12 +297,11 @@ HELD_BUILDERS.Washer = function(ctx, color)
 	part(ctx, "Trigger", nil, Vector3.new(0.14, 0.42, 0.16), Vector3.new(0, 0.3, -0.5), CFrame.Angles(math.rad(-12), 0, 0), Color3.fromRGB(255, 200, 60))
 	tube(ctx, "TriggerGuard", { Vector3.new(0, 0.5, -0.9), Vector3.new(0, 0.05, -0.85), Vector3.new(0, -0.05, -0.35) }, 0.1, DARK)
 	part(ctx, "Coupler", Enum.PartType.Cylinder, Vector3.new(0.35, 0.36, 0.36), Vector3.new(0, y, -1.1), ALONG_Z, BRASS, Enum.Material.Metal)
-	bar(ctx, "Lance", Vector3.new(0, y, -1.25), Vector3.new(0, y, -5.6), 0.2, CHROME, Enum.Material.Metal)
-	bar(ctx, "ForeGrip", Vector3.new(0, y, -2.2), Vector3.new(0, y, -3.1), 0.38, RUBBER)
-	part(ctx, "NozzleCollar", Enum.PartType.Cylinder, Vector3.new(0.2, 0.32, 0.32), Vector3.new(0, y, -5.62), ALONG_Z, CHROME, Enum.Material.Metal)
-	part(ctx, "LanceTip", Enum.PartType.Cylinder, Vector3.new(0.4, 0.34, 0.34), Vector3.new(0, y, -5.9), ALONG_Z, Color3.fromRGB(255, 200, 60))
-	local muzzle = part(ctx, "Muzzle", nil, Vector3.new(0.1, 0.1, 0.1) / ctx.Scale, Vector3.new(0, y, -6.15), nil, WHITE)
-	muzzle.Transparency = 1
+	bar(ctx, "Lance", Vector3.new(0, y, -1.25), Vector3.new(0, y, -7.6), 0.2, CHROME, Enum.Material.Metal)
+	bar(ctx, "ForeGrip", Vector3.new(0, y, -2.4), Vector3.new(0, y, -3.4), 0.38, RUBBER)
+	part(ctx, "NozzleCollar", Enum.PartType.Cylinder, Vector3.new(0.2, 0.32, 0.32), Vector3.new(0, y, -7.62), ALONG_Z, CHROME, Enum.Material.Metal)
+	part(ctx, "LanceTip", Enum.PartType.Cylinder, Vector3.new(0.4, 0.34, 0.34), Vector3.new(0, y, -7.9), ALONG_Z, Color3.fromRGB(255, 200, 60))
+	muzzle(ctx, Vector3.new(0, y, -8.15))
 	tube(ctx, "Hose", { Vector3.new(0, -0.55, 0.2), Vector3.new(0, -1.0, 0.45), Vector3.new(0, -1.7, 0.5), Vector3.new(0, -2.3, 0.3) }, 0.2, Color3.fromRGB(30, 32, 38))
 end
 
@@ -316,6 +322,7 @@ BUILDERS.Cannon = function(ctx, color)
 	part(ctx, "Bell3", Enum.PartType.Cylinder, Vector3.new(0.4, 2.35, 2.35), Vector3.new(0, y, -2.75), ALONG_Z, WHITE)
 	ring(ctx, "BellRim", CFrame.new(0, y, -2.97), 1.2, 0.2, color, nil, 16)
 	part(ctx, "BellMouth", Enum.PartType.Cylinder, Vector3.new(0.05, 2.1, 2.1), Vector3.new(0, y, -2.96), ALONG_Z, Color3.fromRGB(230, 235, 245))
+	muzzle(ctx, Vector3.new(0, y, -3.1))
 	-- Soap tank on top: glass with soap inside, a cap and a brass adjuster.
 	part(ctx, "TankSeat", Enum.PartType.Cylinder, Vector3.new(0.25, 1.35, 1.35), Vector3.new(0, y + 0.78, 0.5), UPRIGHT, shade(color, 0.75))
 	part(ctx, "Tank", Enum.PartType.Cylinder, Vector3.new(1.7, 1.25, 1.25), Vector3.new(0, y + 1.75, 0.5), UPRIGHT, Color3.fromRGB(230, 245, 255), Enum.Material.Glass, 0.45)

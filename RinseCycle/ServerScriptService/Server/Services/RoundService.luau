@@ -97,6 +97,7 @@ type Run = {
 	Order: { Player }, -- members in join order (spawn assignment, results order)
 	MemberIds: { number }, -- cached UserIds for RunState.Members
 	StartedAt: number, -- Util.Now() (server time, so client timers agree)
+	ClockAt: number?, -- when the run clock started: the first player done with (or skipping) the cutscene
 	Phase: "Playing" | "Complete",
 	Ended: boolean,
 	Total: number,
@@ -381,6 +382,7 @@ local function buildState(run: Run, pr: PlayerRun): Types.RunState
 		Level = run.Level,
 		ArenaName = run.ArenaName,
 		StartedAt = run.StartedAt,
+		ClockAt = run.ClockAt or 0,
 		Phase = run.Phase,
 		Coins = pr.Coins,
 		Tank = pr.Tank,
@@ -439,7 +441,18 @@ local function queuePush(player: Player)
 	end
 end
 
-local function pushAll(run: Run)
+local pushAll: (run: Run) -> ()
+
+-- Starts the run clock (once).
+local function startClock(run: Run)
+	if run.ClockAt or run.Ended then
+		return
+	end
+	run.ClockAt = Util.Now()
+	pushAll(run)
+end
+
+pushAll = function(run: Run)
 	for member in run.Players do
 		queuePush(member)
 	end
@@ -837,7 +850,7 @@ completeRun = function(run: Run)
 	end
 	run.Phase = "Complete"
 	local now = Util.Now()
-	local seconds = math.max(0, math.floor((now - run.StartedAt) * 10 + 0.5) / 10)
+	local seconds = math.max(0, math.floor((now - (run.ClockAt or now)) * 10 + 0.5) / 10)
 	local returnAt = now + R.ResultsSeconds
 	pushAll(run) -- Phase change first; Results follow as soon as the rewards are written
 	task.spawn(rewardRun, run, table.clone(run.Order), seconds, returnAt)
@@ -1130,6 +1143,11 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 	end
 	rebuildMemberIds(run)
 	pushAll(run)
+	-- The clock waits for the intro cutscene: it starts when the first player finishes or skips it
+	-- (RunRequest "Loaded"), or after the whole cutscene's length if nobody reports in.
+	task.delay(R.IntroMaxSeconds, function()
+		startClock(run)
+	end)
 	return true
 end
 
@@ -1254,6 +1272,26 @@ end
 -- Recomputes a player's run stats (perks, passes, pets). Called after pet equip changes, perk
 -- purchases and pass grants; harmless when the player isn't in a run.
 -- Coin packs (MarketService): adds coins to the player's current run. False if not in a run.
+-- Admin (:finishrun): cleans every spot of dirt in the player's dishwasher at once. Returns how
+-- many spots were cleaned, or nil when they aren't in a dishwasher.
+function RoundService.DebugFinish(player: Player): number?
+	local run = runOf[player]
+	if not run or run.Phase ~= "Playing" then
+		return nil
+	end
+	-- Collected first: cleaning a spot removes it from run.Grime.
+	local parts: { BasePart } = {}
+	for part, entry in run.Grime do
+		if not entry.Dead and part.Parent then
+			table.insert(parts, part)
+		end
+	end
+	for _, part in parts do
+		RoundService.DamageGrime(player, part, math.huge, true)
+	end
+	return #parts
+end
+
 function RoundService.AddCoins(player: Player, amount: number): boolean
 	local run = runOf[player]
 	local pr = run and run.Players[player]
@@ -1463,7 +1501,11 @@ local function handleRunRequest(player: Player, action: any, value: any): Types.
 		return fail("You're not in a dishwasher right now.")
 	end
 
-	if action == "BuyUpgrade" then
+	if action == "Loaded" then
+		-- This player is in (their cutscene ended or was skipped): the clock runs from now.
+		startClock(run)
+		return OK
+	elseif action == "BuyUpgrade" then
 		if run.Phase ~= "Playing" then
 			return fail("The dishwasher is already sparkling clean!")
 		end

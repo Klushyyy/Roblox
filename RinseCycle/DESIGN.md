@@ -1017,6 +1017,29 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - **No suds when scrubbing with bare hands.** In Studio, a pass without an ID is given free with
   a clear "Studio test" message.
 
+## 6g. Round 9 (v0.8): run clock, aiming, water, admin
+
+- **Run clock:** the timer starts when your client reports "Loaded" (the cutscene ended or was
+  skipped, or you joined late). If nobody reports it, it starts after `Round.IntroMaxSeconds` (22 s).
+  `RunState.ClockAt` is 0 while waiting, and the HUD shows 00:00:00.
+- **Aiming:** your held tool tilts with the camera pitch (±75°) in third and first person.
+  Other players see a raised arm. Your own name tag hides in first person.
+- **Water FX:** the Nozzle, Washer and Cannon fire from an invisible `Muzzle` part. Each has a
+  two-layer beam, streaking droplets, and mist at the muzzle and at the splash. The held
+  Pressure Washer lance is longer.
+- **Follow / Like:** clicking checks straight away. A follow is read through the Roblox friends
+  API via roproxy (turn on *Allow HTTP Requests*). If it isn't visible yet, the player is told to
+  leave and rejoin, and the reward is settled on the next join. Likes can't be read by games, so
+  they are granted on click.
+- **Grime flicker:** every face of a splat sits a multiple of 0.03 studs above the spot's lift.
+  Overlapping spots choose lifts whose face planes fall between each other's, measured from the
+  real surface so curved dishes count.
+- **Admin panel** (`ServerScriptService/Admin`, `AdminClient`): only the owner
+  (`Config.Social.CreatorUserId`) gets the panel, or anyone in Studio. Open it with the backtick
+  key or the 🛡️ button. It uses the same command system as before: moderation, warnings, bans,
+  mutes, logs, teleports and server tools. It adds Rinse Cycle commands: coins, bubbles, gems,
+  ranks, pets, rebirths, gifted passes, the daily streak, and finishing a run.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

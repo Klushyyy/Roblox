@@ -973,6 +973,36 @@ end
 
 -- Public API: each returns a Types.RequestResult and never throws.
 
+-- Admin (:givepet): adds one pet (tier 1 normal, 2 Golden, 3 Rainbow) to the player's collection.
+function PetService.GivePet(player: Player, petId: string, tier: number?): (boolean, string?)
+	local profile = DataService.Get(player)
+	if not profile then
+		return false, "Their data isn't loaded yet"
+	end
+	if not Config.Pets[petId] then
+		return false, "That pet doesn't exist"
+	end
+	if #profile.Pets >= Config.PetRules.MaxInventory then
+		return false, "Their pet inventory is full"
+	end
+	local used: { [string]: boolean } = {}
+	for _, pet in profile.Pets do
+		used[pet.Uid] = true
+	end
+	local nextUid = profile.NextUid
+	while used[tostring(nextUid)] do
+		nextUid += 1
+	end
+	local entry: Types.PetEntry = { Uid = tostring(nextUid), Id = petId }
+	if tier and tier > 1 then
+		entry.Tier = tier
+	end
+	table.insert(profile.Pets, entry)
+	profile.NextUid = nextUid + 1
+	afterChange(player, false)
+	return true, nil
+end
+
 function PetService.Merge(player: Player, uids: { string }): Types.RequestResult
 	return guarded(player, merge, uids)
 end

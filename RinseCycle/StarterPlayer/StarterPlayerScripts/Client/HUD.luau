@@ -1120,7 +1120,7 @@ function HUD.Init()
 			local run = ClientState.Run :: Types.RunState?
 			if run then
 				if run.Phase == "Playing" then
-					local t = math.max(0, math.floor(Util.Now() - run.StartedAt))
+					local t = if run.ClockAt and run.ClockAt > 0 then math.max(0, math.floor(Util.Now() - run.ClockAt)) else 0
 					timerLabel.Text = string.format("%02d:%02d:%02d", t // 3600, (t % 3600) // 60, t % 60)
 				elseif run.Phase == "Complete" and run.Results then
 					local remaining = math.max(0, run.Results.ReturnAt - Util.Now())
