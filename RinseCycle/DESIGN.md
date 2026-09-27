@@ -952,6 +952,52 @@ window shows the count, bonuses and requirements. A rebirth is announced to the 
   skippers start playing while others watch.
 - The scene only plays when you join a run within its first 12 s.
 
+## 6e. Round 7 (v0.6): rewards, holding tools, camera
+
+**Left lobby buttons** (HUD `LeftColumn`, lobby only): 🎁 Daily (red "!" when ready), 🎟️ Codes and
+🎉 Free Rewards.
+
+**Daily rewards** (`Config.Daily`, DailyUI, MetaRequest `ClaimDaily`).
+- Claimed with a button, and the next one unlocks 24 h after the last claim (live countdown).
+- The streak continues if you claim within `Grace` (24 h) after that.
+- Missing it restarts at day 1, unless the player buys the `RestoreStreak` developer product
+  (offered in the window).
+- The window pops up once per session when a reward is waiting.
+- Profile fields: `DailyLast` (os.time), `DailyStreak`. Old `DailyDay` saves are migrated.
+
+**Codes** (`Config.Codes`, MetaRequest `RedeemCode`): once per player, any capitalisation, stored in
+`profile.RedeemedCodes`.
+
+**Community reward** (`Config.Social`, MetaRequest `ClaimGroup`).
+- The client first tries to claim.
+- If the player isn't a member yet, it opens `GroupService:PromptJoinAsync` and claims again when
+  the prompt closes.
+- The server checks membership live with `GroupService:GetGroupsAsync`, so no rejoin is needed.
+- Like/Follow cards are reminders only: Roblox can't report likes or follows, and rewarding likes
+  isn't allowed.
+
+**Pets** show one number, Power (`Config.PetPower` = Speed x 100). Equipping with full slots offers
+the +2 Pet Slots pass.
+
+**Holding tools.**
+- R15 players raise the right arm while holding a tool (client `HoldPose`, set every Stepped
+  for all characters). The server weld undoes that rotation (RoundService `attachHeldTool`).
+- The pressure washer in hand is just its gun and lance (`ToolModels.Build(i, scale, true)`), and
+  the spray comes from its `Muzzle`.
+- `CameraMinZoomDistance` is 0.5 (first person). HoldPose un-hides the tool and right arm when
+  zoomed in.
+
+**Camera vs walls.** Solid, visible arena and lobby parts are `CanQuery` true, so the camera stops at
+walls instead of clipping through. All gameplay queries use Include filters.
+
+**Cutscene v2** (20.5 s).
+- Mum gets up with her own plate while the others slide theirs over.
+- She walks waypoint paths around the table and the open door, facing where she walks.
+- The plates stand in the rack; the counter is open around the dishwasher.
+- She presses Start with her left hand, filmed from the right, then walks off.
+- The door dissolves as the camera pushes in. The capped crew appears only once the door is shut:
+  they turn, salute with their sponges and start scrubbing.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

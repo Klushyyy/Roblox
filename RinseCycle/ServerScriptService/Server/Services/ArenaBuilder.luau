@@ -160,6 +160,11 @@ local function box(b: Builder, name: string, size: Vector3, x: number, y: number
 			(p :: any)[k] = v
 		end
 	end
+	-- Solid, visible scenery is queryable so the camera bumps into it instead of sliding through
+	-- walls and ovens (every gameplay query uses an Include filter, so this changes nothing else).
+	if not (props and props.CanQuery ~= nil) then
+		p.CanQuery = p.CanCollide and p.Transparency < 0.25
+	end
 	p.Parent = b.model
 	b.count += 1
 	return p
@@ -455,7 +460,9 @@ local function pizzeriaProps(b: Builder, k: RoomStyle)
 	dome.Shape = Enum.PartType.Ball
 	dome.Size = Vector3.new(170, 170, 170)
 	span(b, "OvenLip", ox - 92, ox + 92, fy + 104, fy + 112, oz - 82, oz + 82, Color3.fromRGB(200, 185, 170), Enum.Material.Concrete)
-	span(b, "OvenChimney", ox - 14, ox + 14, fy + 246, fy + ROOM_HEIGHT, oz - 14, oz + 14, Color3.fromRGB(120, 58, 44), Enum.Material.Brick)
+	-- The chimney grows out of the top of the dome (its foot is buried in the ball) up to the ceiling.
+	span(b, "OvenChimney", ox - 14, ox + 14, fy + 186, fy + ROOM_HEIGHT, oz - 14, oz + 14, Color3.fromRGB(120, 58, 44), Enum.Material.Brick)
+	span(b, "ChimneyCollar", ox - 17, ox + 17, fy + 214, fy + 222, oz - 17, oz + 17, Color3.fromRGB(200, 185, 170), Enum.Material.Concrete)
 	span(b, "OvenMouth", ox - 44, ox + 44, fy + 124, fy + 184, oz - 80.5, oz - 76, Color3.fromRGB(255, 130, 40), Enum.Material.Neon, noCollide())
 	cyl(b, "OvenArch", 4.8, 88, ox, fy + 184, oz - 78.5, Color3.fromRGB(255, 150, 60), Enum.Material.Neon, noCollide()).CFrame = footprint(b.origin, ox, fy + 184, oz - 78.5) * CFrame.Angles(0, math.rad(90), 0)
 	span(b, "OvenLedge", ox - 60, ox + 60, fy + 110, fy + 118, oz - 100, oz - 80, Color3.fromRGB(190, 180, 170), Enum.Material.Concrete)
@@ -464,9 +471,21 @@ local function pizzeriaProps(b: Builder, k: RoomStyle)
 	glow.Brightness = 2
 	glow.Range = 60
 	glow.Parent = b.model:FindFirstChild("OvenMouth") or b.model
-	-- A pizza peel leaning on the oven.
-	span(b, "PeelHandle", ox - 110, ox - 104, fy, fy + 190, oz - 60, oz - 54, Color3.fromRGB(170, 120, 70), Enum.Material.Wood, noCollide())
-	cyl(b, "PeelHead", 3, 50, ox - 107, fy + 30, oz - 57, Color3.fromRGB(185, 135, 85), Enum.Material.Wood, noCollide()).CFrame = footprint(b.origin, ox - 107, fy + 30, oz - 57) * CFrame.Angles(0, math.rad(90), 0)
+	-- A pizza peel leaning on the side of the oven: the round blade rests on the floor, flat against
+	-- the brick, and the handle's tip touches the lip. Built along a tilted axis so nothing pokes
+	-- into the oven.
+	local lean = math.rad(17)
+	local peelZ = oz - 30
+	local peelX0 = ox - 92 - 2.6 - 120 * math.sin(lean)
+	local function onPeel(sAlong: number): CFrame
+		return footprint(b.origin, peelX0 + sAlong * math.sin(lean), fy + sAlong * math.cos(lean), peelZ) * CFrame.Angles(0, 0, -lean)
+	end
+	local peelWood = Color3.fromRGB(185, 135, 85)
+	local blade = cyl(b, "PeelHead", 2.4, 44, 0, 0, 0, peelWood, Enum.Material.Wood, noCollide())
+	blade.CFrame = onPeel(24)
+	box(b, "PeelNeck", Vector3.new(2.4, 26, 22), 0, 0, 0, peelWood, Enum.Material.Wood, noCollide()).CFrame = onPeel(44)
+	box(b, "PeelHandle", Vector3.new(5, 66, 5), 0, 0, 0, Color3.fromRGB(165, 115, 70), Enum.Material.Wood, noCollide()).CFrame = onPeel(86)
+	box(b, "PeelGrip", Vector3.new(5.6, 10, 5.6), 0, 0, 0, Color3.fromRGB(120, 60, 40), Enum.Material.Wood, noCollide()).CFrame = onPeel(113)
 
 	-- Stacks of pizza boxes on the left.
 	for _, stack in { { -260, -200, 7 }, { -300, -150, 5 }, { -230, -130, 4 } } do
@@ -1052,18 +1071,17 @@ local function guiText(parent: Instance, name: string, text: string, pos: UDim2,
 end
 
 -- The Tool Shop: a chrome wire shelving unit (it matches the dishwasher racks) standing on the
--- left of the open door, facing the players. Two shelves, the tools on the upper ones, a price tag
--- on the front lip of each spot, a sign on top. Buy any tool in any order with the prompt.
+-- left of the open door, facing the players. One shelf holding every tool, a price tag on the front
+-- lip of each spot, a sign on top. Buy any tool in any order with the prompt.
 local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 	local z0, z1 = SHOP_Z[1], SHOP_Z[2]
 	local depth = 9
 	local x0, x1 = SHOP_X - depth / 2, SHOP_X + depth / 2 -- x1 is the front, facing the players
 	local toPlayers = b.origin.RightVector
 	local chrome = Color3.fromRGB(215, 220, 228)
-	-- Two display shelves at waist and head height for a ~5 stud character (anything higher can't be
-	-- seen from the floor).
-	local shelfYs = { 4, 13.5 }
-	local topY = 25
+	-- One waist-high display shelf for a ~5 stud character, with the unit's top just above head height.
+	local shelfYs = { 4 }
+	local topY = 13.5
 	local TOOL_SCALE = 1.45
 
 	-- Four corner posts plus a middle pair, floor to top, with little feet.
@@ -1089,18 +1107,13 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 	local _, headerGui = signBoard(b, "ShopSign", Vector3.new(z1 - z0 - 4, 4, 0.5), worldPoint(b.origin, x1 - 0.5, topY + 2.6, (z0 + z1) / 2), toPlayers, theme.Accent)
 	guiText(headerGui, "Title", "🧽 TOOL SHOP  •  any tool, any order", UDim2.fromScale(0.03, 0.1), UDim2.fromScale(0.94, 0.8), Color3.new(1, 1, 1))
 
-	-- Every tool you can buy stands on the waist-high shelf (easy to reach and read from the door);
-	-- the top shelf holds spare soap. Spots run from the front of the unit to the back.
+	-- Every tool you can buy stands on the waist-high shelf (easy to reach and read from the door).
+	-- Spots run from the front of the unit to the back.
 	local buyable = #Config.Tools - 1
 	local gap = (z1 - z0) / buyable
 	local spots = {}
 	for k = 1, buyable do
 		spots[k + 1] = { y = shelfYs[1], z = z1 - gap * (k - 0.5) }
-	end
-	for k, c in { Color3.fromRGB(120, 210, 140), Color3.fromRGB(255, 150, 200), Color3.fromRGB(120, 190, 255) } do
-		local bz = z0 + (z1 - z0) * k / 4
-		cyl(b, "SpareSoap", 5, 3.4, SHOP_X - 0.5, shelfYs[2] + 2.52, bz, c, Enum.Material.Glass, { CanCollide = false, Transparency = 0.1 })
-		cyl(b, "SpareSoapCap", 1, 1.6, SHOP_X - 0.5, shelfYs[2] + 5.52, bz, Color3.new(1, 1, 1), nil, noCollide())
 	end
 	for i = 2, #Config.Tools do
 		local tool = Config.Tools[i]

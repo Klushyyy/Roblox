@@ -10,6 +10,7 @@
 -- Whatever the client sends, the reply is always a Types.RequestResult and this never throws.
 -- Requests are rate limited (REQUESTS_PER_SECOND per player) and handled one at a time per player.
 
+local GroupService = game:GetService("GroupService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -85,6 +86,15 @@ local function normalize(result: any): Types.RequestResult
 	if type(result.Rank) == "string" then
 		out.Rank = result.Rank
 		out.Equipped = result.Equipped == true
+	end
+	if type(result.Previous) == "string" then
+		out.Previous = result.Previous
+	end
+	if type(result.Message) == "string" then
+		out.Message = result.Message
+	end
+	if type(result.Day) == "number" then
+		out.Day = result.Day
 	end
 	return out
 end
@@ -270,7 +280,74 @@ local function rebirth(player: Player, _value: any): Types.RequestResult
 	return { Ok = true }
 end
 
+-- Daily reward: claimable 24 hours after the last one (DataService.ClaimDaily).
+local function claimDaily(player: Player, _value: any): Types.RequestResult
+	local day, err = DataService.ClaimDaily(player)
+	if not day then
+		return fail(err or ERR_GENERIC)
+	end
+	return { Ok = true, Day = day, Message = Config.RewardText({
+		Bubbles = if Config.DailyRewards[day].Kind == "Gems" then nil else Config.DailyRewards[day].Amount,
+		Gems = if Config.DailyRewards[day].Kind == "Gems" then Config.DailyRewards[day].Amount else nil,
+	}) }
+end
+
+local function redeemCode(player: Player, value: any): Types.RequestResult
+	if type(value) ~= "string" or #value == 0 or #value > 40 then
+		return fail("Type a code first!")
+	end
+	local ok, message = DataService.RedeemCode(player, value)
+	if not ok then
+		return fail(message)
+	end
+	return { Ok = true, Message = message }
+end
+
+-- Community reward: checked live with Roblox (GroupService:GetGroupsAsync isn't cached for the
+-- session like the old Player:IsInGroup), so it works right after joining from the in-game prompt.
+local function inGroup(player: Player, groupId: number): boolean
+	local ok, groups = pcall(function()
+		return GroupService:GetGroupsAsync(player.UserId)
+	end)
+	if ok and type(groups) == "table" then
+		for _, g in groups do
+			if type(g) == "table" and g.Id == groupId then
+				return true
+			end
+		end
+		return false
+	end
+	local okFallback, member = pcall(function()
+		return player:IsInGroupAsync(groupId)
+	end)
+	return okFallback and member == true
+end
+
+local function claimGroup(player: Player, _value: any): Types.RequestResult
+	local groupId = Config.GetGroupId()
+	if groupId <= 0 then
+		return fail("The community isn't set up yet!")
+	end
+	local profile = DataService.Get(player)
+	if not profile then
+		return fail(ERR_LOADING)
+	end
+	if profile.GroupReward then
+		return fail("You already got this reward. Thanks for joining! 💙")
+	end
+	if not inGroup(player, groupId) then
+		return fail("Join the community first, then claim!")
+	end
+	if not DataService.GrantGroupReward(player) then
+		return fail(ERR_GENERIC)
+	end
+	return { Ok = true, Message = Config.RewardText(Config.Social.GroupReward) }
+end
+
 local HANDLERS: { [string]: (Player, any) -> Types.RequestResult } = {
+	ClaimDaily = claimDaily,
+	RedeemCode = redeemCode,
+	ClaimGroup = claimGroup,
 	Rebirth = rebirth,
 	BuyPerk = buyPerk,
 	TestPass = testPass,

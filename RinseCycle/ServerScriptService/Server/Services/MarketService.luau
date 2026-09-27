@@ -59,6 +59,8 @@ function MarketService.GrantProduct(player: Player, product: any): boolean
 		return DataService.AddBubbles(player, product.Amount, "Product")
 	elseif product.Kind == "Gems" then
 		return DataService.AddGems(player, product.Amount)
+	elseif product.Kind == "RestoreStreak" then
+		return DataService.RestoreStreak(player)
 	elseif product.Kind == "Coins" then
 		if RoundService.AddCoins(player, product.Amount) then
 			return true

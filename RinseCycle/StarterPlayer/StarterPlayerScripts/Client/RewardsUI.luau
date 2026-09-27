@@ -1,0 +1,259 @@
+--[[
+	RewardsUI - two small windows opened from the buttons on the left of the lobby HUD.
+
+	  * "Codes" (🎟️): type a code (Config.Codes) and redeem it. "Look out for codes in the game's
+	    description and our community!"
+	  * "Free" (🎉 Free Rewards):
+	      - Join the community: a real reward (Config.Social.GroupReward). JOIN opens Roblox's own
+	        join prompt in game (GroupService:PromptJoinAsync); as soon as it closes, the server
+	        checks membership live and pays out. No rejoin needed.
+	      - Like the game / Follow the dev: friendly reminders. Roblox gives games no way to see
+	        likes or follows (and rewarding likes breaks Roblox's rules), so these have no reward.
+]]
+
+local GroupService = game:GetService("GroupService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+local Types = require(Shared:WaitForChild("Types"))
+
+local Client = script.Parent
+local ClientState = require(Client:WaitForChild("ClientState"))
+local UIKit = require(Client:WaitForChild("UIKit"))
+
+local Colors = UIKit.Theme.Colors
+local Fonts = UIKit.Theme.Fonts
+
+local RewardsUI = {}
+
+local initialized = false
+local busy = false
+local groupButton: TextButton
+local groupStatus: TextLabel
+
+----------------------------------------------------------------------------------------------------
+-- Codes
+----------------------------------------------------------------------------------------------------
+
+local function buildCodes(screenRoot: Instance)
+	local _window, content = UIKit.Window({
+		Name = "Codes",
+		Title = "Codes",
+		Icon = "🎟️",
+		Size = Vector2.new(560, 320),
+		Parent = screenRoot,
+	})
+	UIKit.Label({
+		Text = "Look out for codes in the game's description and in our community!",
+		TextSize = 18,
+		TextWrapped = true,
+		TextColor3 = Colors.TextDim,
+		Size = UDim2.new(1, -30, 0, 48),
+		Position = UDim2.new(0.5, 0, 0, 4),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Parent = content,
+	})
+	local boxFrame = UIKit.Card({
+		Size = UDim2.new(1, -60, 0, 60),
+		Position = UDim2.new(0.5, 0, 0, 62),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Color = Colors.PanelDark,
+		Parent = content,
+	})
+	local box = Instance.new("TextBox")
+	box.Name = "CodeBox"
+	box.BackgroundTransparency = 1
+	box.Size = UDim2.new(1, -24, 1, 0)
+	box.Position = UDim2.fromOffset(12, 0)
+	box.Font = Fonts.Title
+	box.TextSize = 26
+	box.TextColor3 = Colors.Text
+	box.PlaceholderText = "Enter code..."
+	box.PlaceholderColor3 = Colors.TextDim
+	box.Text = ""
+	box.ClearTextOnFocus = false
+	box.Parent = boxFrame
+	local function redeem()
+		if busy then
+			return
+		end
+		local text = box.Text
+		if text == "" then
+			box:CaptureFocus()
+			return
+		end
+		busy = true
+		local result = ClientState.MetaRequest("RedeemCode", text)
+		busy = false
+		if result.Ok then
+			box.Text = ""
+			UIKit.PlaySound("Sparkle")
+			UIKit.Confetti(40)
+			UIKit.Toast("🎟️ Code redeemed: " .. (result.Message or "") .. "!", "Good")
+		else
+			UIKit.Toast(result.Error or "That code doesn't work.", "Bad")
+		end
+	end
+	box.FocusLost:Connect(function(enterPressed)
+		if enterPressed then
+			task.spawn(redeem)
+		end
+	end)
+	UIKit.Button({
+		Text = "REDEEM",
+		Size = UDim2.fromOffset(220, 56),
+		Position = UDim2.new(0.5, 0, 0, 140),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Color = Colors.Good,
+		TextSize = 26,
+		Parent = content,
+		OnClick = function()
+			task.spawn(redeem)
+		end,
+	})
+	UIKit.RegisterWindow("Codes", {})
+end
+
+----------------------------------------------------------------------------------------------------
+-- Free rewards
+----------------------------------------------------------------------------------------------------
+
+local function refreshGroup()
+	local meta = ClientState.Meta :: Types.MetaState?
+	local claimed = meta ~= nil and meta.GroupReward == true
+	groupButton.Text = if claimed then "Claimed ✅" else "JOIN & CLAIM"
+	UIKit.SetButtonColor(groupButton, if claimed then Colors.Disabled else Colors.Good)
+	groupStatus.Text = if claimed then "Thanks for joining! 💙" else "Reward: " .. Config.RewardText(Config.Social.GroupReward)
+end
+
+local function joinGroup()
+	local meta = ClientState.Meta :: Types.MetaState?
+	if busy or (meta and meta.GroupReward) then
+		return
+	end
+	local groupId = Config.GetGroupId()
+	if groupId <= 0 then
+		UIKit.Toast("The community isn't set up yet!", "Info")
+		return
+	end
+	busy = true
+	-- Already a member? Claim straight away. Otherwise Roblox's join prompt, in game; when it
+	-- closes (joined or not), ask the server to check.
+	local result = ClientState.MetaRequest("ClaimGroup")
+	if not result.Ok then
+		pcall(function()
+			GroupService:PromptJoinAsync(groupId)
+		end)
+		result = ClientState.MetaRequest("ClaimGroup")
+	end
+	busy = false
+	if result.Ok then
+		UIKit.PlaySound("Sparkle")
+		UIKit.Confetti(60)
+		UIKit.Toast("👥 Welcome to the community! " .. (result.Message or ""), "Good")
+	else
+		UIKit.Toast(result.Error or "Join the community first, then claim!", "Info")
+	end
+	refreshGroup()
+end
+
+local function card(parent: Instance, order: number, icon: string, title: string, body: string): Frame
+	local c = UIKit.Card({
+		Size = UDim2.new(1, -24, 0, 104),
+		LayoutOrder = order,
+		Color = Colors.PanelLight,
+		Parent = parent,
+	})
+	UIKit.Label({ Text = icon, TextSize = 44, Size = UDim2.fromOffset(70, 70), Position = UDim2.new(0, 10, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5), Stroke = false, Parent = c })
+	UIKit.Label({ Name = "Title", Text = title, TextSize = 22, TextXAlignment = Enum.TextXAlignment.Left, Size = UDim2.new(1, -330, 0, 30), Position = UDim2.fromOffset(88, 12), Parent = c })
+	UIKit.Label({ Name = "Body", Text = body, TextSize = 16, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, TextColor3 = Colors.TextDim, Size = UDim2.new(1, -330, 0, 52), Position = UDim2.fromOffset(88, 44), Parent = c })
+	return c
+end
+
+local function buildFree(screenRoot: Instance)
+	local _window, content = UIKit.Window({
+		Name = "Free",
+		Title = "Free Rewards",
+		Icon = "🎉",
+		Size = Vector2.new(720, 470),
+		Parent = screenRoot,
+	})
+	local list = Instance.new("Frame")
+	list.BackgroundTransparency = 1
+	list.Size = UDim2.new(1, 0, 1, 0)
+	list.Parent = content
+	local layout = Instance.new("UIListLayout")
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.Padding = UDim.new(0, 12)
+	layout.Parent = list
+
+	-- Community (the real reward).
+	local group = card(list, 1, "👥", "Join our community", "Join the Rinse Cycle community for a free reward, news and codes!")
+	groupButton = UIKit.Button({
+		Text = "JOIN & CLAIM",
+		Size = UDim2.fromOffset(210, 52),
+		Position = UDim2.new(1, -14, 0.5, -10),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Color = Colors.Good,
+		TextSize = 20,
+		Parent = group,
+		OnClick = function()
+			task.spawn(joinGroup)
+		end,
+	})
+	groupStatus = UIKit.Label({ Text = "", TextSize = 15, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(230, 20), Position = UDim2.new(1, -4, 1, -8), AnchorPoint = Vector2.new(1, 1), Parent = group })
+
+	-- Like the game (a reminder: Roblox doesn't let games see likes).
+	local like = card(list, 2, "👍", "Like the game!", "Having fun? Press 👍 on the game page. It helps new players find us!")
+	UIKit.Label({ Text = "Thank you! 💙", TextSize = 18, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(210, 40), Position = UDim2.new(1, -14, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), Parent = like })
+
+	-- Follow the dev (a reminder, with their headshot and name).
+	local creatorId = Config.Social.CreatorUserId
+	local follow = card(list, 3, "", "Follow the dev", "Follow for update news and new codes!")
+	local shot = Instance.new("ImageLabel")
+	shot.BackgroundTransparency = 1
+	shot.Size = UDim2.fromOffset(70, 70)
+	shot.Position = UDim2.new(0, 10, 0.5, 0)
+	shot.AnchorPoint = Vector2.new(0, 0.5)
+	shot.Image = string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=150&h=150", creatorId)
+	shot.Parent = follow
+	UIKit.Corner(shot, 35)
+	UIKit.Label({ Text = "Thank you! 💙", TextSize = 18, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(210, 40), Position = UDim2.new(1, -14, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), Parent = follow })
+	task.spawn(function()
+		local ok, name = pcall(function()
+			return Players:GetNameFromUserIdAsync(creatorId)
+		end)
+		if ok and type(name) == "string" then
+			local title = follow:FindFirstChild("Title")
+			if title and title:IsA("TextLabel") then
+				title.Text = "Follow @" .. name
+			end
+		end
+	end)
+
+	UIKit.RegisterWindow("Free", {
+		Open = function()
+			refreshGroup()
+		end,
+	})
+	ClientState.Changed:Connect(function(kind)
+		if kind == "Meta" and UIKit.IsWindowOpen("Free") then
+			refreshGroup()
+		end
+	end)
+end
+
+function RewardsUI.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+	local _gui, screenRoot = UIKit.CreateScreen("RewardsUI", 11)
+	buildCodes(screenRoot)
+	buildFree(screenRoot)
+end
+
+return RewardsUI

@@ -85,8 +85,11 @@ export type Profile = {
 	Unlocked: number, -- highest level index the player may pick
 	BestTimes: { number }, -- one per Config.Levels entry, seconds, 0 = never cleared
 	Rebirths: number, -- times the player has rebirthed (Config.Rebirth)
-	DailyDay: number, -- UTC day number of the last daily reward claimed (0 = never)
+	DailyDay: number, -- (old saves) UTC day number of the last daily reward claimed
+	DailyLast: number, -- os.time() of the last daily claim (0 = never); the next is 24 h later
 	DailyStreak: number, -- 1..#Config.DailyRewards, the day of the streak last claimed
+	RedeemedCodes: { string }, -- Config.Codes already used (upper case)
+	GroupReward: boolean, -- the join-the-community reward has been claimed
 	RebirthReady: boolean, -- the last level has been cleared since the last rebirth
 	Stats: {
 		Runs: number,
@@ -143,7 +146,10 @@ local TEMPLATE: Profile = {
 	Rebirths = 0,
 	RebirthReady = false,
 	DailyDay = 0,
+	DailyLast = 0,
 	DailyStreak = 0,
+	RedeemedCodes = {},
+	GroupReward = false,
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
 }
@@ -334,7 +340,19 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.Gems = toCount(p.Gems, 0)
 	p.Rebirths = toCount(p.Rebirths, 0)
 	p.DailyDay = toCount(p.DailyDay, 0)
+	p.DailyLast = toCount(p.DailyLast, 0)
+	if p.DailyLast == 0 and p.DailyDay > 0 then
+		p.DailyLast = p.DailyDay * 86400 -- saves from before the 24-hour timer
+	end
 	p.DailyStreak = math.clamp(toCount(p.DailyStreak, 0), 0, #Config.DailyRewards)
+	local codes = {}
+	for _, code in (if type(p.RedeemedCodes) == "table" then p.RedeemedCodes else {}) do
+		if type(code) == "string" and #code <= 40 and #codes < 500 then
+			table.insert(codes, code)
+		end
+	end
+	p.RedeemedCodes = codes
+	p.GroupReward = p.GroupReward == true
 	p.RebirthReady = p.RebirthReady == true
 	local ranks, seenRank = {}, {}
 	for _, id in (if type(p.Ranks) == "table" then p.Ranks else {}) do
@@ -501,6 +519,17 @@ end
 -- MetaState, leaderstats and toasts
 ----------------------------------------------------------------------------------------------------
 
+-- Daily reward timing (Config.Daily): claimable 24 h after the last claim; the streak carries on if
+-- you claim within the grace window after that, otherwise the next claim starts again at day 1
+-- (unless the streak is restored with the RestoreStreak product).
+local function dailyClaimable(profile: Profile): boolean
+	return profile.DailyLast == 0 or os.time() >= profile.DailyLast + Config.Daily.Cooldown
+end
+
+local function dailyBroken(profile: Profile): boolean
+	return profile.DailyStreak > 0 and profile.DailyLast > 0 and os.time() >= profile.DailyLast + Config.Daily.Cooldown + Config.Daily.Grace
+end
+
 local function buildMeta(player: Player, profile: Profile): Types.MetaState
 	local passes = passesOf[player] or {}
 	local passCopy = {}
@@ -542,7 +571,10 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		Rebirths = profile.Rebirths,
 		RebirthReady = profile.RebirthReady,
 		DailyStreak = profile.DailyStreak,
-		DailyClaimedToday = profile.DailyDay == math.floor(os.time() / 86400),
+		DailyClaimedToday = not dailyClaimable(profile),
+		DailyReadyAt = if profile.DailyLast > 0 then profile.DailyLast + Config.Daily.Cooldown else 0,
+		DailyBroken = dailyBroken(profile),
+		GroupReward = profile.GroupReward,
 		Stats = {
 			Runs = stats.Runs,
 			DishesCleaned = stats.DishesCleaned,
@@ -601,29 +633,6 @@ local function flushNotices(session: Session)
 	for _, notice in list do
 		notifyRemote:FireClient(player, notice[1], notice[2])
 	end
-end
-
--- Daily reward (Config.DailyRewards): the first join of each UTC day claims the next day of the
--- streak; a missed day restarts it. The client shows the reward calendar (DailyUI).
-local function claimDaily(session: Session, profile: Profile)
-	local today = math.floor(os.time() / 86400)
-	if profile.DailyDay == today then
-		return
-	end
-	local streak = if profile.DailyDay == today - 1 then profile.DailyStreak % #Config.DailyRewards + 1 else 1
-	local reward = Config.DailyRewards[streak]
-	profile.DailyDay = today
-	profile.DailyStreak = streak
-	if reward.Kind == "Gems" then
-		profile.Gems += reward.Amount
-	else
-		profile.Bubbles += reward.Amount
-	end
-	session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
-	-- The client pops the calendar only when the reward was claimed on THIS join.
-	pcall(function()
-		session.Player:SetAttribute("DailyJustClaimed", true)
-	end)
 end
 
 -- Toasts sent the instant a player joins can arrive before their UI exists, so they wait until the
@@ -891,7 +900,6 @@ local function loadSession(session: Session)
 	if notice then
 		queueNotice(session, notice, noticeKind)
 	end
-	claimDaily(session, profile)
 	DataService.ProfileLoaded:Fire(player, profile)
 	pushNow(player)
 
@@ -1165,6 +1173,95 @@ function DataService.SpendGems(player: Player, amount: number): boolean
 		return false
 	end
 	profile.Gems -= cost
+	DataService.PushMeta(player)
+	return true
+end
+
+-- Claims the daily reward if 24 hours have passed since the last claim. Returns the streak day
+-- claimed (1..7) or nil and an error.
+function DataService.ClaimDaily(player: Player): (number?, string?)
+	local profile = DataService.Get(player)
+	if not profile then
+		return nil, "Your data is still loading."
+	end
+	if not dailyClaimable(profile) then
+		return nil, "Come back when the timer runs out!"
+	end
+	local streak = if dailyBroken(profile) or profile.DailyLast == 0 then 1 else profile.DailyStreak % #Config.DailyRewards + 1
+	local reward = Config.DailyRewards[streak]
+	profile.DailyLast = os.time()
+	profile.DailyStreak = streak
+	if reward.Kind == "Gems" then
+		profile.Gems += reward.Amount
+	else
+		applyBubbles(profile, reward.Amount)
+	end
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
+	end
+	DataService.PushMeta(player)
+	return streak, nil
+end
+
+-- RestoreStreak product: a missed day is forgiven, so the next claim (available now) carries on
+-- from the streak you had.
+function DataService.RestoreStreak(player: Player): boolean
+	local profile = DataService.Get(player)
+	if not profile then
+		return false
+	end
+	if dailyBroken(profile) then
+		-- As if the last claim was exactly 24 hours ago: claimable now, and the streak carries on.
+		profile.DailyLast = os.time() - Config.Daily.Cooldown
+	end
+	DataService.PushMeta(player)
+	return true
+end
+
+-- Redeems a code from Config.Codes (any capitalisation) once per player.
+function DataService.RedeemCode(player: Player, text: string): (boolean, string)
+	local profile = DataService.Get(player)
+	if not profile then
+		return false, "Your data is still loading."
+	end
+	local code = string.upper((string.gsub(text, "%s", "")))
+	local def = Config.Codes[code]
+	if not def or (def.Expires and os.time() > def.Expires) then
+		return false, "That code doesn't work."
+	end
+	if table.find(profile.RedeemedCodes, code) then
+		return false, "You already used that code!"
+	end
+	table.insert(profile.RedeemedCodes, code)
+	if def.Gems then
+		profile.Gems += def.Gems
+	end
+	if def.Bubbles then
+		applyBubbles(profile, def.Bubbles)
+	end
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
+	end
+	DataService.PushMeta(player)
+	return true, Config.RewardText(def)
+end
+
+-- The one-time community reward (ShopService checks membership first).
+function DataService.GrantGroupReward(player: Player): boolean
+	local profile = DataService.Get(player)
+	if not profile or profile.GroupReward then
+		return false
+	end
+	profile.GroupReward = true
+	local reward = Config.Social.GroupReward
+	profile.Gems += reward.Gems or 0
+	applyBubbles(profile, reward.Bubbles or 0)
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
+	end
 	DataService.PushMeta(player)
 	return true
 end

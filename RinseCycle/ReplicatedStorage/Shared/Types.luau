@@ -119,7 +119,10 @@ export type MetaState = {
 	Rebirths: number,
 	RebirthReady: boolean, -- the last level was cleared since the last rebirth
 	DailyStreak: number, -- day of the daily-reward streak last claimed (1..7)
-	DailyClaimedToday: boolean,
+	DailyClaimedToday: boolean, -- true while the next daily reward is still on its timer
+	DailyReadyAt: number, -- os.time() when the next daily reward unlocks (0 = never claimed)
+	DailyBroken: boolean, -- a day was missed: the next claim restarts at day 1 unless restored
+	GroupReward: boolean, -- the community reward has been claimed
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
@@ -138,6 +141,8 @@ export type RequestResult = {
 	Rank: string?, -- MetaRequest "RollRank": the rank rolled
 	Equipped: boolean?, -- MetaRequest "RollRank": always true now (a roll replaces your rank)
 	Previous: string?, -- MetaRequest "RollRank": the rank you had before
+	Message: string?, -- ClaimDaily / RedeemCode / ClaimGroup: what you got ("🧼 300 + 💎 10")
+	Day: number?, -- ClaimDaily: the streak day claimed
 }
 
 -- RunFX payloads (S->C), by kind.

@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "0.5.0"
+Config.Version = "0.6.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -375,6 +375,8 @@ Config.DevProducts = {
 	{ Key = "Gems1", Id = 0, Price = 29, Kind = "Gems", Amount = 30, Name = "Pouch of Gems", Icon = "💎" },
 	{ Key = "Gems2", Id = 0, Price = 79, Kind = "Gems", Amount = 100, Name = "Sack of Gems", Icon = "💎" },
 	{ Key = "Gems3", Id = 0, Price = 199, Kind = "Gems", Amount = 300, Name = "Chest of Gems", Icon = "💎" },
+	-- Offered in the Daily Reward window only when you've missed a day.
+	{ Key = "RestoreStreak", Id = 0, Price = 29, Kind = "RestoreStreak", Amount = 1, Name = "Restore Streak", Icon = "🔥" },
 }
 
 function Config.GetProduct(key: string)
@@ -594,6 +596,13 @@ function Config.PetStats(petId: string, tier: number?)
 	return { Speed = def.PowerShare * mult, Capacity = math.floor((def.Capacity or 12) * mult + 0.5), CoinBonus = def.CoinBonus * mult }
 end
 
+-- One easy number for the UI: a pet's Power. Speed, bag size and coin bonus all rise together, so
+-- a single score (bigger = cleans faster, carries more and earns more) says everything.
+function Config.PetPower(petId: string, tier: number?): number
+	local stats = Config.PetStats(petId, tier)
+	return if stats then math.floor(stats.Speed * 100 + 0.5) else 0
+end
+
 function Config.PetCoinBonus(pets, equipped): number
 	local byUid = {}
 	for _, pet in pets or {} do
@@ -681,8 +690,13 @@ function Config.StartCoins(levelIndex: number, perks): number
 	return math.floor(lvl * Config.GetPerk("HeadStart").PerLevel * Config.GetLevel(levelIndex).Mult)
 end
 
--- Daily rewards: claimed automatically the first time you join each (UTC) day. Coming back the next
--- day moves the streak on; missing a day starts it again. Day 7 is the big one, then it loops.
+-- Daily rewards: claimed from the 🎁 Daily button. The next one unlocks 24 hours after you claim
+-- (Cooldown). Claim it within Grace after that and the streak moves on; later and it starts again
+-- at day 1, unless you buy "Restore Streak" (Config.DevProducts). Day 7 is the big one, then it loops.
+Config.Daily = {
+	Cooldown = 24 * 60 * 60,
+	Grace = 24 * 60 * 60,
+}
 Config.DailyRewards = {
 	{ Kind = "Bubbles", Amount = 60 },
 	{ Kind = "Bubbles", Amount = 120 },
@@ -751,6 +765,51 @@ do
 		rankSum += r.Chance
 	end
 	assert(math.abs(rankSum - 100) &lt; 0.001, "Config: rank chances add to " .. rankSum)
+end
+
+----------------------------------------------------------------------------------------------------
+-- Codes (🎟️ Codes button). Key = the code in CAPITALS (players can type any case); each player can
+-- use each code once. Give Bubbles and/or Gems; Expires (optional) is an os.time() after which it
+-- stops working. Add new ones here and announce them in the game's description.
+----------------------------------------------------------------------------------------------------
+Config.Codes = {
+	RELEASE = { Bubbles = 300, Gems = 10 },
+	SQUEAKY = { Bubbles = 150 },
+	BUBBLES = { Gems = 15 },
+} :: { [string]: { Bubbles: number?, Gems: number?, Expires: number? } }
+
+-- "🧼 300 + 💎 10"
+function Config.RewardText(reward: { Bubbles: number?, Gems: number? }): string
+	local bits = {}
+	if reward.Bubbles and reward.Bubbles &gt; 0 then
+		table.insert(bits, "🧼 " .. reward.Bubbles)
+	end
+	if reward.Gems and reward.Gems &gt; 0 then
+		table.insert(bits, "💎 " .. reward.Gems)
+	end
+	return table.concat(bits, " + ")
+end
+
+----------------------------------------------------------------------------------------------------
+-- Community (🎉 Free Rewards button). Joining the game's Roblox community gives a one-time reward;
+-- it's checked in game, no rejoin needed. GroupId 0 = the group that owns the game (set a number to
+-- use a different one). CreatorUserId is shown on the "Follow the dev" card (Roblox has no way to
+-- check follows or likes, so those two are friendly reminders without a reward).
+----------------------------------------------------------------------------------------------------
+Config.Social = {
+	GroupId = 0,
+	CreatorUserId = 2297538363,
+	GroupReward = { Bubbles = 500, Gems = 25 },
+}
+
+function Config.GetGroupId(): number
+	if Config.Social.GroupId &gt; 0 then
+		return Config.Social.GroupId
+	end
+	local ok, id = pcall(function()
+		return if game.CreatorType == Enum.CreatorType.Group then game.CreatorId else 0
+	end)
+	return if ok and type(id) == "number" then id else 0
 end
 
 return Config</ProtectedString></Properties></Item>
@@ -2116,6 +2175,7 @@ local function knob(ctx: Ctx, name: string, cf: CFrame, length: number, diameter
 end
 
 local BUILDERS: { [string]: (Ctx, Color3) -&gt; () } = {}
+local HELD_BUILDERS: { [string]: (Ctx, Color3) -&gt; () } = {}
 
 -- Sponge: a rounded block of yellow foam with dimpled pores, a glue line, and a green scouring pad
 -- on top with a lighter fleck pattern. A bead of soap suds rides on the pad.
@@ -2267,6 +2327,30 @@ BUILDERS.Washer = function(ctx, color)
 	tube(ctx, "Hose", { Vector3.new(1.55, 1.3, 1.1), Vector3.new(1.0, 0.9, 1.9), Vector3.new(-0.6, 0.9, 2.0), Vector3.new(-1.5, 1.2, 1.4), Vector3.new(gx, 1.5, 1.0) }, 0.2, Color3.fromRGB(30, 32, 38))
 end
 
+-- The pressure washer as it's held: just the spray gun and its long lance (the cart stays on the
+-- shelf). The pistol grip is at the origin so the hand closes round it; the gun body sits above
+-- it and the lance runs forward (-Z) with a rubber fore-grip, ending in a yellow nozzle. A short
+-- run of hose hangs from the bottom of the grip.
+HELD_BUILDERS.Washer = function(ctx, color)
+	local y = 0.8
+	bar(ctx, "GunGrip", Vector3.new(0, -0.55, 0.2), Vector3.new(0, 0.55, -0.05), 0.42, DARK)
+	for i = 0, 2 do
+		part(ctx, "GripRidge", Enum.PartType.Cylinder, Vector3.new(0.44, 0.12, 0.12), Vector3.new(0, 0.3 - i * 0.3, -0.12 + i * 0.07), nil, RUBBER)
+	end
+	roundedBox(ctx, "GunBody", Vector3.new(0.5, 0.6, 1.5), CFrame.new(0, y, -0.25), 0.22, DARK)
+	partCF(ctx, "GunStripe", nil, Vector3.new(0.54, 0.16, 1.1), CFrame.new(0, y + 0.12, -0.25), color)
+	part(ctx, "Trigger", nil, Vector3.new(0.14, 0.42, 0.16), Vector3.new(0, 0.3, -0.5), CFrame.Angles(math.rad(-12), 0, 0), Color3.fromRGB(255, 200, 60))
+	tube(ctx, "TriggerGuard", { Vector3.new(0, 0.5, -0.9), Vector3.new(0, 0.05, -0.85), Vector3.new(0, -0.05, -0.35) }, 0.1, DARK)
+	part(ctx, "Coupler", Enum.PartType.Cylinder, Vector3.new(0.35, 0.36, 0.36), Vector3.new(0, y, -1.1), ALONG_Z, BRASS, Enum.Material.Metal)
+	bar(ctx, "Lance", Vector3.new(0, y, -1.25), Vector3.new(0, y, -5.6), 0.2, CHROME, Enum.Material.Metal)
+	bar(ctx, "ForeGrip", Vector3.new(0, y, -2.2), Vector3.new(0, y, -3.1), 0.38, RUBBER)
+	part(ctx, "NozzleCollar", Enum.PartType.Cylinder, Vector3.new(0.2, 0.32, 0.32), Vector3.new(0, y, -5.62), ALONG_Z, CHROME, Enum.Material.Metal)
+	part(ctx, "LanceTip", Enum.PartType.Cylinder, Vector3.new(0.4, 0.34, 0.34), Vector3.new(0, y, -5.9), ALONG_Z, Color3.fromRGB(255, 200, 60))
+	local muzzle = part(ctx, "Muzzle", nil, Vector3.new(0.1, 0.1, 0.1) / ctx.Scale, Vector3.new(0, y, -6.15), nil, WHITE)
+	muzzle.Transparency = 1
+	tube(ctx, "Hose", { Vector3.new(0, -0.55, 0.2), Vector3.new(0, -1.0, 0.45), Vector3.new(0, -1.7, 0.5), Vector3.new(0, -2.3, 0.3) }, 0.2, Color3.fromRGB(30, 32, 38))
+end
+
 -- Foam cannon: a sleek blaster. White rounded body with colour stripes, a see-through soap tank on
 -- top (pink soap, a cap), a brass adjuster knob, a stepped chrome-and-white bell, a rubber pistol
 -- grip and trigger, and a burst of foam from the front.
@@ -2305,7 +2389,8 @@ BUILDERS.Cannon = function(ctx, color)
 	end
 end
 
-function ToolModels.Build(toolIndex: number, scale: number?): Model
+-- `held` picks the in-hand version of a tool when it has one (the washer's gun and lance).
+function ToolModels.Build(toolIndex: number, scale: number?, held: boolean?): Model
 	local model = Instance.new("Model")
 	model.Name = "Tool_" .. tostring(toolIndex)
 	local ctx: Ctx = { Model = model, Scale = scale or 1 }
@@ -2314,7 +2399,7 @@ function ToolModels.Build(toolIndex: number, scale: number?): Model
 	model.PrimaryPart = grip
 	-- Builders are keyed by tool Id, so reordering or removing tools in Config never mixes models up.
 	local tool = Config.Tools[toolIndex]
-	local builder = tool and BUILDERS[tool.Id]
+	local builder = tool and ((held and HELD_BUILDERS[tool.Id]) or BUILDERS[tool.Id])
 	if builder then
 		builder(ctx, tool.Color or WHITE)
 	end
@@ -2325,8 +2410,11 @@ end
 -- The tool sits just in front of the hand, business end pointing forward.
 function ToolModels.HoldOffset(toolIndex: number): CFrame
 	local tool = Config.Tools[toolIndex]
-	local lift = if tool and tool.Id == "Washer" then -1.6 else -0.9
-	return CFrame.new(0, lift, -0.6)
+	if tool and tool.Id == "Washer" then
+		-- The held washer is built round its pistol grip: the hand closes on the grip itself.
+		return CFrame.new(0, -0.15, -0.1)
+	end
+	return CFrame.new(0, -0.9, -0.6)
 end
 
 return ToolModels</ProtectedString></Properties></Item>
@@ -2451,7 +2539,10 @@ export type MetaState = {
 	Rebirths: number,
 	RebirthReady: boolean, -- the last level was cleared since the last rebirth
 	DailyStreak: number, -- day of the daily-reward streak last claimed (1..7)
-	DailyClaimedToday: boolean,
+	DailyClaimedToday: boolean, -- true while the next daily reward is still on its timer
+	DailyReadyAt: number, -- os.time() when the next daily reward unlocks (0 = never claimed)
+	DailyBroken: boolean, -- a day was missed: the next claim restarts at day 1 unless restored
+	GroupReward: boolean, -- the community reward has been claimed
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
@@ -2470,6 +2561,8 @@ export type RequestResult = {
 	Rank: string?, -- MetaRequest "RollRank": the rank rolled
 	Equipped: boolean?, -- MetaRequest "RollRank": always true now (a roll replaces your rank)
 	Previous: string?, -- MetaRequest "RollRank": the rank you had before
+	Message: string?, -- ClaimDaily / RedeemCode / ClaimGroup: what you got ("🧼 300 + 💎 10")
+	Day: number?, -- ClaimDaily: the streak day claimed
 }
 
 -- RunFX payloads (S-&gt;C), by kind.
@@ -2814,6 +2907,11 @@ local function box(b: Builder, name: string, size: Vector3, x: number, y: number
 			(p :: any)[k] = v
 		end
 	end
+	-- Solid, visible scenery is queryable so the camera bumps into it instead of sliding through
+	-- walls and ovens (every gameplay query uses an Include filter, so this changes nothing else).
+	if not (props and props.CanQuery ~= nil) then
+		p.CanQuery = p.CanCollide and p.Transparency &lt; 0.25
+	end
 	p.Parent = b.model
 	b.count += 1
 	return p
@@ -3109,7 +3207,9 @@ local function pizzeriaProps(b: Builder, k: RoomStyle)
 	dome.Shape = Enum.PartType.Ball
 	dome.Size = Vector3.new(170, 170, 170)
 	span(b, "OvenLip", ox - 92, ox + 92, fy + 104, fy + 112, oz - 82, oz + 82, Color3.fromRGB(200, 185, 170), Enum.Material.Concrete)
-	span(b, "OvenChimney", ox - 14, ox + 14, fy + 246, fy + ROOM_HEIGHT, oz - 14, oz + 14, Color3.fromRGB(120, 58, 44), Enum.Material.Brick)
+	-- The chimney grows out of the top of the dome (its foot is buried in the ball) up to the ceiling.
+	span(b, "OvenChimney", ox - 14, ox + 14, fy + 186, fy + ROOM_HEIGHT, oz - 14, oz + 14, Color3.fromRGB(120, 58, 44), Enum.Material.Brick)
+	span(b, "ChimneyCollar", ox - 17, ox + 17, fy + 214, fy + 222, oz - 17, oz + 17, Color3.fromRGB(200, 185, 170), Enum.Material.Concrete)
 	span(b, "OvenMouth", ox - 44, ox + 44, fy + 124, fy + 184, oz - 80.5, oz - 76, Color3.fromRGB(255, 130, 40), Enum.Material.Neon, noCollide())
 	cyl(b, "OvenArch", 4.8, 88, ox, fy + 184, oz - 78.5, Color3.fromRGB(255, 150, 60), Enum.Material.Neon, noCollide()).CFrame = footprint(b.origin, ox, fy + 184, oz - 78.5) * CFrame.Angles(0, math.rad(90), 0)
 	span(b, "OvenLedge", ox - 60, ox + 60, fy + 110, fy + 118, oz - 100, oz - 80, Color3.fromRGB(190, 180, 170), Enum.Material.Concrete)
@@ -3118,9 +3218,21 @@ local function pizzeriaProps(b: Builder, k: RoomStyle)
 	glow.Brightness = 2
 	glow.Range = 60
 	glow.Parent = b.model:FindFirstChild("OvenMouth") or b.model
-	-- A pizza peel leaning on the oven.
-	span(b, "PeelHandle", ox - 110, ox - 104, fy, fy + 190, oz - 60, oz - 54, Color3.fromRGB(170, 120, 70), Enum.Material.Wood, noCollide())
-	cyl(b, "PeelHead", 3, 50, ox - 107, fy + 30, oz - 57, Color3.fromRGB(185, 135, 85), Enum.Material.Wood, noCollide()).CFrame = footprint(b.origin, ox - 107, fy + 30, oz - 57) * CFrame.Angles(0, math.rad(90), 0)
+	-- A pizza peel leaning on the side of the oven: the round blade rests on the floor, flat against
+	-- the brick, and the handle's tip touches the lip. Built along a tilted axis so nothing pokes
+	-- into the oven.
+	local lean = math.rad(17)
+	local peelZ = oz - 30
+	local peelX0 = ox - 92 - 2.6 - 120 * math.sin(lean)
+	local function onPeel(sAlong: number): CFrame
+		return footprint(b.origin, peelX0 + sAlong * math.sin(lean), fy + sAlong * math.cos(lean), peelZ) * CFrame.Angles(0, 0, -lean)
+	end
+	local peelWood = Color3.fromRGB(185, 135, 85)
+	local blade = cyl(b, "PeelHead", 2.4, 44, 0, 0, 0, peelWood, Enum.Material.Wood, noCollide())
+	blade.CFrame = onPeel(24)
+	box(b, "PeelNeck", Vector3.new(2.4, 26, 22), 0, 0, 0, peelWood, Enum.Material.Wood, noCollide()).CFrame = onPeel(44)
+	box(b, "PeelHandle", Vector3.new(5, 66, 5), 0, 0, 0, Color3.fromRGB(165, 115, 70), Enum.Material.Wood, noCollide()).CFrame = onPeel(86)
+	box(b, "PeelGrip", Vector3.new(5.6, 10, 5.6), 0, 0, 0, Color3.fromRGB(120, 60, 40), Enum.Material.Wood, noCollide()).CFrame = onPeel(113)
 
 	-- Stacks of pizza boxes on the left.
 	for _, stack in { { -260, -200, 7 }, { -300, -150, 5 }, { -230, -130, 4 } } do
@@ -3706,18 +3818,17 @@ local function guiText(parent: Instance, name: string, text: string, pos: UDim2,
 end
 
 -- The Tool Shop: a chrome wire shelving unit (it matches the dishwasher racks) standing on the
--- left of the open door, facing the players. Two shelves, the tools on the upper ones, a price tag
--- on the front lip of each spot, a sign on top. Buy any tool in any order with the prompt.
+-- left of the open door, facing the players. One shelf holding every tool, a price tag on the front
+-- lip of each spot, a sign on top. Buy any tool in any order with the prompt.
 local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 	local z0, z1 = SHOP_Z[1], SHOP_Z[2]
 	local depth = 9
 	local x0, x1 = SHOP_X - depth / 2, SHOP_X + depth / 2 -- x1 is the front, facing the players
 	local toPlayers = b.origin.RightVector
 	local chrome = Color3.fromRGB(215, 220, 228)
-	-- Two display shelves at waist and head height for a ~5 stud character (anything higher can't be
-	-- seen from the floor).
-	local shelfYs = { 4, 13.5 }
-	local topY = 25
+	-- One waist-high display shelf for a ~5 stud character, with the unit's top just above head height.
+	local shelfYs = { 4 }
+	local topY = 13.5
 	local TOOL_SCALE = 1.45
 
 	-- Four corner posts plus a middle pair, floor to top, with little feet.
@@ -3743,18 +3854,13 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 	local _, headerGui = signBoard(b, "ShopSign", Vector3.new(z1 - z0 - 4, 4, 0.5), worldPoint(b.origin, x1 - 0.5, topY + 2.6, (z0 + z1) / 2), toPlayers, theme.Accent)
 	guiText(headerGui, "Title", "🧽 TOOL SHOP  •  any tool, any order", UDim2.fromScale(0.03, 0.1), UDim2.fromScale(0.94, 0.8), Color3.new(1, 1, 1))
 
-	-- Every tool you can buy stands on the waist-high shelf (easy to reach and read from the door);
-	-- the top shelf holds spare soap. Spots run from the front of the unit to the back.
+	-- Every tool you can buy stands on the waist-high shelf (easy to reach and read from the door).
+	-- Spots run from the front of the unit to the back.
 	local buyable = #Config.Tools - 1
 	local gap = (z1 - z0) / buyable
 	local spots = {}
 	for k = 1, buyable do
 		spots[k + 1] = { y = shelfYs[1], z = z1 - gap * (k - 0.5) }
-	end
-	for k, c in { Color3.fromRGB(120, 210, 140), Color3.fromRGB(255, 150, 200), Color3.fromRGB(120, 190, 255) } do
-		local bz = z0 + (z1 - z0) * k / 4
-		cyl(b, "SpareSoap", 5, 3.4, SHOP_X - 0.5, shelfYs[2] + 2.52, bz, c, Enum.Material.Glass, { CanCollide = false, Transparency = 0.1 })
-		cyl(b, "SpareSoapCap", 1, 1.6, SHOP_X - 0.5, shelfYs[2] + 5.52, bz, Color3.new(1, 1, 1), nil, noCollide())
 	end
 	for i = 2, #Config.Tools do
 		local tool = Config.Tools[i]
@@ -4344,8 +4450,11 @@ export type Profile = {
 	Unlocked: number, -- highest level index the player may pick
 	BestTimes: { number }, -- one per Config.Levels entry, seconds, 0 = never cleared
 	Rebirths: number, -- times the player has rebirthed (Config.Rebirth)
-	DailyDay: number, -- UTC day number of the last daily reward claimed (0 = never)
+	DailyDay: number, -- (old saves) UTC day number of the last daily reward claimed
+	DailyLast: number, -- os.time() of the last daily claim (0 = never); the next is 24 h later
 	DailyStreak: number, -- 1..#Config.DailyRewards, the day of the streak last claimed
+	RedeemedCodes: { string }, -- Config.Codes already used (upper case)
+	GroupReward: boolean, -- the join-the-community reward has been claimed
 	RebirthReady: boolean, -- the last level has been cleared since the last rebirth
 	Stats: {
 		Runs: number,
@@ -4402,7 +4511,10 @@ local TEMPLATE: Profile = {
 	Rebirths = 0,
 	RebirthReady = false,
 	DailyDay = 0,
+	DailyLast = 0,
 	DailyStreak = 0,
+	RedeemedCodes = {},
+	GroupReward = false,
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
 }
@@ -4593,7 +4705,19 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.Gems = toCount(p.Gems, 0)
 	p.Rebirths = toCount(p.Rebirths, 0)
 	p.DailyDay = toCount(p.DailyDay, 0)
+	p.DailyLast = toCount(p.DailyLast, 0)
+	if p.DailyLast == 0 and p.DailyDay &gt; 0 then
+		p.DailyLast = p.DailyDay * 86400 -- saves from before the 24-hour timer
+	end
 	p.DailyStreak = math.clamp(toCount(p.DailyStreak, 0), 0, #Config.DailyRewards)
+	local codes = {}
+	for _, code in (if type(p.RedeemedCodes) == "table" then p.RedeemedCodes else {}) do
+		if type(code) == "string" and #code &lt;= 40 and #codes &lt; 500 then
+			table.insert(codes, code)
+		end
+	end
+	p.RedeemedCodes = codes
+	p.GroupReward = p.GroupReward == true
 	p.RebirthReady = p.RebirthReady == true
 	local ranks, seenRank = {}, {}
 	for _, id in (if type(p.Ranks) == "table" then p.Ranks else {}) do
@@ -4760,6 +4884,17 @@ end
 -- MetaState, leaderstats and toasts
 ----------------------------------------------------------------------------------------------------
 
+-- Daily reward timing (Config.Daily): claimable 24 h after the last claim; the streak carries on if
+-- you claim within the grace window after that, otherwise the next claim starts again at day 1
+-- (unless the streak is restored with the RestoreStreak product).
+local function dailyClaimable(profile: Profile): boolean
+	return profile.DailyLast == 0 or os.time() &gt;= profile.DailyLast + Config.Daily.Cooldown
+end
+
+local function dailyBroken(profile: Profile): boolean
+	return profile.DailyStreak &gt; 0 and profile.DailyLast &gt; 0 and os.time() &gt;= profile.DailyLast + Config.Daily.Cooldown + Config.Daily.Grace
+end
+
 local function buildMeta(player: Player, profile: Profile): Types.MetaState
 	local passes = passesOf[player] or {}
 	local passCopy = {}
@@ -4801,7 +4936,10 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		Rebirths = profile.Rebirths,
 		RebirthReady = profile.RebirthReady,
 		DailyStreak = profile.DailyStreak,
-		DailyClaimedToday = profile.DailyDay == math.floor(os.time() / 86400),
+		DailyClaimedToday = not dailyClaimable(profile),
+		DailyReadyAt = if profile.DailyLast &gt; 0 then profile.DailyLast + Config.Daily.Cooldown else 0,
+		DailyBroken = dailyBroken(profile),
+		GroupReward = profile.GroupReward,
 		Stats = {
 			Runs = stats.Runs,
 			DishesCleaned = stats.DishesCleaned,
@@ -4860,29 +4998,6 @@ local function flushNotices(session: Session)
 	for _, notice in list do
 		notifyRemote:FireClient(player, notice[1], notice[2])
 	end
-end
-
--- Daily reward (Config.DailyRewards): the first join of each UTC day claims the next day of the
--- streak; a missed day restarts it. The client shows the reward calendar (DailyUI).
-local function claimDaily(session: Session, profile: Profile)
-	local today = math.floor(os.time() / 86400)
-	if profile.DailyDay == today then
-		return
-	end
-	local streak = if profile.DailyDay == today - 1 then profile.DailyStreak % #Config.DailyRewards + 1 else 1
-	local reward = Config.DailyRewards[streak]
-	profile.DailyDay = today
-	profile.DailyStreak = streak
-	if reward.Kind == "Gems" then
-		profile.Gems += reward.Amount
-	else
-		profile.Bubbles += reward.Amount
-	end
-	session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
-	-- The client pops the calendar only when the reward was claimed on THIS join.
-	pcall(function()
-		session.Player:SetAttribute("DailyJustClaimed", true)
-	end)
 end
 
 -- Toasts sent the instant a player joins can arrive before their UI exists, so they wait until the
@@ -5150,7 +5265,6 @@ local function loadSession(session: Session)
 	if notice then
 		queueNotice(session, notice, noticeKind)
 	end
-	claimDaily(session, profile)
 	DataService.ProfileLoaded:Fire(player, profile)
 	pushNow(player)
 
@@ -5424,6 +5538,95 @@ function DataService.SpendGems(player: Player, amount: number): boolean
 		return false
 	end
 	profile.Gems -= cost
+	DataService.PushMeta(player)
+	return true
+end
+
+-- Claims the daily reward if 24 hours have passed since the last claim. Returns the streak day
+-- claimed (1..7) or nil and an error.
+function DataService.ClaimDaily(player: Player): (number?, string?)
+	local profile = DataService.Get(player)
+	if not profile then
+		return nil, "Your data is still loading."
+	end
+	if not dailyClaimable(profile) then
+		return nil, "Come back when the timer runs out!"
+	end
+	local streak = if dailyBroken(profile) or profile.DailyLast == 0 then 1 else profile.DailyStreak % #Config.DailyRewards + 1
+	local reward = Config.DailyRewards[streak]
+	profile.DailyLast = os.time()
+	profile.DailyStreak = streak
+	if reward.Kind == "Gems" then
+		profile.Gems += reward.Amount
+	else
+		applyBubbles(profile, reward.Amount)
+	end
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
+	end
+	DataService.PushMeta(player)
+	return streak, nil
+end
+
+-- RestoreStreak product: a missed day is forgiven, so the next claim (available now) carries on
+-- from the streak you had.
+function DataService.RestoreStreak(player: Player): boolean
+	local profile = DataService.Get(player)
+	if not profile then
+		return false
+	end
+	if dailyBroken(profile) then
+		-- As if the last claim was exactly 24 hours ago: claimable now, and the streak carries on.
+		profile.DailyLast = os.time() - Config.Daily.Cooldown
+	end
+	DataService.PushMeta(player)
+	return true
+end
+
+-- Redeems a code from Config.Codes (any capitalisation) once per player.
+function DataService.RedeemCode(player: Player, text: string): (boolean, string)
+	local profile = DataService.Get(player)
+	if not profile then
+		return false, "Your data is still loading."
+	end
+	local code = string.upper((string.gsub(text, "%s", "")))
+	local def = Config.Codes[code]
+	if not def or (def.Expires and os.time() &gt; def.Expires) then
+		return false, "That code doesn't work."
+	end
+	if table.find(profile.RedeemedCodes, code) then
+		return false, "You already used that code!"
+	end
+	table.insert(profile.RedeemedCodes, code)
+	if def.Gems then
+		profile.Gems += def.Gems
+	end
+	if def.Bubbles then
+		applyBubbles(profile, def.Bubbles)
+	end
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
+	end
+	DataService.PushMeta(player)
+	return true, Config.RewardText(def)
+end
+
+-- The one-time community reward (ShopService checks membership first).
+function DataService.GrantGroupReward(player: Player): boolean
+	local profile = DataService.Get(player)
+	if not profile or profile.GroupReward then
+		return false
+	end
+	profile.GroupReward = true
+	local reward = Config.Social.GroupReward
+	profile.Gems += reward.Gems or 0
+	applyBubbles(profile, reward.Bubbles or 0)
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
+	end
 	DataService.PushMeta(player)
 	return true
 end
@@ -7126,13 +7329,14 @@ local function mkPart(className: string, props: { [string]: any }, parent: Insta
 	if props.CanTouch == nil then
 		inst.CanTouch = false
 	end
-	if props.CanQuery == nil then
-		inst.CanQuery = false
-	end
 	inst.TopSurface = Enum.SurfaceType.Smooth
 	inst.BottomSurface = Enum.SurfaceType.Smooth
 	for k, v in props do
 		(inst :: any)[k] = v
+	end
+	-- Solid, visible scenery is queryable so the camera bumps into it instead of clipping through.
+	if props.CanQuery == nil then
+		inst.CanQuery = inst.CanCollide and inst.Transparency &lt; 0.25
 	end
 	inst.Parent = parent
 	maybeYield()
@@ -7389,14 +7593,15 @@ local function buildRoom(parent: Instance)
 		local sx = if faceX ~= 0 then 8 else half * 2
 		local sz = if faceZ ~= 0 then 8 else half * 2
 		mkPart("Part", { Name = "ChairBack", Size = Vector3.new(sx, 110, sz), CFrame = at(bx, seatY + 59, bz), Color = WOOD_A, Material = LOW }, parent)
-		mkPart("Part", { Name = "ChairTopRail", Size = Vector3.new(sx + 4, 10, sz + 4), CFrame = at(bx, seatY + 116, bz), Color = WOOD_DARK, Material = LOW }, parent)
+		-- The rail overhangs the back a little (side-by-side chairs stay well apart now).
+		mkPart("Part", { Name = "ChairTopRail", Size = Vector3.new(if faceX ~= 0 then sx + 4 else sx + 2, 10, if faceZ ~= 0 then sz + 4 else sz + 2), CFrame = at(bx, seatY + 116, bz), Color = WOOD_DARK, Material = LOW }, parent)
 		for _, dx in { -half + 5, half - 5 } do
 			for _, dz in { -half + 5, half - 5 } do
 				mkPart("Part", { Name = "ChairLeg", Size = Vector3.new(7, seatY - 4 - fy, 7), CFrame = at(cx + dx, (fy + seatY - 4) / 2, cz + dz), Color = WOOD_DARK, Material = LOW }, parent)
 			end
 		end
 	end
-	for _, cz in { -60, 20 } do
+	for _, cz in { -68, 28 } do
 		chair(tx0 - 52, cz, 1, 0)
 		chair(tx1 + 52, cz, -1, 0)
 	end
@@ -7453,7 +7658,9 @@ local function buildSpawn(parent: Instance)
 	local emblem = mkPart("Part", {
 		Name = "SpawnEmblem",
 		Size = Vector3.new(18, 0.05, 18),
-		CFrame = at(SPAWN.X, 1.2, SPAWN.Z),
+		-- A Top-face SurfaceGui's "up" is the part's -X, so turn the part a quarter so the text reads
+		-- left-to-right for someone who just spawned (facing -Z, camera behind them).
+		CFrame = at(SPAWN.X, 1.2, SPAWN.Z) * CFrame.Angles(0, -math.pi / 2, 0),
 		Transparency = 1,
 		CanCollide = false,
 		CastShadow = false,
@@ -8557,6 +8764,8 @@ function MarketService.GrantProduct(player: Player, product: any): boolean
 		return DataService.AddBubbles(player, product.Amount, "Product")
 	elseif product.Kind == "Gems" then
 		return DataService.AddGems(player, product.Amount)
+	elseif product.Kind == "RestoreStreak" then
+		return DataService.RestoreStreak(player)
 	elseif product.Kind == "Coins" then
 		if RoundService.AddCoins(player, product.Amount) then
 			return true
@@ -11442,7 +11651,7 @@ local function attachHeldTool(player: Player, toolIndex: number)
 	if not hand or not hand:IsA("BasePart") then
 		return
 	end
-	local ok, model = pcall(ToolModels.Build, toolIndex, 0.42)
+	local ok, model = pcall(ToolModels.Build, toolIndex, 0.42, true)
 	if not ok or not model then
 		return
 	end
@@ -11452,6 +11661,10 @@ local function attachHeldTool(player: Player, toolIndex: number)
 	local offset = ToolModels.HoldOffset(toolIndex)
 	if hand.Name == "Right Arm" then
 		offset = CFrame.new(0, -1, 0) * offset
+	else
+		-- R15: every client raises the right arm forward while a tool is held (HoldPose), so undo
+		-- that rotation here and the tool still stands upright with its business end forward.
+		offset = CFrame.Angles(-math.pi / 2, 0, 0) * offset
 	end
 	model:PivotTo(hand.CFrame * offset)
 	for _, d in model:GetDescendants() do
@@ -12815,6 +13028,7 @@ return RoundService</ProtectedString></Properties></Item>
 -- Whatever the client sends, the reply is always a Types.RequestResult and this never throws.
 -- Requests are rate limited (REQUESTS_PER_SECOND per player) and handled one at a time per player.
 
+local GroupService = game:GetService("GroupService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -12890,6 +13104,15 @@ local function normalize(result: any): Types.RequestResult
 	if type(result.Rank) == "string" then
 		out.Rank = result.Rank
 		out.Equipped = result.Equipped == true
+	end
+	if type(result.Previous) == "string" then
+		out.Previous = result.Previous
+	end
+	if type(result.Message) == "string" then
+		out.Message = result.Message
+	end
+	if type(result.Day) == "number" then
+		out.Day = result.Day
 	end
 	return out
 end
@@ -13075,7 +13298,74 @@ local function rebirth(player: Player, _value: any): Types.RequestResult
 	return { Ok = true }
 end
 
+-- Daily reward: claimable 24 hours after the last one (DataService.ClaimDaily).
+local function claimDaily(player: Player, _value: any): Types.RequestResult
+	local day, err = DataService.ClaimDaily(player)
+	if not day then
+		return fail(err or ERR_GENERIC)
+	end
+	return { Ok = true, Day = day, Message = Config.RewardText({
+		Bubbles = if Config.DailyRewards[day].Kind == "Gems" then nil else Config.DailyRewards[day].Amount,
+		Gems = if Config.DailyRewards[day].Kind == "Gems" then Config.DailyRewards[day].Amount else nil,
+	}) }
+end
+
+local function redeemCode(player: Player, value: any): Types.RequestResult
+	if type(value) ~= "string" or #value == 0 or #value &gt; 40 then
+		return fail("Type a code first!")
+	end
+	local ok, message = DataService.RedeemCode(player, value)
+	if not ok then
+		return fail(message)
+	end
+	return { Ok = true, Message = message }
+end
+
+-- Community reward: checked live with Roblox (GroupService:GetGroupsAsync isn't cached for the
+-- session like the old Player:IsInGroup), so it works right after joining from the in-game prompt.
+local function inGroup(player: Player, groupId: number): boolean
+	local ok, groups = pcall(function()
+		return GroupService:GetGroupsAsync(player.UserId)
+	end)
+	if ok and type(groups) == "table" then
+		for _, g in groups do
+			if type(g) == "table" and g.Id == groupId then
+				return true
+			end
+		end
+		return false
+	end
+	local okFallback, member = pcall(function()
+		return player:IsInGroupAsync(groupId)
+	end)
+	return okFallback and member == true
+end
+
+local function claimGroup(player: Player, _value: any): Types.RequestResult
+	local groupId = Config.GetGroupId()
+	if groupId &lt;= 0 then
+		return fail("The community isn't set up yet!")
+	end
+	local profile = DataService.Get(player)
+	if not profile then
+		return fail(ERR_LOADING)
+	end
+	if profile.GroupReward then
+		return fail("You already got this reward. Thanks for joining! 💙")
+	end
+	if not inGroup(player, groupId) then
+		return fail("Join the community first, then claim!")
+	end
+	if not DataService.GrantGroupReward(player) then
+		return fail(ERR_GENERIC)
+	end
+	return { Ok = true, Message = Config.RewardText(Config.Social.GroupReward) }
+end
+
 local HANDLERS: { [string]: (Player, any) -&gt; Types.RequestResult } = {
+	ClaimDaily = claimDaily,
+	RedeemCode = redeemCode,
+	ClaimGroup = claimGroup,
 	Rebirth = rebirth,
 	BuyPerk = buyPerk,
 	TestPass = testPass,
@@ -13197,7 +13487,7 @@ end
 
 -- Camera and movement defaults (apply to characters spawned after this point).
 StarterPlayer.CameraMaxZoomDistance = 60
-StarterPlayer.CameraMinZoomDistance = 4
+StarterPlayer.CameraMinZoomDistance = 0.5 -- scroll all the way in for first person
 StarterPlayer.CharacterWalkSpeed = Config.World.LobbyWalkSpeed
 
 step("Remotes", Remotes.Setup)
@@ -13614,6 +13904,7 @@ local ShopUI = require(Client:WaitForChild("ShopUI"))
 local RanksUI = require(Client:WaitForChild("RanksUI"))
 local RebirthUI = require(Client:WaitForChild("RebirthUI"))
 local DailyUI = require(Client:WaitForChild("DailyUI"))
+local RewardsUI = require(Client:WaitForChild("RewardsUI"))
 local Cutscene = require(Client:WaitForChild("Cutscene"))
 local PetsUI = require(Client:WaitForChild("PetsUI"))
 local SprayController = require(Client:WaitForChild("SprayController"))
@@ -13621,6 +13912,7 @@ local PetRenderer = require(Client:WaitForChild("PetRenderer"))
 local Effects = require(Client:WaitForChild("Effects"))
 local BubbleJets = require(Client:WaitForChild("BubbleJets"))
 local Bubbles = require(Client:WaitForChild("Bubbles"))
+local HoldPose = require(Client:WaitForChild("HoldPose"))
 
 local function step(name: string, fn: () -&gt; ())
 	local ok, err = xpcall(fn, debug.traceback)
@@ -13643,13 +13935,15 @@ step("ShopUI", ShopUI.Init)
 step("RanksUI", RanksUI.Init)
 step("RebirthUI", RebirthUI.Init)
 step("DailyUI", DailyUI.Init)
+step("RewardsUI", RewardsUI.Init)
 step("Cutscene", Cutscene.Init)
 step("PetsUI", PetsUI.Init)
 step("SprayController", SprayController.Init)
 step("PetRenderer", PetRenderer.Init)
 step("Bubbles", Bubbles.Init)
 step("Effects", Effects.Init)
-step("BubbleJets", BubbleJets.Init)</ProtectedString></Properties></Item>
+step("BubbleJets", BubbleJets.Init)
+step("HoldPose", HoldPose.Init)</ProtectedString></Properties></Item>
 <Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
 -- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
 -- Changed instead of each hooking the remotes themselves.
@@ -14057,7 +14351,7 @@ return Cutscene</ProtectedString></Properties></Item>
 local Scene = {}
 Scene.__index = Scene
 
-Scene.Duration = 19.5
+Scene.Duration = 20.5
 
 local SKIN = Color3.fromRGB(245, 205, 150)
 local WHITE = Color3.fromRGB(250, 250, 248)
@@ -14183,26 +14477,34 @@ function Scene:hat(actor: Actor, p: BasePart, offset: CFrame)
 end
 
 -- Pose an actor. root = feet position + facing (LookVector = where they face). sit bends the legs
--- forward; walk is a phase (radians) for the stride; armL / armR raise the arms forward (radians).
-function Scene:pose(a: Actor, root: CFrame, pose: { sit: boolean?, walk: number?, armL: number?, armR: number?, bob: number? })
+-- forward (sitK blends between standing, 0, and sitting, 1, for getting up); walk is a phase
+-- (radians) for the stride; armL / armR raise the arms forward (radians). Returns the right hand's
+-- CFrame (scene space) so props can be held.
+function Scene:pose(a: Actor, root: CFrame, pose: { sit: boolean?, sitK: number?, walk: number?, armL: number?, armR: number?, bob: number? }): CFrame
 	local p = a.Parts
 	local sc = a.Scale
-	local hip = if pose.sit then SEAT_Y else 2 * sc
+	local sitK = pose.sitK or (if pose.sit then 1 else 0)
+	local hip = SEAT_Y * sitK + 2 * sc * (1 - sitK)
 	local base = root * CFrame.new(0, hip - 2 * sc + (pose.bob or 0), 0)
 	local swing = if pose.walk then math.sin(pose.walk) * 0.65 else 0
+	local rightHand = base
 	self:place(p.Torso, base * CFrame.new(0, 3 * sc, 0))
 	self:place(p.Head, base * CFrame.new(0, 4.5 * sc, 0))
 	for _, h in a.Hat do
 		self:place(h.Part, base * CFrame.new(0, 4.5 * sc, 0) * h.Offset)
 	end
 	for side, name in { [-1] = "Left", [1] = "Right" } do
-		local legAngle = if pose.sit then math.rad(90) else swing * side
+		local legAngle = math.rad(90) * sitK + swing * side * (1 - sitK)
 		self:place(p[name .. "Leg"], base * CFrame.new(side * 0.5 * sc, 2 * sc, 0) * CFrame.Angles(legAngle, 0, 0) * CFrame.new(0, -sc, 0))
 		local armAngle = (if side &lt; 0 then pose.armL else pose.armR) or (-swing * side * 0.8)
 		local shoulder = base * CFrame.new(side * 1.5 * sc, 3.9 * sc, 0) * CFrame.Angles(armAngle, 0, 0)
 		self:place(p[name .. "Arm"], shoulder * CFrame.new(0, -0.9 * sc, 0))
 		self:place(p[name .. "ArmHand"], shoulder * CFrame.new(0, -1.75 * sc, 0))
+		if side &gt; 0 then
+			rightHand = shoulder * CFrame.new(0, -1.75 * sc, 0)
+		end
 	end
+	return rightHand
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -14304,9 +14606,21 @@ function Scene.Build(levelIndex: number, origin: CFrame, parent: Instance)
 	end
 	chair(tx - 2, tz + 3.4, 1)
 	chair(tx + 2, tz + 3.4, 1)
+	-- Mum's chair at the left end, its back on the far (-X) side.
+	local mx, mz = tx - 5.3, tz - 0.6
+	self:box("Seat", mx - 1, mx + 1, SEAT_Y - 0.3, SEAT_Y, mz - 1, mz + 1, th.Table, Enum.Material.Wood)
+	self:box("ChairBack", mx - 1.05, mx - 0.9, SEAT_Y, SEAT_Y + 2.6, mz - 1, mz + 1, th.Table, Enum.Material.Wood)
+	for _, lx in { mx - 0.8, mx + 0.8 } do
+		for _, lz in { mz - 0.8, mz + 0.8 } do
+			self:box("ChairLeg", lx - 0.12, lx + 0.12, 0, SEAT_Y - 0.3, lz - 0.12, lz + 0.12, th.Table, Enum.Material.Wood)
+		end
+	end
 
 	-- Kitchen: counter run with the dishwasher in it.
-	self:box("Counter", 11, 23, 0, 3.4, 12.2, 18, th.Counter)
+	-- The cupboards stop either side of the dishwasher so its open front really is open.
+	self:box("Counter", 11, DW.X - 1.62, 0, 3.4, 12.2, 18, th.Counter)
+	self:box("Counter", DW.X + 1.62, 23, 0, 3.4, 12.2, 18, th.Counter)
+	self:box("Kickboard", DW.X - 1.62, DW.X + 1.62, 0, 0.2, 12.4, 18, Color3.fromRGB(60, 62, 68))
 	self:box("CounterTop", 10.8, 23, 3.4, 3.7, 11.9, 18, th.CounterTop, Enum.Material.Marble)
 	-- The dishwasher is hollow (panels, not a block) so the camera can go inside at the end.
 	local steel = Color3.fromRGB(170, 176, 184)
@@ -14324,10 +14638,17 @@ function Scene.Build(levelIndex: number, origin: CFrame, parent: Instance)
 	self.InnerLight.Parent = self:box("DWLamp", DW.X - 0.3, DW.X + 0.3, 2.85, 2.95, 14.6, 15.2, Color3.fromRGB(220, 240, 255), Enum.Material.Neon)
 	-- The twist: tiny workers already waiting on the rack, sponges in hand (that's us).
 	self.Workers = {}
+	-- A crew: matching caps, their own shirts, a sponge each.
+	local wsc = 0.22
 	for i, c in { Color3.fromRGB(255, 200, 60), Color3.fromRGB(90, 170, 255), Color3.fromRGB(255, 110, 150) } do
-		local w = self:actor("Worker" .. i, c, Color3.fromRGB(50, 60, 90), 0.22)
-		local sponge = self:part("WorkerSponge", Vector3.new(0.18, 0.1, 0.12), CFrame.new(), Color3.fromRGB(255, 215, 80))
-		table.insert(self.Workers, { Actor = w, Sponge = sponge, X = DW.X - 0.8 + (i - 1) * 0.8 })
+		local w = self:actor("Worker" .. i, c, Color3.fromRGB(50, 60, 90), wsc)
+		local cap = self:part("WorkerCap", Vector3.new(0.35, 1.3, 1.3) * wsc, CFrame.new(), Color3.fromRGB(40, 150, 230), nil, Enum.PartType.Cylinder)
+		self:hat(w, cap, CFrame.new(0, 0.62 * wsc, 0) * CFrame.Angles(0, 0, math.rad(90)))
+		local brim = self:part("WorkerCapBrim", Vector3.new(0.9, 0.08, 0.5) * wsc, CFrame.new(), Color3.fromRGB(40, 150, 230))
+		self:hat(w, brim, CFrame.new(0, 0.5 * wsc, -0.65 * wsc))
+		local sponge = self:part("WorkerSponge", Vector3.new(0.2, 0.12, 0.14), CFrame.new(), Color3.fromRGB(255, 215, 80))
+		local scrubby = self:part("WorkerSpongeScrub", Vector3.new(0.2, 0.04, 0.14), CFrame.new(), Color3.fromRGB(70, 170, 90))
+		table.insert(self.Workers, { Actor = w, Sponge = sponge, Scrubby = scrubby, X = DW.X - 0.8 + (i - 1) * 0.8 })
 	end
 	self.Door = self:part("DWDoor", Vector3.new(3.1, 2.75, 0.25), CFrame.new(), Color3.fromRGB(225, 229, 234), Enum.Material.Metal)
 	self.DoorHandle = self:part("DWHandle", Vector3.new(1.6, 0.15, 0.2), CFrame.new(), Color3.fromRGB(150, 155, 162), Enum.Material.Metal)
@@ -14343,7 +14664,8 @@ function Scene.Build(levelIndex: number, origin: CFrame, parent: Instance)
 		for i, c in { Color3.fromRGB(255, 90, 110), Color3.fromRGB(90, 170, 255), Color3.fromRGB(255, 210, 60) } do
 			local bx = tx - 6 + i * 1.2
 			self:part("Balloon", Vector3.new(1.1, 1.4, 1.1), CFrame.new(bx, 8 + i * 0.4, tz + 5), c, nil, Enum.PartType.Ball)
-			self:box("String", bx - 0.02, bx + 0.02, 3, 7.3 + i * 0.4, tz + 4.98, tz + 5.02, Color3.fromRGB(240, 240, 240))
+			self:box("String", bx - 0.02, bx + 0.02, 0.3, 7.3 + i * 0.4, tz + 4.98, tz + 5.02, Color3.fromRGB(240, 240, 240))
+			self:box("BalloonWeight", bx - 0.2, bx + 0.2, 0, 0.3, tz + 4.8, tz + 5.2, Color3.fromRGB(255, 215, 90), Enum.Material.Metal)
 		end
 		self:box("Banner", -15, 7, 12.5, 13.5, 17.7, 17.8, Color3.fromRGB(255, 120, 60))
 	elseif th.Royal then
@@ -14394,74 +14716,140 @@ end
 -- Timeline
 ----------------------------------------------------------------------------------------------------
 
--- Mum's route: stand up, collect the plates, carry them to the dishwasher, load, close, press.
+-- Mum's route: get up from her chair, walk round the front of the table (never through it), pick
+-- up the plates Dad and the kid slid over, carry them round the open door to the dishwasher, load
+-- it, close it, step up and press Start. Every leg is walked along waypoints at an even pace,
+-- always facing the way she's going.
 local MUM_SEAT = CFrame.new(TABLE_C.X - 5.3, 0, TABLE_C.Z - 0.6) * CFrame.Angles(0, math.rad(-90), 0) -- faces +X (the table)
-local MUM_PICK = CFrame.new(TABLE_C.X, 0, TABLE_C.Z - 3.4) * CFrame.Angles(0, math.rad(180), 0) -- front of the table, facing +Z
-local MUM_DW = CFrame.new(DW.X + 2.1, 0, DW_FRONT_Z - 2.6) * CFrame.Angles(0, math.rad(160), 0) -- beside the door, by the Start button
+local MUM_UP = Vector3.new(TABLE_C.X - 5.3, 0, TABLE_C.Z - 2.2) -- stood up, slid out to the chair's side
+local PICK_POS = Vector3.new(TABLE_C.X - 0.5, 0, TABLE_C.Z - 3.3) -- in front of the table
+local LOAD_POS = Vector3.new(DW.X - 3.1, 0, DW_FRONT_Z - 2.4) -- left of the open door, clear of it
+local PRESS_POS = Vector3.new(DW.X - 0.5, 0, DW_FRONT_Z - 1.5) -- left of the Start button once it's shut (left hand on it)
+local TO_PICK = { MUM_UP, Vector3.new(TABLE_C.X - 5.3, 0, TABLE_C.Z - 3.3), PICK_POS }
+local WALK_OFF = { PRESS_POS, Vector3.new(DW.X - 3, 0, DW_FRONT_Z - 3.5), Vector3.new(DW.X - 7, 0, DW_FRONT_Z - 6) }
+local TO_DW = { PICK_POS, Vector3.new(TABLE_C.X + 7, 0, TABLE_C.Z - 4.2), Vector3.new(DW.X - 3.6, 0, DW_FRONT_Z - 5), LOAD_POS }
 
-local function lerpCF(a: CFrame, b: CFrame, k: number): CFrame
-	return a:Lerp(b, k)
+local function yawCF(pos: Vector3, dir: Vector3): CFrame
+	local flat = Vector3.new(dir.X, 0, dir.Z)
+	if flat.Magnitude &lt; 1e-3 then
+		return CFrame.new(pos)
+	end
+	return CFrame.lookAt(pos, pos + flat.Unit)
+end
+
+-- Position along a polyline at fraction k (by distance).
+local function along(points: { Vector3 }, k: number): Vector3
+	local total = 0
+	for i = 1, #points - 1 do
+		total += (points[i + 1] - points[i]).Magnitude
+	end
+	local d = math.clamp(k, 0, 1) * total
+	for i = 1, #points - 1 do
+		local seg = (points[i + 1] - points[i]).Magnitude
+		if d &lt;= seg or i == #points - 1 then
+			return points[i]:Lerp(points[i + 1], if seg &gt; 0 then math.clamp(d / seg, 0, 1) else 1)
+		end
+		d -= seg
+	end
+	return points[#points]
+end
+
+-- Walking pose along a path between times a and b: eased start and stop, facing the direction of
+-- travel (looked up a little ahead, so corners turn smoothly).
+local function walkPath(points: { Vector3 }, t: number, a: number, b: number): (CFrame, number)
+	local k = phase(t, a, b)
+	local pos = along(points, k)
+	local ahead = along(points, math.min(k + 0.08, 1))
+	local behind = along(points, math.max(k - 0.08, 0))
+	return yawCF(pos, ahead - behind), (t - a) * 9
+end
+
+local function faceTo(pos: Vector3, target: Vector3): CFrame
+	return yawCF(pos, target - pos)
 end
 
 function Scene:Update(t: number)
 	local eat = t &lt; 6.2
 
-	-- Diners: eating (forks up and down), then leaning back happy.
+	-- Diners: eating (fork hand going to the plate and back, always above the table top), then
+	-- sliding their plates to the front for Mum and sitting back happy.
 	local chew = math.sin(t * 5)
-	local dadRoot = CFrame.new(TABLE_C.X - 2, 0, TABLE_C.Z + 3.4) * CFrame.Angles(0, 0, 0) -- faces -Z (camera side)
+	local dadRoot = CFrame.new(TABLE_C.X - 2, 0, TABLE_C.Z + 3.4) -- faces -Z (camera side)
 	local kidRoot = CFrame.new(TABLE_C.X + 2, 0, TABLE_C.Z + 3.4)
-	local dadArm = if eat then 1.1 + chew * 0.35 else 0.2
-	local kidArm = if eat then 1.1 - chew * 0.35 else 0.2
-	self:pose(self.Dad, dadRoot, { sit = true, armR = dadArm, armL = 0.6 })
-	self:pose(self.Kid, kidRoot, { sit = true, armL = kidArm, armR = 0.6 })
+	local slide = phase(t, 7.3, 8.1)
+	local reach = math.sin(slide * math.pi) -- arms out while sliding the plate
+	local dadArm = if eat then 1.45 + chew * 0.15 else 0.35 + reach * 1.1
+	local kidArm = if eat then 1.45 - chew * 0.15 else 0.35 + reach * 1.1
+	self:pose(self.Dad, dadRoot, { sit = true, armR = dadArm, armL = if eat then 1.3 else 0.35 + reach * 1.1 })
+	self:pose(self.Kid, kidRoot, { sit = true, armL = kidArm, armR = if eat then 1.3 else 0.35 + reach * 1.1 })
 
 	-- Mum.
 	local mum: CFrame
-	local pose: { [string]: any } = { sit = false }
-	local carrying = false
+	local pose: { [string]: any } = {}
+	local mumPick = faceTo(PICK_POS, PICK_POS + Vector3.new(0, 0, 1))
+	local mumLoad = faceTo(LOAD_POS, Vector3.new(DW.X, 0, DW_FRONT_Z + 1.5))
 	if t &lt; 7 then
 		mum = MUM_SEAT
-		pose = { sit = true, armR = if eat then 1.1 + math.sin(t * 5 + 1) * 0.35 else 0.3, armL = 0.6 }
+		local lift = phase(t, 6.6, 7)
+		pose = { sit = true, armR = if eat then 1.45 + math.sin(t * 5 + 1) * 0.15 else 0.35 + lift, armL = if eat then 1.3 else 0.35 + lift }
+	elseif t &lt; 7.6 then
+		-- Getting up with her own plate: slide out to the side of the chair while the legs straighten.
+		local k = phase(t, 7, 7.6)
+		mum = CFrame.new(MUM_SEAT.Position:Lerp(MUM_UP, k)) * MUM_SEAT.Rotation
+		pose = { sitK = 1 - k, armL = 1.35, armR = 1.35 }
 	elseif t &lt; 9 then
-		local k = phase(t, 7, 9)
-		mum = lerpCF(MUM_SEAT, MUM_PICK, k)
-		pose = { walk = t * 9, armL = 0.3, armR = 0.3 }
+		local cf, stride = walkPath(TO_PICK, t, 7.6, 9)
+		mum = cf
+		pose = { walk = stride, armL = 1.35, armR = 1.35 }
 	elseif t &lt; 9.8 then
-		mum = MUM_PICK
-		pose = { armL = 1.2, armR = 1.2, bob = -0.3 * math.sin(phase(t, 9, 9.8) * math.pi) }
+		mum = mumPick
+		pose = { armL = 1.3, armR = 1.3, bob = -0.3 * math.sin(phase(t, 9, 9.8) * math.pi) }
 	elseif t &lt; 13 then
-		local k = phase(t, 9.8, 13)
-		local mid = CFrame.new(TABLE_C.X + 8, 0, TABLE_C.Z - 4) * CFrame.Angles(0, math.rad(-120), 0)
-		mum = if k &lt; 0.5 then lerpCF(MUM_PICK, mid, k * 2) else lerpCF(mid, MUM_DW, (k - 0.5) * 2)
-		pose = { walk = t * 9, armL = 1.35, armR = 1.35 }
-		carrying = true
-	elseif t &lt; 15 then
-		mum = MUM_DW
-		local k = phase(t, 13, 14.2)
-		pose = { armL = 1.35 + k * 0.4, armR = 1.35 + k * 0.4, bob = -0.8 * math.sin(k * math.pi) }
-		carrying = t &lt; 14.2
+		local cf, stride = walkPath(TO_DW, t, 9.8, 13)
+		mum = cf
+		pose = { walk = stride, armL = 1.35, armR = 1.35 }
+	elseif t &lt; 15.4 then
+		mum = mumLoad
+		local load = phase(t, 13.2, 14.2)
+		local shut = math.sin(phase(t, 14.6, 15.4) * math.pi) -- bends to lift the door
+		pose = { armL = 1.35 + load * 0.3 - shut * 0.5, armR = 1.35 + load * 0.3 - shut * 0.5, bob = -0.6 * math.sin(load * math.pi) - 0.5 * shut }
+	elseif t &lt; 15.9 then
+		local k = phase(t, 15.4, 15.9)
+		local pos = LOAD_POS:Lerp(PRESS_POS, k)
+		mum = yawCF(pos, (PRESS_POS - LOAD_POS):Lerp(Vector3.new(0, 0, 1), k))
+		pose = { walk = (t - 15.4) * 9 * (1 - k), armL = 0.3, armR = 0.3 }
+	elseif t &lt; 16.5 then
+		mum = faceTo(PRESS_POS, PRESS_POS + Vector3.new(0, 0, 1))
+		local press = phase(t, 15.9, 16.15) - phase(t, 16.25, 16.5)
+		pose = { armR = 0.2, armL = 0.4 + press * 0.8 }
 	else
-		mum = MUM_DW
-		local press = phase(t, 15.6, 16.1) - phase(t, 16.3, 16.8)
-		pose = { armL = 0.2, armR = 0.6 + press * 1.4 }
+		-- Job done: she walks off out of shot, leaving the camera a clear way in.
+		local cf, stride = walkPath(WALK_OFF, t, 16.5, 17.6)
+		mum = cf
+		pose = { walk = stride, armL = 0.3, armR = 0.3 }
 	end
 	self:pose(self.Mum, mum, pose)
 
-	-- Plates: on the table, then stacked in Mum's hands, then into the rack.
+	-- Plates: Mum lifts her own as she gets up; Dad and the kid slide theirs to the front, and she
+	-- stacks them on hers. At the dishwasher they're stood up in the rack side by side (resting on
+	-- it, facing sideways like real plates).
+	local hipDrop = if t &lt; 7.6 then (2 - SEAT_Y) * (1 - phase(t, 7, 7.6)) else 0
 	for i, plate in self.Plates do
-		local tableCF = CFrame.new(plate.X, TABLE_TOP, plate.Z)
-		local handCF = mum * CFrame.new(0, 3.1 + i * 0.16, -1.6)
-		local rackCF = CFrame.new(DW.X - 1.2 + i * 0.6, 0.97, 16.3) * CFrame.Angles(math.rad(90), 0, 0)
+		local own = i == 3
+		local stack = if own then 1 else i + 1
+		local frontZ = TABLE_C.Z - 1.5
+		local slid = if own then 0 else phase(t, 7.3, 8.1)
+		local tableCF = CFrame.new(plate.X, TABLE_TOP, plate.Z + (frontZ - plate.Z) * slid)
+		local handCF = mum * CFrame.new(0, 3.1 - hipDrop + stack * 0.16, -1.6)
+		local rackCF = CFrame.new(DW.X - 0.6 + (stack - 1) * 0.6, 0.96 + 0.96, 16.2) * CFrame.Angles(0, 0, math.rad(90))
+		local pickA, pickB = if own then 6.7 else 9.5, if own then 7 else 9.8
 		local base: CFrame
-		if t &lt; 9.5 then
+		if t &lt; pickA then
 			base = tableCF
-		elseif carrying then
-			base = if t &lt; 9.8 then tableCF:Lerp(handCF, phase(t, 9.5, 9.8)) else handCF
+		elseif t &lt; 13.2 then
+			base = tableCF:Lerp(handCF, phase(t, pickA, pickB))
 		else
-			base = handCF:Lerp(rackCF, phase(t, 13.4, 14.2))
-			if t &gt;= 14.2 then
-				base = rackCF
-			end
+			base = handCF:Lerp(rackCF, phase(t, 13.2 + (3 - stack) * 0.25, 13.7 + (3 - stack) * 0.25))
 		end
 		for _, item in plate.Items do
 			local visible = item.Kind == "Plate" or (item.Kind == "Food" and eat) or (item.Kind == "Mess" and not eat)
@@ -14471,25 +14859,48 @@ function Scene:Update(t: number)
 	end
 
 	-- Dishwasher door: open (flat, towards the camera) until Mum shuts it, then the Start light.
+	-- When the camera pushes in, the door dissolves instead of the lens passing through metal.
 	local close = phase(t, 14.6, 15.4)
 	local hinge = CFrame.new(DW.X, 0.25, DW_FRONT_Z) * CFrame.Angles(math.rad(-90 * (1 - close)), 0, 0)
-	self:place(self.Door, hinge * CFrame.new(0, 1.375, 0))
-	self:place(self.DoorHandle, hinge * CFrame.new(0, 2.4, -0.22))
 	local on = t &gt;= 16.2
+	local shake = if on then math.sin(t * 60) * 0.015 else 0
+	self:place(self.Door, hinge * CFrame.new(shake, 1.375, 0))
+	self:place(self.DoorHandle, hinge * CFrame.new(shake, 2.4, -0.22))
+	local dissolve = phase(t, 17.1, 17.45)
+	self.Door.Transparency = dissolve
+	self.DoorHandle.Transparency = dissolve
 	self.StartLight.Color = if on then Color3.fromRGB(90, 255, 140) else Color3.fromRGB(90, 95, 105)
 	self.StartLight.Material = if on then Enum.Material.Neon else Enum.Material.SmoothPlastic
-	-- Inside: the workers stand ready, then cheer when the lights come on.
+
+	-- Inside: the crew waits facing the plates. The lights come on, they turn round to face us,
+	-- raise their sponges together (a salute, one after another), then turn back and get scrubbing.
 	self.InnerLight.Brightness = if on then 2 else 0
 	for i, w in self.Workers do
-		local cheer = if on then math.abs(math.sin(t * 6 + i)) else 0
-		local root = CFrame.new(w.X, 0.96, 14.3)
-		self:pose(w.Actor, root, { armL = 0.4 + cheer * 2.2, armR = 1.2 + cheer * 1.6, bob = cheer * 0.06 })
-		self:place(w.Sponge, root * CFrame.new(0.33, 0.62 + cheer * 0.18, -0.25))
-	end
-	-- Once it's running, it hums (a tiny shake).
-	if on then
-		local shake = math.sin(t * 60) * 0.015
-		self:place(self.Door, hinge * CFrame.new(shake, 1.375, 0))
+		local delay = (i - 1) * 0.12
+		local turn = phase(t, 17.6 + delay, 18.1 + delay) - phase(t, 19.1 + delay, 19.5 + delay)
+		local yaw = math.rad(180) * (1 - turn) -- 180 = facing the plates (+Z), 0 = facing us
+		local root = CFrame.new(w.X, 0.96, 14.6) * CFrame.Angles(0, yaw, 0)
+		local salute = phase(t, 18.2 + delay, 18.5 + delay) * (1 - phase(t, 18.85, 19.1))
+		local scrubbing = t &gt; 19.5 + delay
+		local armR = 0.25 + salute * 2.6
+		if scrubbing then
+			armR = 1.35 + math.sin(t * 11 + i) * 0.25
+		end
+		local breathe = math.sin(t * 2 + i) * 0.004
+		local hand = self:pose(w.Actor, root, { armL = 0.2 + salute * 0.2, armR = armR, bob = breathe })
+		-- Nobody's inside while the door's open (keeps the reveal a surprise).
+		local shown = if close &gt;= 1 then 0 else 1
+		for _, part in w.Actor.Parts do
+			part.Transparency = shown
+		end
+		for _, h in w.Actor.Hat do
+			h.Part.Transparency = shown
+		end
+		w.Sponge.Transparency = shown
+		w.Scrubby.Transparency = shown
+		local spongeCF = hand * CFrame.new(0, -0.07, 0)
+		self:place(w.Sponge, spongeCF)
+		self:place(w.Scrubby, spongeCF * CFrame.new(0, -0.08, 0))
 	end
 end
 
@@ -14499,12 +14910,13 @@ local KEYS = {
 	{ 3.2, Vector3.new(-3, 5.6, 0.2), Vector3.new(-4, 3.1, 7.5), 46 },
 	{ 5.8, Vector3.new(-4.2, 7.4, 4.2), Vector3.new(-4, 3, 7.4), 44 },
 	{ 7.2, Vector3.new(-2, 6, -3), Vector3.new(-5, 2.8, 6), 50 },
-	{ 10.2, Vector3.new(4, 6, -3), Vector3.new(9, 2.6, 8), 54 },
-	{ 13, Vector3.new(20.5, 5.4, 6.4), Vector3.new(15.3, 1.8, 11.8), 50 },
-	{ 15.4, Vector3.new(13.2, 4.3, 8.9), Vector3.new(16.3, 3.3, 12), 38 },
-	{ 16.6, Vector3.new(15.5, 2.3, 9.8), Vector3.new(15.5, 2.1, 12.4), 50 },
-	{ 17.6, Vector3.new(15.5, 1.9, 12.7), Vector3.new(15.5, 1.3, 16), 62 },
-	{ 19.5, Vector3.new(15.5, 1.75, 13.1), Vector3.new(15.5, 1.25, 16), 58 },
+	{ 10.2, Vector3.new(2, 7, -6), Vector3.new(8, 2.5, 6), 54 },
+	{ 13, Vector3.new(20, 6.5, 4), Vector3.new(14.5, 1.8, 12), 50 },
+	{ 15.4, Vector3.new(22, 5.2, 5.5), Vector3.new(16, 2.5, 11.5), 48 },
+	{ 16.4, Vector3.new(21, 4.6, 6.6), Vector3.new(16, 2.6, 11.7), 44 },
+	{ 17.0, Vector3.new(15.8, 2.6, 9.3), Vector3.new(15.5, 2.0, 12.4), 50 },
+	{ 17.8, Vector3.new(15.5, 1.9, 12.7), Vector3.new(15.5, 1.3, 16), 62 },
+	{ 20.5, Vector3.new(15.5, 1.75, 13.1), Vector3.new(15.5, 1.25, 16), 58 },
 }
 
 function Scene:Camera(t: number): (CFrame, number)
@@ -14541,13 +14953,17 @@ end
 
 return Scene</ProtectedString></Properties></Item>
 <Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">DailyUI</string><ProtectedString name="Source">--[[
-	DailyUI - the daily reward calendar. The server claims today's reward when you join
-	(DataService, Config.DailyRewards); this window pops up once per session to show what you got,
-	the streak so far, and what tomorrow brings, so there's always a reason to come back.
+	DailyUI - the daily reward calendar (🎁 Daily button on the left; it also pops up by itself once
+	per session when a reward is waiting).
+
+	The next reward unlocks 24 hours after you claim one (Config.Daily). The window shows the 7-day
+	streak, a CLAIM button (or a live countdown to the next one), and when you've missed a day, a
+	"Restore Streak" offer (Config.DevProducts "RestoreStreak") so the streak isn't lost. The server
+	does the timing (MetaRequest "ClaimDaily").
 ]]
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
@@ -14556,38 +14972,71 @@ local Types = require(Shared:WaitForChild("Types"))
 local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
 local UIKit = require(Client:WaitForChild("UIKit"))
+local ShopUI = require(Client:WaitForChild("ShopUI"))
 
 local Colors = UIKit.Theme.Colors
 
 local DailyUI = {}
 
 local initialized = false
-local shown = false
+local autoShown = false
+local claiming = false
 local row: Frame
 local footer: TextLabel
+local claimButton: TextButton
+local restoreButton: TextButton
+
+local function now(): number
+	return Workspace:GetServerTimeNow()
+end
+
+-- True when a reward is waiting (the HUD shows a "!" on the Daily button).
+function DailyUI.Ready(): boolean
+	local meta = ClientState.Meta :: Types.MetaState?
+	return meta ~= nil and (meta.DailyReadyAt == 0 or now() &gt;= meta.DailyReadyAt)
+end
 
 local function rewardText(reward): string
 	return string.format("%s %s", if reward.Kind == "Gems" then "💎" else "🧼", UIKit.Commas(reward.Amount))
 end
 
+local function clock(seconds: number): string
+	seconds = math.max(0, math.floor(seconds))
+	return string.format("%02d:%02d:%02d", seconds // 3600, (seconds % 3600) // 60, seconds % 60)
+end
+
+-- The day the next claim would give.
+local function nextDay(meta: Types.MetaState): number
+	if meta.DailyBroken or meta.DailyStreak == 0 then
+		return 1
+	end
+	return meta.DailyStreak % #Config.DailyRewards + 1
+end
+
 local function render()
 	local meta = ClientState.Meta :: Types.MetaState?
-	local streak = (meta and meta.DailyStreak) or 0
+	if not meta then
+		return
+	end
+	local ready = DailyUI.Ready()
+	local streak = if meta.DailyBroken then 0 else meta.DailyStreak
+	local upcoming = nextDay(meta)
 	for _, child in row:GetChildren() do
 		if child:IsA("GuiObject") then
 			child:Destroy()
 		end
 	end
 	for day, reward in Config.DailyRewards do
-		local claimed = day &lt;= streak
-		local today = day == streak
+		-- A finished week starts over once the next reward is ready.
+		local claimed = day &lt;= streak and not (ready and upcoming == 1)
+		local isNext = day == upcoming
 		local card = UIKit.Card({
 			Size = UDim2.fromOffset(96, 132),
 			LayoutOrder = day,
-			Color = if today then Colors.Good elseif claimed then Colors.PanelLight else Colors.PanelDark,
+			Color = if isNext and ready then Colors.Good elseif claimed then Colors.PanelLight else Colors.PanelDark,
 			Parent = row,
 		})
-		if today then
+		if isNext then
 			UIKit.Stroke(card, Color3.fromRGB(255, 230, 120), 3)
 		end
 		UIKit.Label({ Text = if day == #Config.DailyRewards then "Day 7 🎉" else "Day " .. day, TextSize = 18, Size = UDim2.new(1, 0, 0, 26), Position = UDim2.fromOffset(0, 8), Parent = card })
@@ -14595,8 +15044,37 @@ local function render()
 		UIKit.Label({ Text = UIKit.Commas(reward.Amount), TextSize = 20, Size = UDim2.new(1, 0, 0, 24), Position = UDim2.fromOffset(0, 82), Parent = card })
 		UIKit.Label({ Text = if claimed then "✅" else "", TextSize = 18, Size = UDim2.new(1, 0, 0, 20), Position = UDim2.fromOffset(0, 106), Parent = card })
 	end
-	local nextDay = streak % #Config.DailyRewards + 1
-	footer.Text = string.format("Today: %s   •   Tomorrow (Day %d): %s", if streak &gt; 0 then rewardText(Config.DailyRewards[streak]) else "-", nextDay, rewardText(Config.DailyRewards[nextDay]))
+	if ready then
+		footer.Text = string.format("Day %d is ready: %s!", upcoming, rewardText(Config.DailyRewards[upcoming]))
+		claimButton.Text = "CLAIM!"
+		UIKit.SetButtonColor(claimButton, Colors.Good)
+	else
+		footer.Text = string.format("Next up: Day %d (%s)", upcoming, rewardText(Config.DailyRewards[upcoming]))
+		claimButton.Text = "⏳ " .. clock(meta.DailyReadyAt - now())
+		UIKit.SetButtonColor(claimButton, Colors.Disabled)
+	end
+	-- Missed a day with a streak worth saving: offer to restore it.
+	restoreButton.Visible = meta.DailyBroken and meta.DailyStreak &gt; 1
+	if restoreButton.Visible then
+		footer.Text = string.format("You missed a day! Your Day %d streak will restart...", meta.DailyStreak)
+	end
+end
+
+local function claim()
+	if claiming or not DailyUI.Ready() then
+		return
+	end
+	claiming = true
+	local result = ClientState.MetaRequest("ClaimDaily")
+	claiming = false
+	if not result.Ok then
+		UIKit.Toast(result.Error or "Not yet!", "Info")
+		return
+	end
+	UIKit.PlaySound("Sparkle")
+	UIKit.Confetti(50)
+	UIKit.Toast(string.format("🎁 Day %d: %s!", result.Day or 1, result.Message or ""), "Good")
+	render()
 end
 
 function DailyUI.Init()
@@ -14609,7 +15087,7 @@ function DailyUI.Init()
 		Name = "Daily",
 		Title = "Daily Reward",
 		Icon = "🎁",
-		Size = Vector2.new(820, 380),
+		Size = Vector2.new(820, 400),
 		Parent = screenRoot,
 	})
 	row = Instance.new("Frame")
@@ -14624,15 +15102,30 @@ function DailyUI.Init()
 	layout.Padding = UDim.new(0, 10)
 	layout.Parent = row
 	footer = UIKit.Label({ Text = "", TextSize = 20, TextWrapped = true, Size = UDim2.new(1, -20, 0, 32), Position = UDim2.new(0.5, 0, 0, 154), AnchorPoint = Vector2.new(0.5, 0), Parent = content })
-	UIKit.Button({
-		Text = "Awesome!",
-		Size = UDim2.fromOffset(220, 52),
+	claimButton = UIKit.Button({
+		Text = "CLAIM!",
+		Size = UDim2.fromOffset(240, 56),
 		Position = UDim2.new(0.5, 0, 0, 196),
 		AnchorPoint = Vector2.new(0.5, 0),
 		Color = Colors.Good,
+		TextSize = 26,
+		Parent = content,
+		OnClick = claim,
+	})
+	local restore = Config.GetProduct("RestoreStreak")
+	restoreButton = UIKit.Button({
+		Text = string.format("🔥 Restore Streak  (R$ %d)", restore and restore.Price or 0),
+		Size = UDim2.fromOffset(320, 48),
+		Position = UDim2.new(0.5, 0, 0, 262),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Color = Colors.Warning,
+		TextSize = 20,
+		Visible = false,
 		Parent = content,
 		OnClick = function()
-			UIKit.CloseWindow("Daily")
+			if ShopUI.BuyProduct("RestoreStreak") then
+				UIKit.Toast("🔥 Streak restored! Claim your reward.", "Good")
+			end
 		end,
 	})
 	UIKit.RegisterWindow("Daily", {
@@ -14640,26 +15133,35 @@ function DailyUI.Init()
 			render()
 		end,
 	})
-	-- Pop up once per session, the first time we know today's reward was claimed.
+	-- Live countdown while the window is open.
+	task.spawn(function()
+		while true do
+			task.wait(1)
+			if UIKit.IsWindowOpen("Daily") then
+				render()
+			end
+		end
+	end)
+	-- Pops up by itself once per session when a reward is waiting (in the lobby, nothing else open).
 	local function maybeShow()
-		local meta = ClientState.Meta :: Types.MetaState?
-		if shown or not meta or not Players.LocalPlayer:GetAttribute("DailyJustClaimed") or ClientState.InRun() then
+		if autoShown or not DailyUI.Ready() or ClientState.InRun() then
 			return
 		end
-		shown = true
-		task.delay(2, function()
-			if not UIKit.IsWindowOpen() then
+		autoShown = true
+		task.delay(2.5, function()
+			if not UIKit.IsWindowOpen() and not ClientState.InRun() then
 				UIKit.OpenWindow("Daily")
-				UIKit.Confetti(40)
 			end
 		end)
 	end
 	ClientState.Changed:Connect(function(kind)
 		if kind == "Meta" then
 			maybeShow()
+			if UIKit.IsWindowOpen("Daily") then
+				render()
+			end
 		end
 	end)
-	Players.LocalPlayer:GetAttributeChangedSignal("DailyJustClaimed"):Connect(maybeShow)
 	maybeShow()
 end
 
@@ -15641,7 +16143,92 @@ function Effects.Init()
 end
 
 return Effects</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
+<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">HoldPose</string><ProtectedString name="Source">--[[
+	HoldPose - how a held cleaning tool looks, for every player on this client.
+
+	  * Anyone holding a tool (character attribute HeldToolIndex &gt; 1, R15 rigs) holds it out in
+	    front: the right shoulder is raised forward and the elbow and wrist are straightened, set
+	    every frame after the animations run. The server welds the tool with a matching offset
+	    (ToolModels.HoldOffset), so it points forward and not at the floor.
+	  * In first person Roblox hides your whole character, tool included. The held tool and your
+	    right arm are shown again after the camera's update, so you can see what you're holding.
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local HoldPose = {}
+
+local LocalPlayer = Players.LocalPlayer
+local RAISE = CFrame.Angles(math.rad(90), 0, 0)
+local ARM_PARTS = { "RightUpperArm", "RightLowerArm", "RightHand" }
+
+local initialized = false
+
+local function holding(character: Model): boolean
+	local index = tonumber(character:GetAttribute("HeldToolIndex"))
+	return index ~= nil and index &gt; 1 and character:FindFirstChild("HeldTool") ~= nil
+end
+
+local function setJoint(character: Model, partName: string, jointName: string, cf: CFrame)
+	local part = character:FindFirstChild(partName)
+	local joint = part and part:FindFirstChild(jointName)
+	if joint and joint:IsA("Motor6D") then
+		joint.Transform = cf
+	end
+end
+
+-- After the Animator has written this frame's joint transforms.
+local function poseAll()
+	for _, player in Players:GetPlayers() do
+		local character = player.Character
+		if character and character:FindFirstChild("RightUpperArm") and holding(character) then
+			setJoint(character, "RightUpperArm", "RightShoulder", RAISE)
+			setJoint(character, "RightLowerArm", "RightElbow", CFrame.identity)
+			setJoint(character, "RightHand", "RightWrist", CFrame.identity)
+		end
+	end
+end
+
+-- After the camera's transparency pass (which hides the character when zoomed right in).
+local function showInFirstPerson()
+	local character = LocalPlayer.Character
+	local camera = Workspace.CurrentCamera
+	if not character or not camera or not holding(character) then
+		return
+	end
+	local head = character:FindFirstChild("Head")
+	if not head or not head:IsA("BasePart") or (camera.CFrame.Position - head.Position).Magnitude &gt; 1.5 then
+		return
+	end
+	local held = character:FindFirstChild("HeldTool")
+	if held then
+		for _, d in held:GetDescendants() do
+			if d:IsA("BasePart") then
+				d.LocalTransparencyModifier = 0
+			end
+		end
+	end
+	for _, name in ARM_PARTS do
+		local part = character:FindFirstChild(name)
+		if part and part:IsA("BasePart") then
+			part.LocalTransparencyModifier = 0
+		end
+	end
+end
+
+function HoldPose.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+	RunService.Stepped:Connect(poseAll)
+	RunService:BindToRenderStep("RinseCycleHeldTool", Enum.RenderPriority.Camera.Value + 1, showInFirstPerson)
+end
+
+return HoldPose</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
 --   * top centre: the Bubbles pill with a green "+" (opens the Shop)
 --   * right side: big square buttons (Shop/Pets in the lobby, Upgrades/Pets/Leave in a run) with
 --     key hints for keyboard (Tab/G/P) or gamepad (Y/LB)
@@ -15858,6 +16445,56 @@ function HUD.Init()
 	end)
 	local leaveButton = sideButton("🚪", "Leave", Colors.PanelLight, "", "", function()
 		UIKit.OpenWindow("LeaveConfirm")
+	end)
+
+	--------------------------------------------------------------------------------------------------
+	-- Left column (lobby only): Daily reward (with a "!" when one is waiting), Codes, Free Rewards.
+	--------------------------------------------------------------------------------------------------
+	local leftColumn = Instance.new("Frame")
+	leftColumn.Name = "LeftColumn"
+	leftColumn.AnchorPoint = Vector2.new(0, 0.5)
+	leftColumn.Size = UDim2.fromOffset(84, 0)
+	leftColumn.AutomaticSize = Enum.AutomaticSize.Y
+	leftColumn.BackgroundTransparency = 1
+	leftColumn.Parent = root
+	local leftLayout = Instance.new("UIListLayout")
+	leftLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	leftLayout.Padding = UDim.new(0, 10)
+	leftLayout.Parent = leftColumn
+	local function leftButton(order: number, icon: string, label: string, color: Color3, window: string): TextButton
+		return UIKit.IconButton({
+			Icon = icon,
+			Label = label,
+			Color = color,
+			Size = UDim2.fromOffset(80, 80),
+			LayoutOrder = order,
+			Parent = leftColumn,
+			OnClick = function()
+				UIKit.ToggleWindow(window)
+			end,
+		})
+	end
+	local dailyButton = leftButton(1, "🎁", "Daily", Colors.Bubble, "Daily")
+	leftButton(2, "🎟️", "Codes", Colors.Primary, "Codes")
+	leftButton(3, "🎉", "Free", Colors.Good, "Free")
+	local dailyDot = Instance.new("Frame")
+	dailyDot.Name = "Ready"
+	dailyDot.AnchorPoint = Vector2.new(0.5, 0.5)
+	dailyDot.Position = UDim2.new(1, -4, 0, 4)
+	dailyDot.Size = UDim2.fromOffset(28, 28)
+	dailyDot.BackgroundColor3 = Colors.Bad
+	dailyDot.ZIndex = 8
+	dailyDot.Visible = false
+	UIKit.Corner(dailyDot, 14)
+	UIKit.Stroke(dailyDot, Colors.Ink, 2)
+	UIKit.Label({ Text = "!", TextSize = 20, Size = UDim2.fromScale(1, 1), ZIndex = 9, Parent = dailyDot })
+	dailyDot.Parent = dailyButton
+	task.spawn(function()
+		local DailyUI = require(script.Parent:WaitForChild("DailyUI")) :: any
+		while true do
+			dailyDot.Visible = DailyUI.Ready()
+			task.wait(1)
+		end
 	end)
 
 	--------------------------------------------------------------------------------------------------
@@ -16134,6 +16771,14 @@ function HUD.Init()
 		end
 		centerY = math.max(centerY, inset + 80 + colH / 2)
 		rightColumn.Position = UDim2.new(1, -(16 + safe.Right), 0, math.floor(centerY))
+		-- Left column: mirrors the right one (above the thumbstick on touch).
+		local leftH = leftColumn.AbsoluteSize.Y / UIKit.GetScale()
+		local leftY = canvas.Y / 2
+		if touch then
+			leftY = math.min(leftY, canvas.Y - 300 - leftH / 2)
+		end
+		leftY = math.max(leftY, inset + 80 + leftH / 2)
+		leftColumn.Position = UDim2.new(0, 16 + safe.Left, 0, math.floor(leftY))
 
 		-- Money block: bottom-left on desktop/console; above the thumbstick on touch.
 		local bottom = if touch then canvas.Y - 330 else canvas.Y - 16 - safe.Bottom
@@ -16152,6 +16797,7 @@ function HUD.Init()
 		refreshHints()
 	end
 	rightColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
+	leftColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 
 	local function relayoutTopBar()
 		relayoutHud()
@@ -16602,6 +17248,7 @@ function HUD.Init()
 		upgradesButton.Visible = inRun
 		leaveButton.Visible = inRun
 		ranksButton.Visible = not inRun
+		leftColumn.Visible = not inRun
 		upgradesButton.LayoutOrder = 1
 		shopButton.LayoutOrder = 2
 		petsButton.LayoutOrder = 3
@@ -16766,7 +17413,7 @@ function HUD.Init()
 end
 
 return HUD</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
 	PartyUI - everything shown while ClientState.Party ~= nil (standing in a lobby pad).
 
 	Two screens, Search-for-the-Needle style:
@@ -17400,7 +18047,7 @@ function PartyUI.Init()
 end
 
 return PartyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
+<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
 -- state (EquippedPets/&lt;slot&gt; StringValue = pet id, its Target ObjectValue = the grime part being
 -- cleaned); this module is the only thing that actually builds and moves pet models. See
 -- DESIGN.md section 6 ("PetRenderer") and section 4 ("Equipped pets for rendering").
@@ -17877,7 +18524,7 @@ function PetRenderer.Init()
 end
 
 return PetRenderer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
+<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
 -- reveal animation. Everything here is built with UIKit; see DESIGN.md section 6 ("PetsUI") for
 -- the contract. Both windows rebuild their contents from ClientState.Meta whenever it changes and
 -- the relevant window is open, so a purchase/hatch/equip anywhere refreshes what's on screen.
@@ -17893,6 +18540,7 @@ local Types = require(Shared:WaitForChild("Types"))
 local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
 local UIKit = require(Client:WaitForChild("UIKit"))
+local ShopUI = require(Client:WaitForChild("ShopUI"))
 
 local PetsUI = {}
 
@@ -17949,17 +18597,9 @@ local function isEquipped(meta: Types.MetaState, uid: string): boolean
 	return table.find(meta.Equipped, uid) ~= nil
 end
 
--- "⚡ Speed 45%" (share of your pet power it cleans per second), "🎒 Holds 26", "+12% coins".
-local function powerShareText(share: number): string
-	local pct = (Format.Percent(share):gsub("^%+", ""))
-	return string.format("⚡ Cleans at %s of your power", pct)
-end
-local function coinBonusText(bonus: number, capacity: number?): string
-	local bag = if capacity then string.format("🎒 Holds %d  •  ", capacity) else ""
-	return bag .. "💰 " .. Format.Percent(bonus) .. " coins"
-end
-local function shortStats(stats): string
-	return string.format("⚡ %s  🎒 %d  💰 %s", (Format.Percent(stats.Speed):gsub("^%+", "")), stats.Capacity, Format.Percent(stats.CoinBonus))
+-- Pets show one number, Power (Config.PetPower): bigger cleans faster, carries more, earns more.
+local function powerText(id: string, tier: number?): string
+	return "💪 Power " .. Config.PetPower(id, tier)
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -18082,7 +18722,7 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 		ZIndex = 2,
 	})
 	UIKit.Label({
-		Text = entry.Def.Rarity .. "  ⚡" .. (Format.Percent(entry.Stats.Speed):gsub("^%+", "")),
+		Text = entry.Def.Rarity .. "  💪" .. Config.PetPower(entry.Id, entry.Tier),
 		Size = UDim2.new(1, -10, 0, 16),
 		Position = UDim2.new(0.5, 0, 0, 118),
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -18168,8 +18808,8 @@ local function refreshDetailPanel(meta: Types.MetaState?)
 	detailName.Text = petTitle(entry.Id, entry.Tier)
 	detailRarity.Text = entry.Def.Rarity
 	detailRarity.TextColor3 = UIKit.RarityColor(entry.Def.Rarity)
-	detailPower.Text = powerShareText(entry.Stats.Speed)
-	detailCoin.Text = coinBonusText(entry.Stats.CoinBonus, entry.Stats.Capacity)
+	detailPower.Text = powerText(entry.Id, entry.Tier)
+	detailCoin.Text = "Higher power = cleans faster and earns more coins"
 
 	local equipped = isEquipped(meta :: Types.MetaState, entry.Uid)
 	equipButton.Text = if equipped then "Unequip" else "Equip"
@@ -18259,6 +18899,12 @@ local function doEquipToggle()
 		return
 	end
 	local equipped = isEquipped(meta, uid)
+	-- All slots full: offer the +2 Pet Slots pass (if they don't have it yet).
+	if not equipped and #meta.Equipped &gt;= meta.PetSlots and not (meta.Passes and meta.Passes.PetSlots) then
+		UIKit.Toast("🐾 All your pet slots are full! Get +2 Pet Slots to bring more pets.", "Info")
+		ShopUI.BuyPass("PetSlots")
+		return
+	end
 	local result = ClientState.MetaRequest(if equipped then "Unequip" else "Equip", uid)
 	if not result.Ok then
 		UIKit.Toast(result.Error or "Couldn't do that.", "Bad")
@@ -18628,7 +19274,7 @@ local function buildOddsRow(parent: Instance, entry, layoutOrder: number)
 		Parent = row,
 	})
 	UIKit.Label({
-		Text = def.Rarity .. "   " .. shortStats(petStats(entry.Pet)),
+		Text = def.Rarity .. "   " .. powerText(entry.Pet),
 		Size = UDim2.new(1, -170, 0, 18),
 		Position = UDim2.new(0, 66, 0, 32),
 		TextSize = 14,
@@ -19212,7 +19858,7 @@ function PetsUI.Init()
 end
 
 return PetsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
 	RanksUI - the "Ranks" window (Rank Shrine in the lobby, the HUD's Ranks button, R / gamepad RB).
 
 	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
@@ -19555,7 +20201,7 @@ function RanksUI.Init()
 end
 
 return RanksUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
 	RebirthUI - the "Rebirth" window (the Rebirth Fountain in the lobby).
 
 	The endgame loop: once you've cleaned the last dishwasher, trade your Bubbles, unlocked
@@ -19708,7 +20354,266 @@ function RebirthUI.Init()
 end
 
 return RebirthUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002D"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
+	RewardsUI - two small windows opened from the buttons on the left of the lobby HUD.
+
+	  * "Codes" (🎟️): type a code (Config.Codes) and redeem it. "Look out for codes in the game's
+	    description and our community!"
+	  * "Free" (🎉 Free Rewards):
+	      - Join the community: a real reward (Config.Social.GroupReward). JOIN opens Roblox's own
+	        join prompt in game (GroupService:PromptJoinAsync); as soon as it closes, the server
+	        checks membership live and pays out. No rejoin needed.
+	      - Like the game / Follow the dev: friendly reminders. Roblox gives games no way to see
+	        likes or follows (and rewarding likes breaks Roblox's rules), so these have no reward.
+]]
+
+local GroupService = game:GetService("GroupService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+local Types = require(Shared:WaitForChild("Types"))
+
+local Client = script.Parent
+local ClientState = require(Client:WaitForChild("ClientState"))
+local UIKit = require(Client:WaitForChild("UIKit"))
+
+local Colors = UIKit.Theme.Colors
+local Fonts = UIKit.Theme.Fonts
+
+local RewardsUI = {}
+
+local initialized = false
+local busy = false
+local groupButton: TextButton
+local groupStatus: TextLabel
+
+----------------------------------------------------------------------------------------------------
+-- Codes
+----------------------------------------------------------------------------------------------------
+
+local function buildCodes(screenRoot: Instance)
+	local _window, content = UIKit.Window({
+		Name = "Codes",
+		Title = "Codes",
+		Icon = "🎟️",
+		Size = Vector2.new(560, 320),
+		Parent = screenRoot,
+	})
+	UIKit.Label({
+		Text = "Look out for codes in the game's description and in our community!",
+		TextSize = 18,
+		TextWrapped = true,
+		TextColor3 = Colors.TextDim,
+		Size = UDim2.new(1, -30, 0, 48),
+		Position = UDim2.new(0.5, 0, 0, 4),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Parent = content,
+	})
+	local boxFrame = UIKit.Card({
+		Size = UDim2.new(1, -60, 0, 60),
+		Position = UDim2.new(0.5, 0, 0, 62),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Color = Colors.PanelDark,
+		Parent = content,
+	})
+	local box = Instance.new("TextBox")
+	box.Name = "CodeBox"
+	box.BackgroundTransparency = 1
+	box.Size = UDim2.new(1, -24, 1, 0)
+	box.Position = UDim2.fromOffset(12, 0)
+	box.Font = Fonts.Title
+	box.TextSize = 26
+	box.TextColor3 = Colors.Text
+	box.PlaceholderText = "Enter code..."
+	box.PlaceholderColor3 = Colors.TextDim
+	box.Text = ""
+	box.ClearTextOnFocus = false
+	box.Parent = boxFrame
+	local function redeem()
+		if busy then
+			return
+		end
+		local text = box.Text
+		if text == "" then
+			box:CaptureFocus()
+			return
+		end
+		busy = true
+		local result = ClientState.MetaRequest("RedeemCode", text)
+		busy = false
+		if result.Ok then
+			box.Text = ""
+			UIKit.PlaySound("Sparkle")
+			UIKit.Confetti(40)
+			UIKit.Toast("🎟️ Code redeemed: " .. (result.Message or "") .. "!", "Good")
+		else
+			UIKit.Toast(result.Error or "That code doesn't work.", "Bad")
+		end
+	end
+	box.FocusLost:Connect(function(enterPressed)
+		if enterPressed then
+			task.spawn(redeem)
+		end
+	end)
+	UIKit.Button({
+		Text = "REDEEM",
+		Size = UDim2.fromOffset(220, 56),
+		Position = UDim2.new(0.5, 0, 0, 140),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Color = Colors.Good,
+		TextSize = 26,
+		Parent = content,
+		OnClick = function()
+			task.spawn(redeem)
+		end,
+	})
+	UIKit.RegisterWindow("Codes", {})
+end
+
+----------------------------------------------------------------------------------------------------
+-- Free rewards
+----------------------------------------------------------------------------------------------------
+
+local function refreshGroup()
+	local meta = ClientState.Meta :: Types.MetaState?
+	local claimed = meta ~= nil and meta.GroupReward == true
+	groupButton.Text = if claimed then "Claimed ✅" else "JOIN &amp; CLAIM"
+	UIKit.SetButtonColor(groupButton, if claimed then Colors.Disabled else Colors.Good)
+	groupStatus.Text = if claimed then "Thanks for joining! 💙" else "Reward: " .. Config.RewardText(Config.Social.GroupReward)
+end
+
+local function joinGroup()
+	local meta = ClientState.Meta :: Types.MetaState?
+	if busy or (meta and meta.GroupReward) then
+		return
+	end
+	local groupId = Config.GetGroupId()
+	if groupId &lt;= 0 then
+		UIKit.Toast("The community isn't set up yet!", "Info")
+		return
+	end
+	busy = true
+	-- Already a member? Claim straight away. Otherwise Roblox's join prompt, in game; when it
+	-- closes (joined or not), ask the server to check.
+	local result = ClientState.MetaRequest("ClaimGroup")
+	if not result.Ok then
+		pcall(function()
+			GroupService:PromptJoinAsync(groupId)
+		end)
+		result = ClientState.MetaRequest("ClaimGroup")
+	end
+	busy = false
+	if result.Ok then
+		UIKit.PlaySound("Sparkle")
+		UIKit.Confetti(60)
+		UIKit.Toast("👥 Welcome to the community! " .. (result.Message or ""), "Good")
+	else
+		UIKit.Toast(result.Error or "Join the community first, then claim!", "Info")
+	end
+	refreshGroup()
+end
+
+local function card(parent: Instance, order: number, icon: string, title: string, body: string): Frame
+	local c = UIKit.Card({
+		Size = UDim2.new(1, -24, 0, 104),
+		LayoutOrder = order,
+		Color = Colors.PanelLight,
+		Parent = parent,
+	})
+	UIKit.Label({ Text = icon, TextSize = 44, Size = UDim2.fromOffset(70, 70), Position = UDim2.new(0, 10, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5), Stroke = false, Parent = c })
+	UIKit.Label({ Name = "Title", Text = title, TextSize = 22, TextXAlignment = Enum.TextXAlignment.Left, Size = UDim2.new(1, -330, 0, 30), Position = UDim2.fromOffset(88, 12), Parent = c })
+	UIKit.Label({ Name = "Body", Text = body, TextSize = 16, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, TextColor3 = Colors.TextDim, Size = UDim2.new(1, -330, 0, 52), Position = UDim2.fromOffset(88, 44), Parent = c })
+	return c
+end
+
+local function buildFree(screenRoot: Instance)
+	local _window, content = UIKit.Window({
+		Name = "Free",
+		Title = "Free Rewards",
+		Icon = "🎉",
+		Size = Vector2.new(720, 470),
+		Parent = screenRoot,
+	})
+	local list = Instance.new("Frame")
+	list.BackgroundTransparency = 1
+	list.Size = UDim2.new(1, 0, 1, 0)
+	list.Parent = content
+	local layout = Instance.new("UIListLayout")
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.Padding = UDim.new(0, 12)
+	layout.Parent = list
+
+	-- Community (the real reward).
+	local group = card(list, 1, "👥", "Join our community", "Join the Rinse Cycle community for a free reward, news and codes!")
+	groupButton = UIKit.Button({
+		Text = "JOIN &amp; CLAIM",
+		Size = UDim2.fromOffset(210, 52),
+		Position = UDim2.new(1, -14, 0.5, -10),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Color = Colors.Good,
+		TextSize = 20,
+		Parent = group,
+		OnClick = function()
+			task.spawn(joinGroup)
+		end,
+	})
+	groupStatus = UIKit.Label({ Text = "", TextSize = 15, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(230, 20), Position = UDim2.new(1, -4, 1, -8), AnchorPoint = Vector2.new(1, 1), Parent = group })
+
+	-- Like the game (a reminder: Roblox doesn't let games see likes).
+	local like = card(list, 2, "👍", "Like the game!", "Having fun? Press 👍 on the game page. It helps new players find us!")
+	UIKit.Label({ Text = "Thank you! 💙", TextSize = 18, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(210, 40), Position = UDim2.new(1, -14, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), Parent = like })
+
+	-- Follow the dev (a reminder, with their headshot and name).
+	local creatorId = Config.Social.CreatorUserId
+	local follow = card(list, 3, "", "Follow the dev", "Follow for update news and new codes!")
+	local shot = Instance.new("ImageLabel")
+	shot.BackgroundTransparency = 1
+	shot.Size = UDim2.fromOffset(70, 70)
+	shot.Position = UDim2.new(0, 10, 0.5, 0)
+	shot.AnchorPoint = Vector2.new(0, 0.5)
+	shot.Image = string.format("rbxthumb://type=AvatarHeadShot&amp;id=%d&amp;w=150&amp;h=150", creatorId)
+	shot.Parent = follow
+	UIKit.Corner(shot, 35)
+	UIKit.Label({ Text = "Thank you! 💙", TextSize = 18, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(210, 40), Position = UDim2.new(1, -14, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), Parent = follow })
+	task.spawn(function()
+		local ok, name = pcall(function()
+			return Players:GetNameFromUserIdAsync(creatorId)
+		end)
+		if ok and type(name) == "string" then
+			local title = follow:FindFirstChild("Title")
+			if title and title:IsA("TextLabel") then
+				title.Text = "Follow @" .. name
+			end
+		end
+	end)
+
+	UIKit.RegisterWindow("Free", {
+		Open = function()
+			refreshGroup()
+		end,
+	})
+	ClientState.Changed:Connect(function(kind)
+		if kind == "Meta" and UIKit.IsWindowOpen("Free") then
+			refreshGroup()
+		end
+	end)
+end
+
+function RewardsUI.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+	local _gui, screenRoot = UIKit.CreateScreen("RewardsUI", 11)
+	buildCodes(screenRoot)
+	buildFree(screenRoot)
+end
+
+return RewardsUI</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX0000002E"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
 	ShopUI - the lobby "Shop" window: Perks (bought with Bubbles, permanent) and Robux (game passes).
 	Opened from the Soap Shop ProximityPrompt (routed by Effects via OpenWindow="Shop"), the HUD [🛒 Shop]
 	button, or the G key - all outside our scope, they just call UIKit.OpenWindow("Shop").
@@ -20220,7 +21125,7 @@ function ShopUI.Init()
 end
 
 return ShopUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002D"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
+<Item class="ModuleScript" referent="RBX0000002F"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
 -- Aim comes from the mouse on PC, or the screen centre (with a crosshair) on touch/gamepad, cast
@@ -20335,6 +21240,12 @@ local function resetPerRunState()
 end
 
 local function findHandPart(character: Model): BasePart?
+	-- Tools with a nozzle (the washer's lance) spray from its tip.
+	local held = character:FindFirstChild("HeldTool")
+	local muzzle = held and held:FindFirstChild("Muzzle")
+	if muzzle and muzzle:IsA("BasePart") then
+		return muzzle
+	end
 	local hand = character:FindFirstChild("RightHand") -- R15
 	if hand and hand:IsA("BasePart") then
 		return hand
@@ -20409,7 +21320,7 @@ local function ensureBeam(character: Model)
 
 		local origin = Instance.new("Attachment")
 		origin.Name = "SprayOrigin"
-		origin.Position = Vector3.new(0, 0, -0.2)
+		origin.Position = if hand.Name == "Muzzle" then Vector3.zero else Vector3.new(0, 0, -0.2)
 		origin.Parent = hand
 		handAttachment = origin
 
@@ -21174,7 +22085,7 @@ function SprayController.Init()
 end
 
 return SprayController</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002E"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000030"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -23644,7 +24555,7 @@ function UIKit.Init()
 end
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002F"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000031"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button

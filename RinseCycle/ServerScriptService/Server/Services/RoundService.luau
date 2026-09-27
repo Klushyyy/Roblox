@@ -316,7 +316,7 @@ local function attachHeldTool(player: Player, toolIndex: number)
 	if not hand or not hand:IsA("BasePart") then
 		return
 	end
-	local ok, model = pcall(ToolModels.Build, toolIndex, 0.42)
+	local ok, model = pcall(ToolModels.Build, toolIndex, 0.42, true)
 	if not ok or not model then
 		return
 	end
@@ -326,6 +326,10 @@ local function attachHeldTool(player: Player, toolIndex: number)
 	local offset = ToolModels.HoldOffset(toolIndex)
 	if hand.Name == "Right Arm" then
 		offset = CFrame.new(0, -1, 0) * offset
+	else
+		-- R15: every client raises the right arm forward while a tool is held (HoldPose), so undo
+		-- that rotation here and the tool still stands upright with its business end forward.
+		offset = CFrame.Angles(-math.pi / 2, 0, 0) * offset
 	end
 	model:PivotTo(hand.CFrame * offset)
 	for _, d in model:GetDescendants() do

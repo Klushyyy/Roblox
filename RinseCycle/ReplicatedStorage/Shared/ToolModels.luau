@@ -123,6 +123,7 @@ local function knob(ctx: Ctx, name: string, cf: CFrame, length: number, diameter
 end
 
 local BUILDERS: { [string]: (Ctx, Color3) -> () } = {}
+local HELD_BUILDERS: { [string]: (Ctx, Color3) -> () } = {}
 
 -- Sponge: a rounded block of yellow foam with dimpled pores, a glue line, and a green scouring pad
 -- on top with a lighter fleck pattern. A bead of soap suds rides on the pad.
@@ -274,6 +275,30 @@ BUILDERS.Washer = function(ctx, color)
 	tube(ctx, "Hose", { Vector3.new(1.55, 1.3, 1.1), Vector3.new(1.0, 0.9, 1.9), Vector3.new(-0.6, 0.9, 2.0), Vector3.new(-1.5, 1.2, 1.4), Vector3.new(gx, 1.5, 1.0) }, 0.2, Color3.fromRGB(30, 32, 38))
 end
 
+-- The pressure washer as it's held: just the spray gun and its long lance (the cart stays on the
+-- shelf). The pistol grip is at the origin so the hand closes round it; the gun body sits above
+-- it and the lance runs forward (-Z) with a rubber fore-grip, ending in a yellow nozzle. A short
+-- run of hose hangs from the bottom of the grip.
+HELD_BUILDERS.Washer = function(ctx, color)
+	local y = 0.8
+	bar(ctx, "GunGrip", Vector3.new(0, -0.55, 0.2), Vector3.new(0, 0.55, -0.05), 0.42, DARK)
+	for i = 0, 2 do
+		part(ctx, "GripRidge", Enum.PartType.Cylinder, Vector3.new(0.44, 0.12, 0.12), Vector3.new(0, 0.3 - i * 0.3, -0.12 + i * 0.07), nil, RUBBER)
+	end
+	roundedBox(ctx, "GunBody", Vector3.new(0.5, 0.6, 1.5), CFrame.new(0, y, -0.25), 0.22, DARK)
+	partCF(ctx, "GunStripe", nil, Vector3.new(0.54, 0.16, 1.1), CFrame.new(0, y + 0.12, -0.25), color)
+	part(ctx, "Trigger", nil, Vector3.new(0.14, 0.42, 0.16), Vector3.new(0, 0.3, -0.5), CFrame.Angles(math.rad(-12), 0, 0), Color3.fromRGB(255, 200, 60))
+	tube(ctx, "TriggerGuard", { Vector3.new(0, 0.5, -0.9), Vector3.new(0, 0.05, -0.85), Vector3.new(0, -0.05, -0.35) }, 0.1, DARK)
+	part(ctx, "Coupler", Enum.PartType.Cylinder, Vector3.new(0.35, 0.36, 0.36), Vector3.new(0, y, -1.1), ALONG_Z, BRASS, Enum.Material.Metal)
+	bar(ctx, "Lance", Vector3.new(0, y, -1.25), Vector3.new(0, y, -5.6), 0.2, CHROME, Enum.Material.Metal)
+	bar(ctx, "ForeGrip", Vector3.new(0, y, -2.2), Vector3.new(0, y, -3.1), 0.38, RUBBER)
+	part(ctx, "NozzleCollar", Enum.PartType.Cylinder, Vector3.new(0.2, 0.32, 0.32), Vector3.new(0, y, -5.62), ALONG_Z, CHROME, Enum.Material.Metal)
+	part(ctx, "LanceTip", Enum.PartType.Cylinder, Vector3.new(0.4, 0.34, 0.34), Vector3.new(0, y, -5.9), ALONG_Z, Color3.fromRGB(255, 200, 60))
+	local muzzle = part(ctx, "Muzzle", nil, Vector3.new(0.1, 0.1, 0.1) / ctx.Scale, Vector3.new(0, y, -6.15), nil, WHITE)
+	muzzle.Transparency = 1
+	tube(ctx, "Hose", { Vector3.new(0, -0.55, 0.2), Vector3.new(0, -1.0, 0.45), Vector3.new(0, -1.7, 0.5), Vector3.new(0, -2.3, 0.3) }, 0.2, Color3.fromRGB(30, 32, 38))
+end
+
 -- Foam cannon: a sleek blaster. White rounded body with colour stripes, a see-through soap tank on
 -- top (pink soap, a cap), a brass adjuster knob, a stepped chrome-and-white bell, a rubber pistol
 -- grip and trigger, and a burst of foam from the front.
@@ -312,7 +337,8 @@ BUILDERS.Cannon = function(ctx, color)
 	end
 end
 
-function ToolModels.Build(toolIndex: number, scale: number?): Model
+-- `held` picks the in-hand version of a tool when it has one (the washer's gun and lance).
+function ToolModels.Build(toolIndex: number, scale: number?, held: boolean?): Model
 	local model = Instance.new("Model")
 	model.Name = "Tool_" .. tostring(toolIndex)
 	local ctx: Ctx = { Model = model, Scale = scale or 1 }
@@ -321,7 +347,7 @@ function ToolModels.Build(toolIndex: number, scale: number?): Model
 	model.PrimaryPart = grip
 	-- Builders are keyed by tool Id, so reordering or removing tools in Config never mixes models up.
 	local tool = Config.Tools[toolIndex]
-	local builder = tool and BUILDERS[tool.Id]
+	local builder = tool and ((held and HELD_BUILDERS[tool.Id]) or BUILDERS[tool.Id])
 	if builder then
 		builder(ctx, tool.Color or WHITE)
 	end
@@ -332,8 +358,11 @@ end
 -- The tool sits just in front of the hand, business end pointing forward.
 function ToolModels.HoldOffset(toolIndex: number): CFrame
 	local tool = Config.Tools[toolIndex]
-	local lift = if tool and tool.Id == "Washer" then -1.6 else -0.9
-	return CFrame.new(0, lift, -0.6)
+	if tool and tool.Id == "Washer" then
+		-- The held washer is built round its pistol grip: the hand closes on the grip itself.
+		return CFrame.new(0, -0.15, -0.1)
+	end
+	return CFrame.new(0, -0.9, -0.6)
 end
 
 return ToolModels

@@ -218,6 +218,56 @@ function HUD.Init()
 	end)
 
 	--------------------------------------------------------------------------------------------------
+	-- Left column (lobby only): Daily reward (with a "!" when one is waiting), Codes, Free Rewards.
+	--------------------------------------------------------------------------------------------------
+	local leftColumn = Instance.new("Frame")
+	leftColumn.Name = "LeftColumn"
+	leftColumn.AnchorPoint = Vector2.new(0, 0.5)
+	leftColumn.Size = UDim2.fromOffset(84, 0)
+	leftColumn.AutomaticSize = Enum.AutomaticSize.Y
+	leftColumn.BackgroundTransparency = 1
+	leftColumn.Parent = root
+	local leftLayout = Instance.new("UIListLayout")
+	leftLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	leftLayout.Padding = UDim.new(0, 10)
+	leftLayout.Parent = leftColumn
+	local function leftButton(order: number, icon: string, label: string, color: Color3, window: string): TextButton
+		return UIKit.IconButton({
+			Icon = icon,
+			Label = label,
+			Color = color,
+			Size = UDim2.fromOffset(80, 80),
+			LayoutOrder = order,
+			Parent = leftColumn,
+			OnClick = function()
+				UIKit.ToggleWindow(window)
+			end,
+		})
+	end
+	local dailyButton = leftButton(1, "🎁", "Daily", Colors.Bubble, "Daily")
+	leftButton(2, "🎟️", "Codes", Colors.Primary, "Codes")
+	leftButton(3, "🎉", "Free", Colors.Good, "Free")
+	local dailyDot = Instance.new("Frame")
+	dailyDot.Name = "Ready"
+	dailyDot.AnchorPoint = Vector2.new(0.5, 0.5)
+	dailyDot.Position = UDim2.new(1, -4, 0, 4)
+	dailyDot.Size = UDim2.fromOffset(28, 28)
+	dailyDot.BackgroundColor3 = Colors.Bad
+	dailyDot.ZIndex = 8
+	dailyDot.Visible = false
+	UIKit.Corner(dailyDot, 14)
+	UIKit.Stroke(dailyDot, Colors.Ink, 2)
+	UIKit.Label({ Text = "!", TextSize = 20, Size = UDim2.fromScale(1, 1), ZIndex = 9, Parent = dailyDot })
+	dailyDot.Parent = dailyButton
+	task.spawn(function()
+		local DailyUI = require(script.Parent:WaitForChild("DailyUI")) :: any
+		while true do
+			dailyDot.Visible = DailyUI.Ready()
+			task.wait(1)
+		end
+	end)
+
+	--------------------------------------------------------------------------------------------------
 	-- Hotbar (in a run): one slot per tool. Owned tools can be put in your hand (click / tap, keys
 	-- 1-6, gamepad D-pad left/right); locked ones show a lock and open the Upgrade Book.
 	--------------------------------------------------------------------------------------------------
@@ -491,6 +541,14 @@ function HUD.Init()
 		end
 		centerY = math.max(centerY, inset + 80 + colH / 2)
 		rightColumn.Position = UDim2.new(1, -(16 + safe.Right), 0, math.floor(centerY))
+		-- Left column: mirrors the right one (above the thumbstick on touch).
+		local leftH = leftColumn.AbsoluteSize.Y / UIKit.GetScale()
+		local leftY = canvas.Y / 2
+		if touch then
+			leftY = math.min(leftY, canvas.Y - 300 - leftH / 2)
+		end
+		leftY = math.max(leftY, inset + 80 + leftH / 2)
+		leftColumn.Position = UDim2.new(0, 16 + safe.Left, 0, math.floor(leftY))
 
 		-- Money block: bottom-left on desktop/console; above the thumbstick on touch.
 		local bottom = if touch then canvas.Y - 330 else canvas.Y - 16 - safe.Bottom
@@ -509,6 +567,7 @@ function HUD.Init()
 		refreshHints()
 	end
 	rightColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
+	leftColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 
 	local function relayoutTopBar()
 		relayoutHud()
@@ -959,6 +1018,7 @@ function HUD.Init()
 		upgradesButton.Visible = inRun
 		leaveButton.Visible = inRun
 		ranksButton.Visible = not inRun
+		leftColumn.Visible = not inRun
 		upgradesButton.LayoutOrder = 1
 		shopButton.LayoutOrder = 2
 		petsButton.LayoutOrder = 3

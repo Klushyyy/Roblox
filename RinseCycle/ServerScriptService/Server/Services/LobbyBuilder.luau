@@ -116,13 +116,14 @@ local function mkPart(className: string, props: { [string]: any }, parent: Insta
 	if props.CanTouch == nil then
 		inst.CanTouch = false
 	end
-	if props.CanQuery == nil then
-		inst.CanQuery = false
-	end
 	inst.TopSurface = Enum.SurfaceType.Smooth
 	inst.BottomSurface = Enum.SurfaceType.Smooth
 	for k, v in props do
 		(inst :: any)[k] = v
+	end
+	-- Solid, visible scenery is queryable so the camera bumps into it instead of clipping through.
+	if props.CanQuery == nil then
+		inst.CanQuery = inst.CanCollide and inst.Transparency < 0.25
 	end
 	inst.Parent = parent
 	maybeYield()
@@ -379,14 +380,15 @@ local function buildRoom(parent: Instance)
 		local sx = if faceX ~= 0 then 8 else half * 2
 		local sz = if faceZ ~= 0 then 8 else half * 2
 		mkPart("Part", { Name = "ChairBack", Size = Vector3.new(sx, 110, sz), CFrame = at(bx, seatY + 59, bz), Color = WOOD_A, Material = LOW }, parent)
-		mkPart("Part", { Name = "ChairTopRail", Size = Vector3.new(sx + 4, 10, sz + 4), CFrame = at(bx, seatY + 116, bz), Color = WOOD_DARK, Material = LOW }, parent)
+		-- The rail overhangs the back a little (side-by-side chairs stay well apart now).
+		mkPart("Part", { Name = "ChairTopRail", Size = Vector3.new(if faceX ~= 0 then sx + 4 else sx + 2, 10, if faceZ ~= 0 then sz + 4 else sz + 2), CFrame = at(bx, seatY + 116, bz), Color = WOOD_DARK, Material = LOW }, parent)
 		for _, dx in { -half + 5, half - 5 } do
 			for _, dz in { -half + 5, half - 5 } do
 				mkPart("Part", { Name = "ChairLeg", Size = Vector3.new(7, seatY - 4 - fy, 7), CFrame = at(cx + dx, (fy + seatY - 4) / 2, cz + dz), Color = WOOD_DARK, Material = LOW }, parent)
 			end
 		end
 	end
-	for _, cz in { -60, 20 } do
+	for _, cz in { -68, 28 } do
 		chair(tx0 - 52, cz, 1, 0)
 		chair(tx1 + 52, cz, -1, 0)
 	end
@@ -443,7 +445,9 @@ local function buildSpawn(parent: Instance)
 	local emblem = mkPart("Part", {
 		Name = "SpawnEmblem",
 		Size = Vector3.new(18, 0.05, 18),
-		CFrame = at(SPAWN.X, 1.2, SPAWN.Z),
+		-- A Top-face SurfaceGui's "up" is the part's -X, so turn the part a quarter so the text reads
+		-- left-to-right for someone who just spawned (facing -Z, camera behind them).
+		CFrame = at(SPAWN.X, 1.2, SPAWN.Z) * CFrame.Angles(0, -math.pi / 2, 0),
 		Transparency = 1,
 		CanCollide = false,
 		CastShadow = false,

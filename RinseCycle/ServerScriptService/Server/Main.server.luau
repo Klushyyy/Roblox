@@ -40,7 +40,7 @@ end
 
 -- Camera and movement defaults (apply to characters spawned after this point).
 StarterPlayer.CameraMaxZoomDistance = 60
-StarterPlayer.CameraMinZoomDistance = 4
+StarterPlayer.CameraMinZoomDistance = 0.5 -- scroll all the way in for first person
 StarterPlayer.CharacterWalkSpeed = Config.World.LobbyWalkSpeed
 
 step("Remotes", Remotes.Setup)

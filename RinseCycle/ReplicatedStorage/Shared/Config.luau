@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "0.5.0"
+Config.Version = "0.6.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -371,6 +371,8 @@ Config.DevProducts = {
 	{ Key = "Gems1", Id = 0, Price = 29, Kind = "Gems", Amount = 30, Name = "Pouch of Gems", Icon = "💎" },
 	{ Key = "Gems2", Id = 0, Price = 79, Kind = "Gems", Amount = 100, Name = "Sack of Gems", Icon = "💎" },
 	{ Key = "Gems3", Id = 0, Price = 199, Kind = "Gems", Amount = 300, Name = "Chest of Gems", Icon = "💎" },
+	-- Offered in the Daily Reward window only when you've missed a day.
+	{ Key = "RestoreStreak", Id = 0, Price = 29, Kind = "RestoreStreak", Amount = 1, Name = "Restore Streak", Icon = "🔥" },
 }
 
 function Config.GetProduct(key: string)
@@ -590,6 +592,13 @@ function Config.PetStats(petId: string, tier: number?)
 	return { Speed = def.PowerShare * mult, Capacity = math.floor((def.Capacity or 12) * mult + 0.5), CoinBonus = def.CoinBonus * mult }
 end
 
+-- One easy number for the UI: a pet's Power. Speed, bag size and coin bonus all rise together, so
+-- a single score (bigger = cleans faster, carries more and earns more) says everything.
+function Config.PetPower(petId: string, tier: number?): number
+	local stats = Config.PetStats(petId, tier)
+	return if stats then math.floor(stats.Speed * 100 + 0.5) else 0
+end
+
 function Config.PetCoinBonus(pets, equipped): number
 	local byUid = {}
 	for _, pet in pets or {} do
@@ -677,8 +686,13 @@ function Config.StartCoins(levelIndex: number, perks): number
 	return math.floor(lvl * Config.GetPerk("HeadStart").PerLevel * Config.GetLevel(levelIndex).Mult)
 end
 
--- Daily rewards: claimed automatically the first time you join each (UTC) day. Coming back the next
--- day moves the streak on; missing a day starts it again. Day 7 is the big one, then it loops.
+-- Daily rewards: claimed from the 🎁 Daily button. The next one unlocks 24 hours after you claim
+-- (Cooldown). Claim it within Grace after that and the streak moves on; later and it starts again
+-- at day 1, unless you buy "Restore Streak" (Config.DevProducts). Day 7 is the big one, then it loops.
+Config.Daily = {
+	Cooldown = 24 * 60 * 60,
+	Grace = 24 * 60 * 60,
+}
 Config.DailyRewards = {
 	{ Kind = "Bubbles", Amount = 60 },
 	{ Kind = "Bubbles", Amount = 120 },
@@ -747,6 +761,51 @@ do
 		rankSum += r.Chance
 	end
 	assert(math.abs(rankSum - 100) < 0.001, "Config: rank chances add to " .. rankSum)
+end
+
+----------------------------------------------------------------------------------------------------
+-- Codes (🎟️ Codes button). Key = the code in CAPITALS (players can type any case); each player can
+-- use each code once. Give Bubbles and/or Gems; Expires (optional) is an os.time() after which it
+-- stops working. Add new ones here and announce them in the game's description.
+----------------------------------------------------------------------------------------------------
+Config.Codes = {
+	RELEASE = { Bubbles = 300, Gems = 10 },
+	SQUEAKY = { Bubbles = 150 },
+	BUBBLES = { Gems = 15 },
+} :: { [string]: { Bubbles: number?, Gems: number?, Expires: number? } }
+
+-- "🧼 300 + 💎 10"
+function Config.RewardText(reward: { Bubbles: number?, Gems: number? }): string
+	local bits = {}
+	if reward.Bubbles and reward.Bubbles > 0 then
+		table.insert(bits, "🧼 " .. reward.Bubbles)
+	end
+	if reward.Gems and reward.Gems > 0 then
+		table.insert(bits, "💎 " .. reward.Gems)
+	end
+	return table.concat(bits, " + ")
+end
+
+----------------------------------------------------------------------------------------------------
+-- Community (🎉 Free Rewards button). Joining the game's Roblox community gives a one-time reward;
+-- it's checked in game, no rejoin needed. GroupId 0 = the group that owns the game (set a number to
+-- use a different one). CreatorUserId is shown on the "Follow the dev" card (Roblox has no way to
+-- check follows or likes, so those two are friendly reminders without a reward).
+----------------------------------------------------------------------------------------------------
+Config.Social = {
+	GroupId = 0,
+	CreatorUserId = 2297538363,
+	GroupReward = { Bubbles = 500, Gems = 25 },
+}
+
+function Config.GetGroupId(): number
+	if Config.Social.GroupId > 0 then
+		return Config.Social.GroupId
+	end
+	local ok, id = pcall(function()
+		return if game.CreatorType == Enum.CreatorType.Group then game.CreatorId else 0
+	end)
+	return if ok and type(id) == "number" then id else 0
 end
 
 return Config

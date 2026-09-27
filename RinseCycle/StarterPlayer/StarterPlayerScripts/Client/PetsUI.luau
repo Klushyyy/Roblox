@@ -14,6 +14,7 @@ local Types = require(Shared:WaitForChild("Types"))
 local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
 local UIKit = require(Client:WaitForChild("UIKit"))
+local ShopUI = require(Client:WaitForChild("ShopUI"))
 
 local PetsUI = {}
 
@@ -70,17 +71,9 @@ local function isEquipped(meta: Types.MetaState, uid: string): boolean
 	return table.find(meta.Equipped, uid) ~= nil
 end
 
--- "⚡ Speed 45%" (share of your pet power it cleans per second), "🎒 Holds 26", "+12% coins".
-local function powerShareText(share: number): string
-	local pct = (Format.Percent(share):gsub("^%+", ""))
-	return string.format("⚡ Cleans at %s of your power", pct)
-end
-local function coinBonusText(bonus: number, capacity: number?): string
-	local bag = if capacity then string.format("🎒 Holds %d  •  ", capacity) else ""
-	return bag .. "💰 " .. Format.Percent(bonus) .. " coins"
-end
-local function shortStats(stats): string
-	return string.format("⚡ %s  🎒 %d  💰 %s", (Format.Percent(stats.Speed):gsub("^%+", "")), stats.Capacity, Format.Percent(stats.CoinBonus))
+-- Pets show one number, Power (Config.PetPower): bigger cleans faster, carries more, earns more.
+local function powerText(id: string, tier: number?): string
+	return "💪 Power " .. Config.PetPower(id, tier)
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -203,7 +196,7 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 		ZIndex = 2,
 	})
 	UIKit.Label({
-		Text = entry.Def.Rarity .. "  ⚡" .. (Format.Percent(entry.Stats.Speed):gsub("^%+", "")),
+		Text = entry.Def.Rarity .. "  💪" .. Config.PetPower(entry.Id, entry.Tier),
 		Size = UDim2.new(1, -10, 0, 16),
 		Position = UDim2.new(0.5, 0, 0, 118),
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -289,8 +282,8 @@ local function refreshDetailPanel(meta: Types.MetaState?)
 	detailName.Text = petTitle(entry.Id, entry.Tier)
 	detailRarity.Text = entry.Def.Rarity
 	detailRarity.TextColor3 = UIKit.RarityColor(entry.Def.Rarity)
-	detailPower.Text = powerShareText(entry.Stats.Speed)
-	detailCoin.Text = coinBonusText(entry.Stats.CoinBonus, entry.Stats.Capacity)
+	detailPower.Text = powerText(entry.Id, entry.Tier)
+	detailCoin.Text = "Higher power = cleans faster and earns more coins"
 
 	local equipped = isEquipped(meta :: Types.MetaState, entry.Uid)
 	equipButton.Text = if equipped then "Unequip" else "Equip"
@@ -380,6 +373,12 @@ local function doEquipToggle()
 		return
 	end
 	local equipped = isEquipped(meta, uid)
+	-- All slots full: offer the +2 Pet Slots pass (if they don't have it yet).
+	if not equipped and #meta.Equipped >= meta.PetSlots and not (meta.Passes and meta.Passes.PetSlots) then
+		UIKit.Toast("🐾 All your pet slots are full! Get +2 Pet Slots to bring more pets.", "Info")
+		ShopUI.BuyPass("PetSlots")
+		return
+	end
 	local result = ClientState.MetaRequest(if equipped then "Unequip" else "Equip", uid)
 	if not result.Ok then
 		UIKit.Toast(result.Error or "Couldn't do that.", "Bad")
@@ -749,7 +748,7 @@ local function buildOddsRow(parent: Instance, entry, layoutOrder: number)
 		Parent = row,
 	})
 	UIKit.Label({
-		Text = def.Rarity .. "   " .. shortStats(petStats(entry.Pet)),
+		Text = def.Rarity .. "   " .. powerText(entry.Pet),
 		Size = UDim2.new(1, -170, 0, 18),
 		Position = UDim2.new(0, 66, 0, 32),
 		TextSize = 14,

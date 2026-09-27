@@ -113,6 +113,12 @@ local function resetPerRunState()
 end
 
 local function findHandPart(character: Model): BasePart?
+	-- Tools with a nozzle (the washer's lance) spray from its tip.
+	local held = character:FindFirstChild("HeldTool")
+	local muzzle = held and held:FindFirstChild("Muzzle")
+	if muzzle and muzzle:IsA("BasePart") then
+		return muzzle
+	end
 	local hand = character:FindFirstChild("RightHand") -- R15
 	if hand and hand:IsA("BasePart") then
 		return hand
@@ -187,7 +193,7 @@ local function ensureBeam(character: Model)
 
 		local origin = Instance.new("Attachment")
 		origin.Name = "SprayOrigin"
-		origin.Position = Vector3.new(0, 0, -0.2)
+		origin.Position = if hand.Name == "Muzzle" then Vector3.zero else Vector3.new(0, 0, -0.2)
 		origin.Parent = hand
 		handAttachment = origin
 

@@ -17,7 +17,7 @@
 local Scene = {}
 Scene.__index = Scene
 
-Scene.Duration = 19.5
+Scene.Duration = 20.5
 
 local SKIN = Color3.fromRGB(245, 205, 150)
 local WHITE = Color3.fromRGB(250, 250, 248)
@@ -143,26 +143,34 @@ function Scene:hat(actor: Actor, p: BasePart, offset: CFrame)
 end
 
 -- Pose an actor. root = feet position + facing (LookVector = where they face). sit bends the legs
--- forward; walk is a phase (radians) for the stride; armL / armR raise the arms forward (radians).
-function Scene:pose(a: Actor, root: CFrame, pose: { sit: boolean?, walk: number?, armL: number?, armR: number?, bob: number? })
+-- forward (sitK blends between standing, 0, and sitting, 1, for getting up); walk is a phase
+-- (radians) for the stride; armL / armR raise the arms forward (radians). Returns the right hand's
+-- CFrame (scene space) so props can be held.
+function Scene:pose(a: Actor, root: CFrame, pose: { sit: boolean?, sitK: number?, walk: number?, armL: number?, armR: number?, bob: number? }): CFrame
 	local p = a.Parts
 	local sc = a.Scale
-	local hip = if pose.sit then SEAT_Y else 2 * sc
+	local sitK = pose.sitK or (if pose.sit then 1 else 0)
+	local hip = SEAT_Y * sitK + 2 * sc * (1 - sitK)
 	local base = root * CFrame.new(0, hip - 2 * sc + (pose.bob or 0), 0)
 	local swing = if pose.walk then math.sin(pose.walk) * 0.65 else 0
+	local rightHand = base
 	self:place(p.Torso, base * CFrame.new(0, 3 * sc, 0))
 	self:place(p.Head, base * CFrame.new(0, 4.5 * sc, 0))
 	for _, h in a.Hat do
 		self:place(h.Part, base * CFrame.new(0, 4.5 * sc, 0) * h.Offset)
 	end
 	for side, name in { [-1] = "Left", [1] = "Right" } do
-		local legAngle = if pose.sit then math.rad(90) else swing * side
+		local legAngle = math.rad(90) * sitK + swing * side * (1 - sitK)
 		self:place(p[name .. "Leg"], base * CFrame.new(side * 0.5 * sc, 2 * sc, 0) * CFrame.Angles(legAngle, 0, 0) * CFrame.new(0, -sc, 0))
 		local armAngle = (if side < 0 then pose.armL else pose.armR) or (-swing * side * 0.8)
 		local shoulder = base * CFrame.new(side * 1.5 * sc, 3.9 * sc, 0) * CFrame.Angles(armAngle, 0, 0)
 		self:place(p[name .. "Arm"], shoulder * CFrame.new(0, -0.9 * sc, 0))
 		self:place(p[name .. "ArmHand"], shoulder * CFrame.new(0, -1.75 * sc, 0))
+		if side > 0 then
+			rightHand = shoulder * CFrame.new(0, -1.75 * sc, 0)
+		end
 	end
+	return rightHand
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -264,9 +272,21 @@ function Scene.Build(levelIndex: number, origin: CFrame, parent: Instance)
 	end
 	chair(tx - 2, tz + 3.4, 1)
 	chair(tx + 2, tz + 3.4, 1)
+	-- Mum's chair at the left end, its back on the far (-X) side.
+	local mx, mz = tx - 5.3, tz - 0.6
+	self:box("Seat", mx - 1, mx + 1, SEAT_Y - 0.3, SEAT_Y, mz - 1, mz + 1, th.Table, Enum.Material.Wood)
+	self:box("ChairBack", mx - 1.05, mx - 0.9, SEAT_Y, SEAT_Y + 2.6, mz - 1, mz + 1, th.Table, Enum.Material.Wood)
+	for _, lx in { mx - 0.8, mx + 0.8 } do
+		for _, lz in { mz - 0.8, mz + 0.8 } do
+			self:box("ChairLeg", lx - 0.12, lx + 0.12, 0, SEAT_Y - 0.3, lz - 0.12, lz + 0.12, th.Table, Enum.Material.Wood)
+		end
+	end
 
 	-- Kitchen: counter run with the dishwasher in it.
-	self:box("Counter", 11, 23, 0, 3.4, 12.2, 18, th.Counter)
+	-- The cupboards stop either side of the dishwasher so its open front really is open.
+	self:box("Counter", 11, DW.X - 1.62, 0, 3.4, 12.2, 18, th.Counter)
+	self:box("Counter", DW.X + 1.62, 23, 0, 3.4, 12.2, 18, th.Counter)
+	self:box("Kickboard", DW.X - 1.62, DW.X + 1.62, 0, 0.2, 12.4, 18, Color3.fromRGB(60, 62, 68))
 	self:box("CounterTop", 10.8, 23, 3.4, 3.7, 11.9, 18, th.CounterTop, Enum.Material.Marble)
 	-- The dishwasher is hollow (panels, not a block) so the camera can go inside at the end.
 	local steel = Color3.fromRGB(170, 176, 184)
@@ -284,10 +304,17 @@ function Scene.Build(levelIndex: number, origin: CFrame, parent: Instance)
 	self.InnerLight.Parent = self:box("DWLamp", DW.X - 0.3, DW.X + 0.3, 2.85, 2.95, 14.6, 15.2, Color3.fromRGB(220, 240, 255), Enum.Material.Neon)
 	-- The twist: tiny workers already waiting on the rack, sponges in hand (that's us).
 	self.Workers = {}
+	-- A crew: matching caps, their own shirts, a sponge each.
+	local wsc = 0.22
 	for i, c in { Color3.fromRGB(255, 200, 60), Color3.fromRGB(90, 170, 255), Color3.fromRGB(255, 110, 150) } do
-		local w = self:actor("Worker" .. i, c, Color3.fromRGB(50, 60, 90), 0.22)
-		local sponge = self:part("WorkerSponge", Vector3.new(0.18, 0.1, 0.12), CFrame.new(), Color3.fromRGB(255, 215, 80))
-		table.insert(self.Workers, { Actor = w, Sponge = sponge, X = DW.X - 0.8 + (i - 1) * 0.8 })
+		local w = self:actor("Worker" .. i, c, Color3.fromRGB(50, 60, 90), wsc)
+		local cap = self:part("WorkerCap", Vector3.new(0.35, 1.3, 1.3) * wsc, CFrame.new(), Color3.fromRGB(40, 150, 230), nil, Enum.PartType.Cylinder)
+		self:hat(w, cap, CFrame.new(0, 0.62 * wsc, 0) * CFrame.Angles(0, 0, math.rad(90)))
+		local brim = self:part("WorkerCapBrim", Vector3.new(0.9, 0.08, 0.5) * wsc, CFrame.new(), Color3.fromRGB(40, 150, 230))
+		self:hat(w, brim, CFrame.new(0, 0.5 * wsc, -0.65 * wsc))
+		local sponge = self:part("WorkerSponge", Vector3.new(0.2, 0.12, 0.14), CFrame.new(), Color3.fromRGB(255, 215, 80))
+		local scrubby = self:part("WorkerSpongeScrub", Vector3.new(0.2, 0.04, 0.14), CFrame.new(), Color3.fromRGB(70, 170, 90))
+		table.insert(self.Workers, { Actor = w, Sponge = sponge, Scrubby = scrubby, X = DW.X - 0.8 + (i - 1) * 0.8 })
 	end
 	self.Door = self:part("DWDoor", Vector3.new(3.1, 2.75, 0.25), CFrame.new(), Color3.fromRGB(225, 229, 234), Enum.Material.Metal)
 	self.DoorHandle = self:part("DWHandle", Vector3.new(1.6, 0.15, 0.2), CFrame.new(), Color3.fromRGB(150, 155, 162), Enum.Material.Metal)
@@ -303,7 +330,8 @@ function Scene.Build(levelIndex: number, origin: CFrame, parent: Instance)
 		for i, c in { Color3.fromRGB(255, 90, 110), Color3.fromRGB(90, 170, 255), Color3.fromRGB(255, 210, 60) } do
 			local bx = tx - 6 + i * 1.2
 			self:part("Balloon", Vector3.new(1.1, 1.4, 1.1), CFrame.new(bx, 8 + i * 0.4, tz + 5), c, nil, Enum.PartType.Ball)
-			self:box("String", bx - 0.02, bx + 0.02, 3, 7.3 + i * 0.4, tz + 4.98, tz + 5.02, Color3.fromRGB(240, 240, 240))
+			self:box("String", bx - 0.02, bx + 0.02, 0.3, 7.3 + i * 0.4, tz + 4.98, tz + 5.02, Color3.fromRGB(240, 240, 240))
+			self:box("BalloonWeight", bx - 0.2, bx + 0.2, 0, 0.3, tz + 4.8, tz + 5.2, Color3.fromRGB(255, 215, 90), Enum.Material.Metal)
 		end
 		self:box("Banner", -15, 7, 12.5, 13.5, 17.7, 17.8, Color3.fromRGB(255, 120, 60))
 	elseif th.Royal then
@@ -354,74 +382,140 @@ end
 -- Timeline
 ----------------------------------------------------------------------------------------------------
 
--- Mum's route: stand up, collect the plates, carry them to the dishwasher, load, close, press.
+-- Mum's route: get up from her chair, walk round the front of the table (never through it), pick
+-- up the plates Dad and the kid slid over, carry them round the open door to the dishwasher, load
+-- it, close it, step up and press Start. Every leg is walked along waypoints at an even pace,
+-- always facing the way she's going.
 local MUM_SEAT = CFrame.new(TABLE_C.X - 5.3, 0, TABLE_C.Z - 0.6) * CFrame.Angles(0, math.rad(-90), 0) -- faces +X (the table)
-local MUM_PICK = CFrame.new(TABLE_C.X, 0, TABLE_C.Z - 3.4) * CFrame.Angles(0, math.rad(180), 0) -- front of the table, facing +Z
-local MUM_DW = CFrame.new(DW.X + 2.1, 0, DW_FRONT_Z - 2.6) * CFrame.Angles(0, math.rad(160), 0) -- beside the door, by the Start button
+local MUM_UP = Vector3.new(TABLE_C.X - 5.3, 0, TABLE_C.Z - 2.2) -- stood up, slid out to the chair's side
+local PICK_POS = Vector3.new(TABLE_C.X - 0.5, 0, TABLE_C.Z - 3.3) -- in front of the table
+local LOAD_POS = Vector3.new(DW.X - 3.1, 0, DW_FRONT_Z - 2.4) -- left of the open door, clear of it
+local PRESS_POS = Vector3.new(DW.X - 0.5, 0, DW_FRONT_Z - 1.5) -- left of the Start button once it's shut (left hand on it)
+local TO_PICK = { MUM_UP, Vector3.new(TABLE_C.X - 5.3, 0, TABLE_C.Z - 3.3), PICK_POS }
+local WALK_OFF = { PRESS_POS, Vector3.new(DW.X - 3, 0, DW_FRONT_Z - 3.5), Vector3.new(DW.X - 7, 0, DW_FRONT_Z - 6) }
+local TO_DW = { PICK_POS, Vector3.new(TABLE_C.X + 7, 0, TABLE_C.Z - 4.2), Vector3.new(DW.X - 3.6, 0, DW_FRONT_Z - 5), LOAD_POS }
 
-local function lerpCF(a: CFrame, b: CFrame, k: number): CFrame
-	return a:Lerp(b, k)
+local function yawCF(pos: Vector3, dir: Vector3): CFrame
+	local flat = Vector3.new(dir.X, 0, dir.Z)
+	if flat.Magnitude < 1e-3 then
+		return CFrame.new(pos)
+	end
+	return CFrame.lookAt(pos, pos + flat.Unit)
+end
+
+-- Position along a polyline at fraction k (by distance).
+local function along(points: { Vector3 }, k: number): Vector3
+	local total = 0
+	for i = 1, #points - 1 do
+		total += (points[i + 1] - points[i]).Magnitude
+	end
+	local d = math.clamp(k, 0, 1) * total
+	for i = 1, #points - 1 do
+		local seg = (points[i + 1] - points[i]).Magnitude
+		if d <= seg or i == #points - 1 then
+			return points[i]:Lerp(points[i + 1], if seg > 0 then math.clamp(d / seg, 0, 1) else 1)
+		end
+		d -= seg
+	end
+	return points[#points]
+end
+
+-- Walking pose along a path between times a and b: eased start and stop, facing the direction of
+-- travel (looked up a little ahead, so corners turn smoothly).
+local function walkPath(points: { Vector3 }, t: number, a: number, b: number): (CFrame, number)
+	local k = phase(t, a, b)
+	local pos = along(points, k)
+	local ahead = along(points, math.min(k + 0.08, 1))
+	local behind = along(points, math.max(k - 0.08, 0))
+	return yawCF(pos, ahead - behind), (t - a) * 9
+end
+
+local function faceTo(pos: Vector3, target: Vector3): CFrame
+	return yawCF(pos, target - pos)
 end
 
 function Scene:Update(t: number)
 	local eat = t < 6.2
 
-	-- Diners: eating (forks up and down), then leaning back happy.
+	-- Diners: eating (fork hand going to the plate and back, always above the table top), then
+	-- sliding their plates to the front for Mum and sitting back happy.
 	local chew = math.sin(t * 5)
-	local dadRoot = CFrame.new(TABLE_C.X - 2, 0, TABLE_C.Z + 3.4) * CFrame.Angles(0, 0, 0) -- faces -Z (camera side)
+	local dadRoot = CFrame.new(TABLE_C.X - 2, 0, TABLE_C.Z + 3.4) -- faces -Z (camera side)
 	local kidRoot = CFrame.new(TABLE_C.X + 2, 0, TABLE_C.Z + 3.4)
-	local dadArm = if eat then 1.1 + chew * 0.35 else 0.2
-	local kidArm = if eat then 1.1 - chew * 0.35 else 0.2
-	self:pose(self.Dad, dadRoot, { sit = true, armR = dadArm, armL = 0.6 })
-	self:pose(self.Kid, kidRoot, { sit = true, armL = kidArm, armR = 0.6 })
+	local slide = phase(t, 7.3, 8.1)
+	local reach = math.sin(slide * math.pi) -- arms out while sliding the plate
+	local dadArm = if eat then 1.45 + chew * 0.15 else 0.35 + reach * 1.1
+	local kidArm = if eat then 1.45 - chew * 0.15 else 0.35 + reach * 1.1
+	self:pose(self.Dad, dadRoot, { sit = true, armR = dadArm, armL = if eat then 1.3 else 0.35 + reach * 1.1 })
+	self:pose(self.Kid, kidRoot, { sit = true, armL = kidArm, armR = if eat then 1.3 else 0.35 + reach * 1.1 })
 
 	-- Mum.
 	local mum: CFrame
-	local pose: { [string]: any } = { sit = false }
-	local carrying = false
+	local pose: { [string]: any } = {}
+	local mumPick = faceTo(PICK_POS, PICK_POS + Vector3.new(0, 0, 1))
+	local mumLoad = faceTo(LOAD_POS, Vector3.new(DW.X, 0, DW_FRONT_Z + 1.5))
 	if t < 7 then
 		mum = MUM_SEAT
-		pose = { sit = true, armR = if eat then 1.1 + math.sin(t * 5 + 1) * 0.35 else 0.3, armL = 0.6 }
+		local lift = phase(t, 6.6, 7)
+		pose = { sit = true, armR = if eat then 1.45 + math.sin(t * 5 + 1) * 0.15 else 0.35 + lift, armL = if eat then 1.3 else 0.35 + lift }
+	elseif t < 7.6 then
+		-- Getting up with her own plate: slide out to the side of the chair while the legs straighten.
+		local k = phase(t, 7, 7.6)
+		mum = CFrame.new(MUM_SEAT.Position:Lerp(MUM_UP, k)) * MUM_SEAT.Rotation
+		pose = { sitK = 1 - k, armL = 1.35, armR = 1.35 }
 	elseif t < 9 then
-		local k = phase(t, 7, 9)
-		mum = lerpCF(MUM_SEAT, MUM_PICK, k)
-		pose = { walk = t * 9, armL = 0.3, armR = 0.3 }
+		local cf, stride = walkPath(TO_PICK, t, 7.6, 9)
+		mum = cf
+		pose = { walk = stride, armL = 1.35, armR = 1.35 }
 	elseif t < 9.8 then
-		mum = MUM_PICK
-		pose = { armL = 1.2, armR = 1.2, bob = -0.3 * math.sin(phase(t, 9, 9.8) * math.pi) }
+		mum = mumPick
+		pose = { armL = 1.3, armR = 1.3, bob = -0.3 * math.sin(phase(t, 9, 9.8) * math.pi) }
 	elseif t < 13 then
-		local k = phase(t, 9.8, 13)
-		local mid = CFrame.new(TABLE_C.X + 8, 0, TABLE_C.Z - 4) * CFrame.Angles(0, math.rad(-120), 0)
-		mum = if k < 0.5 then lerpCF(MUM_PICK, mid, k * 2) else lerpCF(mid, MUM_DW, (k - 0.5) * 2)
-		pose = { walk = t * 9, armL = 1.35, armR = 1.35 }
-		carrying = true
-	elseif t < 15 then
-		mum = MUM_DW
-		local k = phase(t, 13, 14.2)
-		pose = { armL = 1.35 + k * 0.4, armR = 1.35 + k * 0.4, bob = -0.8 * math.sin(k * math.pi) }
-		carrying = t < 14.2
+		local cf, stride = walkPath(TO_DW, t, 9.8, 13)
+		mum = cf
+		pose = { walk = stride, armL = 1.35, armR = 1.35 }
+	elseif t < 15.4 then
+		mum = mumLoad
+		local load = phase(t, 13.2, 14.2)
+		local shut = math.sin(phase(t, 14.6, 15.4) * math.pi) -- bends to lift the door
+		pose = { armL = 1.35 + load * 0.3 - shut * 0.5, armR = 1.35 + load * 0.3 - shut * 0.5, bob = -0.6 * math.sin(load * math.pi) - 0.5 * shut }
+	elseif t < 15.9 then
+		local k = phase(t, 15.4, 15.9)
+		local pos = LOAD_POS:Lerp(PRESS_POS, k)
+		mum = yawCF(pos, (PRESS_POS - LOAD_POS):Lerp(Vector3.new(0, 0, 1), k))
+		pose = { walk = (t - 15.4) * 9 * (1 - k), armL = 0.3, armR = 0.3 }
+	elseif t < 16.5 then
+		mum = faceTo(PRESS_POS, PRESS_POS + Vector3.new(0, 0, 1))
+		local press = phase(t, 15.9, 16.15) - phase(t, 16.25, 16.5)
+		pose = { armR = 0.2, armL = 0.4 + press * 0.8 }
 	else
-		mum = MUM_DW
-		local press = phase(t, 15.6, 16.1) - phase(t, 16.3, 16.8)
-		pose = { armL = 0.2, armR = 0.6 + press * 1.4 }
+		-- Job done: she walks off out of shot, leaving the camera a clear way in.
+		local cf, stride = walkPath(WALK_OFF, t, 16.5, 17.6)
+		mum = cf
+		pose = { walk = stride, armL = 0.3, armR = 0.3 }
 	end
 	self:pose(self.Mum, mum, pose)
 
-	-- Plates: on the table, then stacked in Mum's hands, then into the rack.
+	-- Plates: Mum lifts her own as she gets up; Dad and the kid slide theirs to the front, and she
+	-- stacks them on hers. At the dishwasher they're stood up in the rack side by side (resting on
+	-- it, facing sideways like real plates).
+	local hipDrop = if t < 7.6 then (2 - SEAT_Y) * (1 - phase(t, 7, 7.6)) else 0
 	for i, plate in self.Plates do
-		local tableCF = CFrame.new(plate.X, TABLE_TOP, plate.Z)
-		local handCF = mum * CFrame.new(0, 3.1 + i * 0.16, -1.6)
-		local rackCF = CFrame.new(DW.X - 1.2 + i * 0.6, 0.97, 16.3) * CFrame.Angles(math.rad(90), 0, 0)
+		local own = i == 3
+		local stack = if own then 1 else i + 1
+		local frontZ = TABLE_C.Z - 1.5
+		local slid = if own then 0 else phase(t, 7.3, 8.1)
+		local tableCF = CFrame.new(plate.X, TABLE_TOP, plate.Z + (frontZ - plate.Z) * slid)
+		local handCF = mum * CFrame.new(0, 3.1 - hipDrop + stack * 0.16, -1.6)
+		local rackCF = CFrame.new(DW.X - 0.6 + (stack - 1) * 0.6, 0.96 + 0.96, 16.2) * CFrame.Angles(0, 0, math.rad(90))
+		local pickA, pickB = if own then 6.7 else 9.5, if own then 7 else 9.8
 		local base: CFrame
-		if t < 9.5 then
+		if t < pickA then
 			base = tableCF
-		elseif carrying then
-			base = if t < 9.8 then tableCF:Lerp(handCF, phase(t, 9.5, 9.8)) else handCF
+		elseif t < 13.2 then
+			base = tableCF:Lerp(handCF, phase(t, pickA, pickB))
 		else
-			base = handCF:Lerp(rackCF, phase(t, 13.4, 14.2))
-			if t >= 14.2 then
-				base = rackCF
-			end
+			base = handCF:Lerp(rackCF, phase(t, 13.2 + (3 - stack) * 0.25, 13.7 + (3 - stack) * 0.25))
 		end
 		for _, item in plate.Items do
 			local visible = item.Kind == "Plate" or (item.Kind == "Food" and eat) or (item.Kind == "Mess" and not eat)
@@ -431,25 +525,48 @@ function Scene:Update(t: number)
 	end
 
 	-- Dishwasher door: open (flat, towards the camera) until Mum shuts it, then the Start light.
+	-- When the camera pushes in, the door dissolves instead of the lens passing through metal.
 	local close = phase(t, 14.6, 15.4)
 	local hinge = CFrame.new(DW.X, 0.25, DW_FRONT_Z) * CFrame.Angles(math.rad(-90 * (1 - close)), 0, 0)
-	self:place(self.Door, hinge * CFrame.new(0, 1.375, 0))
-	self:place(self.DoorHandle, hinge * CFrame.new(0, 2.4, -0.22))
 	local on = t >= 16.2
+	local shake = if on then math.sin(t * 60) * 0.015 else 0
+	self:place(self.Door, hinge * CFrame.new(shake, 1.375, 0))
+	self:place(self.DoorHandle, hinge * CFrame.new(shake, 2.4, -0.22))
+	local dissolve = phase(t, 17.1, 17.45)
+	self.Door.Transparency = dissolve
+	self.DoorHandle.Transparency = dissolve
 	self.StartLight.Color = if on then Color3.fromRGB(90, 255, 140) else Color3.fromRGB(90, 95, 105)
 	self.StartLight.Material = if on then Enum.Material.Neon else Enum.Material.SmoothPlastic
-	-- Inside: the workers stand ready, then cheer when the lights come on.
+
+	-- Inside: the crew waits facing the plates. The lights come on, they turn round to face us,
+	-- raise their sponges together (a salute, one after another), then turn back and get scrubbing.
 	self.InnerLight.Brightness = if on then 2 else 0
 	for i, w in self.Workers do
-		local cheer = if on then math.abs(math.sin(t * 6 + i)) else 0
-		local root = CFrame.new(w.X, 0.96, 14.3)
-		self:pose(w.Actor, root, { armL = 0.4 + cheer * 2.2, armR = 1.2 + cheer * 1.6, bob = cheer * 0.06 })
-		self:place(w.Sponge, root * CFrame.new(0.33, 0.62 + cheer * 0.18, -0.25))
-	end
-	-- Once it's running, it hums (a tiny shake).
-	if on then
-		local shake = math.sin(t * 60) * 0.015
-		self:place(self.Door, hinge * CFrame.new(shake, 1.375, 0))
+		local delay = (i - 1) * 0.12
+		local turn = phase(t, 17.6 + delay, 18.1 + delay) - phase(t, 19.1 + delay, 19.5 + delay)
+		local yaw = math.rad(180) * (1 - turn) -- 180 = facing the plates (+Z), 0 = facing us
+		local root = CFrame.new(w.X, 0.96, 14.6) * CFrame.Angles(0, yaw, 0)
+		local salute = phase(t, 18.2 + delay, 18.5 + delay) * (1 - phase(t, 18.85, 19.1))
+		local scrubbing = t > 19.5 + delay
+		local armR = 0.25 + salute * 2.6
+		if scrubbing then
+			armR = 1.35 + math.sin(t * 11 + i) * 0.25
+		end
+		local breathe = math.sin(t * 2 + i) * 0.004
+		local hand = self:pose(w.Actor, root, { armL = 0.2 + salute * 0.2, armR = armR, bob = breathe })
+		-- Nobody's inside while the door's open (keeps the reveal a surprise).
+		local shown = if close >= 1 then 0 else 1
+		for _, part in w.Actor.Parts do
+			part.Transparency = shown
+		end
+		for _, h in w.Actor.Hat do
+			h.Part.Transparency = shown
+		end
+		w.Sponge.Transparency = shown
+		w.Scrubby.Transparency = shown
+		local spongeCF = hand * CFrame.new(0, -0.07, 0)
+		self:place(w.Sponge, spongeCF)
+		self:place(w.Scrubby, spongeCF * CFrame.new(0, -0.08, 0))
 	end
 end
 
@@ -459,12 +576,13 @@ local KEYS = {
 	{ 3.2, Vector3.new(-3, 5.6, 0.2), Vector3.new(-4, 3.1, 7.5), 46 },
 	{ 5.8, Vector3.new(-4.2, 7.4, 4.2), Vector3.new(-4, 3, 7.4), 44 },
 	{ 7.2, Vector3.new(-2, 6, -3), Vector3.new(-5, 2.8, 6), 50 },
-	{ 10.2, Vector3.new(4, 6, -3), Vector3.new(9, 2.6, 8), 54 },
-	{ 13, Vector3.new(20.5, 5.4, 6.4), Vector3.new(15.3, 1.8, 11.8), 50 },
-	{ 15.4, Vector3.new(13.2, 4.3, 8.9), Vector3.new(16.3, 3.3, 12), 38 },
-	{ 16.6, Vector3.new(15.5, 2.3, 9.8), Vector3.new(15.5, 2.1, 12.4), 50 },
-	{ 17.6, Vector3.new(15.5, 1.9, 12.7), Vector3.new(15.5, 1.3, 16), 62 },
-	{ 19.5, Vector3.new(15.5, 1.75, 13.1), Vector3.new(15.5, 1.25, 16), 58 },
+	{ 10.2, Vector3.new(2, 7, -6), Vector3.new(8, 2.5, 6), 54 },
+	{ 13, Vector3.new(20, 6.5, 4), Vector3.new(14.5, 1.8, 12), 50 },
+	{ 15.4, Vector3.new(22, 5.2, 5.5), Vector3.new(16, 2.5, 11.5), 48 },
+	{ 16.4, Vector3.new(21, 4.6, 6.6), Vector3.new(16, 2.6, 11.7), 44 },
+	{ 17.0, Vector3.new(15.8, 2.6, 9.3), Vector3.new(15.5, 2.0, 12.4), 50 },
+	{ 17.8, Vector3.new(15.5, 1.9, 12.7), Vector3.new(15.5, 1.3, 16), 62 },
+	{ 20.5, Vector3.new(15.5, 1.75, 13.1), Vector3.new(15.5, 1.25, 16), 58 },
 }
 
 function Scene:Camera(t: number): (CFrame, number)
