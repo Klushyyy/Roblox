@@ -14596,7 +14596,7 @@ local function render()
 		UIKit.Label({ Text = if claimed then "✅" else "", TextSize = 18, Size = UDim2.new(1, 0, 0, 20), Position = UDim2.fromOffset(0, 106), Parent = card })
 	end
 	local nextDay = streak % #Config.DailyRewards + 1
-	footer.Text = string.format("Today: %s!  Come back tomorrow for Day %d: %s", if streak &gt; 0 then rewardText(Config.DailyRewards[streak]) else "-", nextDay, rewardText(Config.DailyRewards[nextDay]))
+	footer.Text = string.format("Today: %s   •   Tomorrow (Day %d): %s", if streak &gt; 0 then rewardText(Config.DailyRewards[streak]) else "-", nextDay, rewardText(Config.DailyRewards[nextDay]))
 end
 
 function DailyUI.Init()
@@ -14609,13 +14609,13 @@ function DailyUI.Init()
 		Name = "Daily",
 		Title = "Daily Reward",
 		Icon = "🎁",
-		Size = Vector2.new(820, 330),
+		Size = Vector2.new(820, 380),
 		Parent = screenRoot,
 	})
 	row = Instance.new("Frame")
 	row.BackgroundTransparency = 1
 	row.Size = UDim2.new(1, 0, 0, 140)
-	row.Position = UDim2.fromOffset(0, 10)
+	row.Position = UDim2.fromOffset(0, 6)
 	row.Parent = content
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Horizontal
@@ -14623,12 +14623,12 @@ function DailyUI.Init()
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Padding = UDim.new(0, 10)
 	layout.Parent = row
-	footer = UIKit.Label({ Text = "", TextSize = 20, TextWrapped = true, Size = UDim2.new(1, -20, 0, 56), Position = UDim2.new(0.5, 0, 0, 160), AnchorPoint = Vector2.new(0.5, 0), Parent = content })
+	footer = UIKit.Label({ Text = "", TextSize = 20, TextWrapped = true, Size = UDim2.new(1, -20, 0, 32), Position = UDim2.new(0.5, 0, 0, 154), AnchorPoint = Vector2.new(0.5, 0), Parent = content })
 	UIKit.Button({
 		Text = "Awesome!",
 		Size = UDim2.fromOffset(220, 52),
-		Position = UDim2.new(0.5, 0, 1, -8),
-		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 0, 196),
+		AnchorPoint = Vector2.new(0.5, 0),
 		Color = Colors.Good,
 		Parent = content,
 		OnClick = function()
