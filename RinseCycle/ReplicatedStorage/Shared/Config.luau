@@ -31,7 +31,7 @@ Config.World = {
 ----------------------------------------------------------------------------------------------------
 Config.Party = {
 	PadCount = 6,
-	MaxPlayers = 4,
+	MaxPlayers = 8,
 	Countdown = 15, -- seconds from when the host presses Create until the party teleports
 	LockSeconds = 1.5, -- joins and leaves are refused this close to launch
 	RejoinCooldown = 3, -- seconds before a player who left/was ejected can re-enter a pad
@@ -49,11 +49,13 @@ Config.Round = {
 	MaxScrubDt = 0.25, -- cap on the damage window of a single held scrub packet
 	ReachSlack = 6, -- extra studs the server allows over reach (latency)
 	DrainRadius = 8,
-	PartyGrimeScale = 0.6, -- total grime = base * (1 + 0.6 * (players - 1))
+	PartyGrimeScale = 0.6, -- total grime = base * min(PartyGrimeCap, 1 + 0.6 * (players - 1))
+	PartyGrimeCap = 3.6, -- big parties (up to 8) share a fuller load rather than an endless one
 	MarkerThreshold = 12, -- clients mark every remaining spot when this few are left
 	StuckSeconds = 60, -- if nobody damages anything for this long...
 	StuckMaxRemaining = 3, -- ...and this few spots are left, they pop on their own
 	DishBonusShare = 0.25, -- cleaning the last spot on a dish pays 25% of the dish's units as coins
+	CoinsPerUnit = 4, -- coins paid per unit of dirt sold at the drain (before CoinMult bonuses)
 	GoldenUnitsMult = 5,
 	UnderTierMult = 0.2, -- a tool below a spot's MinTool still cleans it, at this fraction of its power
 	GoldenBubbles = { 1, 3 }, -- min/max Bubbles for a golden spot (times the level index)
@@ -85,16 +87,24 @@ Config.Upgrades = {
 	{ Id = "Sneakers", Name = "Sneakers", Icon = "👟", Desc = "Run to the drain faster.", Base = 12, Growth = 2, Max = 6 },
 }
 
--- Tools, bought with Coins inside a run in ANY order, then picked from the hotbar (keys 1-6). Each
--- one plays differently. Tier decides which dirt it can shift: dirt with MinTool 2 needs a Tier 2+
--- tool. Radius and Power multiply the (per-tool) upgraded base stats. Reach is in studs.
+-- Tools, bought with Coins inside a run in ANY order (skip straight to the best one if you can
+-- afford it), then picked from the hotbar (keys 1-6). Each one plays differently (Mode):
+--   Scrub - a circle right where you aim; hold to scrub. Short reach.
+--   Spray - a circle at the end of a long water stream. Long reach.
+--   Line  - a long, thin blade of water (LineLength x LineWidth, turned with the camera): sweep it
+--           across the dirt; anything in the line goes fast.
+--   Foam  - fires foam blobs (one per FoamInterval) that splat and keep cleaning everything in
+--           FoamRadius for FoamSeconds, at Power * FoamShare per second.
+-- Tier decides which dirt it cleans at full speed (dirt with MinTool above the Tier cleans at
+-- Round.UnderTierMult). Radius and Power multiply the (per-tool) upgraded base stats; for Line the
+-- Size upgrade makes the line longer, for Foam the splats bigger. Reach is in studs.
 Config.Tools = {
-	{ Id = "Hands", Name = "Bare Hands", Icon = "🖐️", Tier = 1, Cost = 0, Radius = 1.0, Power = 1.0, Reach = 16, UpgradeMult = 1, Color = Color3.fromRGB(150, 210, 255), Desc = "Free, but slow." },
-	{ Id = "Sponge", Name = "Sponge", Icon = "🧽", Tier = 1, Cost = 50, Radius = 1.3, Power = 2.0, Reach = 16, UpgradeMult = 1.5, Color = Color3.fromRGB(255, 221, 87), Desc = "Soft and quick on sauces." },
-	{ Id = "Brush", Name = "Scrub Brush", Icon = "🧹", Tier = 2, Cost = 200, Radius = 1.0, Power = 3.4, Reach = 15, UpgradeMult = 2, Color = Color3.fromRGB(120, 230, 160), Desc = "Small but tough: shifts burnt-on bits." },
-	{ Id = "Nozzle", Name = "Spray Nozzle", Icon = "🚿", Tier = 2, Cost = 600, Radius = 1.5, Power = 2.8, Reach = 30, UpgradeMult = 3, Color = Color3.fromRGB(90, 200, 255), Desc = "Cleans from far away." },
-	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Tier = 3, Cost = 2200, Radius = 1.9, Power = 7.0, Reach = 30, UpgradeMult = 5, Color = Color3.fromRGB(60, 140, 255), Desc = "Blasts through anything." },
-	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Tier = 3, Cost = 8000, Radius = 3.2, Power = 9.0, Reach = 36, UpgradeMult = 8, Color = Color3.fromRGB(200, 150, 255), Desc = "A huge wave of foam." },
+	{ Id = "Hands", Name = "Bare Hands", Icon = "🖐️", Mode = "Scrub", Tier = 1, Cost = 0, Radius = 1.0, Power = 1.0, Reach = 12, UpgradeMult = 1, Color = Color3.fromRGB(150, 210, 255), Desc = "Free, but slow. Get close and scrub." },
+	{ Id = "Sponge", Name = "Sponge", Icon = "🧽", Mode = "Scrub", Tier = 1, Cost = 60, Radius = 1.4, Power = 2.2, Reach = 12, UpgradeMult = 1.5, Color = Color3.fromRGB(255, 221, 87), Desc = "Soft and quick. Scrub up close." },
+	{ Id = "Brush", Name = "Scrub Brush", Icon = "🧹", Mode = "Scrub", Tier = 2, Cost = 180, Radius = 0.9, Power = 5.5, Reach = 8, UpgradeMult = 2, Color = Color3.fromRGB(120, 230, 160), Desc = "Right up close: small but tough, shifts burnt-on bits." },
+	{ Id = "Nozzle", Name = "Spray Nozzle", Icon = "🚿", Mode = "Spray", Tier = 2, Cost = 350, Radius = 1.5, Power = 3.2, Reach = 34, UpgradeMult = 3, Color = Color3.fromRGB(90, 200, 255), Desc = "A water stream: clean from far away." },
+	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Mode = "Line", Tier = 3, Cost = 700, Radius = 1.0, Power = 12, Reach = 26, UpgradeMult = 5, LineLength = 5, LineWidth = 0.9, Color = Color3.fromRGB(60, 140, 255), Desc = "A long thin blast: sweep it across and dirt melts away." },
+	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Mode = "Foam", Tier = 3, Cost = 1500, Radius = 2.1, Power = 4.5, Reach = 40, UpgradeMult = 8, FoamInterval = 0.4, FoamSeconds = 2.5, FoamShare = 0.6, Color = Color3.fromRGB(200, 150, 255), Desc = "Shoots foam blobs that keep cleaning where they land." },
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -139,8 +149,9 @@ Config.Levels = {
 		Subtitle = "Crumbs, ketchup and a whole lot of gravy.",
 		Icon = "🍝",
 		Place = "Family Kitchen",
+		Toughness = 1.0, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 1,
-		ParTime = 360,
+		ParTime = 300,
 		Bubbles = 40,
 		GoldenChance = 0.02,
 		Dishes = { Plate = 16, Tray = 0, Bowl = 6, Cup = 6, Glass = 2, Fork = 4, Knife = 3, Spoon = 3, Pan = 0, Pot = 0 },
@@ -166,8 +177,9 @@ Config.Levels = {
 		Subtitle = "Greasy pizza trays, sauce everywhere and burnt crust.",
 		Icon = "🍕",
 		Place = "Pizzeria",
+		Toughness = 1.5, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 4,
-		ParTime = 600,
+		ParTime = 540,
 		Bubbles = 120,
 		GoldenChance = 0.025,
 		Dishes = { Plate = 12, Tray = 9, Bowl = 8, Cup = 7, Glass = 4, Fork = 5, Knife = 4, Spoon = 4, Pan = 2, Pot = 0 },
@@ -199,8 +211,9 @@ Config.Levels = {
 		Subtitle = "Golden platters, fancy food and ancient gravy.",
 		Icon = "👑",
 		Place = "Castle Hall",
+		Toughness = 2.0, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 16,
-		ParTime = 780,
+		ParTime = 720,
 		Bubbles = 400,
 		GoldenChance = 0.035,
 		Dishes = { Plate = 14, Tray = 10, Bowl = 10, Cup = 6, Glass = 10, Fork = 6, Knife = 6, Spoon = 5, Pan = 2, Pot = 2 },
@@ -233,11 +246,10 @@ Config.Levels = {
 -- Cost = Base * Growth^level (2 significant figures), or Costs[level + 1] when Costs is given.
 ----------------------------------------------------------------------------------------------------
 Config.Perks = {
-	{ Id = "HeadStart", Name = "Head Start", Icon = "💰", Desc = "Start every run with +25 coins per level (times the dishwasher's multiplier).", Base = 40, Growth = 2, Max = 6, PerLevel = 25 },
+	{ Id = "HeadStart", Name = "Head Start", Icon = "💰", Desc = "Start every run with +40 coins per level (times the dishwasher's multiplier).", Base = 40, Growth = 2, Max = 6, PerLevel = 40 },
 	{ Id = "CoinSoap", Name = "Coin Soap", Icon = "💰", Desc = "+15% coins from the drain per level.", Base = 60, Growth = 2, Max = 6, PerLevel = 0.15 },
 	{ Id = "DeepTank", Name = "Deep Tank", Icon = "🛢️", Desc = "+25% tank size per level.", Base = 50, Growth = 2, Max = 6, PerLevel = 0.25 },
 	{ Id = "LuckySuds", Name = "Lucky Suds", Icon = "🍀", Desc = "+1% golden dirt per level (best in the party counts).", Base = 60, Growth = 1.8, Max = 5, PerLevel = 0.01 },
-	{ Id = "PetSlot", Name = "Pet Slot", Icon = "🐾", Desc = "Equip one more pet.", Costs = { 300, 1500 }, Max = 2, PerLevel = 1 },
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -256,6 +268,7 @@ Config.Rarities = {
 Config.PetRules = {
 	BaseSlots = 3,
 	MaxInventory = 60,
+	MergeCount = 3, -- this many pets of one rarity merge into one of the next rarity
 	Range = 35, -- pets pick grime within this many studs of their owner
 	Speed = 40, -- studs per second when flying to a spot (used for the travel delay)
 	ThinkInterval = 0.25,
@@ -346,9 +359,9 @@ Config.DevProducts = {
 	{ Key = "Bubbles2", Id = 0, Price = 49, Kind = "Bubbles", Amount = 800, Name = "Bucket of Bubbles", Icon = "🧼" },
 	{ Key = "Bubbles3", Id = 0, Price = 99, Kind = "Bubbles", Amount = 2000, Name = "Tub of Bubbles", Icon = "🛁" },
 	{ Key = "Bubbles4", Id = 0, Price = 199, Kind = "Bubbles", Amount = 5000, Name = "Bathtub Overflow", Icon = "🌊" },
-	{ Key = "Coins1", Id = 0, Price = 15, Kind = "Coins", Amount = 150, Name = "Coin Splash", Icon = "💰" },
-	{ Key = "Coins2", Id = 0, Price = 39, Kind = "Coins", Amount = 600, Name = "Coin Wave", Icon = "💰" },
-	{ Key = "Coins3", Id = 0, Price = 89, Kind = "Coins", Amount = 2000, Name = "Coin Flood", Icon = "💰" },
+	{ Key = "Coins1", Id = 0, Price = 15, Kind = "Coins", Amount = 250, Name = "Coin Splash", Icon = "💰" },
+	{ Key = "Coins2", Id = 0, Price = 39, Kind = "Coins", Amount = 900, Name = "Coin Wave", Icon = "💰" },
+	{ Key = "Coins3", Id = 0, Price = 89, Kind = "Coins", Amount = 2500, Name = "Coin Flood", Icon = "💰" },
 	{ Key = "Gems1", Id = 0, Price = 29, Kind = "Gems", Amount = 30, Name = "Pouch of Gems", Icon = "💎" },
 	{ Key = "Gems2", Id = 0, Price = 79, Kind = "Gems", Amount = 100, Name = "Sack of Gems", Icon = "💎" },
 	{ Key = "Gems3", Id = 0, Price = 199, Kind = "Gems", Amount = 300, Name = "Chest of Gems", Icon = "💎" },
@@ -593,7 +606,7 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 		tank *= 2
 	end
 	tank *= 1 + (fx.Tank or 0)
-	local coinMult = 1 + (perks.CoinSoap or 0) * Config.GetPerk("CoinSoap").PerLevel + (petCoinBonus or 0)
+	local coinMult = Config.Round.CoinsPerUnit * (1 + (perks.CoinSoap or 0) * Config.GetPerk("CoinSoap").PerLevel + (petCoinBonus or 0))
 	if passes.DoubleCoins then
 		coinMult *= 2
 	end
@@ -602,11 +615,19 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 	end
 	coinMult *= 1 + (fx.Coins or 0)
 
+	local mode = tool.Mode or "Scrub"
 	return {
 		Radius = radius,
 		Power = power,
 		TankMax = math.floor(tank),
 		Reach = tool.Reach,
+		Mode = mode,
+		-- Line: length grows with the Size upgrade (Radius), width is fixed.
+		LineLength = if mode == "Line" then radius * (tool.LineLength or 5) else nil,
+		LineWidth = if mode == "Line" then tool.LineWidth or 0.9 else nil,
+		FoamInterval = if mode == "Foam" then tool.FoamInterval or 0.4 else nil,
+		FoamSeconds = if mode == "Foam" then tool.FoamSeconds or 2.5 else nil,
+		FoamShare = if mode == "Foam" then tool.FoamShare or 0.6 else nil,
 		WalkSpeed = b.WalkSpeed + b.WalkSpeedPerLevel * (upgrades.Sneakers or 0) + (fx.Speed or 0),
 		Hold = true, -- holding always scrubs (the old "Hold to Scrub" upgrade confused new players)
 		CoinMult = coinMult,
@@ -621,9 +642,9 @@ function Config.StartCoins(levelIndex: number, perks): number
 	return math.floor(lvl * Config.GetPerk("HeadStart").PerLevel * Config.GetLevel(levelIndex).Mult)
 end
 
--- Equip slots for pets.
-function Config.PetSlots(perks, passes): number
-	local slots = Config.PetRules.BaseSlots + ((perks and perks.PetSlot) or 0)
+-- Equip slots for pets: 3, or 5 with the +2 Pet Slots pass.
+function Config.PetSlots(_perks, passes): number
+	local slots = Config.PetRules.BaseSlots
 	if passes and passes.PetSlots then
 		slots += 2
 	end

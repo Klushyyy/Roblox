@@ -45,7 +45,13 @@ export type RunStats = {
 	Hold: boolean,
 	CoinMult: number,
 	ToolIndex: number,
-	Tier: number, -- the tool's Tier (dirt with MinTool above this can't be scrubbed)
+	Tier: number, -- the tool's Tier (dirt with MinTool above this cleans slowly)
+	Mode: string, -- "Scrub" | "Spray" | "Line" | "Foam" (see Config.Tools)
+	LineLength: number?, -- Line only
+	LineWidth: number?,
+	FoamInterval: number?, -- Foam only
+	FoamSeconds: number?,
+	FoamShare: number?,
 }
 
 export type ResultRow = {

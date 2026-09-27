@@ -81,6 +81,10 @@ local ROOM_WALL = Color3.fromRGB(236, 222, 196)
 local ROOM_FLOOR = Color3.fromRGB(150, 104, 70)
 local LOW = Enum.Material.SmoothPlastic -- the lobby is flat-shaded, low-poly style
 
+local function shadeColor(c: Color3, f: number): Color3
+	return Color3.new(c.R * f, c.G * f, c.B * f)
+end
+
 -- The plaza is the top of a giant dining table; the room around it (floor far below).
 local TABLE_MARGIN = 16 -- table top overhang past the plaza
 local ROOM_FLOOR_Y = -130
@@ -278,7 +282,7 @@ local function buildGround(parent: Instance)
 end
 
 -- The dining room around the table: legs down to a floor far below, giant chairs, a sideboard, a
--- pendant lamp, and walls with big windows looking out at the garden and mountains (Terrain).
+-- pendant lamp, and walls with big windows looking out at the back garden (buildGarden).
 -- Walls and ceiling cast no shadows, so daylight still fills the room.
 local function buildRoom(parent: Instance)
 	local fy = ROOM_FLOOR_Y
@@ -331,7 +335,7 @@ local function buildRoom(parent: Instance)
 			box("Wall", x, x + gap, winY0, winY1, z - 2, z + 2, ROOM_WALL, shadowless)
 			x += gap
 			if k < n then
-				box("WindowSill", x - 6, x + winW + 6, winY0 - 6, winY0, z - 8, z + 8, Color3.fromRGB(255, 255, 255), shadowless)
+				box("WindowSill", x - 6, x + winW + 6, winY0 - 6, winY0 + 0.4, z - 8, z + 8, Color3.fromRGB(255, 255, 255), shadowless)
 				box("WindowBar", x + winW / 2 - 2, x + winW / 2 + 2, winY0, winY1, z - 1, z + 1, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
 				box("WindowBar", x, x + winW, (winY0 + winY1) / 2 - 2, (winY0 + winY1) / 2 + 2, z - 1, z + 1, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
 				box("WindowGlass", x, x + winW, winY0, winY1, z - 0.3, z + 0.3, Color3.fromRGB(200, 230, 255), { Transparency = 0.85, Material = Enum.Material.Glass, CastShadow = false })
@@ -351,7 +355,7 @@ local function buildRoom(parent: Instance)
 			box("Wall", xw - 2, xw + 2, winY0, winY1, z, z + gap, ROOM_WALL, shadowless)
 			z += gap
 			if k < n then
-				box("WindowSill", xw - 8, xw + 8, winY0 - 6, winY0, z - 6, z + winW + 6, Color3.fromRGB(255, 255, 255), shadowless)
+				box("WindowSill", xw - 8, xw + 8, winY0 - 6, winY0 + 0.4, z - 6, z + winW + 6, Color3.fromRGB(255, 255, 255), shadowless)
 				box("WindowBar", xw - 1, xw + 1, winY0, winY1, z + winW / 2 - 2, z + winW / 2 + 2, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
 				box("WindowBar", xw - 1, xw + 1, (winY0 + winY1) / 2 - 2, (winY0 + winY1) / 2 + 2, z, z + winW, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
 				box("WindowGlass", xw - 0.3, xw + 0.3, winY0, winY1, z, z + winW, Color3.fromRGB(200, 230, 255), { Transparency = 0.85, Material = Enum.Material.Glass, CastShadow = false })
@@ -487,39 +491,78 @@ local function buildSpawn(parent: Instance)
 	end
 end
 
--- Terrain outside the dining room (seen through the windows): a garden lawn below the room floor,
--- rolling hills and a ring of snowy mountains. Nothing inside the room is Terrain, so grass never
--- shows up on the table. Built in the background after the lobby, with small yields.
-local function buildTerrain()
-	local terrain = workspace.Terrain
-	pcall(function()
-		terrain:Clear()
-	end)
-	local o = ORIGIN
-	local cz = o.Z + (ROOM_Z0 + ROOM_Z1) / 2
-	-- Lawn, top a few studs under the room floor (the room floor part covers everything inside).
-	local lawnTop = o.Y + ROOM_FLOOR_Y - 8
-	terrain:FillBlock(CFrame.new(o.X, lawnTop - 8, cz), Vector3.new(2600, 16, 2600), Enum.Material.Grass)
-	task.wait()
-	local rng = Random.new(7)
-	for i = 1, 20 do
-		local a = i / 20 * math.pi * 2 + rng:NextNumber(-0.1, 0.1)
-		local dist = rng:NextNumber(700, 820)
-		local r = rng:NextNumber(50, 90)
-		terrain:FillBall(Vector3.new(o.X + math.cos(a) * dist, lawnTop - r * 0.5, cz + math.sin(a) * dist), r, Enum.Material.Grass)
-		if i % 4 == 0 then
-			task.wait()
+-- The back garden seen through the windows: a lawn level with the room floor, a paved patio, a
+-- wooden fence all round, low-poly trees and hedges. All plain parts (no Terrain), so nothing can
+-- ever pop up on the table, and nothing unrealistic (no mountains) sits on the horizon.
+local function buildGarden(parent: Instance)
+	local fy = ROOM_FLOOR_Y
+	local GX0, GX1 = -ROOM_X - 260, ROOM_X + 260
+	local GZ0, GZ1 = ROOM_Z0 - 260, ROOM_Z1 + 260
+	local lawn = Color3.fromRGB(110, 170, 90)
+	-- The lawn runs far past the fence so the horizon is always grass, never empty sky.
+	mkPart("Part", { Name = "Lawn", Size = Vector3.new(4000, 4, 4000), CFrame = at(0, fy - 2.6, (GZ0 + GZ1) / 2), Color = lawn, Material = LOW, CastShadow = false }, parent)
+	mkPart("Part", { Name = "Patio", Size = Vector3.new(360, 1, 120), CFrame = at(0, fy - 0.9, ROOM_Z1 + 64), Color = Color3.fromRGB(200, 190, 175), Material = LOW }, parent)
+
+	-- Fence: posts every 30 studs with two rails, along all four sides.
+	local fenceColor = Color3.fromRGB(176, 128, 86)
+	local function run(x0: number, z0: number, x1: number, z1: number)
+		local len = math.max(math.abs(x1 - x0), math.abs(z1 - z0))
+		local alongX = math.abs(x1 - x0) > math.abs(z1 - z0)
+		for _, y in { 22, 44 } do
+			mkPart("Part", { Name = "FenceRail", Size = if alongX then Vector3.new(len, 5, 2) else Vector3.new(2, 5, len), CFrame = at((x0 + x1) / 2, fy + y, (z0 + z1) / 2), Color = fenceColor, Material = LOW, CastShadow = false }, parent)
+		end
+		local n = math.floor(len / 30)
+		for i = 0, n do
+			local t = i / n
+			mkPart("Part", { Name = "FencePost", Size = Vector3.new(4, 56, 4), CFrame = at(x0 + (x1 - x0) * t, fy + 28, z0 + (z1 - z0) * t), Color = shadeColor(fenceColor, 0.85), Material = LOW, CastShadow = false }, parent)
 		end
 	end
-	for i = 1, 16 do
-		local a = i / 16 * math.pi * 2 + rng:NextNumber(-0.08, 0.08)
-		local dist = rng:NextNumber(1000, 1150)
-		local r = rng:NextNumber(150, 220)
-		local c = Vector3.new(o.X + math.cos(a) * dist, lawnTop - r * 0.15, cz + math.sin(a) * dist)
-		terrain:FillBall(c, r, Enum.Material.Rock)
-		terrain:FillBall(c + Vector3.new(rng:NextNumber(-70, 70), -r * 0.2, rng:NextNumber(-70, 70)), r * 0.8, Enum.Material.Rock)
-		terrain:FillBall(c + Vector3.new(0, r * 0.62, 0), r * 0.42, Enum.Material.Snow)
-		task.wait()
+	local fx0, fx1, fz0, fz1 = GX0 + 40, GX1 - 40, GZ0 + 40, GZ1 - 40
+	run(fx0, fz0, fx1, fz0)
+	run(fx0, fz1, fx1, fz1)
+	run(fx0, fz0, fx0, fz1)
+	run(fx1, fz0, fx1, fz1)
+
+	-- Low-poly trees: a hexagonal trunk and a stack of turned, faceted canopy blocks.
+	local rng = Random.new(21)
+	local function treeAt(x: number, z: number, scale: number)
+		local trunkH = 70 * scale
+		local tr = 9 * scale
+		local side = tr / math.sqrt(3)
+		for k = 0, 2 do
+			mkPart("Part", { Name = "TreeTrunk", Size = Vector3.new(side, trunkH, tr), CFrame = at(x, fy + trunkH / 2, z) * CFrame.Angles(0, k * math.pi / 3, 0), Color = Color3.fromRGB(120, 84, 56), Material = LOW, CastShadow = false }, parent)
+		end
+		local greens = { Color3.fromRGB(86, 150, 78), Color3.fromRGB(104, 168, 86), Color3.fromRGB(74, 136, 70) }
+		for i = 0, 2 do
+			local size = (64 - i * 14) * scale
+			mkPart("Part", {
+				Name = "TreeCanopy",
+				Size = Vector3.new(size, size * 0.8, size),
+				CFrame = at(x, fy + trunkH + (i * 26 - 4) * scale, z) * CFrame.Angles(math.rad(12 * (i % 2 == 0 and 1 or -1)), math.rad(rng:NextNumber(0, 90)), math.rad(8)),
+				Color = greens[i + 1],
+				Material = LOW,
+				CastShadow = false,
+			}, parent)
+		end
+	end
+	for _ = 1, 22 do
+		-- Pick a spot in the ring between the house walls and the fence.
+		local x, z
+		repeat
+			x = rng:NextNumber(fx0 + 50, fx1 - 50)
+			z = rng:NextNumber(fz0 + 50, fz1 - 50)
+		until x < -ROOM_X - 70 or x > ROOM_X + 70 or z < ROOM_Z0 - 70 or z > ROOM_Z1 + 150
+		treeAt(x, z, rng:NextNumber(0.8, 1.25))
+	end
+	-- A thicker tree line beyond the fence (neighbours' gardens), so the view out ends in trees.
+	for i = 1, 40 do
+		local ang = i / 40 * math.pi * 2 + rng:NextNumber(-0.05, 0.05)
+		local rx, rz = (GX1 - GX0) / 2 + rng:NextNumber(40, 160), (GZ1 - GZ0) / 2 + rng:NextNumber(40, 160)
+		treeAt(math.cos(ang) * rx, (GZ0 + GZ1) / 2 + math.sin(ang) * rz, rng:NextNumber(1.2, 1.8))
+	end
+	-- Hedges hugging the house walls.
+	for _, spec in { { -ROOM_X - 20, ROOM_Z0, -ROOM_X - 20, ROOM_Z1 }, { ROOM_X + 20, ROOM_Z0, ROOM_X + 20, ROOM_Z1 } } do
+		mkPart("Part", { Name = "Hedge", Size = Vector3.new(24, 40, math.abs(spec[4] - spec[2]) - 40), CFrame = at(spec[1], fy + 20, (spec[2] + spec[4]) / 2), Color = Color3.fromRGB(80, 142, 72), Material = LOW, CastShadow = false }, parent)
 	end
 end
 
@@ -681,7 +724,7 @@ local function buildPad(parent: Instance, id: number): PadInfo
 		return lbl
 	end
 	local titleLbl = line("Title", 0, 0.2, "", Color3.fromRGB(255, 230, 140), Enum.Font.FredokaOne)
-	local countLbl = line("Count", 0.2, 0.42, "0/4", Color3.new(1, 1, 1), Enum.Font.FredokaOne)
+	local countLbl = line("Count", 0.2, 0.42, "0/" .. Config.Party.MaxPlayers, Color3.new(1, 1, 1), Enum.Font.FredokaOne)
 	local statusLbl = line("Status", 0.63, 0.2, "Touch to create a party", Color3.new(1, 1, 1), Enum.Font.FredokaOne)
 	local privacyLbl = line("Privacy", 0.84, 0.15, "", Color3.fromRGB(215, 230, 250), Enum.Font.GothamBold)
 
@@ -712,7 +755,7 @@ local function buildDishwasherBuilding(parent: Instance)
 	mkPart("Part", { Name = "Body", Size = Vector3.new(w, h - 4, d), CFrame = at(0, (h - 4) / 2 + 4, z), Color = Color3.fromRGB(238, 242, 246), Material = LOW }, parent)
 	mkPart("Part", { Name = "Plinth", Size = Vector3.new(w - 4, 4, d - 3), CFrame = at(0, 2, z - 1.5), Color = Color3.fromRGB(38, 60, 96), Material = LOW }, parent)
 	mkPart("Part", { Name = "Worktop", Size = Vector3.new(w + 10, 3, d + 6), CFrame = at(0, h + 1.5, z + 1), Color = Color3.fromRGB(196, 146, 98), Material = LOW }, parent)
-	mkPart("Part", { Name = "WorktopEdge", Size = Vector3.new(w + 10.4, 1.2, 1), CFrame = at(0, h + 0.6, z + d / 2 + 4.2), Color = Color3.fromRGB(150, 104, 70), Material = LOW }, parent)
+	mkPart("Part", { Name = "WorktopEdge", Size = Vector3.new(w + 10.4, 1.0, 1), CFrame = at(0, h + 0.7, z + d / 2 + 4.2), Color = Color3.fromRGB(150, 104, 70), Material = LOW }, parent)
 	for _, side in { -1, 1 } do
 		-- Vertical chamfer strips on the front corners.
 		mkPart("Part", {
@@ -785,7 +828,7 @@ local function buildDishwasherBuilding(parent: Instance)
 	local signText = mk("TextLabel", { Size = UDim2.fromScale(0.94, 0.86), Position = UDim2.fromScale(0.03, 0.07), BackgroundTransparency = 1, Text = "🐾 PETS & EGGS 🥚", Font = Enum.Font.FredokaOne, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, signGui)
 	mk("UIStroke", { Thickness = 5, Color = Color3.fromRGB(140, 40, 90) }, signText)
 	for _, x in { -18, 18 } do
-		mkPart("Part", { Name = "SignPost", Size = Vector3.new(1, 3, 1), CFrame = at(x, h + 3.5, HATCHERY_Z - 4), Color = Color3.fromRGB(200, 205, 212), Material = LOW }, parent)
+		mkPart("Part", { Name = "SignPost", Size = Vector3.new(0.8, 3, 0.8), CFrame = at(x, h + 3.5, HATCHERY_Z - 4), Color = Color3.fromRGB(200, 205, 212), Material = LOW }, parent)
 	end
 	-- Steam puffing out of the top.
 	local vent = mkPart("Part", decor({ Name = "Vent", Size = Vector3.new(10, 1, 4), CFrame = at(-24, h + 3.5, z), Color = Color3.fromRGB(150, 155, 160), Material = LOW }), parent)
@@ -1000,16 +1043,13 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 		}, root) :: Frame
 		mk("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4) }, list)
 		if paged then
-			mk("TextLabel", {
-				Name = "PageNumber",
-				Size = UDim2.new(1, 0, 0, 28),
-				Position = UDim2.new(0, 0, 1, -28),
-				BackgroundTransparency = 1,
-				Text = string.format("◀  Level %d of %d  ▶", i, pageCount :: number),
-				Font = Enum.Font.FredokaOne,
-				TextScaled = true,
-				TextColor3 = Color3.fromRGB(170, 205, 240),
-			}, root)
+			-- Page dots along the bottom, this page's dot lit.
+			local dots = mk("Frame", { Name = "PageDots", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -2), Size = UDim2.fromOffset(200, 22), BackgroundTransparency = 1 }, root)
+			mk("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 12) }, dots)
+			for d = 1, pageCount :: number do
+				local dot = mk("Frame", { Name = "Dot" .. d, LayoutOrder = d, Size = if d == i then UDim2.fromOffset(34, 16) else UDim2.fromOffset(16, 16), BackgroundColor3 = if d == i then Color3.fromRGB(255, 205, 70) else Color3.fromRGB(70, 110, 160) }, dots)
+				mk("UICorner", { CornerRadius = UDim.new(1, 0) }, dot)
+			end
 		end
 		return { Title = titleLbl, List = list }
 	end
@@ -1023,30 +1063,55 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 	for i = 1, pageCount :: number do
 		pages[i] = page(i, gui)
 	end
-	-- Physical arrow buttons either side of the title (click or tap them), plus a prompt for
-	-- controllers. The client flips the pages locally (Effects).
+	-- Round arrow buttons drawn in the board's own SurfaceGui (crisp, same resolution as the board),
+	-- either side of the title, with an invisible click target over each (click or tap), plus a
+	-- prompt for controllers. The client flips the pages locally and lights a button on hover
+	-- (Effects).
 	local w, h = boardPart.Size.X, boardPart.Size.Y
+	local canvas = Vector2.new(700, 480)
+	local pxPerStud = canvas.X / w
+	local btn = 60
 	for _, dir in { -1, 1 } do
-		local arrow = mkPart("Part", {
-			Name = "BoardArrow",
-			Size = Vector3.new(2.2, 1.9, 0.4),
-			CFrame = boardPart.CFrame * CFrame.new(dir * (w / 2 - 1.7), h / 2 - 1.5, -0.65),
-			Color = Color3.fromRGB(255, 200, 60),
-			Material = Enum.Material.SmoothPlastic,
-			CanCollide = false,
-			CanQuery = true, -- ClickDetectors need the mouse ray to hit the part
-		}, boardPart)
-		arrow:SetAttribute("Dir", dir)
-		CollectionService:AddTag(arrow, "BoardArrow")
-		local agui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(110, 95), LightInfluence = 0 }, arrow)
+		local name = if dir < 0 then "ArrowLeft" else "ArrowRight"
+		local frame = mk("Frame", {
+			Name = name,
+			AnchorPoint = Vector2.new(if dir < 0 then 0 else 1, 0),
+			Position = if dir < 0 then UDim2.fromOffset(0, 2) else UDim2.new(1, 0, 0, 2),
+			Size = UDim2.fromOffset(btn, btn),
+			BackgroundColor3 = Color3.fromRGB(255, 205, 70),
+			ZIndex = 5,
+		}, gui)
+		mk("UICorner", { CornerRadius = UDim.new(1, 0) }, frame)
+		mk("UIStroke", { Thickness = 4, Color = Color3.fromRGB(255, 245, 200) }, frame)
+		mk("UIGradient", {
+			Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(200, 200, 200)),
+			Rotation = 90,
+		}, frame)
 		mk("TextLabel", {
 			Size = UDim2.fromScale(1, 1),
+			Position = UDim2.fromOffset(if dir < 0 then -2 else 2, -1),
 			BackgroundTransparency = 1,
 			Text = if dir < 0 then "◀" else "▶",
 			Font = Enum.Font.FredokaOne,
-			TextScaled = true,
-			TextColor3 = Color3.fromRGB(40, 30, 10),
-		}, agui)
+			TextSize = 34,
+			TextColor3 = Color3.fromRGB(60, 40, 10),
+			ZIndex = 6,
+		}, frame)
+		-- Click target over the drawn button (board padding: 12 px left/right, 10 px top).
+		local cx = if dir < 0 then 12 + btn / 2 else canvas.X - 12 - btn / 2
+		local cy = 10 + 2 + btn / 2
+		local arrow = mkPart("Part", {
+			Name = "BoardArrow",
+			Size = Vector3.new(btn / pxPerStud + 0.3, btn / pxPerStud + 0.3, 0.3),
+			CFrame = boardPart.CFrame * CFrame.new(cx / pxPerStud - w / 2, h / 2 - cy / pxPerStud, -0.7),
+			Transparency = 1,
+			CanCollide = false,
+			CanQuery = true, -- ClickDetectors need the mouse ray to hit the part
+			CastShadow = false,
+		}, boardPart)
+		arrow:SetAttribute("Dir", dir)
+		arrow:SetAttribute("Button", name)
+		CollectionService:AddTag(arrow, "BoardArrow")
 		mk("ClickDetector", { MaxActivationDistance = 70 }, arrow)
 	end
 	local prompt = mk("ProximityPrompt", {
@@ -1215,7 +1280,6 @@ local function buildRankShrine(parent: Instance)
 	local x, z = -32, 40
 	local base = mkPart("Part", { Name = "ShrineBase", Shape = Enum.PartType.Cylinder, Size = Vector3.new(1.6, 12, 12), CFrame = upright(x, 1, z), Color = Color3.fromRGB(60, 40, 110), Material = Enum.Material.SmoothPlastic }, parent)
 	mkPart("Part", { Name = "ShrinePillar", Shape = Enum.PartType.Cylinder, Size = Vector3.new(4, 5, 5), CFrame = upright(x, 3.8, z), Color = Color3.fromRGB(235, 225, 250), Material = Enum.Material.Marble }, parent)
-	mkPart("Part", decor({ Name = "ShrineRing", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.3, 13, 13), CFrame = upright(x, 1.65, z), Color = Color3.fromRGB(255, 120, 200), Material = Enum.Material.Neon }), parent)
 	local crystal = mkPart("Part", decor({
 		Name = "Crystal",
 		Size = Vector3.new(4, 4, 4),
@@ -1363,12 +1427,11 @@ function LobbyBuilder.Build(): Lobby
 		Boards = { Times = timesBoard, Dishes = dishesBoard },
 	}
 	lobby = built
-	task.spawn(function()
-		local ok, err = pcall(buildTerrain)
-		if not ok then
-			warn("[LobbyBuilder] terrain failed: " .. tostring(err))
-		end
+	-- No Terrain anywhere (it used to cover the table with grass); wipe any saved in the place.
+	pcall(function()
+		workspace.Terrain:Clear()
 	end)
+	buildGarden(model)
 	return built
 end
 

@@ -53,7 +53,8 @@ local function fmtNum(n: number): string
 end
 
 local PREVIEW: { [string]: { Label: string, Get: (Types.RunStats) -> number, Suffix: string? } } = {
-	HandSize = { Label = "Size", Get = function(s) return s.Radius end },
+	-- Size is the circle for scrub/spray tools, the line length for the washer, the splat for foam.
+	HandSize = { Label = "Size", Get = function(s) return s.LineLength or s.Radius end },
 	ScrubPower = { Label = "Power", Get = function(s) return s.Power end, Suffix = "/s" },
 	TankSize = { Label = "Tank", Get = function(s) return s.TankMax end },
 	Sneakers = { Label = "Speed", Get = function(s) return s.WalkSpeed end },
@@ -215,7 +216,14 @@ local function renderLeft(run: Types.RunState)
 	})
 	local s = run.Stats
 	ink({
-		Text = string.format("💪 %s/s   🖐️ %s   🎯 %s studs", fmtNum(s.Power), fmtNum(s.Radius), fmtNum(s.Reach)),
+		Text = string.format(
+			"💪 %s/s   %s   🎯 %s studs",
+			fmtNum(s.Power),
+			if s.Mode == "Line" then "📏 " .. fmtNum(s.LineLength or 0) .. " line"
+				elseif s.Mode == "Foam" then "💥 " .. fmtNum(s.Radius) .. " splat"
+				else "🖐️ " .. fmtNum(s.Radius),
+			fmtNum(s.Reach)
+		),
 		TextSize = 16,
 		TextColor3 = INK_DIM,
 		Position = UDim2.fromOffset(94, 42),

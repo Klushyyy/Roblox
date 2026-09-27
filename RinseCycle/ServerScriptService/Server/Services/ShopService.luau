@@ -262,6 +262,20 @@ local HANDLERS: { [string]: (Player, any) -> Types.RequestResult } = {
 	Equip = petAction("Equip"),
 	Unequip = petAction("Unequip"),
 	Delete = petAction("Delete"),
+	Merge = function(player: Player, value: any): Types.RequestResult
+		local n = Config.PetRules.MergeCount or 3
+		if type(value) ~= "table" or #value ~= n then
+			return fail(string.format("Pick %d pets to merge.", n))
+		end
+		local uids = {}
+		for i = 1, n do
+			if not isId(value[i]) then
+				return fail("That pet doesn't exist.")
+			end
+			uids[i] = value[i]
+		end
+		return callPetService("Merge", player, uids)
+	end,
 	EquipBest = function(player: Player, _value: any): Types.RequestResult
 		return callPetService("EquipBest", player)
 	end,

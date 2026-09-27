@@ -176,6 +176,66 @@ local function onDishDone(data: Types.FXDishDone)
 	end
 end
 
+-- Foam Cannon splat: a heap of foam blobs on the surface that slowly shrinks while it cleans,
+-- fizzing bubbles the whole time.
+local function onFoam(data: any)
+	local pos = data and data.Position
+	if typeof(pos) ~= "Vector3" then
+		return
+	end
+	local normal: Vector3 = if typeof(data.Normal) == "Vector3" and data.Normal.Magnitude > 0.5 then data.Normal.Unit else Vector3.yAxis
+	local radius = math.clamp(tonumber(data.Radius) or 3, 1, 12)
+	local duration = math.clamp(tonumber(data.Duration) or 2.5, 0.5, 6)
+	local u = normal:Cross(if math.abs(normal.Y) > 0.9 then Vector3.xAxis else Vector3.yAxis).Unit
+	local v = normal:Cross(u)
+	local folder = Instance.new("Folder")
+	folder.Name = "FoamSplat"
+	folder.Parent = workspace
+	local blobs: { { Part: Part, Size: number, Base: Vector3 } } = {}
+	local count = 9 + math.floor(radius * 2)
+	for i = 1, count do
+		local a = math.random() * math.pi * 2
+		local d = math.sqrt(math.random()) * radius * 0.8
+		local size = radius * (0.3 + math.random() * 0.35) * (if i == 1 then 1.4 else 1)
+		local base = pos + (u * math.cos(a) + v * math.sin(a)) * (if i == 1 then 0 else d) + normal * size * 0.15
+		local blob = Instance.new("Part")
+		blob.Shape = Enum.PartType.Ball
+		blob.Material = Enum.Material.SmoothPlastic
+		blob.Color = Color3.fromRGB(255, 255, 255):Lerp(Color3.fromRGB(225, 205, 255), math.random() * 0.4)
+		blob.Size = Vector3.one * 0.05
+		blob.Anchored = true
+		blob.CanCollide = false
+		blob.CanQuery = false
+		blob.CanTouch = false
+		blob.CastShadow = false
+		blob.CFrame = CFrame.new(base)
+		blob.Parent = folder
+		table.insert(blobs, { Part = blob, Size = size, Base = base })
+	end
+	Bubbles.Emit(pos + normal, { Count = 8, Spread = radius * 0.5, Velocity = normal * 4 + Vector3.new(0, 2, 0), Jitter = 3, Size = { 0.3, 0.9 }, Life = { 0.8, 1.6 } })
+	task.spawn(function()
+		local t = 0
+		local fizz = 0
+		while t < duration and folder.Parent do
+			local dt = RunService.Heartbeat:Wait()
+			t += dt
+			fizz += dt
+			local grow = math.min(t / 0.15, 1)
+			local shrink = 1 - math.clamp((t - duration * 0.35) / (duration * 0.65), 0, 1)
+			for i, b in blobs do
+				local wobble = 1 + 0.06 * math.sin(t * 7 + i)
+				b.Part.Size = Vector3.one * math.max(b.Size * grow * shrink * wobble, 0.05)
+			end
+			if fizz > 0.25 then
+				fizz = 0
+				Bubbles.Emit(pos + normal * 0.5, { Count = 2, Spread = radius * 0.6, Velocity = normal * 2, Jitter = 1.5, Size = { 0.25, 0.7 }, Life = { 0.6, 1.2 } })
+			end
+		end
+		folder:Destroy()
+	end)
+	UIKit.PlaySound("Splash", 1.1 + math.random() * 0.2)
+end
+
 local function onSold(data: Types.FXSold)
 	UIKit.PlaySound("Coins")
 	UIKit.Toast("+" .. UIKit.Commas(data.Coins) .. " 💰", "Good")
@@ -188,6 +248,8 @@ end
 local function onRunFX(kind: string, data: any)
 	if kind == "Cleaned" then
 		onCleaned(data)
+	elseif kind == "Foam" then
+		onFoam(data)
 	elseif kind == "DishDone" then
 		onDishDone(data)
 	elseif kind == "Sold" then
@@ -231,14 +293,12 @@ end
 ----------------------------------------------------------------------------------------------------
 -- Lift pads (CollectionService tag "LiftPad", attribute LiftTo = world Vector3): step on one and
 -- you're carried to LiftTo in a puff of bubbles. The local client owns its character, so moving it
--- here replicates. A short cooldown stops you bouncing straight back.
+-- here replicates.
 ----------------------------------------------------------------------------------------------------
 
 local LIFT_RADIUS = 4.2
-local LIFT_COOLDOWN = 1.2
 
 local liftPads: { [BasePart]: boolean } = {}
-local lastLiftAt = 0
 
 local function addLiftPart(inst: Instance)
 	if inst:IsA("BasePart") then
@@ -279,11 +339,15 @@ local function stepLiftBubbles(dt: number)
 	end
 end
 
-local function stepLift(_dt: number)
-	local now = os.clock()
-	if now - lastLiftAt < LIFT_COOLDOWN then
-		return
-	end
+-- Bubble columns (like Minecraft's bubble elevators): stand in a lift's column and the bubbles
+-- carry you up smoothly, drifting you to the middle; at the top they push you out onto the rack.
+local LIFT_RISE_SPEED = 18 -- studs per second
+local LIFT_EXIT_SPEED = 16
+local LIFT_EXIT_SECONDS = 0.7
+local liftExit: { Until: number, Dir: Vector3 }? = nil
+local wasInColumn = false
+
+local function stepLift(dt: number)
 	local character = LocalPlayer.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not character or not root or not root:IsA("BasePart") then
@@ -291,7 +355,19 @@ local function stepLift(_dt: number)
 	end
 	local rootPart = root :: BasePart
 	local pos = rootPart.Position
+	local now = os.clock()
 
+	-- Pushing out at the top.
+	if liftExit then
+		if now < liftExit.Until then
+			local v = rootPart.AssemblyLinearVelocity
+			rootPart.AssemblyLinearVelocity = Vector3.new(liftExit.Dir.X * LIFT_EXIT_SPEED, math.max(v.Y, 0), liftExit.Dir.Z * LIFT_EXIT_SPEED)
+			return
+		end
+		liftExit = nil
+	end
+
+	local inColumn = false
 	for pad in liftPads do
 		if not pad.Parent then
 			liftPads[pad] = nil
@@ -302,17 +378,31 @@ local function stepLift(_dt: number)
 			continue
 		end
 		local d = pos - pad.Position
-		if Vector3.new(d.X, 0, d.Z).Magnitude <= LIFT_RADIUS and d.Y > -1 and d.Y < 7 then
-			lastLiftAt = now
-			popBubbles(pad.Position + Vector3.new(0, 2, 0), 8, 3)
-			UIKit.PlaySound("Splash", 1.3)
-			local facing = rootPart.CFrame.Rotation
-			character:PivotTo(CFrame.new(target) * facing)
-			rootPart.AssemblyLinearVelocity = Vector3.zero
-			popBubbles(target, 8, 3)
+		local flat = Vector3.new(d.X, 0, d.Z)
+		if flat.Magnitude <= LIFT_RADIUS and d.Y > -1 and pos.Y < target.Y + 2 then
+			inColumn = true
+			if not wasInColumn then
+				popBubbles(pad.Position + Vector3.new(0, 2, 0), 8, 3)
+				UIKit.PlaySound("Splash", 1.3)
+			end
+			if pos.Y >= target.Y then
+				-- Top of the column: shove out toward the landing spot.
+				local out = Vector3.new(target.X - pos.X, 0, target.Z - pos.Z)
+				local dir = if out.Magnitude > 0.1 then out.Unit else Vector3.new(0, 0, 1)
+				liftExit = { Until = now + LIFT_EXIT_SECONDS, Dir = dir }
+				rootPart.AssemblyLinearVelocity = Vector3.new(dir.X * LIFT_EXIT_SPEED, 6, dir.Z * LIFT_EXIT_SPEED)
+				popBubbles(pos, 6, 2)
+			else
+				-- Rise, easing toward the column's middle so you don't bump the edges.
+				local centering = -flat * math.min(1, 4 * dt) / math.max(dt, 1e-3) * 0.25
+				local v = rootPart.AssemblyLinearVelocity
+				local vy = v.Y + (LIFT_RISE_SPEED - v.Y) * math.min(1, 10 * dt)
+				rootPart.AssemblyLinearVelocity = Vector3.new(v.X * 0.9 + centering.X, vy, v.Z * 0.9 + centering.Z)
+			end
 			break
 		end
 	end
+	wasInColumn = inColumn
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -555,9 +645,38 @@ local function addBoardArrow(inst: Instance)
 	if not detector or not detector:IsA("ClickDetector") then
 		return
 	end
+	-- The drawn button this click target sits over (in the board's SurfaceGui).
+	local function button(): GuiObject?
+		local board = inst.Parent
+		local gui = board and board:FindFirstChildOfClass("SurfaceGui")
+		local name = inst:GetAttribute("Button")
+		local b = gui and type(name) == "string" and gui:FindFirstChild(name)
+		return if b and b:IsA("GuiObject") then b else nil
+	end
+	local function setLook(size: number, color: Color3)
+		local b = button()
+		if b then
+			UIKit.Tween(b, { Size = UDim2.fromOffset(size, size), BackgroundColor3 = color }, 0.12)
+		end
+	end
+	local IDLE, HOVER = Color3.fromRGB(255, 205, 70), Color3.fromRGB(255, 228, 130)
+	detector.MouseHoverEnter:Connect(function(player)
+		if player == LocalPlayer then
+			setLook(66, HOVER)
+		end
+	end)
+	detector.MouseHoverLeave:Connect(function(player)
+		if player == LocalPlayer then
+			setLook(60, IDLE)
+		end
+	end)
 	detector.MouseClick:Connect(function(player)
 		if player == LocalPlayer and inst.Parent then
 			flipBoard(inst.Parent, tonumber(inst:GetAttribute("Dir")) or 1)
+			setLook(54, HOVER)
+			task.delay(0.12, function()
+				setLook(60, IDLE)
+			end)
 		end
 	end)
 end

@@ -841,7 +841,117 @@ local function delete(player: Player, rawUid: any): Types.RequestResult
 	return { Ok = true }
 end
 
+-- Merge: three pets of the same rarity (below Legendary) become one pet of the next rarity. The new
+-- pet comes from the best egg any of the three came from. If any of them was out, the new pet takes
+-- its slot.
+local MERGE_COUNT = RULES.MergeCount or 3
+local eggIndexOf: { [string]: number } = {}
+for i, egg in Config.Eggs do
+	for _, entry in egg.Pets do
+		eggIndexOf[entry.Pet] = math.max(eggIndexOf[entry.Pet] or 0, i)
+	end
+end
+local rarityByOrder: { [number]: string } = {}
+for id, r in Config.Rarities do
+	rarityByOrder[r.Order] = id
+end
+
+local function merge(player: Player, rawUids: any): Types.RequestResult
+	if type(rawUids) ~= "table" then
+		return fail("Pick three pets to merge.")
+	end
+	local profile = getProfile(player)
+	if not profile then
+		return fail(LOADING)
+	end
+	sanitize(profile)
+	local uids: { string } = {}
+	local seen: { [string]: boolean } = {}
+	for i = 1, MERGE_COUNT do
+		local uid = normalizeUid(rawUids[i])
+		if not uid or seen[uid] or not findPet(profile, uid) then
+			return fail("Pick three different pets to merge.")
+		end
+		seen[uid] = true
+		uids[i] = uid
+	end
+	local rarity: string? = nil
+	local bestEgg = 1
+	for _, uid in uids do
+		local pet = findPet(profile, uid)
+		local def = pet and Config.Pets[pet.Id]
+		if not pet or not def then
+			return fail("That pet can't be merged.")
+		end
+		if rarity and def.Rarity ~= rarity then
+			return fail("All three pets must be the same rarity.")
+		end
+		rarity = def.Rarity
+		bestEgg = math.max(bestEgg, eggIndexOf[pet.Id] or 1)
+	end
+	local order = Config.Rarities[rarity :: string].Order
+	local nextRarity = rarityByOrder[order + 1]
+	if not nextRarity then
+		return fail("Legendary pets are already the best!")
+	end
+	-- The next-rarity pet from the best egg (every egg has one pet per rarity).
+	local resultId: string? = nil
+	for i = bestEgg, 1, -1 do
+		for _, entry in Config.Eggs[i].Pets do
+			local def = Config.Pets[entry.Pet]
+			if def and def.Rarity == nextRarity then
+				resultId = entry.Pet
+				break
+			end
+		end
+		if resultId then
+			break
+		end
+	end
+	if not resultId then
+		return fail("Couldn't find a pet to merge into.")
+	end
+
+	-- Everything is checked: remove the three, add the new one (no yields in between).
+	local slot: number? = nil
+	for _, uid in uids do
+		local _, index = findPet(profile, uid)
+		if index then
+			table.remove(profile.Pets, index)
+		end
+		local at = table.find(profile.Equipped, uid)
+		if at then
+			table.remove(profile.Equipped, at)
+			slot = math.min(slot or at, at)
+		end
+	end
+	local used: { [string]: boolean } = {}
+	for _, pet in profile.Pets do
+		used[pet.Uid] = true
+	end
+	local nextUid = profile.NextUid
+	while used[tostring(nextUid)] do
+		nextUid += 1
+	end
+	local uid = tostring(nextUid)
+	profile.NextUid = nextUid + 1
+	table.insert(profile.Pets, { Uid = uid, Id = resultId })
+	if slot then
+		table.insert(profile.Equipped, math.min(slot, #profile.Equipped + 1), uid)
+	end
+	afterChange(player, true)
+	if nextRarity == "Legendary" then
+		local def = Config.Pets[resultId]
+		announceLegendary(player, def and def.Name or resultId)
+	end
+	return { Ok = true, Pets = { { Uid = uid, Id = resultId } } }
+end
+
 -- Public API: each returns a Types.RequestResult and never throws.
+
+function PetService.Merge(player: Player, uids: { string }): Types.RequestResult
+	return guarded(player, merge, uids)
+end
 
 function PetService.Hatch(player: Player, eggId: string, count: number): Types.RequestResult
 	return guarded(player, hatch, eggId, count)

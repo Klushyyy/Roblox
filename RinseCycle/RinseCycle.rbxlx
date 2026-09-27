@@ -35,7 +35,7 @@ Config.World = {
 ----------------------------------------------------------------------------------------------------
 Config.Party = {
 	PadCount = 6,
-	MaxPlayers = 4,
+	MaxPlayers = 8,
 	Countdown = 15, -- seconds from when the host presses Create until the party teleports
 	LockSeconds = 1.5, -- joins and leaves are refused this close to launch
 	RejoinCooldown = 3, -- seconds before a player who left/was ejected can re-enter a pad
@@ -53,11 +53,13 @@ Config.Round = {
 	MaxScrubDt = 0.25, -- cap on the damage window of a single held scrub packet
 	ReachSlack = 6, -- extra studs the server allows over reach (latency)
 	DrainRadius = 8,
-	PartyGrimeScale = 0.6, -- total grime = base * (1 + 0.6 * (players - 1))
+	PartyGrimeScale = 0.6, -- total grime = base * min(PartyGrimeCap, 1 + 0.6 * (players - 1))
+	PartyGrimeCap = 3.6, -- big parties (up to 8) share a fuller load rather than an endless one
 	MarkerThreshold = 12, -- clients mark every remaining spot when this few are left
 	StuckSeconds = 60, -- if nobody damages anything for this long...
 	StuckMaxRemaining = 3, -- ...and this few spots are left, they pop on their own
 	DishBonusShare = 0.25, -- cleaning the last spot on a dish pays 25% of the dish's units as coins
+	CoinsPerUnit = 4, -- coins paid per unit of dirt sold at the drain (before CoinMult bonuses)
 	GoldenUnitsMult = 5,
 	UnderTierMult = 0.2, -- a tool below a spot's MinTool still cleans it, at this fraction of its power
 	GoldenBubbles = { 1, 3 }, -- min/max Bubbles for a golden spot (times the level index)
@@ -89,16 +91,24 @@ Config.Upgrades = {
 	{ Id = "Sneakers", Name = "Sneakers", Icon = "👟", Desc = "Run to the drain faster.", Base = 12, Growth = 2, Max = 6 },
 }
 
--- Tools, bought with Coins inside a run in ANY order, then picked from the hotbar (keys 1-6). Each
--- one plays differently. Tier decides which dirt it can shift: dirt with MinTool 2 needs a Tier 2+
--- tool. Radius and Power multiply the (per-tool) upgraded base stats. Reach is in studs.
+-- Tools, bought with Coins inside a run in ANY order (skip straight to the best one if you can
+-- afford it), then picked from the hotbar (keys 1-6). Each one plays differently (Mode):
+--   Scrub - a circle right where you aim; hold to scrub. Short reach.
+--   Spray - a circle at the end of a long water stream. Long reach.
+--   Line  - a long, thin blade of water (LineLength x LineWidth, turned with the camera): sweep it
+--           across the dirt; anything in the line goes fast.
+--   Foam  - fires foam blobs (one per FoamInterval) that splat and keep cleaning everything in
+--           FoamRadius for FoamSeconds, at Power * FoamShare per second.
+-- Tier decides which dirt it cleans at full speed (dirt with MinTool above the Tier cleans at
+-- Round.UnderTierMult). Radius and Power multiply the (per-tool) upgraded base stats; for Line the
+-- Size upgrade makes the line longer, for Foam the splats bigger. Reach is in studs.
 Config.Tools = {
-	{ Id = "Hands", Name = "Bare Hands", Icon = "🖐️", Tier = 1, Cost = 0, Radius = 1.0, Power = 1.0, Reach = 16, UpgradeMult = 1, Color = Color3.fromRGB(150, 210, 255), Desc = "Free, but slow." },
-	{ Id = "Sponge", Name = "Sponge", Icon = "🧽", Tier = 1, Cost = 50, Radius = 1.3, Power = 2.0, Reach = 16, UpgradeMult = 1.5, Color = Color3.fromRGB(255, 221, 87), Desc = "Soft and quick on sauces." },
-	{ Id = "Brush", Name = "Scrub Brush", Icon = "🧹", Tier = 2, Cost = 200, Radius = 1.0, Power = 3.4, Reach = 15, UpgradeMult = 2, Color = Color3.fromRGB(120, 230, 160), Desc = "Small but tough: shifts burnt-on bits." },
-	{ Id = "Nozzle", Name = "Spray Nozzle", Icon = "🚿", Tier = 2, Cost = 600, Radius = 1.5, Power = 2.8, Reach = 30, UpgradeMult = 3, Color = Color3.fromRGB(90, 200, 255), Desc = "Cleans from far away." },
-	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Tier = 3, Cost = 2200, Radius = 1.9, Power = 7.0, Reach = 30, UpgradeMult = 5, Color = Color3.fromRGB(60, 140, 255), Desc = "Blasts through anything." },
-	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Tier = 3, Cost = 8000, Radius = 3.2, Power = 9.0, Reach = 36, UpgradeMult = 8, Color = Color3.fromRGB(200, 150, 255), Desc = "A huge wave of foam." },
+	{ Id = "Hands", Name = "Bare Hands", Icon = "🖐️", Mode = "Scrub", Tier = 1, Cost = 0, Radius = 1.0, Power = 1.0, Reach = 12, UpgradeMult = 1, Color = Color3.fromRGB(150, 210, 255), Desc = "Free, but slow. Get close and scrub." },
+	{ Id = "Sponge", Name = "Sponge", Icon = "🧽", Mode = "Scrub", Tier = 1, Cost = 60, Radius = 1.4, Power = 2.2, Reach = 12, UpgradeMult = 1.5, Color = Color3.fromRGB(255, 221, 87), Desc = "Soft and quick. Scrub up close." },
+	{ Id = "Brush", Name = "Scrub Brush", Icon = "🧹", Mode = "Scrub", Tier = 2, Cost = 180, Radius = 0.9, Power = 5.5, Reach = 8, UpgradeMult = 2, Color = Color3.fromRGB(120, 230, 160), Desc = "Right up close: small but tough, shifts burnt-on bits." },
+	{ Id = "Nozzle", Name = "Spray Nozzle", Icon = "🚿", Mode = "Spray", Tier = 2, Cost = 350, Radius = 1.5, Power = 3.2, Reach = 34, UpgradeMult = 3, Color = Color3.fromRGB(90, 200, 255), Desc = "A water stream: clean from far away." },
+	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Mode = "Line", Tier = 3, Cost = 700, Radius = 1.0, Power = 12, Reach = 26, UpgradeMult = 5, LineLength = 5, LineWidth = 0.9, Color = Color3.fromRGB(60, 140, 255), Desc = "A long thin blast: sweep it across and dirt melts away." },
+	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Mode = "Foam", Tier = 3, Cost = 1500, Radius = 2.1, Power = 4.5, Reach = 40, UpgradeMult = 8, FoamInterval = 0.4, FoamSeconds = 2.5, FoamShare = 0.6, Color = Color3.fromRGB(200, 150, 255), Desc = "Shoots foam blobs that keep cleaning where they land." },
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -143,8 +153,9 @@ Config.Levels = {
 		Subtitle = "Crumbs, ketchup and a whole lot of gravy.",
 		Icon = "🍝",
 		Place = "Family Kitchen",
+		Toughness = 1.0, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 1,
-		ParTime = 360,
+		ParTime = 300,
 		Bubbles = 40,
 		GoldenChance = 0.02,
 		Dishes = { Plate = 16, Tray = 0, Bowl = 6, Cup = 6, Glass = 2, Fork = 4, Knife = 3, Spoon = 3, Pan = 0, Pot = 0 },
@@ -170,8 +181,9 @@ Config.Levels = {
 		Subtitle = "Greasy pizza trays, sauce everywhere and burnt crust.",
 		Icon = "🍕",
 		Place = "Pizzeria",
+		Toughness = 1.5, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 4,
-		ParTime = 600,
+		ParTime = 540,
 		Bubbles = 120,
 		GoldenChance = 0.025,
 		Dishes = { Plate = 12, Tray = 9, Bowl = 8, Cup = 7, Glass = 4, Fork = 5, Knife = 4, Spoon = 4, Pan = 2, Pot = 0 },
@@ -203,8 +215,9 @@ Config.Levels = {
 		Subtitle = "Golden platters, fancy food and ancient gravy.",
 		Icon = "👑",
 		Place = "Castle Hall",
+		Toughness = 2.0, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 16,
-		ParTime = 780,
+		ParTime = 720,
 		Bubbles = 400,
 		GoldenChance = 0.035,
 		Dishes = { Plate = 14, Tray = 10, Bowl = 10, Cup = 6, Glass = 10, Fork = 6, Knife = 6, Spoon = 5, Pan = 2, Pot = 2 },
@@ -237,11 +250,10 @@ Config.Levels = {
 -- Cost = Base * Growth^level (2 significant figures), or Costs[level + 1] when Costs is given.
 ----------------------------------------------------------------------------------------------------
 Config.Perks = {
-	{ Id = "HeadStart", Name = "Head Start", Icon = "💰", Desc = "Start every run with +25 coins per level (times the dishwasher's multiplier).", Base = 40, Growth = 2, Max = 6, PerLevel = 25 },
+	{ Id = "HeadStart", Name = "Head Start", Icon = "💰", Desc = "Start every run with +40 coins per level (times the dishwasher's multiplier).", Base = 40, Growth = 2, Max = 6, PerLevel = 40 },
 	{ Id = "CoinSoap", Name = "Coin Soap", Icon = "💰", Desc = "+15% coins from the drain per level.", Base = 60, Growth = 2, Max = 6, PerLevel = 0.15 },
 	{ Id = "DeepTank", Name = "Deep Tank", Icon = "🛢️", Desc = "+25% tank size per level.", Base = 50, Growth = 2, Max = 6, PerLevel = 0.25 },
 	{ Id = "LuckySuds", Name = "Lucky Suds", Icon = "🍀", Desc = "+1% golden dirt per level (best in the party counts).", Base = 60, Growth = 1.8, Max = 5, PerLevel = 0.01 },
-	{ Id = "PetSlot", Name = "Pet Slot", Icon = "🐾", Desc = "Equip one more pet.", Costs = { 300, 1500 }, Max = 2, PerLevel = 1 },
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -260,6 +272,7 @@ Config.Rarities = {
 Config.PetRules = {
 	BaseSlots = 3,
 	MaxInventory = 60,
+	MergeCount = 3, -- this many pets of one rarity merge into one of the next rarity
 	Range = 35, -- pets pick grime within this many studs of their owner
 	Speed = 40, -- studs per second when flying to a spot (used for the travel delay)
 	ThinkInterval = 0.25,
@@ -350,9 +363,9 @@ Config.DevProducts = {
 	{ Key = "Bubbles2", Id = 0, Price = 49, Kind = "Bubbles", Amount = 800, Name = "Bucket of Bubbles", Icon = "🧼" },
 	{ Key = "Bubbles3", Id = 0, Price = 99, Kind = "Bubbles", Amount = 2000, Name = "Tub of Bubbles", Icon = "🛁" },
 	{ Key = "Bubbles4", Id = 0, Price = 199, Kind = "Bubbles", Amount = 5000, Name = "Bathtub Overflow", Icon = "🌊" },
-	{ Key = "Coins1", Id = 0, Price = 15, Kind = "Coins", Amount = 150, Name = "Coin Splash", Icon = "💰" },
-	{ Key = "Coins2", Id = 0, Price = 39, Kind = "Coins", Amount = 600, Name = "Coin Wave", Icon = "💰" },
-	{ Key = "Coins3", Id = 0, Price = 89, Kind = "Coins", Amount = 2000, Name = "Coin Flood", Icon = "💰" },
+	{ Key = "Coins1", Id = 0, Price = 15, Kind = "Coins", Amount = 250, Name = "Coin Splash", Icon = "💰" },
+	{ Key = "Coins2", Id = 0, Price = 39, Kind = "Coins", Amount = 900, Name = "Coin Wave", Icon = "💰" },
+	{ Key = "Coins3", Id = 0, Price = 89, Kind = "Coins", Amount = 2500, Name = "Coin Flood", Icon = "💰" },
 	{ Key = "Gems1", Id = 0, Price = 29, Kind = "Gems", Amount = 30, Name = "Pouch of Gems", Icon = "💎" },
 	{ Key = "Gems2", Id = 0, Price = 79, Kind = "Gems", Amount = 100, Name = "Sack of Gems", Icon = "💎" },
 	{ Key = "Gems3", Id = 0, Price = 199, Kind = "Gems", Amount = 300, Name = "Chest of Gems", Icon = "💎" },
@@ -597,7 +610,7 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 		tank *= 2
 	end
 	tank *= 1 + (fx.Tank or 0)
-	local coinMult = 1 + (perks.CoinSoap or 0) * Config.GetPerk("CoinSoap").PerLevel + (petCoinBonus or 0)
+	local coinMult = Config.Round.CoinsPerUnit * (1 + (perks.CoinSoap or 0) * Config.GetPerk("CoinSoap").PerLevel + (petCoinBonus or 0))
 	if passes.DoubleCoins then
 		coinMult *= 2
 	end
@@ -606,11 +619,19 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 	end
 	coinMult *= 1 + (fx.Coins or 0)
 
+	local mode = tool.Mode or "Scrub"
 	return {
 		Radius = radius,
 		Power = power,
 		TankMax = math.floor(tank),
 		Reach = tool.Reach,
+		Mode = mode,
+		-- Line: length grows with the Size upgrade (Radius), width is fixed.
+		LineLength = if mode == "Line" then radius * (tool.LineLength or 5) else nil,
+		LineWidth = if mode == "Line" then tool.LineWidth or 0.9 else nil,
+		FoamInterval = if mode == "Foam" then tool.FoamInterval or 0.4 else nil,
+		FoamSeconds = if mode == "Foam" then tool.FoamSeconds or 2.5 else nil,
+		FoamShare = if mode == "Foam" then tool.FoamShare or 0.6 else nil,
 		WalkSpeed = b.WalkSpeed + b.WalkSpeedPerLevel * (upgrades.Sneakers or 0) + (fx.Speed or 0),
 		Hold = true, -- holding always scrubs (the old "Hold to Scrub" upgrade confused new players)
 		CoinMult = coinMult,
@@ -625,9 +646,9 @@ function Config.StartCoins(levelIndex: number, perks): number
 	return math.floor(lvl * Config.GetPerk("HeadStart").PerLevel * Config.GetLevel(levelIndex).Mult)
 end
 
--- Equip slots for pets.
-function Config.PetSlots(perks, passes): number
-	local slots = Config.PetRules.BaseSlots + ((perks and perks.PetSlot) or 0)
+-- Equip slots for pets: 3, or 5 with the +2 Pet Slots pass.
+function Config.PetSlots(_perks, passes): number
+	local slots = Config.PetRules.BaseSlots
 	if passes and passes.PetSlots then
 		slots += 2
 	end
@@ -1953,8 +1974,13 @@ end
 -- `cf`. Two crossing cores plus four corner cylinders.
 local function roundedBox(ctx: Ctx, name: string, size: Vector3, cf: CFrame, r: number, color: Color3, material: Enum.Material?, transparency: number?)
 	r = math.min(r, size.X / 2, size.Z / 2)
-	partCF(ctx, name, nil, Vector3.new(size.X - 2 * r, size.Y, size.Z), cf, color, material, transparency)
-	partCF(ctx, name, nil, Vector3.new(size.X, size.Y, size.Z - 2 * r), cf, color, material, transparency)
+	-- (A core with no width left is skipped: two zero-width slabs would share faces and flicker.)
+	if size.X - 2 * r &gt; 0.06 then
+		partCF(ctx, name, nil, Vector3.new(size.X - 2 * r, size.Y, size.Z), cf, color, material, transparency)
+	end
+	if size.Z - 2 * r &gt; 0.06 then
+		partCF(ctx, name, nil, Vector3.new(size.X, size.Y, size.Z - 2 * r), cf, color, material, transparency)
+	end
 	for _, sx in { -1, 1 } do
 		for _, sz in { -1, 1 } do
 			partCF(ctx, name .. "Edge", Enum.PartType.Cylinder, Vector3.new(size.Y, 2 * r, 2 * r), cf * CFrame.new(sx * (size.X / 2 - r), 0, sz * (size.Z / 2 - r)) * UPRIGHT, color, material, transparency)
@@ -1992,7 +2018,7 @@ BUILDERS[2] = function(ctx, _color)
 	local foamCF = CFrame.new(0, 0.85, 0)
 	roundedBox(ctx, "Foam", Vector3.new(3.4, 1.7, 2.3), foamCF, 0.55, yellow, Enum.Material.SmoothPlastic)
 	-- Slightly darker lower lip, so the block reads rounded.
-	roundedBox(ctx, "FoamBase", Vector3.new(3.3, 0.3, 2.2), CFrame.new(0, 0.12, 0), 0.5, shade(yellow, 0.85))
+	roundedBox(ctx, "FoamBase", Vector3.new(3.6, 0.3, 2.5), CFrame.new(0, 0.12, 0), 0.6, shade(yellow, 0.85))
 	partCF(ctx, "Glue", nil, Vector3.new(3.36, 0.08, 2.26), CFrame.new(0, 1.74, 0), Color3.fromRGB(255, 240, 190))
 	roundedBox(ctx, "Pad", Vector3.new(3.4, 0.5, 2.3), CFrame.new(0, 2.03, 0), 0.55, Color3.fromRGB(64, 160, 80), Enum.Material.Fabric)
 	-- Flecks on top of the pad.
@@ -2020,8 +2046,8 @@ end
 -- and a curved wooden handle with a rubber grip, a chrome ferrule and a hanging ring.
 BUILDERS[3] = function(ctx, color)
 	roundedBox(ctx, "Head", Vector3.new(3.2, 0.8, 1.6), CFrame.new(0, 1.15, 0), 0.8, color)
-	roundedBox(ctx, "HeadTop", Vector3.new(3.0, 0.25, 1.4), CFrame.new(0, 1.66, 0), 0.7, shade(color, 1.18))
-	roundedBox(ctx, "HeadBase", Vector3.new(3.1, 0.15, 1.5), CFrame.new(0, 0.7, 0), 0.75, shade(color, 0.75))
+	roundedBox(ctx, "HeadTop", Vector3.new(3.0, 0.25, 1.4), CFrame.new(0, 1.68, 0), 0.7, shade(color, 1.18))
+	roundedBox(ctx, "HeadBase", Vector3.new(3.0, 0.15, 1.5), CFrame.new(0, 0.7, 0), 0.75, shade(color, 0.75))
 	-- Bristle tufts: 7 x 3 grid, alternating lengths, white with pale tips.
 	for i = -3, 3 do
 		for j = -1, 1 do
@@ -2093,8 +2119,8 @@ BUILDERS[5] = function(ctx, color)
 	for i = 0, 3 do
 		part(ctx, "Vent", nil, Vector3.new(1.4, 0.12, 0.08), Vector3.new(0, 1.35 + i * 0.25, -1.23), nil, shade(color, 0.55))
 	end
-	part(ctx, "Badge", nil, Vector3.new(1.2, 0.4, 0.06), Vector3.new(0, 2.55, -1.22), nil, WHITE)
-	part(ctx, "BadgeStripe", nil, Vector3.new(1.0, 0.1, 0.07), Vector3.new(0, 2.55, -1.23), nil, Color3.fromRGB(255, 200, 60))
+	part(ctx, "Badge", nil, Vector3.new(1.1, 0.4, 0.06), Vector3.new(0, 2.55, -1.22), nil, WHITE)
+	part(ctx, "BadgeStripe", nil, Vector3.new(0.9, 0.1, 0.05), Vector3.new(0, 2.55, -1.26), nil, Color3.fromRGB(255, 200, 60))
 	-- Gauge on top.
 	part(ctx, "Gauge", Enum.PartType.Cylinder, Vector3.new(0.2, 0.8, 0.8), Vector3.new(0.6, 3.4, -0.5), UPRIGHT, CHROME, Enum.Material.Metal)
 	part(ctx, "GaugeFace", Enum.PartType.Cylinder, Vector3.new(0.06, 0.65, 0.65), Vector3.new(0.6, 3.52, -0.5), UPRIGHT, WHITE)
@@ -2106,7 +2132,7 @@ BUILDERS[5] = function(ctx, color)
 		part(ctx, "Wheel", Enum.PartType.Cylinder, Vector3.new(0.55, 1.5, 1.5), Vector3.new(x, 0.75, 1.2), nil, DARK)
 		part(ctx, "Tread", Enum.PartType.Cylinder, Vector3.new(0.45, 1.56, 1.56), Vector3.new(x, 0.75, 1.2), nil, RUBBER)
 		part(ctx, "Hub", Enum.PartType.Cylinder, Vector3.new(0.6, 0.7, 0.7), Vector3.new(x, 0.75, 1.2), nil, CHROME, Enum.Material.Metal)
-		part(ctx, "HubCap", Enum.PartType.Cylinder, Vector3.new(0.64, 0.3, 0.3), Vector3.new(x, 0.75, 1.2), nil, shade(color, 0.8))
+		part(ctx, "HubCap", Enum.PartType.Cylinder, Vector3.new(0.72, 0.3, 0.3), Vector3.new(x, 0.75, 1.2), nil, shade(color, 0.8))
 	end
 	-- Front foot.
 	part(ctx, "Foot", nil, Vector3.new(1.8, 0.35, 0.4), Vector3.new(0, 0.18, -0.9), nil, RUBBER)
@@ -2120,9 +2146,9 @@ BUILDERS[5] = function(ctx, color)
 	-- Hose reel on the right side.
 	part(ctx, "Reel", Enum.PartType.Cylinder, Vector3.new(0.5, 1.5, 1.5), Vector3.new(1.55, 2.0, 0.6), nil, shade(color, 0.8))
 	for i = 0, 2 do
-		part(ctx, "ReelCoil", Enum.PartType.Cylinder, Vector3.new(0.12, 1.25 - i * 0.12, 1.25 - i * 0.12), Vector3.new(1.84 + i * 0.001, 2.0, 0.6), nil, if i % 2 == 0 then DARK else RUBBER)
+		part(ctx, "ReelCoil", Enum.PartType.Cylinder, Vector3.new(0.12, 1.25 - i * 0.12, 1.25 - i * 0.12), Vector3.new(1.84 + i * 0.035, 2.0, 0.6), nil, if i % 2 == 0 then DARK else RUBBER)
 	end
-	part(ctx, "ReelCrank", nil, Vector3.new(0.12, 0.7, 0.14), Vector3.new(1.9, 2.3, 0.6), nil, CHROME, Enum.Material.Metal)
+	part(ctx, "ReelCrank", nil, Vector3.new(0.12, 0.7, 0.14), Vector3.new(2.04, 2.3, 0.6), nil, CHROME, Enum.Material.Metal)
 	-- Spray gun clipped on the left side, lance pointing forward.
 	local gx = -1.6
 	roundedBox(ctx, "GunBody", Vector3.new(0.45, 0.6, 1.1), CFrame.new(gx, 2.35, 0.5), 0.22, DARK)
@@ -2158,7 +2184,7 @@ BUILDERS[6] = function(ctx, color)
 	part(ctx, "Soap", Enum.PartType.Cylinder, Vector3.new(1.05, 1.05, 1.05), Vector3.new(0, y + 1.45, 0.5), UPRIGHT, Color3.fromRGB(255, 140, 210), nil, 0.1)
 	part(ctx, "SoapBubble", Enum.PartType.Ball, Vector3.one * 0.3, Vector3.new(0.2, y + 2.05, 0.4), nil, WHITE, nil, 0.3)
 	part(ctx, "TankCap", Enum.PartType.Cylinder, Vector3.new(0.3, 1.35, 1.35), Vector3.new(0, y + 2.73, 0.5), UPRIGHT, color)
-	knob(ctx, "Adjuster", CFrame.new(0, y + 0.3, -0.6) * UPRIGHT, 0.5, 0.6, BRASS, shade(BRASS, 0.8))
+	knob(ctx, "Adjuster", CFrame.new(0.72, y, -0.5), 0.5, 0.6, BRASS, shade(BRASS, 0.8))
 	-- Pistol grip, trigger and guard.
 	local gripCF = CFrame.new(0, 1.35, 1.55) * CFrame.Angles(math.rad(-14), 0, 0)
 	roundedBox(ctx, "Grip", Vector3.new(0.85, 2.1, 1.0), gripCF, 0.4, RUBBER)
@@ -2242,7 +2268,13 @@ export type RunStats = {
 	Hold: boolean,
 	CoinMult: number,
 	ToolIndex: number,
-	Tier: number, -- the tool's Tier (dirt with MinTool above this can't be scrubbed)
+	Tier: number, -- the tool's Tier (dirt with MinTool above this cleans slowly)
+	Mode: string, -- "Scrub" | "Spray" | "Line" | "Foam" (see Config.Tools)
+	LineLength: number?, -- Line only
+	LineWidth: number?,
+	FoamInterval: number?, -- Foam only
+	FoamSeconds: number?,
+	FoamShare: number?,
 }
 
 export type ResultRow = {
@@ -3466,8 +3498,8 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 	local chrome = Color3.fromRGB(215, 220, 228)
 	-- Two display shelves at waist and head height for a ~5 stud character (anything higher can't be
 	-- seen from the floor).
-	local shelfYs = { 4, 12.5 }
-	local topY = 21
+	local shelfYs = { 4, 13.5 }
+	local topY = 25
 	local TOOL_SCALE = 1.45
 
 	-- Four corner posts plus a middle pair, floor to top, with little feet.
@@ -3508,8 +3540,9 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 		if not spot then
 			break
 		end
-		-- Upper-shelf tools stand on tall risers so they show above the shelf lip from the floor.
-		local riser = if spot.y &gt; shelfYs[1] then 2.6 else 0.4
+		-- Upper-shelf tools stand on a short riser so they show above the shelf lip from the floor
+		-- (and the tallest, the foam cannon, still clears the top of the unit).
+		local riser = if spot.y &gt; shelfYs[1] then 1.0 else 0.4
 		local pedestal = cyl(b, "Pedestal", riser, 6.4, SHOP_X - 0.5, spot.y + riser / 2, spot.z, Color3.new(1, 1, 1), nil, noCollide())
 		pedestal.Name = "ToolDisplay_" .. i
 		cyl(b, "PedestalGlow", 0.12, 7, SHOP_X - 0.5, spot.y + 0.06, spot.z, tool.Color, Enum.Material.Neon, noCollide())
@@ -3522,9 +3555,9 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 		end
 
 		local cost = Config.ToolCost(i, levelIndex) or 0
-		-- Price tag: a camera-facing card floating just in front of the shelf (never inside a shelf,
-		-- post or pedestal). Lower shelf: level with the tool's base; upper shelf: under the lip.
-		local tagY = if spot.y &gt; shelfYs[1] then spot.y - 1.6 else spot.y + 1.3
+		-- Price tag: a camera-facing card floating just in front of the tool's own shelf, at the same
+		-- height above the shelf on both shelves, so each tag clearly belongs to the tool above it.
+		local tagY = spot.y + 1.3
 		local tag = box(b, "PriceTag_" .. i, Vector3.new(0.2, 0.2, 0.2), x1 + 1.6, tagY, spot.z, Color3.new(1, 1, 1), nil, { Transparency = 1, CanCollide = false, CastShadow = false })
 		tag:SetAttribute("ToolIndex", i)
 		local card = Instance.new("BillboardGui")
@@ -3784,7 +3817,7 @@ function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeSc
 	model:SetAttribute("Cleaned", 0)
 
 	local spawns: { CFrame } = {}
-	for _, x in { -9, -3, 3, 9 } do
+	for _, x in { -14, -10, -6, -2, 2, 6, 10, 14 } do -- one spot per party member (up to 8)
 		table.insert(spawns, footprint(origin, x, 0.5, SPAWN_Z))
 	end
 
@@ -6164,7 +6197,7 @@ function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, leve
 			-- raycasts) skip parts whose group can't collide with the query's group, so a
 			-- "collides with nothing" group would make dirt impossible to clean.
 
-			local hp = math.max(1, math.floor(grimeType.HP * levelMult + 0.5))
+			local hp = math.max(1, math.floor(grimeType.HP * levelMult * (level.Toughness or 1) + 0.5))
 			local units = math.max(1, math.floor(grimeType.Units * levelMult + 0.5))
 			local minTool = grimeType.MinTool
 			if golden then
@@ -6730,6 +6763,10 @@ local ROOM_WALL = Color3.fromRGB(236, 222, 196)
 local ROOM_FLOOR = Color3.fromRGB(150, 104, 70)
 local LOW = Enum.Material.SmoothPlastic -- the lobby is flat-shaded, low-poly style
 
+local function shadeColor(c: Color3, f: number): Color3
+	return Color3.new(c.R * f, c.G * f, c.B * f)
+end
+
 -- The plaza is the top of a giant dining table; the room around it (floor far below).
 local TABLE_MARGIN = 16 -- table top overhang past the plaza
 local ROOM_FLOOR_Y = -130
@@ -6927,7 +6964,7 @@ local function buildGround(parent: Instance)
 end
 
 -- The dining room around the table: legs down to a floor far below, giant chairs, a sideboard, a
--- pendant lamp, and walls with big windows looking out at the garden and mountains (Terrain).
+-- pendant lamp, and walls with big windows looking out at the back garden (buildGarden).
 -- Walls and ceiling cast no shadows, so daylight still fills the room.
 local function buildRoom(parent: Instance)
 	local fy = ROOM_FLOOR_Y
@@ -6980,7 +7017,7 @@ local function buildRoom(parent: Instance)
 			box("Wall", x, x + gap, winY0, winY1, z - 2, z + 2, ROOM_WALL, shadowless)
 			x += gap
 			if k &lt; n then
-				box("WindowSill", x - 6, x + winW + 6, winY0 - 6, winY0, z - 8, z + 8, Color3.fromRGB(255, 255, 255), shadowless)
+				box("WindowSill", x - 6, x + winW + 6, winY0 - 6, winY0 + 0.4, z - 8, z + 8, Color3.fromRGB(255, 255, 255), shadowless)
 				box("WindowBar", x + winW / 2 - 2, x + winW / 2 + 2, winY0, winY1, z - 1, z + 1, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
 				box("WindowBar", x, x + winW, (winY0 + winY1) / 2 - 2, (winY0 + winY1) / 2 + 2, z - 1, z + 1, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
 				box("WindowGlass", x, x + winW, winY0, winY1, z - 0.3, z + 0.3, Color3.fromRGB(200, 230, 255), { Transparency = 0.85, Material = Enum.Material.Glass, CastShadow = false })
@@ -7000,7 +7037,7 @@ local function buildRoom(parent: Instance)
 			box("Wall", xw - 2, xw + 2, winY0, winY1, z, z + gap, ROOM_WALL, shadowless)
 			z += gap
 			if k &lt; n then
-				box("WindowSill", xw - 8, xw + 8, winY0 - 6, winY0, z - 6, z + winW + 6, Color3.fromRGB(255, 255, 255), shadowless)
+				box("WindowSill", xw - 8, xw + 8, winY0 - 6, winY0 + 0.4, z - 6, z + winW + 6, Color3.fromRGB(255, 255, 255), shadowless)
 				box("WindowBar", xw - 1, xw + 1, winY0, winY1, z + winW / 2 - 2, z + winW / 2 + 2, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
 				box("WindowBar", xw - 1, xw + 1, (winY0 + winY1) / 2 - 2, (winY0 + winY1) / 2 + 2, z, z + winW, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
 				box("WindowGlass", xw - 0.3, xw + 0.3, winY0, winY1, z, z + winW, Color3.fromRGB(200, 230, 255), { Transparency = 0.85, Material = Enum.Material.Glass, CastShadow = false })
@@ -7136,39 +7173,78 @@ local function buildSpawn(parent: Instance)
 	end
 end
 
--- Terrain outside the dining room (seen through the windows): a garden lawn below the room floor,
--- rolling hills and a ring of snowy mountains. Nothing inside the room is Terrain, so grass never
--- shows up on the table. Built in the background after the lobby, with small yields.
-local function buildTerrain()
-	local terrain = workspace.Terrain
-	pcall(function()
-		terrain:Clear()
-	end)
-	local o = ORIGIN
-	local cz = o.Z + (ROOM_Z0 + ROOM_Z1) / 2
-	-- Lawn, top a few studs under the room floor (the room floor part covers everything inside).
-	local lawnTop = o.Y + ROOM_FLOOR_Y - 8
-	terrain:FillBlock(CFrame.new(o.X, lawnTop - 8, cz), Vector3.new(2600, 16, 2600), Enum.Material.Grass)
-	task.wait()
-	local rng = Random.new(7)
-	for i = 1, 20 do
-		local a = i / 20 * math.pi * 2 + rng:NextNumber(-0.1, 0.1)
-		local dist = rng:NextNumber(700, 820)
-		local r = rng:NextNumber(50, 90)
-		terrain:FillBall(Vector3.new(o.X + math.cos(a) * dist, lawnTop - r * 0.5, cz + math.sin(a) * dist), r, Enum.Material.Grass)
-		if i % 4 == 0 then
-			task.wait()
+-- The back garden seen through the windows: a lawn level with the room floor, a paved patio, a
+-- wooden fence all round, low-poly trees and hedges. All plain parts (no Terrain), so nothing can
+-- ever pop up on the table, and nothing unrealistic (no mountains) sits on the horizon.
+local function buildGarden(parent: Instance)
+	local fy = ROOM_FLOOR_Y
+	local GX0, GX1 = -ROOM_X - 260, ROOM_X + 260
+	local GZ0, GZ1 = ROOM_Z0 - 260, ROOM_Z1 + 260
+	local lawn = Color3.fromRGB(110, 170, 90)
+	-- The lawn runs far past the fence so the horizon is always grass, never empty sky.
+	mkPart("Part", { Name = "Lawn", Size = Vector3.new(4000, 4, 4000), CFrame = at(0, fy - 2.6, (GZ0 + GZ1) / 2), Color = lawn, Material = LOW, CastShadow = false }, parent)
+	mkPart("Part", { Name = "Patio", Size = Vector3.new(360, 1, 120), CFrame = at(0, fy - 0.9, ROOM_Z1 + 64), Color = Color3.fromRGB(200, 190, 175), Material = LOW }, parent)
+
+	-- Fence: posts every 30 studs with two rails, along all four sides.
+	local fenceColor = Color3.fromRGB(176, 128, 86)
+	local function run(x0: number, z0: number, x1: number, z1: number)
+		local len = math.max(math.abs(x1 - x0), math.abs(z1 - z0))
+		local alongX = math.abs(x1 - x0) &gt; math.abs(z1 - z0)
+		for _, y in { 22, 44 } do
+			mkPart("Part", { Name = "FenceRail", Size = if alongX then Vector3.new(len, 5, 2) else Vector3.new(2, 5, len), CFrame = at((x0 + x1) / 2, fy + y, (z0 + z1) / 2), Color = fenceColor, Material = LOW, CastShadow = false }, parent)
+		end
+		local n = math.floor(len / 30)
+		for i = 0, n do
+			local t = i / n
+			mkPart("Part", { Name = "FencePost", Size = Vector3.new(4, 56, 4), CFrame = at(x0 + (x1 - x0) * t, fy + 28, z0 + (z1 - z0) * t), Color = shadeColor(fenceColor, 0.85), Material = LOW, CastShadow = false }, parent)
 		end
 	end
-	for i = 1, 16 do
-		local a = i / 16 * math.pi * 2 + rng:NextNumber(-0.08, 0.08)
-		local dist = rng:NextNumber(1000, 1150)
-		local r = rng:NextNumber(150, 220)
-		local c = Vector3.new(o.X + math.cos(a) * dist, lawnTop - r * 0.15, cz + math.sin(a) * dist)
-		terrain:FillBall(c, r, Enum.Material.Rock)
-		terrain:FillBall(c + Vector3.new(rng:NextNumber(-70, 70), -r * 0.2, rng:NextNumber(-70, 70)), r * 0.8, Enum.Material.Rock)
-		terrain:FillBall(c + Vector3.new(0, r * 0.62, 0), r * 0.42, Enum.Material.Snow)
-		task.wait()
+	local fx0, fx1, fz0, fz1 = GX0 + 40, GX1 - 40, GZ0 + 40, GZ1 - 40
+	run(fx0, fz0, fx1, fz0)
+	run(fx0, fz1, fx1, fz1)
+	run(fx0, fz0, fx0, fz1)
+	run(fx1, fz0, fx1, fz1)
+
+	-- Low-poly trees: a hexagonal trunk and a stack of turned, faceted canopy blocks.
+	local rng = Random.new(21)
+	local function treeAt(x: number, z: number, scale: number)
+		local trunkH = 70 * scale
+		local tr = 9 * scale
+		local side = tr / math.sqrt(3)
+		for k = 0, 2 do
+			mkPart("Part", { Name = "TreeTrunk", Size = Vector3.new(side, trunkH, tr), CFrame = at(x, fy + trunkH / 2, z) * CFrame.Angles(0, k * math.pi / 3, 0), Color = Color3.fromRGB(120, 84, 56), Material = LOW, CastShadow = false }, parent)
+		end
+		local greens = { Color3.fromRGB(86, 150, 78), Color3.fromRGB(104, 168, 86), Color3.fromRGB(74, 136, 70) }
+		for i = 0, 2 do
+			local size = (64 - i * 14) * scale
+			mkPart("Part", {
+				Name = "TreeCanopy",
+				Size = Vector3.new(size, size * 0.8, size),
+				CFrame = at(x, fy + trunkH + (i * 26 - 4) * scale, z) * CFrame.Angles(math.rad(12 * (i % 2 == 0 and 1 or -1)), math.rad(rng:NextNumber(0, 90)), math.rad(8)),
+				Color = greens[i + 1],
+				Material = LOW,
+				CastShadow = false,
+			}, parent)
+		end
+	end
+	for _ = 1, 22 do
+		-- Pick a spot in the ring between the house walls and the fence.
+		local x, z
+		repeat
+			x = rng:NextNumber(fx0 + 50, fx1 - 50)
+			z = rng:NextNumber(fz0 + 50, fz1 - 50)
+		until x &lt; -ROOM_X - 70 or x &gt; ROOM_X + 70 or z &lt; ROOM_Z0 - 70 or z &gt; ROOM_Z1 + 150
+		treeAt(x, z, rng:NextNumber(0.8, 1.25))
+	end
+	-- A thicker tree line beyond the fence (neighbours' gardens), so the view out ends in trees.
+	for i = 1, 40 do
+		local ang = i / 40 * math.pi * 2 + rng:NextNumber(-0.05, 0.05)
+		local rx, rz = (GX1 - GX0) / 2 + rng:NextNumber(40, 160), (GZ1 - GZ0) / 2 + rng:NextNumber(40, 160)
+		treeAt(math.cos(ang) * rx, (GZ0 + GZ1) / 2 + math.sin(ang) * rz, rng:NextNumber(1.2, 1.8))
+	end
+	-- Hedges hugging the house walls.
+	for _, spec in { { -ROOM_X - 20, ROOM_Z0, -ROOM_X - 20, ROOM_Z1 }, { ROOM_X + 20, ROOM_Z0, ROOM_X + 20, ROOM_Z1 } } do
+		mkPart("Part", { Name = "Hedge", Size = Vector3.new(24, 40, math.abs(spec[4] - spec[2]) - 40), CFrame = at(spec[1], fy + 20, (spec[2] + spec[4]) / 2), Color = Color3.fromRGB(80, 142, 72), Material = LOW, CastShadow = false }, parent)
 	end
 end
 
@@ -7330,7 +7406,7 @@ local function buildPad(parent: Instance, id: number): PadInfo
 		return lbl
 	end
 	local titleLbl = line("Title", 0, 0.2, "", Color3.fromRGB(255, 230, 140), Enum.Font.FredokaOne)
-	local countLbl = line("Count", 0.2, 0.42, "0/4", Color3.new(1, 1, 1), Enum.Font.FredokaOne)
+	local countLbl = line("Count", 0.2, 0.42, "0/" .. Config.Party.MaxPlayers, Color3.new(1, 1, 1), Enum.Font.FredokaOne)
 	local statusLbl = line("Status", 0.63, 0.2, "Touch to create a party", Color3.new(1, 1, 1), Enum.Font.FredokaOne)
 	local privacyLbl = line("Privacy", 0.84, 0.15, "", Color3.fromRGB(215, 230, 250), Enum.Font.GothamBold)
 
@@ -7361,7 +7437,7 @@ local function buildDishwasherBuilding(parent: Instance)
 	mkPart("Part", { Name = "Body", Size = Vector3.new(w, h - 4, d), CFrame = at(0, (h - 4) / 2 + 4, z), Color = Color3.fromRGB(238, 242, 246), Material = LOW }, parent)
 	mkPart("Part", { Name = "Plinth", Size = Vector3.new(w - 4, 4, d - 3), CFrame = at(0, 2, z - 1.5), Color = Color3.fromRGB(38, 60, 96), Material = LOW }, parent)
 	mkPart("Part", { Name = "Worktop", Size = Vector3.new(w + 10, 3, d + 6), CFrame = at(0, h + 1.5, z + 1), Color = Color3.fromRGB(196, 146, 98), Material = LOW }, parent)
-	mkPart("Part", { Name = "WorktopEdge", Size = Vector3.new(w + 10.4, 1.2, 1), CFrame = at(0, h + 0.6, z + d / 2 + 4.2), Color = Color3.fromRGB(150, 104, 70), Material = LOW }, parent)
+	mkPart("Part", { Name = "WorktopEdge", Size = Vector3.new(w + 10.4, 1.0, 1), CFrame = at(0, h + 0.7, z + d / 2 + 4.2), Color = Color3.fromRGB(150, 104, 70), Material = LOW }, parent)
 	for _, side in { -1, 1 } do
 		-- Vertical chamfer strips on the front corners.
 		mkPart("Part", {
@@ -7434,7 +7510,7 @@ local function buildDishwasherBuilding(parent: Instance)
 	local signText = mk("TextLabel", { Size = UDim2.fromScale(0.94, 0.86), Position = UDim2.fromScale(0.03, 0.07), BackgroundTransparency = 1, Text = "🐾 PETS &amp; EGGS 🥚", Font = Enum.Font.FredokaOne, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, signGui)
 	mk("UIStroke", { Thickness = 5, Color = Color3.fromRGB(140, 40, 90) }, signText)
 	for _, x in { -18, 18 } do
-		mkPart("Part", { Name = "SignPost", Size = Vector3.new(1, 3, 1), CFrame = at(x, h + 3.5, HATCHERY_Z - 4), Color = Color3.fromRGB(200, 205, 212), Material = LOW }, parent)
+		mkPart("Part", { Name = "SignPost", Size = Vector3.new(0.8, 3, 0.8), CFrame = at(x, h + 3.5, HATCHERY_Z - 4), Color = Color3.fromRGB(200, 205, 212), Material = LOW }, parent)
 	end
 	-- Steam puffing out of the top.
 	local vent = mkPart("Part", decor({ Name = "Vent", Size = Vector3.new(10, 1, 4), CFrame = at(-24, h + 3.5, z), Color = Color3.fromRGB(150, 155, 160), Material = LOW }), parent)
@@ -7649,16 +7725,13 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 		}, root) :: Frame
 		mk("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4) }, list)
 		if paged then
-			mk("TextLabel", {
-				Name = "PageNumber",
-				Size = UDim2.new(1, 0, 0, 28),
-				Position = UDim2.new(0, 0, 1, -28),
-				BackgroundTransparency = 1,
-				Text = string.format("◀  Level %d of %d  ▶", i, pageCount :: number),
-				Font = Enum.Font.FredokaOne,
-				TextScaled = true,
-				TextColor3 = Color3.fromRGB(170, 205, 240),
-			}, root)
+			-- Page dots along the bottom, this page's dot lit.
+			local dots = mk("Frame", { Name = "PageDots", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -2), Size = UDim2.fromOffset(200, 22), BackgroundTransparency = 1 }, root)
+			mk("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 12) }, dots)
+			for d = 1, pageCount :: number do
+				local dot = mk("Frame", { Name = "Dot" .. d, LayoutOrder = d, Size = if d == i then UDim2.fromOffset(34, 16) else UDim2.fromOffset(16, 16), BackgroundColor3 = if d == i then Color3.fromRGB(255, 205, 70) else Color3.fromRGB(70, 110, 160) }, dots)
+				mk("UICorner", { CornerRadius = UDim.new(1, 0) }, dot)
+			end
 		end
 		return { Title = titleLbl, List = list }
 	end
@@ -7672,30 +7745,55 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 	for i = 1, pageCount :: number do
 		pages[i] = page(i, gui)
 	end
-	-- Physical arrow buttons either side of the title (click or tap them), plus a prompt for
-	-- controllers. The client flips the pages locally (Effects).
+	-- Round arrow buttons drawn in the board's own SurfaceGui (crisp, same resolution as the board),
+	-- either side of the title, with an invisible click target over each (click or tap), plus a
+	-- prompt for controllers. The client flips the pages locally and lights a button on hover
+	-- (Effects).
 	local w, h = boardPart.Size.X, boardPart.Size.Y
+	local canvas = Vector2.new(700, 480)
+	local pxPerStud = canvas.X / w
+	local btn = 60
 	for _, dir in { -1, 1 } do
-		local arrow = mkPart("Part", {
-			Name = "BoardArrow",
-			Size = Vector3.new(2.2, 1.9, 0.4),
-			CFrame = boardPart.CFrame * CFrame.new(dir * (w / 2 - 1.7), h / 2 - 1.5, -0.65),
-			Color = Color3.fromRGB(255, 200, 60),
-			Material = Enum.Material.SmoothPlastic,
-			CanCollide = false,
-			CanQuery = true, -- ClickDetectors need the mouse ray to hit the part
-		}, boardPart)
-		arrow:SetAttribute("Dir", dir)
-		CollectionService:AddTag(arrow, "BoardArrow")
-		local agui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(110, 95), LightInfluence = 0 }, arrow)
+		local name = if dir &lt; 0 then "ArrowLeft" else "ArrowRight"
+		local frame = mk("Frame", {
+			Name = name,
+			AnchorPoint = Vector2.new(if dir &lt; 0 then 0 else 1, 0),
+			Position = if dir &lt; 0 then UDim2.fromOffset(0, 2) else UDim2.new(1, 0, 0, 2),
+			Size = UDim2.fromOffset(btn, btn),
+			BackgroundColor3 = Color3.fromRGB(255, 205, 70),
+			ZIndex = 5,
+		}, gui)
+		mk("UICorner", { CornerRadius = UDim.new(1, 0) }, frame)
+		mk("UIStroke", { Thickness = 4, Color = Color3.fromRGB(255, 245, 200) }, frame)
+		mk("UIGradient", {
+			Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(200, 200, 200)),
+			Rotation = 90,
+		}, frame)
 		mk("TextLabel", {
 			Size = UDim2.fromScale(1, 1),
+			Position = UDim2.fromOffset(if dir &lt; 0 then -2 else 2, -1),
 			BackgroundTransparency = 1,
 			Text = if dir &lt; 0 then "◀" else "▶",
 			Font = Enum.Font.FredokaOne,
-			TextScaled = true,
-			TextColor3 = Color3.fromRGB(40, 30, 10),
-		}, agui)
+			TextSize = 34,
+			TextColor3 = Color3.fromRGB(60, 40, 10),
+			ZIndex = 6,
+		}, frame)
+		-- Click target over the drawn button (board padding: 12 px left/right, 10 px top).
+		local cx = if dir &lt; 0 then 12 + btn / 2 else canvas.X - 12 - btn / 2
+		local cy = 10 + 2 + btn / 2
+		local arrow = mkPart("Part", {
+			Name = "BoardArrow",
+			Size = Vector3.new(btn / pxPerStud + 0.3, btn / pxPerStud + 0.3, 0.3),
+			CFrame = boardPart.CFrame * CFrame.new(cx / pxPerStud - w / 2, h / 2 - cy / pxPerStud, -0.7),
+			Transparency = 1,
+			CanCollide = false,
+			CanQuery = true, -- ClickDetectors need the mouse ray to hit the part
+			CastShadow = false,
+		}, boardPart)
+		arrow:SetAttribute("Dir", dir)
+		arrow:SetAttribute("Button", name)
+		CollectionService:AddTag(arrow, "BoardArrow")
 		mk("ClickDetector", { MaxActivationDistance = 70 }, arrow)
 	end
 	local prompt = mk("ProximityPrompt", {
@@ -7864,7 +7962,6 @@ local function buildRankShrine(parent: Instance)
 	local x, z = -32, 40
 	local base = mkPart("Part", { Name = "ShrineBase", Shape = Enum.PartType.Cylinder, Size = Vector3.new(1.6, 12, 12), CFrame = upright(x, 1, z), Color = Color3.fromRGB(60, 40, 110), Material = Enum.Material.SmoothPlastic }, parent)
 	mkPart("Part", { Name = "ShrinePillar", Shape = Enum.PartType.Cylinder, Size = Vector3.new(4, 5, 5), CFrame = upright(x, 3.8, z), Color = Color3.fromRGB(235, 225, 250), Material = Enum.Material.Marble }, parent)
-	mkPart("Part", decor({ Name = "ShrineRing", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.3, 13, 13), CFrame = upright(x, 1.65, z), Color = Color3.fromRGB(255, 120, 200), Material = Enum.Material.Neon }), parent)
 	local crystal = mkPart("Part", decor({
 		Name = "Crystal",
 		Size = Vector3.new(4, 4, 4),
@@ -8012,12 +8109,11 @@ function LobbyBuilder.Build(): Lobby
 		Boards = { Times = timesBoard, Dishes = dishesBoard },
 	}
 	lobby = built
-	task.spawn(function()
-		local ok, err = pcall(buildTerrain)
-		if not ok then
-			warn("[LobbyBuilder] terrain failed: " .. tostring(err))
-		end
+	-- No Terrain anywhere (it used to cover the table with grass); wipe any saved in the place.
+	pcall(function()
+		workspace.Terrain:Clear()
 	end)
+	buildGarden(model)
 	return built
 end
 
@@ -10267,7 +10363,117 @@ local function delete(player: Player, rawUid: any): Types.RequestResult
 	return { Ok = true }
 end
 
+-- Merge: three pets of the same rarity (below Legendary) become one pet of the next rarity. The new
+-- pet comes from the best egg any of the three came from. If any of them was out, the new pet takes
+-- its slot.
+local MERGE_COUNT = RULES.MergeCount or 3
+local eggIndexOf: { [string]: number } = {}
+for i, egg in Config.Eggs do
+	for _, entry in egg.Pets do
+		eggIndexOf[entry.Pet] = math.max(eggIndexOf[entry.Pet] or 0, i)
+	end
+end
+local rarityByOrder: { [number]: string } = {}
+for id, r in Config.Rarities do
+	rarityByOrder[r.Order] = id
+end
+
+local function merge(player: Player, rawUids: any): Types.RequestResult
+	if type(rawUids) ~= "table" then
+		return fail("Pick three pets to merge.")
+	end
+	local profile = getProfile(player)
+	if not profile then
+		return fail(LOADING)
+	end
+	sanitize(profile)
+	local uids: { string } = {}
+	local seen: { [string]: boolean } = {}
+	for i = 1, MERGE_COUNT do
+		local uid = normalizeUid(rawUids[i])
+		if not uid or seen[uid] or not findPet(profile, uid) then
+			return fail("Pick three different pets to merge.")
+		end
+		seen[uid] = true
+		uids[i] = uid
+	end
+	local rarity: string? = nil
+	local bestEgg = 1
+	for _, uid in uids do
+		local pet = findPet(profile, uid)
+		local def = pet and Config.Pets[pet.Id]
+		if not pet or not def then
+			return fail("That pet can't be merged.")
+		end
+		if rarity and def.Rarity ~= rarity then
+			return fail("All three pets must be the same rarity.")
+		end
+		rarity = def.Rarity
+		bestEgg = math.max(bestEgg, eggIndexOf[pet.Id] or 1)
+	end
+	local order = Config.Rarities[rarity :: string].Order
+	local nextRarity = rarityByOrder[order + 1]
+	if not nextRarity then
+		return fail("Legendary pets are already the best!")
+	end
+	-- The next-rarity pet from the best egg (every egg has one pet per rarity).
+	local resultId: string? = nil
+	for i = bestEgg, 1, -1 do
+		for _, entry in Config.Eggs[i].Pets do
+			local def = Config.Pets[entry.Pet]
+			if def and def.Rarity == nextRarity then
+				resultId = entry.Pet
+				break
+			end
+		end
+		if resultId then
+			break
+		end
+	end
+	if not resultId then
+		return fail("Couldn't find a pet to merge into.")
+	end
+
+	-- Everything is checked: remove the three, add the new one (no yields in between).
+	local slot: number? = nil
+	for _, uid in uids do
+		local _, index = findPet(profile, uid)
+		if index then
+			table.remove(profile.Pets, index)
+		end
+		local at = table.find(profile.Equipped, uid)
+		if at then
+			table.remove(profile.Equipped, at)
+			slot = math.min(slot or at, at)
+		end
+	end
+	local used: { [string]: boolean } = {}
+	for _, pet in profile.Pets do
+		used[pet.Uid] = true
+	end
+	local nextUid = profile.NextUid
+	while used[tostring(nextUid)] do
+		nextUid += 1
+	end
+	local uid = tostring(nextUid)
+	profile.NextUid = nextUid + 1
+	table.insert(profile.Pets, { Uid = uid, Id = resultId })
+	if slot then
+		table.insert(profile.Equipped, math.min(slot, #profile.Equipped + 1), uid)
+	end
+	afterChange(player, true)
+	if nextRarity == "Legendary" then
+		local def = Config.Pets[resultId]
+		announceLegendary(player, def and def.Name or resultId)
+	end
+	return { Ok = true, Pets = { { Uid = uid, Id = resultId } } }
+end
+
 -- Public API: each returns a Types.RequestResult and never throws.
+
+function PetService.Merge(player: Player, uids: { string }): Types.RequestResult
+	return guarded(player, merge, uids)
+end
 
 function PetService.Hatch(player: Player, eggId: string, count: number): Types.RequestResult
 	return guarded(player, hatch, eggId, count)
@@ -10477,11 +10683,15 @@ type Run = {
 	Grime: { [BasePart]: GrimeEntry },
 	Dishes: { [number]: DishState },
 	Overlap: OverlapParams, -- Include filter on this run's GrimeFolder, built once per run
+	Splats: { FoamSplat }, -- live Foam Cannon splats, ticked by the foam loop
 	Connections: { RBXScriptConnection },
 	DrainSound: Sound?,
 	DrainRadius: number,
 	KillY: number,
 }
+
+-- A Foam Cannon splat: cleans everything within Radius of Position at Dps until Until.
+type FoamSplat = { Player: Player, Position: Vector3, Radius: number, Dps: number, Until: number }
 
 ----------------------------------------------------------------------------------------------------
 -- Constants
@@ -10498,6 +10708,8 @@ local TANK_FULL_FX_COOLDOWN = 2
 -- on spatial queries.
 local HOLD_MIN_INTERVAL = R.ScrubSendInterval * 0.4
 local HP_EPSILON = 1e-3
+local FOAM_TICK = 0.2
+local MAX_SPLATS_PER_PLAYER = 4
 local REQUESTS_PER_SECOND = 10
 local LEFT_GAME = "PlayerRemoving" -- internal RemoveFromRun reason: skip everything client-facing
 local EMPTY: { [string]: any } = table.freeze({})
@@ -10922,7 +11134,7 @@ local function retireGrime(run: Run, part: BasePart, entry: GrimeEntry, cleaner:
 			end
 			local bonus = 0
 			if rewardPlayer and pr then
-				bonus = math.floor(dish.Units * R.DishBonusShare)
+				bonus = math.floor(dish.Units * R.DishBonusShare * pr.Stats.CoinMult)
 				pr.Coins += bonus
 				for member in run.Players do
 					safe(DataService.AddStat, member, "DishesCleaned", 1)
@@ -11365,7 +11577,7 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 		goldenChance *= 2 -- Lucky Charm pass: anyone in the party having it doubles the whole load's gold
 	end
 	local options = {
-		GrimeScale = 1 + R.PartyGrimeScale * (#members - 1),
+		GrimeScale = math.min(R.PartyGrimeCap or 99, 1 + R.PartyGrimeScale * (#members - 1)),
 		GoldenChance = goldenChance,
 	}
 
@@ -11422,6 +11634,7 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 		Grime = {},
 		Dishes = {},
 		Overlap = overlap,
+		Splats = {},
 		Connections = {},
 		DrainSound = nil,
 		DrainRadius = positive(arena.DrainRadius) or R.DrainRadius,
@@ -11580,7 +11793,28 @@ end
 -- Remote handlers
 ----------------------------------------------------------------------------------------------------
 
-local function onScrub(player: Player, aim: any, holding: any)
+-- Damages every live grime part in `parts` by `amount` (stops early when the tank fills).
+local function damageParts(run: Run, player: Player, pr: PlayerRun, parts: { BasePart }, amount: number)
+	for _, part in parts do
+		local entry = run.Grime[part]
+		if entry and not entry.Dead then
+			damageEntry(run, player, pr, part, entry, math.min(amount, entry.HP), false)
+			if run.Phase ~= "Playing" or pr.Tank &gt;= pr.Stats.TankMax then
+				break
+			end
+		end
+	end
+end
+
+local function unitOr(v: any, fallback: Vector3): Vector3
+	if Util.IsFiniteVector3(v) and v.Magnitude &gt; 1e-3 then
+		return v.Unit
+	end
+	return fallback
+end
+
+-- extra (optional table): { Dir = Vector3, Normal = Vector3 } for Line; { Normal = Vector3 } for Foam.
+local function onScrub(player: Player, aim: any, holding: any, extra: any)
 	-- 1. In a Playing run, finite aim, alive.
 	local run = runOf[player]
 	if not run or run.Phase ~= "Playing" or run.Ended then
@@ -11597,12 +11831,54 @@ local function onScrub(player: Player, aim: any, holding: any)
 
 	-- 2. Reach (plus slack for latency).
 	local stats = pr.Stats
-	if (aim - root.Position).Magnitude &gt; stats.Reach + stats.Radius + R.ReachSlack then
+	local mode = stats.Mode or "Scrub"
+	local extent = if mode == "Line" then (stats.LineLength or 5) / 2 else stats.Radius
+	if (aim - root.Position).Magnitude &gt; stats.Reach + extent + R.ReachSlack then
+		return
+	end
+	local info = if type(extra) == "table" then extra else {}
+
+	-- 3. Foam: one blob per FoamInterval; the splat does the cleaning over time (foamStep).
+	local now = os.clock()
+	if mode == "Foam" then
+		if now - pr.LastScrubAt &lt; (stats.FoamInterval or 0.4) * 0.9 then
+			return
+		end
+		pr.LastScrubAt = now
+		if pr.Tank &gt;= stats.TankMax then
+			sendTankFull(player, pr)
+			return
+		end
+		local mine = 0
+		local oldest: number? = nil
+		for i, splat in run.Splats do
+			if splat.Player == player then
+				mine += 1
+				oldest = oldest or i
+			end
+		end
+		if mine &gt;= MAX_SPLATS_PER_PLAYER and oldest then
+			table.remove(run.Splats, oldest)
+		end
+		local seconds = stats.FoamSeconds or 2.5
+		table.insert(run.Splats, {
+			Player = player,
+			Position = aim,
+			Radius = stats.Radius,
+			Dps = stats.Power * (stats.FoamShare or 0.6),
+			Until = now + seconds,
+		})
+		fireAll(run, "Foam", {
+			Position = aim,
+			Normal = unitOr(info.Normal, Vector3.yAxis),
+			Radius = stats.Radius,
+			Duration = seconds,
+			By = player.UserId,
+		})
 		return
 	end
 
-	-- 3. Rate. Damage comes from server time, never from anything in the packet.
-	local now = os.clock()
+	-- 4. Rate. Damage comes from server time, never from anything in the packet.
 	local seconds
 	if holding == true and stats.Hold then
 		local dt = now - pr.LastScrubAt
@@ -11618,21 +11894,45 @@ local function onScrub(player: Player, aim: any, holding: any)
 	end
 	pr.LastScrubAt = now
 
-	-- 4. Tank full: nothing to do but remind them.
+	-- 5. Tank full: nothing to do but remind them.
 	if pr.Tank &gt;= stats.TankMax then
 		sendTankFull(player, pr)
 		return
 	end
 
-	-- 5. Every grime spot under the hand takes the full hit (that's what Hand Size buys).
 	local amount = stats.Power * seconds
-	local parts = workspace:GetPartBoundsInRadius(aim, stats.Radius, run.Overlap)
-	for _, part in parts do
-		local entry = run.Grime[part]
-		if entry and not entry.Dead then
-			damageEntry(run, player, pr, part, entry, math.min(amount, entry.HP), false)
-			if run.Phase ~= "Playing" or pr.Tank &gt;= pr.Stats.TankMax then
-				break
+	if mode == "Line" then
+		-- A thin box along the line, a little deep along the surface normal so curved dishes count.
+		local normal = unitOr(info.Normal, Vector3.yAxis)
+		local dir = unitOr(info.Dir, root.CFrame.RightVector)
+		dir = dir - normal * dir:Dot(normal)
+		dir = if dir.Magnitude &gt; 1e-3 then dir.Unit else normal:Cross(Vector3.xAxis).Unit
+		local cf = CFrame.fromMatrix(aim, dir, normal)
+		local size = Vector3.new(stats.LineLength or 5, 2.4, stats.LineWidth or 0.9)
+		damageParts(run, player, pr, workspace:GetPartBoundsInBox(cf, size, run.Overlap), amount)
+		return
+	end
+	-- Scrub / Spray: every grime spot under the circle takes the full hit (that's what Size buys).
+	damageParts(run, player, pr, workspace:GetPartBoundsInRadius(aim, stats.Radius, run.Overlap), amount)
+end
+
+-- Foam splats: every FOAM_TICK, each live splat cleans what it covers.
+local function foamStep()
+	local now = os.clock()
+	for _, run in runs do
+		if run.Ended or run.Phase ~= "Playing" or #run.Splats == 0 then
+			continue
+		end
+		local i = 1
+		while i &lt;= #run.Splats do
+			local splat = run.Splats[i]
+			local pr = run.Players[splat.Player]
+			if now &gt;= splat.Until or not pr or not isHere(splat.Player) then
+				table.remove(run.Splats, i)
+			else
+				local parts = workspace:GetPartBoundsInRadius(splat.Position, splat.Radius, run.Overlap)
+				damageParts(run, splat.Player, pr, parts, splat.Dps * FOAM_TICK)
+				i += 1
 			end
 		end
 	end
@@ -11869,6 +12169,15 @@ function RoundService.Start()
 			local ok, err = pcall(drainStep)
 			if not ok then
 				warn("[RoundService] drain loop: " .. tostring(err))
+			end
+		end
+	end)
+	task.spawn(function()
+		while true do
+			task.wait(FOAM_TICK)
+			local ok, err = pcall(foamStep)
+			if not ok then
+				warn("[RoundService] foam loop: " .. tostring(err))
 			end
 		end
 	end)
@@ -12148,6 +12457,20 @@ local HANDLERS: { [string]: (Player, any) -&gt; Types.RequestResult } = {
 	Equip = petAction("Equip"),
 	Unequip = petAction("Unequip"),
 	Delete = petAction("Delete"),
+	Merge = function(player: Player, value: any): Types.RequestResult
+		local n = Config.PetRules.MergeCount or 3
+		if type(value) ~= "table" or #value ~= n then
+			return fail(string.format("Pick %d pets to merge.", n))
+		end
+		local uids = {}
+		for i = 1, n do
+			if not isId(value[i]) then
+				return fail("That pet doesn't exist.")
+			end
+			uids[i] = value[i]
+		end
+		return callPetService("Merge", player, uids)
+	end,
 	EquipBest = function(player: Player, _value: any): Types.RequestResult
 		return callPetService("EquipBest", player)
 	end,
@@ -12991,6 +13314,66 @@ local function onDishDone(data: Types.FXDishDone)
 	end
 end
 
+-- Foam Cannon splat: a heap of foam blobs on the surface that slowly shrinks while it cleans,
+-- fizzing bubbles the whole time.
+local function onFoam(data: any)
+	local pos = data and data.Position
+	if typeof(pos) ~= "Vector3" then
+		return
+	end
+	local normal: Vector3 = if typeof(data.Normal) == "Vector3" and data.Normal.Magnitude &gt; 0.5 then data.Normal.Unit else Vector3.yAxis
+	local radius = math.clamp(tonumber(data.Radius) or 3, 1, 12)
+	local duration = math.clamp(tonumber(data.Duration) or 2.5, 0.5, 6)
+	local u = normal:Cross(if math.abs(normal.Y) &gt; 0.9 then Vector3.xAxis else Vector3.yAxis).Unit
+	local v = normal:Cross(u)
+	local folder = Instance.new("Folder")
+	folder.Name = "FoamSplat"
+	folder.Parent = workspace
+	local blobs: { { Part: Part, Size: number, Base: Vector3 } } = {}
+	local count = 9 + math.floor(radius * 2)
+	for i = 1, count do
+		local a = math.random() * math.pi * 2
+		local d = math.sqrt(math.random()) * radius * 0.8
+		local size = radius * (0.3 + math.random() * 0.35) * (if i == 1 then 1.4 else 1)
+		local base = pos + (u * math.cos(a) + v * math.sin(a)) * (if i == 1 then 0 else d) + normal * size * 0.15
+		local blob = Instance.new("Part")
+		blob.Shape = Enum.PartType.Ball
+		blob.Material = Enum.Material.SmoothPlastic
+		blob.Color = Color3.fromRGB(255, 255, 255):Lerp(Color3.fromRGB(225, 205, 255), math.random() * 0.4)
+		blob.Size = Vector3.one * 0.05
+		blob.Anchored = true
+		blob.CanCollide = false
+		blob.CanQuery = false
+		blob.CanTouch = false
+		blob.CastShadow = false
+		blob.CFrame = CFrame.new(base)
+		blob.Parent = folder
+		table.insert(blobs, { Part = blob, Size = size, Base = base })
+	end
+	Bubbles.Emit(pos + normal, { Count = 8, Spread = radius * 0.5, Velocity = normal * 4 + Vector3.new(0, 2, 0), Jitter = 3, Size = { 0.3, 0.9 }, Life = { 0.8, 1.6 } })
+	task.spawn(function()
+		local t = 0
+		local fizz = 0
+		while t &lt; duration and folder.Parent do
+			local dt = RunService.Heartbeat:Wait()
+			t += dt
+			fizz += dt
+			local grow = math.min(t / 0.15, 1)
+			local shrink = 1 - math.clamp((t - duration * 0.35) / (duration * 0.65), 0, 1)
+			for i, b in blobs do
+				local wobble = 1 + 0.06 * math.sin(t * 7 + i)
+				b.Part.Size = Vector3.one * math.max(b.Size * grow * shrink * wobble, 0.05)
+			end
+			if fizz &gt; 0.25 then
+				fizz = 0
+				Bubbles.Emit(pos + normal * 0.5, { Count = 2, Spread = radius * 0.6, Velocity = normal * 2, Jitter = 1.5, Size = { 0.25, 0.7 }, Life = { 0.6, 1.2 } })
+			end
+		end
+		folder:Destroy()
+	end)
+	UIKit.PlaySound("Splash", 1.1 + math.random() * 0.2)
+end
+
 local function onSold(data: Types.FXSold)
 	UIKit.PlaySound("Coins")
 	UIKit.Toast("+" .. UIKit.Commas(data.Coins) .. " 💰", "Good")
@@ -13003,6 +13386,8 @@ end
 local function onRunFX(kind: string, data: any)
 	if kind == "Cleaned" then
 		onCleaned(data)
+	elseif kind == "Foam" then
+		onFoam(data)
 	elseif kind == "DishDone" then
 		onDishDone(data)
 	elseif kind == "Sold" then
@@ -13046,14 +13431,12 @@ end
 ----------------------------------------------------------------------------------------------------
 -- Lift pads (CollectionService tag "LiftPad", attribute LiftTo = world Vector3): step on one and
 -- you're carried to LiftTo in a puff of bubbles. The local client owns its character, so moving it
--- here replicates. A short cooldown stops you bouncing straight back.
+-- here replicates.
 ----------------------------------------------------------------------------------------------------
 
 local LIFT_RADIUS = 4.2
-local LIFT_COOLDOWN = 1.2
 
 local liftPads: { [BasePart]: boolean } = {}
-local lastLiftAt = 0
 
 local function addLiftPart(inst: Instance)
 	if inst:IsA("BasePart") then
@@ -13094,11 +13477,15 @@ local function stepLiftBubbles(dt: number)
 	end
 end
 
-local function stepLift(_dt: number)
-	local now = os.clock()
-	if now - lastLiftAt &lt; LIFT_COOLDOWN then
-		return
-	end
+-- Bubble columns (like Minecraft's bubble elevators): stand in a lift's column and the bubbles
+-- carry you up smoothly, drifting you to the middle; at the top they push you out onto the rack.
+local LIFT_RISE_SPEED = 18 -- studs per second
+local LIFT_EXIT_SPEED = 16
+local LIFT_EXIT_SECONDS = 0.7
+local liftExit: { Until: number, Dir: Vector3 }? = nil
+local wasInColumn = false
+
+local function stepLift(dt: number)
 	local character = LocalPlayer.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not character or not root or not root:IsA("BasePart") then
@@ -13106,7 +13493,19 @@ local function stepLift(_dt: number)
 	end
 	local rootPart = root :: BasePart
 	local pos = rootPart.Position
+	local now = os.clock()
 
+	-- Pushing out at the top.
+	if liftExit then
+		if now &lt; liftExit.Until then
+			local v = rootPart.AssemblyLinearVelocity
+			rootPart.AssemblyLinearVelocity = Vector3.new(liftExit.Dir.X * LIFT_EXIT_SPEED, math.max(v.Y, 0), liftExit.Dir.Z * LIFT_EXIT_SPEED)
+			return
+		end
+		liftExit = nil
+	end
+
+	local inColumn = false
 	for pad in liftPads do
 		if not pad.Parent then
 			liftPads[pad] = nil
@@ -13117,17 +13516,31 @@ local function stepLift(_dt: number)
 			continue
 		end
 		local d = pos - pad.Position
-		if Vector3.new(d.X, 0, d.Z).Magnitude &lt;= LIFT_RADIUS and d.Y &gt; -1 and d.Y &lt; 7 then
-			lastLiftAt = now
-			popBubbles(pad.Position + Vector3.new(0, 2, 0), 8, 3)
-			UIKit.PlaySound("Splash", 1.3)
-			local facing = rootPart.CFrame.Rotation
-			character:PivotTo(CFrame.new(target) * facing)
-			rootPart.AssemblyLinearVelocity = Vector3.zero
-			popBubbles(target, 8, 3)
+		local flat = Vector3.new(d.X, 0, d.Z)
+		if flat.Magnitude &lt;= LIFT_RADIUS and d.Y &gt; -1 and pos.Y &lt; target.Y + 2 then
+			inColumn = true
+			if not wasInColumn then
+				popBubbles(pad.Position + Vector3.new(0, 2, 0), 8, 3)
+				UIKit.PlaySound("Splash", 1.3)
+			end
+			if pos.Y &gt;= target.Y then
+				-- Top of the column: shove out toward the landing spot.
+				local out = Vector3.new(target.X - pos.X, 0, target.Z - pos.Z)
+				local dir = if out.Magnitude &gt; 0.1 then out.Unit else Vector3.new(0, 0, 1)
+				liftExit = { Until = now + LIFT_EXIT_SECONDS, Dir = dir }
+				rootPart.AssemblyLinearVelocity = Vector3.new(dir.X * LIFT_EXIT_SPEED, 6, dir.Z * LIFT_EXIT_SPEED)
+				popBubbles(pos, 6, 2)
+			else
+				-- Rise, easing toward the column's middle so you don't bump the edges.
+				local centering = -flat * math.min(1, 4 * dt) / math.max(dt, 1e-3) * 0.25
+				local v = rootPart.AssemblyLinearVelocity
+				local vy = v.Y + (LIFT_RISE_SPEED - v.Y) * math.min(1, 10 * dt)
+				rootPart.AssemblyLinearVelocity = Vector3.new(v.X * 0.9 + centering.X, vy, v.Z * 0.9 + centering.Z)
+			end
 			break
 		end
 	end
+	wasInColumn = inColumn
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -13370,9 +13783,38 @@ local function addBoardArrow(inst: Instance)
 	if not detector or not detector:IsA("ClickDetector") then
 		return
 	end
+	-- The drawn button this click target sits over (in the board's SurfaceGui).
+	local function button(): GuiObject?
+		local board = inst.Parent
+		local gui = board and board:FindFirstChildOfClass("SurfaceGui")
+		local name = inst:GetAttribute("Button")
+		local b = gui and type(name) == "string" and gui:FindFirstChild(name)
+		return if b and b:IsA("GuiObject") then b else nil
+	end
+	local function setLook(size: number, color: Color3)
+		local b = button()
+		if b then
+			UIKit.Tween(b, { Size = UDim2.fromOffset(size, size), BackgroundColor3 = color }, 0.12)
+		end
+	end
+	local IDLE, HOVER = Color3.fromRGB(255, 205, 70), Color3.fromRGB(255, 228, 130)
+	detector.MouseHoverEnter:Connect(function(player)
+		if player == LocalPlayer then
+			setLook(66, HOVER)
+		end
+	end)
+	detector.MouseHoverLeave:Connect(function(player)
+		if player == LocalPlayer then
+			setLook(60, IDLE)
+		end
+	end)
 	detector.MouseClick:Connect(function(player)
 		if player == LocalPlayer and inst.Parent then
 			flipBoard(inst.Parent, tonumber(inst:GetAttribute("Dir")) or 1)
+			setLook(54, HOVER)
+			task.delay(0.12, function()
+				setLook(60, IDLE)
+			end)
 		end
 	end)
 end
@@ -15195,8 +15637,9 @@ local function renderWait(party: Types.PartyState)
 	listLayout(avatars, Enum.FillDirection.Horizontal, 6)
 	for _, member in party.Members do
 		local isHost = member.UserId == party.HostUserId
+		local avatarSize = if #party.Members &gt; 5 then 34 else 42 -- up to 8 fit on one row
 		local img = UIKit.New("ImageLabel", {
-			Size = UDim2.fromOffset(42, 42),
+			Size = UDim2.fromOffset(avatarSize, avatarSize),
 			BackgroundColor3 = Colors.PanelLight,
 			ScaleType = Enum.ScaleType.Crop,
 			Parent = avatars,
@@ -15880,6 +16323,17 @@ local deleteConfirmFrame: Frame
 local selectedUid: string? = nil
 local deleteToken = 0
 
+-- Merge mode: pick MergeCount pets of one rarity; they become one pet of the next rarity.
+local MERGE_COUNT = Config.PetRules.MergeCount or 3
+local mergeMode = false
+local mergeSel: { string } = {}
+local mergeButton: TextButton
+local mergePanel: Frame
+local mergeInfo: TextLabel
+local mergeResult: TextLabel
+local mergeGo: TextButton
+local detailsCard: Frame
+
 -- Eggs window
 local eggTabsHolder: Frame
 local eggViewport: ViewportFrame
@@ -15897,6 +16351,46 @@ local currentEggId: string? = nil
 
 local GRID_CELL = Vector2.new(122, 156)
 local GRID_GAP = 10
+
+-- Same rule as the server: the next-rarity pet from the best egg any picked pet came from.
+local EGG_INDEX: { [string]: number } = {}
+for i, egg in Config.Eggs do
+	for _, e in egg.Pets do
+		EGG_INDEX[e.Pet] = math.max(EGG_INDEX[e.Pet] or 0, i)
+	end
+end
+local function nextRarityName(rarity: string): string?
+	local order = rarityOrder(rarity)
+	for id, r in Config.Rarities do
+		if r.Order == order + 1 then
+			return id
+		end
+	end
+	return nil
+end
+local function mergeResultId(ids: { string }): string?
+	if #ids == 0 then
+		return nil
+	end
+	local def = petDef(ids[1])
+	local nextRarity = def and nextRarityName(def.Rarity)
+	if not nextRarity then
+		return nil
+	end
+	local best = 1
+	for _, id in ids do
+		best = math.max(best, EGG_INDEX[id] or 1)
+	end
+	for i = best, 1, -1 do
+		for _, e in Config.Eggs[i].Pets do
+			local d = petDef(e.Pet)
+			if d and d.Rarity == nextRarity then
+				return e.Pet
+			end
+		end
+	end
+	return nil
+end
 
 local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick: (uid: string) -&gt; ())
 	local card = UIKit.Card({
@@ -15965,7 +16459,41 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 		check.Name = "EquippedCheck"
 	end
 
-	if selectedUid == entry.Uid then
+	if mergeMode then
+		local pick = table.find(mergeSel, entry.Uid)
+		local firstDef = mergeSel[1] and ClientState.Meta and (function()
+			for _, pet in (ClientState.Meta :: any).Pets do
+				if pet.Uid == mergeSel[1] then
+					return petDef(pet.Id)
+				end
+			end
+			return nil
+		end)()
+		local blocked = nextRarityName(entry.Def.Rarity) == nil or (firstDef ~= nil and firstDef.Rarity ~= entry.Def.Rarity)
+		if pick then
+			local ring = UIKit.Stroke(card, C.Good, 4, 0)
+			ring.Name = "MergeRing"
+			local badge = UIKit.Label({
+				Text = tostring(pick),
+				Size = UDim2.fromOffset(28, 28),
+				Position = UDim2.fromOffset(4, 4),
+				TextSize = 20,
+				TextColor3 = C.Good,
+				Parent = card,
+				ZIndex = 4,
+			})
+			badge.Name = "MergeBadge"
+		elseif blocked then
+			local shade = Instance.new("Frame")
+			shade.Name = "Blocked"
+			shade.Size = UDim2.fromScale(1, 1)
+			shade.BackgroundColor3 = Color3.new(0, 0, 0)
+			shade.BackgroundTransparency = 0.5
+			shade.ZIndex = 4
+			UIKit.Corner(shade, 12)
+			shade.Parent = card
+		end
+	elseif selectedUid == entry.Uid then
 		local ring = UIKit.Stroke(card, C.Text, 3, 0.35)
 		ring.Name = "SelectRing"
 	end
@@ -16009,13 +16537,99 @@ local function refreshDetailPanel(meta: Types.MetaState?)
 	equipButton.BackgroundColor3 = if equipped then C.Warning else C.Good
 end
 
+local function refreshMergePanel()
+	local meta = ClientState.Meta
+	local ids: { string } = {}
+	if meta then
+		for _, uid in mergeSel do
+			for _, pet in meta.Pets do
+				if pet.Uid == uid then
+					table.insert(ids, pet.Id)
+				end
+			end
+		end
+	end
+	local resultId = mergeResultId(ids)
+	local resultDef = resultId and petDef(resultId)
+	mergeInfo.Text = string.format("Pick %d pets of the same rarity. Picked %d/%d.", MERGE_COUNT, #mergeSel, MERGE_COUNT)
+	if resultDef then
+		mergeResult.Text = string.format("➡️ %s %s", resultDef.Rarity, resultDef.Name)
+		mergeResult.TextColor3 = UIKit.RarityColor(resultDef.Rarity)
+	else
+		mergeResult.Text = "➡️ ?"
+		mergeResult.TextColor3 = C.TextDim
+	end
+	UIKit.SetButtonColor(mergeGo, if #mergeSel == MERGE_COUNT then C.Good else C.Disabled)
+end
+
 local function selectPet(uid: string?)
+	if mergeMode then
+		local meta = ClientState.Meta
+		if uid and meta then
+			local at = table.find(mergeSel, uid)
+			if at then
+				table.remove(mergeSel, at)
+			elseif #mergeSel &lt; MERGE_COUNT then
+				local def, firstDef = nil, nil
+				for _, pet in meta.Pets do
+					if pet.Uid == uid then
+						def = petDef(pet.Id)
+					end
+					if pet.Uid == mergeSel[1] then
+						firstDef = petDef(pet.Id)
+					end
+				end
+				if def and nextRarityName(def.Rarity) == nil then
+					UIKit.Toast("Legendary pets are already the best!", "Bad")
+				elseif def and firstDef and def.Rarity ~= firstDef.Rarity then
+					UIKit.Toast("All pets in a merge must be the same rarity.", "Bad")
+				elseif def then
+					table.insert(mergeSel, uid)
+				end
+			end
+		end
+		refreshMergePanel()
+		PetsUI._refreshGrid()
+		return
+	end
 	selectedUid = uid
 	deleteConfirmFrame.Visible = false
 	refreshDetailPanel(ClientState.Meta)
 	-- The grid highlights the selection: cheapest is a full rebuild, and this list is at most
 	-- Config.PetRules.MaxInventory (60) cards, so it's not worth a more surgical update.
 	PetsUI._refreshGrid()
+end
+
+local function setMergeMode(on: boolean)
+	mergeMode = on
+	table.clear(mergeSel)
+	mergePanel.Visible = on
+	detailEmpty.Parent = if on then nil else detailsCard
+	detailFilled.Parent = if on then nil else detailsCard
+	mergeButton.Text = if on then "Done" else "🔮 Merge"
+	if on then
+		refreshMergePanel()
+	end
+	PetsUI._refreshGrid()
+end
+
+local function doMerge()
+	if #mergeSel ~= MERGE_COUNT then
+		UIKit.Toast(string.format("Pick %d pets of the same rarity first.", MERGE_COUNT), "Bad")
+		return
+	end
+	local result = ClientState.MetaRequest("Merge", table.clone(mergeSel))
+	if not result.Ok then
+		UIKit.Toast(result.Error or "Couldn't merge those.", "Bad")
+		return
+	end
+	table.clear(mergeSel)
+	UIKit.PlaySound("Hatch")
+	UIKit.Confetti()
+	local made = result.Pets and result.Pets[1]
+	local def = made and petDef(made.Id)
+	UIKit.Toast(if def then ("✨ Merged into a " .. def.Rarity .. " " .. def.Name .. "!") else "Merged!", "Good")
+	refreshMergePanel()
 end
 
 local function doEquipToggle()
@@ -16095,18 +16709,29 @@ local function buildPetsWindow()
 
 	equippedLabel = UIKit.Label({
 		Text = "Equipped 0/0",
-		Size = UDim2.new(0.4, 0, 1, 0),
+		Size = UDim2.new(0.3, 0, 1, 0),
 		TextSize = 22,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = header,
 	})
 	countLabel = UIKit.Label({
 		Text = "0/0",
-		Size = UDim2.new(0.2, 0, 1, 0),
-		Position = UDim2.new(0.4, 0, 0, 0),
+		Size = UDim2.new(0.12, 0, 1, 0),
+		Position = UDim2.new(0.3, 0, 0, 0),
 		TextSize = 22,
 		TextColor3 = C.TextDim,
 		Parent = header,
+	})
+	mergeButton = UIKit.Button({
+		Text = "🔮 Merge",
+		Size = UDim2.fromOffset(140, 40),
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -190, 0, 0),
+		Color = Color3.fromRGB(170, 110, 255),
+		Parent = header,
+		OnClick = function()
+			setMergeMode(not mergeMode)
+		end,
 	})
 	UIKit.Button({
 		Text = "Equip Best",
@@ -16154,13 +16779,58 @@ local function buildPetsWindow()
 	local gridPad = UIKit.Padding(gridScroll, 10)
 	gridPad.Parent = gridScroll
 
-	-- Details panel
+	-- Details panel (or the merge panel, in merge mode)
 	local details = UIKit.Card({
 		Size = UDim2.new(0, 300, 1, 0),
 		Position = UDim2.new(1, 0, 0, 0),
 		AnchorPoint = Vector2.new(1, 0),
 		Color = C.PanelDark,
 		Parent = body,
+	})
+
+	detailsCard = details
+
+	mergePanel = Instance.new("Frame")
+	mergePanel.Name = "Merge"
+	mergePanel.BackgroundTransparency = 1
+	mergePanel.Size = UDim2.fromScale(1, 1)
+	mergePanel.Visible = false
+	mergePanel.Parent = details
+	UIKit.Label({ Text = "🔮 Merge Pets", Size = UDim2.new(1, -16, 0, 34), Position = UDim2.new(0.5, 0, 0, 14), AnchorPoint = Vector2.new(0.5, 0), TextSize = 26, Parent = mergePanel })
+	UIKit.Label({
+		Text = string.format("%d pets of the same rarity become 1 pet of the next rarity.", MERGE_COUNT),
+		Size = UDim2.new(1, -24, 0, 48),
+		Position = UDim2.new(0.5, 0, 0, 56),
+		AnchorPoint = Vector2.new(0.5, 0),
+		TextSize = 16,
+		TextWrapped = true,
+		TextColor3 = C.TextDim,
+		Parent = mergePanel,
+	})
+	mergeInfo = UIKit.Label({ Text = "", Size = UDim2.new(1, -24, 0, 44), Position = UDim2.new(0.5, 0, 0, 116), AnchorPoint = Vector2.new(0.5, 0), TextSize = 17, TextWrapped = true, Parent = mergePanel })
+	mergeResult = UIKit.Label({ Text = "➡️ ?", Size = UDim2.new(1, -24, 0, 36), Position = UDim2.new(0.5, 0, 0, 170), AnchorPoint = Vector2.new(0.5, 0), TextSize = 22, TextScaled = true, Parent = mergePanel })
+	mergeGo = UIKit.Button({
+		Text = "MERGE!",
+		Icon = "✨",
+		Size = UDim2.new(1, -24, 0, 56),
+		Position = UDim2.new(0.5, 0, 0, 232),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Color = C.Disabled,
+		Parent = mergePanel,
+		OnClick = doMerge,
+	})
+	UIKit.Button({
+		Text = "Clear picks",
+		Size = UDim2.new(1, -24, 0, 40),
+		Position = UDim2.new(0.5, 0, 0, 300),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Color = C.PanelLight,
+		Parent = mergePanel,
+		OnClick = function()
+			table.clear(mergeSel)
+			refreshMergePanel()
+			PetsUI._refreshGrid()
+		end,
 	})
 
 	detailEmpty = Instance.new("Frame")
@@ -16288,9 +16958,16 @@ local function buildPetsWindow()
 
 	UIKit.RegisterWindow("Pets", {
 		Open = function()
+			if mergeMode then
+				setMergeMode(false)
+			end
 			PetsUI._refreshGrid()
 		end,
-		Close = function() end,
+		Close = function()
+			if mergeMode then
+				setMergeMode(false)
+			end
+		end,
 	})
 end
 
@@ -17723,6 +18400,7 @@ local Types = require(Shared:WaitForChild("Types"))
 local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
 local UIKit = require(Client:WaitForChild("UIKit"))
+local Bubbles = require(Client:WaitForChild("Bubbles"))
 
 local SprayController = {}
 
@@ -17760,7 +18438,6 @@ local touchHeld = false
 
 local clickCount = 0
 local lastSendAt = 0
-local lastClickPulseUntil = 0 -- visuals stay on this long after a single (non-Hold) click
 local lastTankFullToastAt = 0
 
 -- Visuals, built lazily and reused for the whole session.
@@ -17777,6 +18454,12 @@ local hintLabel: TextLabel? = nil
 local hpAnchor: BasePart? = nil
 local hpBillboard: BillboardGui? = nil
 local hpFill: Frame? = nil
+-- Pressure Washer line: a thin glowing blade on the surface, with two beams fanning out to its ends.
+local linePart: BasePart? = nil
+local lineEnds: { Attachment } = {}
+local lineBeams: { Beam } = {}
+local lastSudsAt = 0
+local lastFoamAt = 0
 
 -- Touch-only UI.
 local touchGui: ScreenGui? = nil
@@ -17794,7 +18477,6 @@ local characterConns: { RBXScriptConnection } = {}
 local function resetPerRunState()
 	clickCount = 0
 	lastSendAt = 0
-	lastClickPulseUntil = 0
 end
 
 local function findHandPart(character: Model): BasePart?
@@ -17894,6 +18576,100 @@ local function ensureBeam(character: Model)
 		b.Parent = origin
 		beam = b
 	end
+end
+
+local function ensureLine()
+	if linePart and linePart.Parent and handAttachment and #lineBeams == 2 and lineBeams[1].Attachment0 == handAttachment then
+		return
+	end
+	if not linePart or not linePart.Parent then
+		local part = Instance.new("Part")
+		part.Name = "WasherLine"
+		part.Material = Enum.Material.Neon
+		part.Anchored = true
+		part.CanCollide = false
+		part.CanTouch = false
+		part.CanQuery = false
+		part.CastShadow = false
+		part.Transparency = 1
+		part.Size = Vector3.new(4, 0.12, 0.9)
+		part.Parent = workspace
+		linePart = part
+		table.clear(lineEnds)
+		for i = 1, 2 do
+			local a = Instance.new("Attachment")
+			a.Name = "LineEnd" .. i
+			a.Parent = part
+			lineEnds[i] = a
+		end
+	end
+	for _, b in lineBeams do
+		b:Destroy()
+	end
+	table.clear(lineBeams)
+	if not handAttachment then
+		return
+	end
+	for i = 1, 2 do
+		local b = Instance.new("Beam")
+		b.Attachment0 = handAttachment
+		b.Attachment1 = lineEnds[i]
+		b.Width0 = 0.15
+		b.Width1 = 0.35
+		b.LightEmission = 1
+		b.LightInfluence = 0
+		b.FaceCamera = true
+		b.Transparency = NumberSequence.new(0.1, 0.5)
+		b.Texture = "rbxasset://textures/particles/smoke_main.dds"
+		b.TextureMode = Enum.TextureMode.Wrap
+		b.TextureLength = 0.5
+		b.TextureSpeed = 4
+		b.Enabled = false
+		b.Parent = handAttachment
+		lineBeams[i] = b
+	end
+end
+
+local function hideLine()
+	if linePart then
+		linePart.Transparency = 1
+	end
+	for _, b in lineBeams do
+		b.Enabled = false
+	end
+end
+
+-- A foam blob flying from the hand to the target in a short arc (the splat itself comes back from
+-- the server as a "Foam" FX, so everyone in the party sees it).
+local function launchFoam(from: Vector3, to: Vector3, color: Color3)
+	local blob = Instance.new("Part")
+	blob.Name = "FoamBlob"
+	blob.Shape = Enum.PartType.Ball
+	blob.Material = Enum.Material.SmoothPlastic
+	blob.Color = Color3.new(1, 1, 1):Lerp(color, 0.15)
+	blob.Size = Vector3.one * 1.3
+	blob.Anchored = true
+	blob.CanCollide = false
+	blob.CanQuery = false
+	blob.CanTouch = false
+	blob.CastShadow = false
+	blob.CFrame = CFrame.new(from)
+	blob.Parent = workspace
+	local flight = math.clamp((to - from).Magnitude / 90, 0.12, 0.35)
+	local arc = math.min(4, (to - from).Magnitude * 0.08)
+	task.spawn(function()
+		local t = 0
+		while t &lt; flight and blob.Parent do
+			t += RunService.Heartbeat:Wait()
+			local k = math.min(t / flight, 1)
+			local pos = from:Lerp(to, k) + Vector3.new(0, math.sin(k * math.pi) * arc, 0)
+			blob.CFrame = CFrame.new(pos)
+			if math.random() &lt; 0.5 then
+				Bubbles.Emit(pos, { Count = 1, Spread = 0.3, Velocity = Vector3.new(0, 1, 0), Jitter = 1, Size = { 0.25, 0.6 }, Life = { 0.4, 0.8 } })
+			end
+		end
+		blob:Destroy()
+	end)
 end
 
 local function ensureHealthBar()
@@ -18077,6 +18853,7 @@ local function hideVisuals()
 	if hpBillboard then
 		hpBillboard.Enabled = false
 	end
+	hideLine()
 end
 
 local function cleanupForRunEnd()
@@ -18130,8 +18907,8 @@ local function toolName(tier: number): string
 	return "a bigger tool"
 end
 
-local function sendScrub(hitPosition: Vector3, holding: boolean, pitchJitter: number)
-	ScrubEvent:FireServer(hitPosition, holding)
+local function sendScrub(hitPosition: Vector3, holding: boolean, pitchJitter: number, extra: { [string]: any }?)
+	ScrubEvent:FireServer(hitPosition, holding, extra)
 	UIKit.PlaySound("Scrub", 0.9 + pitchJitter * 0.25)
 	if splashEmitter then
 		splashEmitter:Emit(SPLASH_EMIT_COUNT)
@@ -18180,16 +18957,41 @@ local function onHeartbeat(dt: number)
 	local inReach = distance &lt;= stats.Reach
 	local toolColor = (Config.Tools[stats.ToolIndex] or Config.Tools[1]).Color
 
-	-- Scrub ring: tool colour in reach, red and dimmer out of reach.
+	local mode = stats.Mode or "Scrub"
+	local toolIndex = stats.ToolIndex
+	local normal = result.Normal
 	local r = ring :: BasePart
-	r.CFrame = CFrame.new(hitPos, hitPos + result.Normal) * CFrame.Angles(0, math.rad(90), 0)
-	r.Size = Vector3.new(RING_THICKNESS, stats.Radius * 2, stats.Radius * 2)
-	if inReach then
-		r.Color = toolColor
-		r.Transparency = RING_TRANSPARENCY
+
+	-- Aim marker. Scrub / Spray: a ring the size of the cleaning circle. Foam: a fainter ring the
+	-- size of the splat. Line: the washer's blade, turned with the camera, lying on the surface.
+	local lineDir: Vector3? = nil
+	if mode == "Line" then
+		r.Transparency = 1
+		r.CFrame = CFrame.new(hitPos, hitPos + normal) * CFrame.Angles(0, math.rad(90), 0) -- splash source
+		ensureLine()
+		local right = camera.CFrame.RightVector
+		local dir = right - normal * right:Dot(normal)
+		dir = if dir.Magnitude &gt; 1e-3 then dir.Unit else normal:Cross(Vector3.xAxis).Unit
+		lineDir = dir
+		local len = stats.LineLength or 5
+		local lp = linePart :: BasePart
+		lp.Size = Vector3.new(len, 0.12, stats.LineWidth or 0.9)
+		lp.CFrame = CFrame.fromMatrix(hitPos + normal * 0.08, dir, normal)
+		lp.Color = if inReach then toolColor else UIKit.Theme.Colors.Bad
+		lp.Transparency = if inReach then 0.3 else 0.6
+		lineEnds[1].Position = Vector3.new(-len / 2, 0, 0)
+		lineEnds[2].Position = Vector3.new(len / 2, 0, 0)
 	else
-		r.Color = UIKit.Theme.Colors.Bad
-		r.Transparency = 0.5
+		hideLine()
+		r.CFrame = CFrame.new(hitPos, hitPos + normal) * CFrame.Angles(0, math.rad(90), 0)
+		r.Size = Vector3.new(RING_THICKNESS, stats.Radius * 2, stats.Radius * 2)
+		if inReach then
+			r.Color = toolColor
+			r.Transparency = if mode == "Foam" then 0.6 else RING_TRANSPARENCY
+		else
+			r.Color = UIKit.Theme.Colors.Bad
+			r.Transparency = 0.5
+		end
 	end
 
 	updateHealthBar(hitPart)
@@ -18212,16 +19014,25 @@ local function onHeartbeat(dt: number)
 	local sending = false
 
 	if canSend then
-		if stats.Hold then
-			if now - lastSendAt &gt;= Config.Round.ScrubSendInterval then
-				lastSendAt = now
-				sendScrub(hitPos, true, math.random())
+		if mode == "Foam" then
+			-- One blob per FoamInterval while held.
+			if now - lastFoamAt &gt;= (stats.FoamInterval or 0.4) then
+				lastFoamAt = now
+				local from = if handAttachment then handAttachment.WorldPosition else (root :: BasePart).Position
+				launchFoam(from, hitPos, toolColor)
+				sendScrub(hitPos, true, math.random(), { Normal = normal })
 			end
+		elseif now - lastSendAt &gt;= Config.Round.ScrubSendInterval then
+			lastSendAt = now
+			sendScrub(hitPos, true, math.random(), if lineDir then { Dir = lineDir, Normal = normal } else nil)
 			sending = true
 		else
-			-- Single pulse: the actual send happens on the input's rising edge (onPressBegan), so
-			-- here we only decide whether the visuals (beam/splash) should still be showing.
-			sending = now &lt; lastClickPulseUntil
+			sending = true
+		end
+		-- Scrubbing tools froth up suds right on the dish.
+		if sending and mode == "Scrub" and now - lastSudsAt &gt; 0.12 then
+			lastSudsAt = now
+			Bubbles.Emit(hitPos + normal * 0.3, { Count = 2, Spread = stats.Radius * 0.6, Velocity = normal * 2 + Vector3.new(0, 1, 0), Jitter = 1.2, Size = { 0.2, 0.55 }, Life = { 0.5, 1.0 }, Rise = 2 })
 		end
 	elseif tankFull and pressed then
 		if now - lastTankFullToastAt &gt; TANK_FULL_TOAST_GAP then
@@ -18230,12 +19041,18 @@ local function onHeartbeat(dt: number)
 		end
 	end
 
+	-- Water stream: only the Spray nozzle has one; the washer fans out to its line; scrubbing tools
+	-- work right on the dish.
 	if beam then
 		local b = beam :: Beam
-		b.Enabled = sending
-		b.Width0 = 0.2 + (stats.ToolIndex - 1) * 0.12
-		b.Width1 = b.Width0
+		b.Enabled = sending and mode == "Spray"
+		b.Width0 = 0.2 + (toolIndex - 1) * 0.08
+		b.Width1 = b.Width0 * 1.6
 		b.Color = ColorSequence.new(toolColor)
+	end
+	for _, lb in lineBeams do
+		lb.Enabled = sending and mode == "Line"
+		lb.Color = ColorSequence.new(toolColor:Lerp(Color3.new(1, 1, 1), 0.4))
 	end
 end
 
@@ -18269,7 +19086,6 @@ local function onPressBegan()
 	end
 
 	lastSendAt = os.clock()
-	lastClickPulseUntil = os.clock() + Config.Round.ClickPulseSeconds
 	sendScrub(result.Position, false, math.random())
 
 	clickCount += 1
@@ -20853,7 +21669,8 @@ local function fmtNum(n: number): string
 end
 
 local PREVIEW: { [string]: { Label: string, Get: (Types.RunStats) -&gt; number, Suffix: string? } } = {
-	HandSize = { Label = "Size", Get = function(s) return s.Radius end },
+	-- Size is the circle for scrub/spray tools, the line length for the washer, the splat for foam.
+	HandSize = { Label = "Size", Get = function(s) return s.LineLength or s.Radius end },
 	ScrubPower = { Label = "Power", Get = function(s) return s.Power end, Suffix = "/s" },
 	TankSize = { Label = "Tank", Get = function(s) return s.TankMax end },
 	Sneakers = { Label = "Speed", Get = function(s) return s.WalkSpeed end },
@@ -21015,7 +21832,14 @@ local function renderLeft(run: Types.RunState)
 	})
 	local s = run.Stats
 	ink({
-		Text = string.format("💪 %s/s   🖐️ %s   🎯 %s studs", fmtNum(s.Power), fmtNum(s.Radius), fmtNum(s.Reach)),
+		Text = string.format(
+			"💪 %s/s   %s   🎯 %s studs",
+			fmtNum(s.Power),
+			if s.Mode == "Line" then "📏 " .. fmtNum(s.LineLength or 0) .. " line"
+				elseif s.Mode == "Foam" then "💥 " .. fmtNum(s.Radius) .. " splat"
+				else "🖐️ " .. fmtNum(s.Radius),
+			fmtNum(s.Reach)
+		),
 		TextSize = 16,
 		TextColor3 = INK_DIM,
 		Position = UDim2.fromOffset(94, 42),

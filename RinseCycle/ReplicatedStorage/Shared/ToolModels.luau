@@ -93,8 +93,13 @@ end
 -- `cf`. Two crossing cores plus four corner cylinders.
 local function roundedBox(ctx: Ctx, name: string, size: Vector3, cf: CFrame, r: number, color: Color3, material: Enum.Material?, transparency: number?)
 	r = math.min(r, size.X / 2, size.Z / 2)
-	partCF(ctx, name, nil, Vector3.new(size.X - 2 * r, size.Y, size.Z), cf, color, material, transparency)
-	partCF(ctx, name, nil, Vector3.new(size.X, size.Y, size.Z - 2 * r), cf, color, material, transparency)
+	-- (A core with no width left is skipped: two zero-width slabs would share faces and flicker.)
+	if size.X - 2 * r > 0.06 then
+		partCF(ctx, name, nil, Vector3.new(size.X - 2 * r, size.Y, size.Z), cf, color, material, transparency)
+	end
+	if size.Z - 2 * r > 0.06 then
+		partCF(ctx, name, nil, Vector3.new(size.X, size.Y, size.Z - 2 * r), cf, color, material, transparency)
+	end
 	for _, sx in { -1, 1 } do
 		for _, sz in { -1, 1 } do
 			partCF(ctx, name .. "Edge", Enum.PartType.Cylinder, Vector3.new(size.Y, 2 * r, 2 * r), cf * CFrame.new(sx * (size.X / 2 - r), 0, sz * (size.Z / 2 - r)) * UPRIGHT, color, material, transparency)
@@ -132,7 +137,7 @@ BUILDERS[2] = function(ctx, _color)
 	local foamCF = CFrame.new(0, 0.85, 0)
 	roundedBox(ctx, "Foam", Vector3.new(3.4, 1.7, 2.3), foamCF, 0.55, yellow, Enum.Material.SmoothPlastic)
 	-- Slightly darker lower lip, so the block reads rounded.
-	roundedBox(ctx, "FoamBase", Vector3.new(3.3, 0.3, 2.2), CFrame.new(0, 0.12, 0), 0.5, shade(yellow, 0.85))
+	roundedBox(ctx, "FoamBase", Vector3.new(3.6, 0.3, 2.5), CFrame.new(0, 0.12, 0), 0.6, shade(yellow, 0.85))
 	partCF(ctx, "Glue", nil, Vector3.new(3.36, 0.08, 2.26), CFrame.new(0, 1.74, 0), Color3.fromRGB(255, 240, 190))
 	roundedBox(ctx, "Pad", Vector3.new(3.4, 0.5, 2.3), CFrame.new(0, 2.03, 0), 0.55, Color3.fromRGB(64, 160, 80), Enum.Material.Fabric)
 	-- Flecks on top of the pad.
@@ -160,8 +165,8 @@ end
 -- and a curved wooden handle with a rubber grip, a chrome ferrule and a hanging ring.
 BUILDERS[3] = function(ctx, color)
 	roundedBox(ctx, "Head", Vector3.new(3.2, 0.8, 1.6), CFrame.new(0, 1.15, 0), 0.8, color)
-	roundedBox(ctx, "HeadTop", Vector3.new(3.0, 0.25, 1.4), CFrame.new(0, 1.66, 0), 0.7, shade(color, 1.18))
-	roundedBox(ctx, "HeadBase", Vector3.new(3.1, 0.15, 1.5), CFrame.new(0, 0.7, 0), 0.75, shade(color, 0.75))
+	roundedBox(ctx, "HeadTop", Vector3.new(3.0, 0.25, 1.4), CFrame.new(0, 1.68, 0), 0.7, shade(color, 1.18))
+	roundedBox(ctx, "HeadBase", Vector3.new(3.0, 0.15, 1.5), CFrame.new(0, 0.7, 0), 0.75, shade(color, 0.75))
 	-- Bristle tufts: 7 x 3 grid, alternating lengths, white with pale tips.
 	for i = -3, 3 do
 		for j = -1, 1 do
@@ -233,8 +238,8 @@ BUILDERS[5] = function(ctx, color)
 	for i = 0, 3 do
 		part(ctx, "Vent", nil, Vector3.new(1.4, 0.12, 0.08), Vector3.new(0, 1.35 + i * 0.25, -1.23), nil, shade(color, 0.55))
 	end
-	part(ctx, "Badge", nil, Vector3.new(1.2, 0.4, 0.06), Vector3.new(0, 2.55, -1.22), nil, WHITE)
-	part(ctx, "BadgeStripe", nil, Vector3.new(1.0, 0.1, 0.07), Vector3.new(0, 2.55, -1.23), nil, Color3.fromRGB(255, 200, 60))
+	part(ctx, "Badge", nil, Vector3.new(1.1, 0.4, 0.06), Vector3.new(0, 2.55, -1.22), nil, WHITE)
+	part(ctx, "BadgeStripe", nil, Vector3.new(0.9, 0.1, 0.05), Vector3.new(0, 2.55, -1.26), nil, Color3.fromRGB(255, 200, 60))
 	-- Gauge on top.
 	part(ctx, "Gauge", Enum.PartType.Cylinder, Vector3.new(0.2, 0.8, 0.8), Vector3.new(0.6, 3.4, -0.5), UPRIGHT, CHROME, Enum.Material.Metal)
 	part(ctx, "GaugeFace", Enum.PartType.Cylinder, Vector3.new(0.06, 0.65, 0.65), Vector3.new(0.6, 3.52, -0.5), UPRIGHT, WHITE)
@@ -246,7 +251,7 @@ BUILDERS[5] = function(ctx, color)
 		part(ctx, "Wheel", Enum.PartType.Cylinder, Vector3.new(0.55, 1.5, 1.5), Vector3.new(x, 0.75, 1.2), nil, DARK)
 		part(ctx, "Tread", Enum.PartType.Cylinder, Vector3.new(0.45, 1.56, 1.56), Vector3.new(x, 0.75, 1.2), nil, RUBBER)
 		part(ctx, "Hub", Enum.PartType.Cylinder, Vector3.new(0.6, 0.7, 0.7), Vector3.new(x, 0.75, 1.2), nil, CHROME, Enum.Material.Metal)
-		part(ctx, "HubCap", Enum.PartType.Cylinder, Vector3.new(0.64, 0.3, 0.3), Vector3.new(x, 0.75, 1.2), nil, shade(color, 0.8))
+		part(ctx, "HubCap", Enum.PartType.Cylinder, Vector3.new(0.72, 0.3, 0.3), Vector3.new(x, 0.75, 1.2), nil, shade(color, 0.8))
 	end
 	-- Front foot.
 	part(ctx, "Foot", nil, Vector3.new(1.8, 0.35, 0.4), Vector3.new(0, 0.18, -0.9), nil, RUBBER)
@@ -260,9 +265,9 @@ BUILDERS[5] = function(ctx, color)
 	-- Hose reel on the right side.
 	part(ctx, "Reel", Enum.PartType.Cylinder, Vector3.new(0.5, 1.5, 1.5), Vector3.new(1.55, 2.0, 0.6), nil, shade(color, 0.8))
 	for i = 0, 2 do
-		part(ctx, "ReelCoil", Enum.PartType.Cylinder, Vector3.new(0.12, 1.25 - i * 0.12, 1.25 - i * 0.12), Vector3.new(1.84 + i * 0.001, 2.0, 0.6), nil, if i % 2 == 0 then DARK else RUBBER)
+		part(ctx, "ReelCoil", Enum.PartType.Cylinder, Vector3.new(0.12, 1.25 - i * 0.12, 1.25 - i * 0.12), Vector3.new(1.84 + i * 0.035, 2.0, 0.6), nil, if i % 2 == 0 then DARK else RUBBER)
 	end
-	part(ctx, "ReelCrank", nil, Vector3.new(0.12, 0.7, 0.14), Vector3.new(1.9, 2.3, 0.6), nil, CHROME, Enum.Material.Metal)
+	part(ctx, "ReelCrank", nil, Vector3.new(0.12, 0.7, 0.14), Vector3.new(2.04, 2.3, 0.6), nil, CHROME, Enum.Material.Metal)
 	-- Spray gun clipped on the left side, lance pointing forward.
 	local gx = -1.6
 	roundedBox(ctx, "GunBody", Vector3.new(0.45, 0.6, 1.1), CFrame.new(gx, 2.35, 0.5), 0.22, DARK)
@@ -298,7 +303,7 @@ BUILDERS[6] = function(ctx, color)
 	part(ctx, "Soap", Enum.PartType.Cylinder, Vector3.new(1.05, 1.05, 1.05), Vector3.new(0, y + 1.45, 0.5), UPRIGHT, Color3.fromRGB(255, 140, 210), nil, 0.1)
 	part(ctx, "SoapBubble", Enum.PartType.Ball, Vector3.one * 0.3, Vector3.new(0.2, y + 2.05, 0.4), nil, WHITE, nil, 0.3)
 	part(ctx, "TankCap", Enum.PartType.Cylinder, Vector3.new(0.3, 1.35, 1.35), Vector3.new(0, y + 2.73, 0.5), UPRIGHT, color)
-	knob(ctx, "Adjuster", CFrame.new(0, y + 0.3, -0.6) * UPRIGHT, 0.5, 0.6, BRASS, shade(BRASS, 0.8))
+	knob(ctx, "Adjuster", CFrame.new(0.72, y, -0.5), 0.5, 0.6, BRASS, shade(BRASS, 0.8))
 	-- Pistol grip, trigger and guard.
 	local gripCF = CFrame.new(0, 1.35, 1.55) * CFrame.Angles(math.rad(-14), 0, 0)
 	roundedBox(ctx, "Grip", Vector3.new(0.85, 2.1, 1.0), gripCF, 0.4, RUBBER)

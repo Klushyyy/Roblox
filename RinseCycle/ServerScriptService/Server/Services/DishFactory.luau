@@ -872,7 +872,7 @@ function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, leve
 			-- raycasts) skip parts whose group can't collide with the query's group, so a
 			-- "collides with nothing" group would make dirt impossible to clean.
 
-			local hp = math.max(1, math.floor(grimeType.HP * levelMult + 0.5))
+			local hp = math.max(1, math.floor(grimeType.HP * levelMult * (level.Toughness or 1) + 0.5))
 			local units = math.max(1, math.floor(grimeType.Units * levelMult + 0.5))
 			local minTool = grimeType.MinTool
 			if golden then

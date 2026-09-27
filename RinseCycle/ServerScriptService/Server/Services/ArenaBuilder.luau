@@ -960,8 +960,8 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 	local chrome = Color3.fromRGB(215, 220, 228)
 	-- Two display shelves at waist and head height for a ~5 stud character (anything higher can't be
 	-- seen from the floor).
-	local shelfYs = { 4, 12.5 }
-	local topY = 21
+	local shelfYs = { 4, 13.5 }
+	local topY = 25
 	local TOOL_SCALE = 1.45
 
 	-- Four corner posts plus a middle pair, floor to top, with little feet.
@@ -1002,8 +1002,9 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 		if not spot then
 			break
 		end
-		-- Upper-shelf tools stand on tall risers so they show above the shelf lip from the floor.
-		local riser = if spot.y > shelfYs[1] then 2.6 else 0.4
+		-- Upper-shelf tools stand on a short riser so they show above the shelf lip from the floor
+		-- (and the tallest, the foam cannon, still clears the top of the unit).
+		local riser = if spot.y > shelfYs[1] then 1.0 else 0.4
 		local pedestal = cyl(b, "Pedestal", riser, 6.4, SHOP_X - 0.5, spot.y + riser / 2, spot.z, Color3.new(1, 1, 1), nil, noCollide())
 		pedestal.Name = "ToolDisplay_" .. i
 		cyl(b, "PedestalGlow", 0.12, 7, SHOP_X - 0.5, spot.y + 0.06, spot.z, tool.Color, Enum.Material.Neon, noCollide())
@@ -1016,9 +1017,9 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 		end
 
 		local cost = Config.ToolCost(i, levelIndex) or 0
-		-- Price tag: a camera-facing card floating just in front of the shelf (never inside a shelf,
-		-- post or pedestal). Lower shelf: level with the tool's base; upper shelf: under the lip.
-		local tagY = if spot.y > shelfYs[1] then spot.y - 1.6 else spot.y + 1.3
+		-- Price tag: a camera-facing card floating just in front of the tool's own shelf, at the same
+		-- height above the shelf on both shelves, so each tag clearly belongs to the tool above it.
+		local tagY = spot.y + 1.3
 		local tag = box(b, "PriceTag_" .. i, Vector3.new(0.2, 0.2, 0.2), x1 + 1.6, tagY, spot.z, Color3.new(1, 1, 1), nil, { Transparency = 1, CanCollide = false, CastShadow = false })
 		tag:SetAttribute("ToolIndex", i)
 		local card = Instance.new("BillboardGui")
@@ -1278,7 +1279,7 @@ function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeSc
 	model:SetAttribute("Cleaned", 0)
 
 	local spawns: { CFrame } = {}
-	for _, x in { -9, -3, 3, 9 } do
+	for _, x in { -14, -10, -6, -2, 2, 6, 10, 14 } do -- one spot per party member (up to 8)
 		table.insert(spawns, footprint(origin, x, 0.5, SPAWN_Z))
 	end
 

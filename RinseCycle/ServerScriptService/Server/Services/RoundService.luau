@@ -106,11 +106,15 @@ type Run = {
 	Grime: { [BasePart]: GrimeEntry },
 	Dishes: { [number]: DishState },
 	Overlap: OverlapParams, -- Include filter on this run's GrimeFolder, built once per run
+	Splats: { FoamSplat }, -- live Foam Cannon splats, ticked by the foam loop
 	Connections: { RBXScriptConnection },
 	DrainSound: Sound?,
 	DrainRadius: number,
 	KillY: number,
 }
+
+-- A Foam Cannon splat: cleans everything within Radius of Position at Dps until Until.
+type FoamSplat = { Player: Player, Position: Vector3, Radius: number, Dps: number, Until: number }
 
 ----------------------------------------------------------------------------------------------------
 -- Constants
@@ -127,6 +131,8 @@ local TANK_FULL_FX_COOLDOWN = 2
 -- on spatial queries.
 local HOLD_MIN_INTERVAL = R.ScrubSendInterval * 0.4
 local HP_EPSILON = 1e-3
+local FOAM_TICK = 0.2
+local MAX_SPLATS_PER_PLAYER = 4
 local REQUESTS_PER_SECOND = 10
 local LEFT_GAME = "PlayerRemoving" -- internal RemoveFromRun reason: skip everything client-facing
 local EMPTY: { [string]: any } = table.freeze({})
@@ -551,7 +557,7 @@ local function retireGrime(run: Run, part: BasePart, entry: GrimeEntry, cleaner:
 			end
 			local bonus = 0
 			if rewardPlayer and pr then
-				bonus = math.floor(dish.Units * R.DishBonusShare)
+				bonus = math.floor(dish.Units * R.DishBonusShare * pr.Stats.CoinMult)
 				pr.Coins += bonus
 				for member in run.Players do
 					safe(DataService.AddStat, member, "DishesCleaned", 1)
@@ -994,7 +1000,7 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 		goldenChance *= 2 -- Lucky Charm pass: anyone in the party having it doubles the whole load's gold
 	end
 	local options = {
-		GrimeScale = 1 + R.PartyGrimeScale * (#members - 1),
+		GrimeScale = math.min(R.PartyGrimeCap or 99, 1 + R.PartyGrimeScale * (#members - 1)),
 		GoldenChance = goldenChance,
 	}
 
@@ -1051,6 +1057,7 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 		Grime = {},
 		Dishes = {},
 		Overlap = overlap,
+		Splats = {},
 		Connections = {},
 		DrainSound = nil,
 		DrainRadius = positive(arena.DrainRadius) or R.DrainRadius,
@@ -1209,7 +1216,28 @@ end
 -- Remote handlers
 ----------------------------------------------------------------------------------------------------
 
-local function onScrub(player: Player, aim: any, holding: any)
+-- Damages every live grime part in `parts` by `amount` (stops early when the tank fills).
+local function damageParts(run: Run, player: Player, pr: PlayerRun, parts: { BasePart }, amount: number)
+	for _, part in parts do
+		local entry = run.Grime[part]
+		if entry and not entry.Dead then
+			damageEntry(run, player, pr, part, entry, math.min(amount, entry.HP), false)
+			if run.Phase ~= "Playing" or pr.Tank >= pr.Stats.TankMax then
+				break
+			end
+		end
+	end
+end
+
+local function unitOr(v: any, fallback: Vector3): Vector3
+	if Util.IsFiniteVector3(v) and v.Magnitude > 1e-3 then
+		return v.Unit
+	end
+	return fallback
+end
+
+-- extra (optional table): { Dir = Vector3, Normal = Vector3 } for Line; { Normal = Vector3 } for Foam.
+local function onScrub(player: Player, aim: any, holding: any, extra: any)
 	-- 1. In a Playing run, finite aim, alive.
 	local run = runOf[player]
 	if not run or run.Phase ~= "Playing" or run.Ended then
@@ -1226,12 +1254,54 @@ local function onScrub(player: Player, aim: any, holding: any)
 
 	-- 2. Reach (plus slack for latency).
 	local stats = pr.Stats
-	if (aim - root.Position).Magnitude > stats.Reach + stats.Radius + R.ReachSlack then
+	local mode = stats.Mode or "Scrub"
+	local extent = if mode == "Line" then (stats.LineLength or 5) / 2 else stats.Radius
+	if (aim - root.Position).Magnitude > stats.Reach + extent + R.ReachSlack then
+		return
+	end
+	local info = if type(extra) == "table" then extra else {}
+
+	-- 3. Foam: one blob per FoamInterval; the splat does the cleaning over time (foamStep).
+	local now = os.clock()
+	if mode == "Foam" then
+		if now - pr.LastScrubAt < (stats.FoamInterval or 0.4) * 0.9 then
+			return
+		end
+		pr.LastScrubAt = now
+		if pr.Tank >= stats.TankMax then
+			sendTankFull(player, pr)
+			return
+		end
+		local mine = 0
+		local oldest: number? = nil
+		for i, splat in run.Splats do
+			if splat.Player == player then
+				mine += 1
+				oldest = oldest or i
+			end
+		end
+		if mine >= MAX_SPLATS_PER_PLAYER and oldest then
+			table.remove(run.Splats, oldest)
+		end
+		local seconds = stats.FoamSeconds or 2.5
+		table.insert(run.Splats, {
+			Player = player,
+			Position = aim,
+			Radius = stats.Radius,
+			Dps = stats.Power * (stats.FoamShare or 0.6),
+			Until = now + seconds,
+		})
+		fireAll(run, "Foam", {
+			Position = aim,
+			Normal = unitOr(info.Normal, Vector3.yAxis),
+			Radius = stats.Radius,
+			Duration = seconds,
+			By = player.UserId,
+		})
 		return
 	end
 
-	-- 3. Rate. Damage comes from server time, never from anything in the packet.
-	local now = os.clock()
+	-- 4. Rate. Damage comes from server time, never from anything in the packet.
 	local seconds
 	if holding == true and stats.Hold then
 		local dt = now - pr.LastScrubAt
@@ -1247,21 +1317,45 @@ local function onScrub(player: Player, aim: any, holding: any)
 	end
 	pr.LastScrubAt = now
 
-	-- 4. Tank full: nothing to do but remind them.
+	-- 5. Tank full: nothing to do but remind them.
 	if pr.Tank >= stats.TankMax then
 		sendTankFull(player, pr)
 		return
 	end
 
-	-- 5. Every grime spot under the hand takes the full hit (that's what Hand Size buys).
 	local amount = stats.Power * seconds
-	local parts = workspace:GetPartBoundsInRadius(aim, stats.Radius, run.Overlap)
-	for _, part in parts do
-		local entry = run.Grime[part]
-		if entry and not entry.Dead then
-			damageEntry(run, player, pr, part, entry, math.min(amount, entry.HP), false)
-			if run.Phase ~= "Playing" or pr.Tank >= pr.Stats.TankMax then
-				break
+	if mode == "Line" then
+		-- A thin box along the line, a little deep along the surface normal so curved dishes count.
+		local normal = unitOr(info.Normal, Vector3.yAxis)
+		local dir = unitOr(info.Dir, root.CFrame.RightVector)
+		dir = dir - normal * dir:Dot(normal)
+		dir = if dir.Magnitude > 1e-3 then dir.Unit else normal:Cross(Vector3.xAxis).Unit
+		local cf = CFrame.fromMatrix(aim, dir, normal)
+		local size = Vector3.new(stats.LineLength or 5, 2.4, stats.LineWidth or 0.9)
+		damageParts(run, player, pr, workspace:GetPartBoundsInBox(cf, size, run.Overlap), amount)
+		return
+	end
+	-- Scrub / Spray: every grime spot under the circle takes the full hit (that's what Size buys).
+	damageParts(run, player, pr, workspace:GetPartBoundsInRadius(aim, stats.Radius, run.Overlap), amount)
+end
+
+-- Foam splats: every FOAM_TICK, each live splat cleans what it covers.
+local function foamStep()
+	local now = os.clock()
+	for _, run in runs do
+		if run.Ended or run.Phase ~= "Playing" or #run.Splats == 0 then
+			continue
+		end
+		local i = 1
+		while i <= #run.Splats do
+			local splat = run.Splats[i]
+			local pr = run.Players[splat.Player]
+			if now >= splat.Until or not pr or not isHere(splat.Player) then
+				table.remove(run.Splats, i)
+			else
+				local parts = workspace:GetPartBoundsInRadius(splat.Position, splat.Radius, run.Overlap)
+				damageParts(run, splat.Player, pr, parts, splat.Dps * FOAM_TICK)
+				i += 1
 			end
 		end
 	end
@@ -1498,6 +1592,15 @@ function RoundService.Start()
 			local ok, err = pcall(drainStep)
 			if not ok then
 				warn("[RoundService] drain loop: " .. tostring(err))
+			end
+		end
+	end)
+	task.spawn(function()
+		while true do
+			task.wait(FOAM_TICK)
+			local ok, err = pcall(foamStep)
+			if not ok then
+				warn("[RoundService] foam loop: " .. tostring(err))
 			end
 		end
 	end)

@@ -24,6 +24,7 @@ local Types = require(Shared:WaitForChild("Types"))
 local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
 local UIKit = require(Client:WaitForChild("UIKit"))
+local Bubbles = require(Client:WaitForChild("Bubbles"))
 
 local SprayController = {}
 
@@ -61,7 +62,6 @@ local touchHeld = false
 
 local clickCount = 0
 local lastSendAt = 0
-local lastClickPulseUntil = 0 -- visuals stay on this long after a single (non-Hold) click
 local lastTankFullToastAt = 0
 
 -- Visuals, built lazily and reused for the whole session.
@@ -78,6 +78,12 @@ local hintLabel: TextLabel? = nil
 local hpAnchor: BasePart? = nil
 local hpBillboard: BillboardGui? = nil
 local hpFill: Frame? = nil
+-- Pressure Washer line: a thin glowing blade on the surface, with two beams fanning out to its ends.
+local linePart: BasePart? = nil
+local lineEnds: { Attachment } = {}
+local lineBeams: { Beam } = {}
+local lastSudsAt = 0
+local lastFoamAt = 0
 
 -- Touch-only UI.
 local touchGui: ScreenGui? = nil
@@ -95,7 +101,6 @@ local characterConns: { RBXScriptConnection } = {}
 local function resetPerRunState()
 	clickCount = 0
 	lastSendAt = 0
-	lastClickPulseUntil = 0
 end
 
 local function findHandPart(character: Model): BasePart?
@@ -195,6 +200,100 @@ local function ensureBeam(character: Model)
 		b.Parent = origin
 		beam = b
 	end
+end
+
+local function ensureLine()
+	if linePart and linePart.Parent and handAttachment and #lineBeams == 2 and lineBeams[1].Attachment0 == handAttachment then
+		return
+	end
+	if not linePart or not linePart.Parent then
+		local part = Instance.new("Part")
+		part.Name = "WasherLine"
+		part.Material = Enum.Material.Neon
+		part.Anchored = true
+		part.CanCollide = false
+		part.CanTouch = false
+		part.CanQuery = false
+		part.CastShadow = false
+		part.Transparency = 1
+		part.Size = Vector3.new(4, 0.12, 0.9)
+		part.Parent = workspace
+		linePart = part
+		table.clear(lineEnds)
+		for i = 1, 2 do
+			local a = Instance.new("Attachment")
+			a.Name = "LineEnd" .. i
+			a.Parent = part
+			lineEnds[i] = a
+		end
+	end
+	for _, b in lineBeams do
+		b:Destroy()
+	end
+	table.clear(lineBeams)
+	if not handAttachment then
+		return
+	end
+	for i = 1, 2 do
+		local b = Instance.new("Beam")
+		b.Attachment0 = handAttachment
+		b.Attachment1 = lineEnds[i]
+		b.Width0 = 0.15
+		b.Width1 = 0.35
+		b.LightEmission = 1
+		b.LightInfluence = 0
+		b.FaceCamera = true
+		b.Transparency = NumberSequence.new(0.1, 0.5)
+		b.Texture = "rbxasset://textures/particles/smoke_main.dds"
+		b.TextureMode = Enum.TextureMode.Wrap
+		b.TextureLength = 0.5
+		b.TextureSpeed = 4
+		b.Enabled = false
+		b.Parent = handAttachment
+		lineBeams[i] = b
+	end
+end
+
+local function hideLine()
+	if linePart then
+		linePart.Transparency = 1
+	end
+	for _, b in lineBeams do
+		b.Enabled = false
+	end
+end
+
+-- A foam blob flying from the hand to the target in a short arc (the splat itself comes back from
+-- the server as a "Foam" FX, so everyone in the party sees it).
+local function launchFoam(from: Vector3, to: Vector3, color: Color3)
+	local blob = Instance.new("Part")
+	blob.Name = "FoamBlob"
+	blob.Shape = Enum.PartType.Ball
+	blob.Material = Enum.Material.SmoothPlastic
+	blob.Color = Color3.new(1, 1, 1):Lerp(color, 0.15)
+	blob.Size = Vector3.one * 1.3
+	blob.Anchored = true
+	blob.CanCollide = false
+	blob.CanQuery = false
+	blob.CanTouch = false
+	blob.CastShadow = false
+	blob.CFrame = CFrame.new(from)
+	blob.Parent = workspace
+	local flight = math.clamp((to - from).Magnitude / 90, 0.12, 0.35)
+	local arc = math.min(4, (to - from).Magnitude * 0.08)
+	task.spawn(function()
+		local t = 0
+		while t < flight and blob.Parent do
+			t += RunService.Heartbeat:Wait()
+			local k = math.min(t / flight, 1)
+			local pos = from:Lerp(to, k) + Vector3.new(0, math.sin(k * math.pi) * arc, 0)
+			blob.CFrame = CFrame.new(pos)
+			if math.random() < 0.5 then
+				Bubbles.Emit(pos, { Count = 1, Spread = 0.3, Velocity = Vector3.new(0, 1, 0), Jitter = 1, Size = { 0.25, 0.6 }, Life = { 0.4, 0.8 } })
+			end
+		end
+		blob:Destroy()
+	end)
 end
 
 local function ensureHealthBar()
@@ -378,6 +477,7 @@ local function hideVisuals()
 	if hpBillboard then
 		hpBillboard.Enabled = false
 	end
+	hideLine()
 end
 
 local function cleanupForRunEnd()
@@ -431,8 +531,8 @@ local function toolName(tier: number): string
 	return "a bigger tool"
 end
 
-local function sendScrub(hitPosition: Vector3, holding: boolean, pitchJitter: number)
-	ScrubEvent:FireServer(hitPosition, holding)
+local function sendScrub(hitPosition: Vector3, holding: boolean, pitchJitter: number, extra: { [string]: any }?)
+	ScrubEvent:FireServer(hitPosition, holding, extra)
 	UIKit.PlaySound("Scrub", 0.9 + pitchJitter * 0.25)
 	if splashEmitter then
 		splashEmitter:Emit(SPLASH_EMIT_COUNT)
@@ -481,16 +581,41 @@ local function onHeartbeat(dt: number)
 	local inReach = distance <= stats.Reach
 	local toolColor = (Config.Tools[stats.ToolIndex] or Config.Tools[1]).Color
 
-	-- Scrub ring: tool colour in reach, red and dimmer out of reach.
+	local mode = stats.Mode or "Scrub"
+	local toolIndex = stats.ToolIndex
+	local normal = result.Normal
 	local r = ring :: BasePart
-	r.CFrame = CFrame.new(hitPos, hitPos + result.Normal) * CFrame.Angles(0, math.rad(90), 0)
-	r.Size = Vector3.new(RING_THICKNESS, stats.Radius * 2, stats.Radius * 2)
-	if inReach then
-		r.Color = toolColor
-		r.Transparency = RING_TRANSPARENCY
+
+	-- Aim marker. Scrub / Spray: a ring the size of the cleaning circle. Foam: a fainter ring the
+	-- size of the splat. Line: the washer's blade, turned with the camera, lying on the surface.
+	local lineDir: Vector3? = nil
+	if mode == "Line" then
+		r.Transparency = 1
+		r.CFrame = CFrame.new(hitPos, hitPos + normal) * CFrame.Angles(0, math.rad(90), 0) -- splash source
+		ensureLine()
+		local right = camera.CFrame.RightVector
+		local dir = right - normal * right:Dot(normal)
+		dir = if dir.Magnitude > 1e-3 then dir.Unit else normal:Cross(Vector3.xAxis).Unit
+		lineDir = dir
+		local len = stats.LineLength or 5
+		local lp = linePart :: BasePart
+		lp.Size = Vector3.new(len, 0.12, stats.LineWidth or 0.9)
+		lp.CFrame = CFrame.fromMatrix(hitPos + normal * 0.08, dir, normal)
+		lp.Color = if inReach then toolColor else UIKit.Theme.Colors.Bad
+		lp.Transparency = if inReach then 0.3 else 0.6
+		lineEnds[1].Position = Vector3.new(-len / 2, 0, 0)
+		lineEnds[2].Position = Vector3.new(len / 2, 0, 0)
 	else
-		r.Color = UIKit.Theme.Colors.Bad
-		r.Transparency = 0.5
+		hideLine()
+		r.CFrame = CFrame.new(hitPos, hitPos + normal) * CFrame.Angles(0, math.rad(90), 0)
+		r.Size = Vector3.new(RING_THICKNESS, stats.Radius * 2, stats.Radius * 2)
+		if inReach then
+			r.Color = toolColor
+			r.Transparency = if mode == "Foam" then 0.6 else RING_TRANSPARENCY
+		else
+			r.Color = UIKit.Theme.Colors.Bad
+			r.Transparency = 0.5
+		end
 	end
 
 	updateHealthBar(hitPart)
@@ -513,16 +638,25 @@ local function onHeartbeat(dt: number)
 	local sending = false
 
 	if canSend then
-		if stats.Hold then
-			if now - lastSendAt >= Config.Round.ScrubSendInterval then
-				lastSendAt = now
-				sendScrub(hitPos, true, math.random())
+		if mode == "Foam" then
+			-- One blob per FoamInterval while held.
+			if now - lastFoamAt >= (stats.FoamInterval or 0.4) then
+				lastFoamAt = now
+				local from = if handAttachment then handAttachment.WorldPosition else (root :: BasePart).Position
+				launchFoam(from, hitPos, toolColor)
+				sendScrub(hitPos, true, math.random(), { Normal = normal })
 			end
+		elseif now - lastSendAt >= Config.Round.ScrubSendInterval then
+			lastSendAt = now
+			sendScrub(hitPos, true, math.random(), if lineDir then { Dir = lineDir, Normal = normal } else nil)
 			sending = true
 		else
-			-- Single pulse: the actual send happens on the input's rising edge (onPressBegan), so
-			-- here we only decide whether the visuals (beam/splash) should still be showing.
-			sending = now < lastClickPulseUntil
+			sending = true
+		end
+		-- Scrubbing tools froth up suds right on the dish.
+		if sending and mode == "Scrub" and now - lastSudsAt > 0.12 then
+			lastSudsAt = now
+			Bubbles.Emit(hitPos + normal * 0.3, { Count = 2, Spread = stats.Radius * 0.6, Velocity = normal * 2 + Vector3.new(0, 1, 0), Jitter = 1.2, Size = { 0.2, 0.55 }, Life = { 0.5, 1.0 }, Rise = 2 })
 		end
 	elseif tankFull and pressed then
 		if now - lastTankFullToastAt > TANK_FULL_TOAST_GAP then
@@ -531,12 +665,18 @@ local function onHeartbeat(dt: number)
 		end
 	end
 
+	-- Water stream: only the Spray nozzle has one; the washer fans out to its line; scrubbing tools
+	-- work right on the dish.
 	if beam then
 		local b = beam :: Beam
-		b.Enabled = sending
-		b.Width0 = 0.2 + (stats.ToolIndex - 1) * 0.12
-		b.Width1 = b.Width0
+		b.Enabled = sending and mode == "Spray"
+		b.Width0 = 0.2 + (toolIndex - 1) * 0.08
+		b.Width1 = b.Width0 * 1.6
 		b.Color = ColorSequence.new(toolColor)
+	end
+	for _, lb in lineBeams do
+		lb.Enabled = sending and mode == "Line"
+		lb.Color = ColorSequence.new(toolColor:Lerp(Color3.new(1, 1, 1), 0.4))
 	end
 end
 
@@ -570,7 +710,6 @@ local function onPressBegan()
 	end
 
 	lastSendAt = os.clock()
-	lastClickPulseUntil = os.clock() + Config.Round.ClickPulseSeconds
 	sendScrub(result.Position, false, math.random())
 
 	clickCount += 1

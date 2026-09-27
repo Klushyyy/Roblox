@@ -93,6 +93,17 @@ local deleteConfirmFrame: Frame
 local selectedUid: string? = nil
 local deleteToken = 0
 
+-- Merge mode: pick MergeCount pets of one rarity; they become one pet of the next rarity.
+local MERGE_COUNT = Config.PetRules.MergeCount or 3
+local mergeMode = false
+local mergeSel: { string } = {}
+local mergeButton: TextButton
+local mergePanel: Frame
+local mergeInfo: TextLabel
+local mergeResult: TextLabel
+local mergeGo: TextButton
+local detailsCard: Frame
+
 -- Eggs window
 local eggTabsHolder: Frame
 local eggViewport: ViewportFrame
@@ -110,6 +121,46 @@ local currentEggId: string? = nil
 
 local GRID_CELL = Vector2.new(122, 156)
 local GRID_GAP = 10
+
+-- Same rule as the server: the next-rarity pet from the best egg any picked pet came from.
+local EGG_INDEX: { [string]: number } = {}
+for i, egg in Config.Eggs do
+	for _, e in egg.Pets do
+		EGG_INDEX[e.Pet] = math.max(EGG_INDEX[e.Pet] or 0, i)
+	end
+end
+local function nextRarityName(rarity: string): string?
+	local order = rarityOrder(rarity)
+	for id, r in Config.Rarities do
+		if r.Order == order + 1 then
+			return id
+		end
+	end
+	return nil
+end
+local function mergeResultId(ids: { string }): string?
+	if #ids == 0 then
+		return nil
+	end
+	local def = petDef(ids[1])
+	local nextRarity = def and nextRarityName(def.Rarity)
+	if not nextRarity then
+		return nil
+	end
+	local best = 1
+	for _, id in ids do
+		best = math.max(best, EGG_INDEX[id] or 1)
+	end
+	for i = best, 1, -1 do
+		for _, e in Config.Eggs[i].Pets do
+			local d = petDef(e.Pet)
+			if d and d.Rarity == nextRarity then
+				return e.Pet
+			end
+		end
+	end
+	return nil
+end
 
 local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick: (uid: string) -> ())
 	local card = UIKit.Card({
@@ -178,7 +229,41 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 		check.Name = "EquippedCheck"
 	end
 
-	if selectedUid == entry.Uid then
+	if mergeMode then
+		local pick = table.find(mergeSel, entry.Uid)
+		local firstDef = mergeSel[1] and ClientState.Meta and (function()
+			for _, pet in (ClientState.Meta :: any).Pets do
+				if pet.Uid == mergeSel[1] then
+					return petDef(pet.Id)
+				end
+			end
+			return nil
+		end)()
+		local blocked = nextRarityName(entry.Def.Rarity) == nil or (firstDef ~= nil and firstDef.Rarity ~= entry.Def.Rarity)
+		if pick then
+			local ring = UIKit.Stroke(card, C.Good, 4, 0)
+			ring.Name = "MergeRing"
+			local badge = UIKit.Label({
+				Text = tostring(pick),
+				Size = UDim2.fromOffset(28, 28),
+				Position = UDim2.fromOffset(4, 4),
+				TextSize = 20,
+				TextColor3 = C.Good,
+				Parent = card,
+				ZIndex = 4,
+			})
+			badge.Name = "MergeBadge"
+		elseif blocked then
+			local shade = Instance.new("Frame")
+			shade.Name = "Blocked"
+			shade.Size = UDim2.fromScale(1, 1)
+			shade.BackgroundColor3 = Color3.new(0, 0, 0)
+			shade.BackgroundTransparency = 0.5
+			shade.ZIndex = 4
+			UIKit.Corner(shade, 12)
+			shade.Parent = card
+		end
+	elseif selectedUid == entry.Uid then
 		local ring = UIKit.Stroke(card, C.Text, 3, 0.35)
 		ring.Name = "SelectRing"
 	end
@@ -222,13 +307,99 @@ local function refreshDetailPanel(meta: Types.MetaState?)
 	equipButton.BackgroundColor3 = if equipped then C.Warning else C.Good
 end
 
+local function refreshMergePanel()
+	local meta = ClientState.Meta
+	local ids: { string } = {}
+	if meta then
+		for _, uid in mergeSel do
+			for _, pet in meta.Pets do
+				if pet.Uid == uid then
+					table.insert(ids, pet.Id)
+				end
+			end
+		end
+	end
+	local resultId = mergeResultId(ids)
+	local resultDef = resultId and petDef(resultId)
+	mergeInfo.Text = string.format("Pick %d pets of the same rarity. Picked %d/%d.", MERGE_COUNT, #mergeSel, MERGE_COUNT)
+	if resultDef then
+		mergeResult.Text = string.format("➡️ %s %s", resultDef.Rarity, resultDef.Name)
+		mergeResult.TextColor3 = UIKit.RarityColor(resultDef.Rarity)
+	else
+		mergeResult.Text = "➡️ ?"
+		mergeResult.TextColor3 = C.TextDim
+	end
+	UIKit.SetButtonColor(mergeGo, if #mergeSel == MERGE_COUNT then C.Good else C.Disabled)
+end
+
 local function selectPet(uid: string?)
+	if mergeMode then
+		local meta = ClientState.Meta
+		if uid and meta then
+			local at = table.find(mergeSel, uid)
+			if at then
+				table.remove(mergeSel, at)
+			elseif #mergeSel < MERGE_COUNT then
+				local def, firstDef = nil, nil
+				for _, pet in meta.Pets do
+					if pet.Uid == uid then
+						def = petDef(pet.Id)
+					end
+					if pet.Uid == mergeSel[1] then
+						firstDef = petDef(pet.Id)
+					end
+				end
+				if def and nextRarityName(def.Rarity) == nil then
+					UIKit.Toast("Legendary pets are already the best!", "Bad")
+				elseif def and firstDef and def.Rarity ~= firstDef.Rarity then
+					UIKit.Toast("All pets in a merge must be the same rarity.", "Bad")
+				elseif def then
+					table.insert(mergeSel, uid)
+				end
+			end
+		end
+		refreshMergePanel()
+		PetsUI._refreshGrid()
+		return
+	end
 	selectedUid = uid
 	deleteConfirmFrame.Visible = false
 	refreshDetailPanel(ClientState.Meta)
 	-- The grid highlights the selection: cheapest is a full rebuild, and this list is at most
 	-- Config.PetRules.MaxInventory (60) cards, so it's not worth a more surgical update.
 	PetsUI._refreshGrid()
+end
+
+local function setMergeMode(on: boolean)
+	mergeMode = on
+	table.clear(mergeSel)
+	mergePanel.Visible = on
+	detailEmpty.Parent = if on then nil else detailsCard
+	detailFilled.Parent = if on then nil else detailsCard
+	mergeButton.Text = if on then "Done" else "🔮 Merge"
+	if on then
+		refreshMergePanel()
+	end
+	PetsUI._refreshGrid()
+end
+
+local function doMerge()
+	if #mergeSel ~= MERGE_COUNT then
+		UIKit.Toast(string.format("Pick %d pets of the same rarity first.", MERGE_COUNT), "Bad")
+		return
+	end
+	local result = ClientState.MetaRequest("Merge", table.clone(mergeSel))
+	if not result.Ok then
+		UIKit.Toast(result.Error or "Couldn't merge those.", "Bad")
+		return
+	end
+	table.clear(mergeSel)
+	UIKit.PlaySound("Hatch")
+	UIKit.Confetti()
+	local made = result.Pets and result.Pets[1]
+	local def = made and petDef(made.Id)
+	UIKit.Toast(if def then ("✨ Merged into a " .. def.Rarity .. " " .. def.Name .. "!") else "Merged!", "Good")
+	refreshMergePanel()
 end
 
 local function doEquipToggle()
@@ -308,18 +479,29 @@ local function buildPetsWindow()
 
 	equippedLabel = UIKit.Label({
 		Text = "Equipped 0/0",
-		Size = UDim2.new(0.4, 0, 1, 0),
+		Size = UDim2.new(0.3, 0, 1, 0),
 		TextSize = 22,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = header,
 	})
 	countLabel = UIKit.Label({
 		Text = "0/0",
-		Size = UDim2.new(0.2, 0, 1, 0),
-		Position = UDim2.new(0.4, 0, 0, 0),
+		Size = UDim2.new(0.12, 0, 1, 0),
+		Position = UDim2.new(0.3, 0, 0, 0),
 		TextSize = 22,
 		TextColor3 = C.TextDim,
 		Parent = header,
+	})
+	mergeButton = UIKit.Button({
+		Text = "🔮 Merge",
+		Size = UDim2.fromOffset(140, 40),
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -190, 0, 0),
+		Color = Color3.fromRGB(170, 110, 255),
+		Parent = header,
+		OnClick = function()
+			setMergeMode(not mergeMode)
+		end,
 	})
 	UIKit.Button({
 		Text = "Equip Best",
@@ -367,13 +549,58 @@ local function buildPetsWindow()
 	local gridPad = UIKit.Padding(gridScroll, 10)
 	gridPad.Parent = gridScroll
 
-	-- Details panel
+	-- Details panel (or the merge panel, in merge mode)
 	local details = UIKit.Card({
 		Size = UDim2.new(0, 300, 1, 0),
 		Position = UDim2.new(1, 0, 0, 0),
 		AnchorPoint = Vector2.new(1, 0),
 		Color = C.PanelDark,
 		Parent = body,
+	})
+
+	detailsCard = details
+
+	mergePanel = Instance.new("Frame")
+	mergePanel.Name = "Merge"
+	mergePanel.BackgroundTransparency = 1
+	mergePanel.Size = UDim2.fromScale(1, 1)
+	mergePanel.Visible = false
+	mergePanel.Parent = details
+	UIKit.Label({ Text = "🔮 Merge Pets", Size = UDim2.new(1, -16, 0, 34), Position = UDim2.new(0.5, 0, 0, 14), AnchorPoint = Vector2.new(0.5, 0), TextSize = 26, Parent = mergePanel })
+	UIKit.Label({
+		Text = string.format("%d pets of the same rarity become 1 pet of the next rarity.", MERGE_COUNT),
+		Size = UDim2.new(1, -24, 0, 48),
+		Position = UDim2.new(0.5, 0, 0, 56),
+		AnchorPoint = Vector2.new(0.5, 0),
+		TextSize = 16,
+		TextWrapped = true,
+		TextColor3 = C.TextDim,
+		Parent = mergePanel,
+	})
+	mergeInfo = UIKit.Label({ Text = "", Size = UDim2.new(1, -24, 0, 44), Position = UDim2.new(0.5, 0, 0, 116), AnchorPoint = Vector2.new(0.5, 0), TextSize = 17, TextWrapped = true, Parent = mergePanel })
+	mergeResult = UIKit.Label({ Text = "➡️ ?", Size = UDim2.new(1, -24, 0, 36), Position = UDim2.new(0.5, 0, 0, 170), AnchorPoint = Vector2.new(0.5, 0), TextSize = 22, TextScaled = true, Parent = mergePanel })
+	mergeGo = UIKit.Button({
+		Text = "MERGE!",
+		Icon = "✨",
+		Size = UDim2.new(1, -24, 0, 56),
+		Position = UDim2.new(0.5, 0, 0, 232),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Color = C.Disabled,
+		Parent = mergePanel,
+		OnClick = doMerge,
+	})
+	UIKit.Button({
+		Text = "Clear picks",
+		Size = UDim2.new(1, -24, 0, 40),
+		Position = UDim2.new(0.5, 0, 0, 300),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Color = C.PanelLight,
+		Parent = mergePanel,
+		OnClick = function()
+			table.clear(mergeSel)
+			refreshMergePanel()
+			PetsUI._refreshGrid()
+		end,
 	})
 
 	detailEmpty = Instance.new("Frame")
@@ -501,9 +728,16 @@ local function buildPetsWindow()
 
 	UIKit.RegisterWindow("Pets", {
 		Open = function()
+			if mergeMode then
+				setMergeMode(false)
+			end
 			PetsUI._refreshGrid()
 		end,
-		Close = function() end,
+		Close = function()
+			if mergeMode then
+				setMergeMode(false)
+			end
+		end,
 	})
 end
 

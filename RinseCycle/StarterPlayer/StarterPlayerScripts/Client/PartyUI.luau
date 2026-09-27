@@ -473,8 +473,9 @@ local function renderWait(party: Types.PartyState)
 	listLayout(avatars, Enum.FillDirection.Horizontal, 6)
 	for _, member in party.Members do
 		local isHost = member.UserId == party.HostUserId
+		local avatarSize = if #party.Members > 5 then 34 else 42 -- up to 8 fit on one row
 		local img = UIKit.New("ImageLabel", {
-			Size = UDim2.fromOffset(42, 42),
+			Size = UDim2.fromOffset(avatarSize, avatarSize),
 			BackgroundColor3 = Colors.PanelLight,
 			ScaleType = Enum.ScaleType.Crop,
 			Parent = avatars,
