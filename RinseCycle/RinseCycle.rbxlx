@@ -2825,8 +2825,38 @@ if not giveableItemsFolder then
 	print("[AdminServer] Created ServerStorage.AdminGiveableItems - empty until Tools are placed there (in EDIT mode, not Play mode) for :give to hand out")
 end
 
--- The one account allowed to use the admin system in a live server.
+-- The one account allowed to use the admin system in a live server: EnderBuilda (display name
+-- Klushy). Matched by UserId, with the username as a backup in case the id in Config changes.
 local OWNER_USER_ID = Config.Social.CreatorUserId
+local OWNER_USERNAME = "enderbuilda"
+
+local function isOwnerAccount(player)
+	return player.UserId == OWNER_USER_ID or string.lower(player.Name) == OWNER_USERNAME
+end
+
+-- GetDataStore throws in Studio when the place isn't published or "Enable Studio Access to API
+-- Services" is off. A throw here used to stop this whole script before its remotes existed, so the
+-- panel never appeared. A failed lookup now hands back a stand-in whose calls fail like a DataStore
+-- outage; every caller already pcalls and carries on without saving.
+local function getStore(name)
+	local ok, store = pcall(function()
+		return DataStoreService:GetDataStore(name)
+	end)
+	if ok and store then
+		return store
+	end
+	warn("[AdminServer] DataStore '" .. name .. "' unavailable (" .. tostring(store) .. ") - bans, warnings, mutes and logs won't save this session")
+	local function unavailable()
+		error("DataStore unavailable", 2)
+	end
+	return {
+		GetAsync = unavailable,
+		SetAsync = unavailable,
+		UpdateAsync = unavailable,
+		RemoveAsync = unavailable,
+		ListKeysAsync = unavailable,
+	}
+end
 
 local ALL_COMMANDS = {
 	"kick", "mute", "tempmute", "warn", "msg", "goto", "ban", "tempban",
@@ -2977,7 +3007,7 @@ local function getPlayerTier(player)
 	end
 
 	-- Only the owner, by UserId. Everyone else has no tier at all (so no panel and no commands).
-	if player.UserId == OWNER_USER_ID then return "Founder" end
+	if isOwnerAccount(player) then return "Founder" end
 	-- In Studio every tester is treated as the owner - it's your own machine and place file.
 	if RunService:IsStudio() then return "Founder" end
 	return nil
@@ -3041,7 +3071,7 @@ end
 -- guarantees is unique (a display name isn't).
 local function isOwner(player)
 	if player == nil then return false end
-	if player.UserId == OWNER_USER_ID then return true end
+	if isOwnerAccount(player) then return true end
 
 	-- Studio fallback. A Studio test client is very often NOT signed in
 	-- under the owner's username - multi-client testing names its players
@@ -3079,7 +3109,7 @@ ownerCheck = isOwner
 --
 -- A grant never touches Roblox's own record - it cannot: the real entitlement lives on Roblox's
 -- side and only a purchase changes it. This is the game choosing to treat someone as an owner.
-local GamepassGrantStore = DataStoreService:GetDataStore("RinseCycleGamepassGrants")
+local GamepassGrantStore = getStore("RinseCycleGamepassGrants")
 
 -- Rinse Cycle's passes come straight from Config.GamePasses, matched by Key ("doublecoins"), by
 -- name ("2x Coins") or by Id once one is pasted in. A grant is stored by Key (passes can still
@@ -3543,7 +3573,7 @@ end
 -- Ban persistence - supports an optional expiry (ExpiresAt, a unix
 -- timestamp) for temporary bans; nil/absent means permanent.
 -- =====================================================================
-local BanStore = DataStoreService:GetDataStore("RinseCycleBans")
+local BanStore = getStore("RinseCycleBans")
 
 -- Authoritative in-memory mirror of BanStore - [userIdStr] = banData, or
 -- false for "checked, not banned". Seeded once at startup below and kept
@@ -3719,7 +3749,7 @@ end)
 -- a player leaves. Reaching certain totals auto-escalates: 3rd warning
 -- kicks, 5th bans for 24 hours, 7th bans permanently.
 -- =====================================================================
-local WarningStore = DataStoreService:GetDataStore("RinseCycleWarnings")
+local WarningStore = getStore("RinseCycleWarnings")
 
 -- Authoritative in-memory mirror of WarningStore - [userIdStr] = the
 -- warnings array (possibly empty). getWarnings/saveWarnings are the only
@@ -3797,7 +3827,7 @@ end
 -- currently online, since the chat filter below runs on every single
 -- message and can't afford an async DataStore call per message.
 -- =====================================================================
-local MuteStore = DataStoreService:GetDataStore("RinseCycleMutes")
+local MuteStore = getStore("RinseCycleMutes")
 local mutedUserIds = {} -- [userId] = {Reason=, By=, Timestamp=, ExpiresAt=} - online users only, mirrors MuteStore
 
 -- Authoritative in-memory mirror of MuteStore covering EVERYONE ever
@@ -5299,7 +5329,7 @@ end
 -- :playerlogs [admin] (filtered to one admin, so abuse of a specific
 -- staff member's commands can be reviewed on its own).
 -- =====================================================================
-local CommandLogStore = DataStoreService:GetDataStore("RinseCycleCommandLog")
+local CommandLogStore = getStore("RinseCycleCommandLog")
 local COMMAND_LOG_KEY = "Log"
 -- Raised from 200 alongside the date filter and paging below. Browsing
 -- the log by day is only worth having if the log actually reaches back
