@@ -1010,7 +1010,18 @@ function HUD.Init()
 		if run and run.Phase == "Playing" then
 			if lastBannerStartedAt ~= run.StartedAt then
 				lastBannerStartedAt = run.StartedAt
-				showRunStartBanner(run.Level)
+				local level = run.Level
+				-- After the run-start cutscene, if one plays (it starts on the same RunState).
+				task.spawn(function()
+					task.wait(0.4)
+					local okCs, Cutscene = pcall(function()
+						return require(script.Parent:WaitForChild("Cutscene")) :: any
+					end)
+					while okCs and Cutscene.IsPlaying() do
+						task.wait(0.2)
+					end
+					showRunStartBanner(level)
+				end)
 			end
 		end
 	end

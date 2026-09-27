@@ -450,13 +450,14 @@ local function pizzeriaProps(b: Builder, k: RoomStyle)
 	-- glowing arched mouth facing the players.
 	local ox, oz = 250, -170
 	span(b, "OvenBase", ox - 90, ox + 90, fy, fy + 110, oz - 80, oz + 80, brick, Enum.Material.Brick)
-	for i, w in { 86, 74, 58, 38 } do
-		local y0 = fy + 110 + (i - 1) * 34
-		span(b, "OvenDome", ox - w, ox + w, y0, y0 + 34, oz - w * 0.9, oz + w * 0.9, brick, Enum.Material.Brick)
-	end
+	-- A round brick dome (a ball sunk into the base), with a lighter lip where they meet.
+	local dome = box(b, "OvenDome", Vector3.new(170, 150, 150), ox, fy + 110, oz, brick, Enum.Material.Brick)
+	dome.Shape = Enum.PartType.Ball
+	dome.Size = Vector3.new(170, 170, 170)
+	span(b, "OvenLip", ox - 92, ox + 92, fy + 104, fy + 112, oz - 82, oz + 82, Color3.fromRGB(200, 185, 170), Enum.Material.Concrete)
 	span(b, "OvenChimney", ox - 14, ox + 14, fy + 246, fy + ROOM_HEIGHT, oz - 14, oz + 14, Color3.fromRGB(120, 58, 44), Enum.Material.Brick)
 	span(b, "OvenMouth", ox - 44, ox + 44, fy + 124, fy + 184, oz - 80.5, oz - 76, Color3.fromRGB(255, 130, 40), Enum.Material.Neon, noCollide())
-	cyl(b, "OvenArch", 5, 88, ox, fy + 184, oz - 78.5, Color3.fromRGB(255, 150, 60), Enum.Material.Neon, noCollide()).CFrame = footprint(b.origin, ox, fy + 184, oz - 78.5) * CFrame.Angles(0, math.rad(90), 0)
+	cyl(b, "OvenArch", 4.8, 88, ox, fy + 184, oz - 78.5, Color3.fromRGB(255, 150, 60), Enum.Material.Neon, noCollide()).CFrame = footprint(b.origin, ox, fy + 184, oz - 78.5) * CFrame.Angles(0, math.rad(90), 0)
 	span(b, "OvenLedge", ox - 60, ox + 60, fy + 110, fy + 118, oz - 100, oz - 80, Color3.fromRGB(190, 180, 170), Enum.Material.Concrete)
 	local glow = Instance.new("PointLight")
 	glow.Color = Color3.fromRGB(255, 140, 60)
@@ -500,6 +501,61 @@ local function pizzeriaProps(b: Builder, k: RoomStyle)
 		for _, dz in { -95, 95 } do
 			cyl(b, "StoolSeat", 8, 44, tx, fy + 90, tz + dz, red)
 			span(b, "StoolPost", tx - 3, tx + 3, fy, fy + 86, tz + dz - 3, tz + dz + 3, Color3.fromRGB(40, 40, 44), Enum.Material.Metal)
+		end
+	end
+
+	-- Wooden ceiling beams and strings of warm party lights across the room.
+	for z = ROOM_Z_FRONT + 60, ROOM_Z_BACK - 40, 110 do
+		span(b, "Beam", -ROOM_HALF_X, ROOM_HALF_X, fy + ROOM_HEIGHT - 16, fy + ROOM_HEIGHT, z - 8, z + 8, Color3.fromRGB(110, 72, 44), Enum.Material.Wood, noCollide())
+	end
+	local bulbColors = { Color3.fromRGB(255, 200, 90), Color3.fromRGB(255, 120, 90), Color3.fromRGB(120, 220, 140), Color3.fromRGB(255, 240, 200) }
+	for li, z in { -440, -300, -160 } do
+		local n = 18
+		for i = 0, n do
+			local u = i / n
+			local x = -ROOM_HALF_X + 20 + u * (ROOM_HALF_X * 2 - 40)
+			local y = fy + 420 - math.sin(u * math.pi) * 60
+			local bulb = box(b, "PartyBulb", Vector3.new(7, 9, 7), x, y, z, bulbColors[(i + li) % #bulbColors + 1], Enum.Material.Neon, noCollide())
+			bulb.Shape = Enum.PartType.Ball
+			if i < n then
+				local nx = -ROOM_HALF_X + 20 + (i + 1) / n * (ROOM_HALF_X * 2 - 40)
+				local ny = fy + 420 - math.sin((i + 1) / n * math.pi) * 60
+				local len = math.sqrt((nx - x) ^ 2 + (ny - y) ^ 2)
+				local wire = box(b, "LightWire", Vector3.new(len, 0.8, 0.8), (x + nx) / 2, (y + ny) / 2 + 5, z, Color3.fromRGB(40, 40, 40), nil, noCollide())
+				wire.CFrame = footprint(b.origin, (x + nx) / 2, (y + ny) / 2 + 5, z) * CFrame.Angles(0, 0, math.atan2(ny - y, nx - x))
+			end
+		end
+	end
+	-- The front wall: a chalkboard menu, a neon OPEN sign and a glass door.
+	local frontZ = ROOM_Z_FRONT + 3
+	span(b, "MenuFrame", -150, 150, fy + 220, fy + 400, ROOM_Z_FRONT, ROOM_Z_FRONT + 2, Color3.fromRGB(120, 80, 50), Enum.Material.Wood, noCollide())
+	roomSign(b, "MENU\nMargherita  •  Pepperoni\nFour Cheese  •  Hawaiian", Vector3.new(284, 164, 2), 0, fy + 310, frontZ, Color3.fromRGB(35, 40, 38), Color3.fromRGB(245, 240, 225), Enum.NormalId.Front, Enum.Material.Slate)
+	roomSign(b, "OPEN", Vector3.new(110, 44, 2), 260, fy + 330, frontZ, Color3.fromRGB(30, 26, 26), Color3.fromRGB(255, 80, 120), Enum.NormalId.Front)
+	span(b, "DoorFrame", -320, -200, fy, fy + 240, ROOM_Z_FRONT, ROOM_Z_FRONT + 3, Color3.fromRGB(120, 80, 50), Enum.Material.Wood, noCollide())
+	local glass = span(b, "DoorGlass", -310, -210, fy + 10, fy + 230, ROOM_Z_FRONT + 3, ROOM_Z_FRONT + 4, Color3.fromRGB(190, 225, 255), Enum.Material.Neon, noCollide())
+	glass.Transparency = 0.3
+	-- Shelves of ingredients on the left wall: flour sacks, tomato tins, jars of basil.
+	local sx = -ROOM_HALF_X + 3
+	for level, y in { fy + 170, fy + 250 } do
+		span(b, "Shelf", sx, sx + 40, y - 4, y, -460, -300, Color3.fromRGB(140, 95, 60), Enum.Material.Wood)
+		for k = 0, 5 do
+			local z = -450 + k * 26
+			if (k + level) % 3 == 0 then
+				local sack = box(b, "FlourSack", Vector3.new(26, 34, 20), sx + 20, y + 17, z, Color3.fromRGB(240, 232, 215), Enum.Material.Fabric, noCollide())
+				sack.Shape = Enum.PartType.Ball
+			elseif (k + level) % 3 == 1 then
+				cyl(b, "TomatoTin", 22, 16, sx + 20, y + 11, z, Color3.fromRGB(210, 50, 40), Enum.Material.Metal, noCollide())
+			else
+				cyl(b, "BasilJar", 20, 14, sx + 20, y + 10, z, Color3.fromRGB(90, 170, 80), Enum.Material.Glass, noCollide())
+			end
+		end
+	end
+	-- Potted basil by the tables.
+	for _, px in { -250, 250 } do
+		cyl(b, "Pot", 30, 36, px, fy + 15, -470, Color3.fromRGB(190, 100, 60))
+		for k = 0, 4 do
+			local leaf = box(b, "Basil", Vector3.new(22, 22, 22), px + math.cos(k * 1.3) * 10, fy + 38 + (k % 2) * 8, -470 + math.sin(k * 1.3) * 10, Color3.fromRGB(80, 160, 70), nil, noCollide())
+			leaf.Shape = Enum.PartType.Ball
 		end
 	end
 
@@ -624,6 +680,52 @@ local function castleProps(b: Builder, k: RoomStyle)
 	for _, x in { -30, 0, 30 } do
 		local spike = box(b, "ThroneSpike", Vector3.new(14, 14, 8), x, fy + 268, tz0 - 26, gold, Enum.Material.Metal, noCollide())
 		spike.Shape = Enum.PartType.Ball
+	end
+
+	-- Wall torches on the pillars' room-facing sides, lighting the hall warmly.
+	for _, side in { -1, 1 } do
+		for _, z in { -460, -340, -220, -100 } do
+			if side == 1 and (z == -220 or z == -340) then
+				continue
+			end
+			local x = side * (ROOM_HALF_X - 52)
+			span(b, "TorchBracket", x - 3, x + 3, fy + 200, fy + 230, z - 3, z + 3, Color3.fromRGB(60, 50, 45), Enum.Material.Metal, noCollide())
+			cyl(b, "TorchCup", 10, 14, x, fy + 234, z, Color3.fromRGB(60, 50, 45), Enum.Material.Metal, noCollide())
+			local flame = box(b, "TorchFlame", Vector3.new(10, 18, 10), x, fy + 248, z, Color3.fromRGB(255, 160, 60), Enum.Material.Neon, noCollide())
+			flame.Shape = Enum.PartType.Ball
+			local light = Instance.new("PointLight")
+			light.Color = Color3.fromRGB(255, 170, 90)
+			light.Brightness = 1.2
+			light.Range = 55
+			light.Parent = flame
+		end
+	end
+	-- Suits of armour guarding the front wall, and shields with crests.
+	for _, ax in { -200, 200 } do
+		local steel = Color3.fromRGB(175, 180, 188)
+		span(b, "ArmourPlinth", ax - 30, ax + 30, fy, fy + 12, ROOM_Z_FRONT + 10, ROOM_Z_FRONT + 70, Color3.fromRGB(110, 104, 98), Enum.Material.Slate)
+		for _, lx in { -9, 9 } do
+			span(b, "ArmourLeg", ax + lx - 7, ax + lx + 7, fy + 12, fy + 92, ROOM_Z_FRONT + 33, ROOM_Z_FRONT + 47, steel, Enum.Material.Metal)
+		end
+		span(b, "ArmourBody", ax - 22, ax + 22, fy + 92, fy + 160, ROOM_Z_FRONT + 30, ROOM_Z_FRONT + 50, steel, Enum.Material.Metal)
+		for _, lx in { -30, 30 } do
+			span(b, "ArmourArm", ax + lx - 6, ax + lx + 6, fy + 100, fy + 158, ROOM_Z_FRONT + 34, ROOM_Z_FRONT + 46, steel, Enum.Material.Metal)
+		end
+		local helm = box(b, "ArmourHelm", Vector3.new(30, 34, 30), ax, fy + 178, ROOM_Z_FRONT + 40, steel, Enum.Material.Metal)
+		helm.Shape = Enum.PartType.Ball
+		span(b, "Visor", ax - 12, ax + 12, fy + 176, fy + 180, ROOM_Z_FRONT + 55, ROOM_Z_FRONT + 56, Color3.fromRGB(30, 30, 34), nil, noCollide())
+		span(b, "Plume", ax - 3, ax + 3, fy + 194, fy + 222, ROOM_Z_FRONT + 36, ROOM_Z_FRONT + 44, red, Enum.Material.Fabric, noCollide())
+		span(b, "Spear", ax + 40, ax + 44, fy + 12, fy + 250, ROOM_Z_FRONT + 38, ROOM_Z_FRONT + 42, Color3.fromRGB(120, 85, 55), Enum.Material.Wood, noCollide())
+		cyl(b, "Shield", 4, 70, ax, fy + 300, ROOM_Z_FRONT + 3, red, Enum.Material.Metal, noCollide()).CFrame = footprint(b.origin, ax, fy + 300, ROOM_Z_FRONT + 3) * CFrame.Angles(0, math.rad(90), 0)
+		cyl(b, "ShieldBoss", 5, 30, ax, fy + 300, ROOM_Z_FRONT + 4, gold, Enum.Material.Metal, noCollide()).CFrame = footprint(b.origin, ax, fy + 300, ROOM_Z_FRONT + 4) * CFrame.Angles(0, math.rad(90), 0)
+	end
+	-- A great tapestry on the front wall, and dark ceiling beams.
+	span(b, "Tapestry", -110, 110, fy + 170, fy + 440, ROOM_Z_FRONT, ROOM_Z_FRONT + 2, Color3.fromRGB(40, 60, 130), Enum.Material.Fabric, noCollide())
+	span(b, "TapestryTrim", -116, 116, fy + 164, fy + 172, ROOM_Z_FRONT, ROOM_Z_FRONT + 2.5, gold, Enum.Material.Metal, noCollide())
+	span(b, "TapestryRod", -124, 124, fy + 440, fy + 448, ROOM_Z_FRONT, ROOM_Z_FRONT + 6, gold, Enum.Material.Metal, noCollide())
+	span(b, "TapestryCrest", -40, 40, fy + 260, fy + 350, ROOM_Z_FRONT + 2, ROOM_Z_FRONT + 2.6, gold, Enum.Material.Metal, noCollide())
+	for z = ROOM_Z_FRONT + 60, ROOM_Z_BACK - 40, 120 do
+		span(b, "Beam", -ROOM_HALF_X, ROOM_HALF_X, fy + ROOM_HEIGHT - 20, fy + ROOM_HEIGHT, z - 10, z + 10, Color3.fromRGB(60, 40, 28), Enum.Material.Wood, noCollide())
 	end
 
 	-- Two chandeliers: a gold ring with glowing candles on a chain.
@@ -1011,7 +1113,7 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 		local riser = 0.4
 		local pedestal = cyl(b, "Pedestal", riser, 6.4, SHOP_X - 0.5, spot.y + 0.03 + riser / 2, spot.z, Color3.new(1, 1, 1), nil, noCollide())
 		pedestal.Name = "ToolDisplay_" .. i
-		cyl(b, "PedestalGlow", 0.12, 7, SHOP_X - 0.5, spot.y + 0.1, spot.z, tool.Color, Enum.Material.Neon, noCollide())
+		cyl(b, "PedestalGlow", 0.12, 7, SHOP_X - 0.5, spot.y + 0.2, spot.z, tool.Color, Enum.Material.Neon, noCollide())
 		local okModel, model = pcall(ToolModels.Build, i, TOOL_SCALE)
 		if okModel and model then
 			local basePos = worldPoint(b.origin, SHOP_X - 0.5, spot.y + 0.03 + riser, spot.z)

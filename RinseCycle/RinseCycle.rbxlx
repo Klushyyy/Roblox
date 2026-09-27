@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "0.4.0"
+Config.Version = "0.5.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -3104,13 +3104,14 @@ local function pizzeriaProps(b: Builder, k: RoomStyle)
 	-- glowing arched mouth facing the players.
 	local ox, oz = 250, -170
 	span(b, "OvenBase", ox - 90, ox + 90, fy, fy + 110, oz - 80, oz + 80, brick, Enum.Material.Brick)
-	for i, w in { 86, 74, 58, 38 } do
-		local y0 = fy + 110 + (i - 1) * 34
-		span(b, "OvenDome", ox - w, ox + w, y0, y0 + 34, oz - w * 0.9, oz + w * 0.9, brick, Enum.Material.Brick)
-	end
+	-- A round brick dome (a ball sunk into the base), with a lighter lip where they meet.
+	local dome = box(b, "OvenDome", Vector3.new(170, 150, 150), ox, fy + 110, oz, brick, Enum.Material.Brick)
+	dome.Shape = Enum.PartType.Ball
+	dome.Size = Vector3.new(170, 170, 170)
+	span(b, "OvenLip", ox - 92, ox + 92, fy + 104, fy + 112, oz - 82, oz + 82, Color3.fromRGB(200, 185, 170), Enum.Material.Concrete)
 	span(b, "OvenChimney", ox - 14, ox + 14, fy + 246, fy + ROOM_HEIGHT, oz - 14, oz + 14, Color3.fromRGB(120, 58, 44), Enum.Material.Brick)
 	span(b, "OvenMouth", ox - 44, ox + 44, fy + 124, fy + 184, oz - 80.5, oz - 76, Color3.fromRGB(255, 130, 40), Enum.Material.Neon, noCollide())
-	cyl(b, "OvenArch", 5, 88, ox, fy + 184, oz - 78.5, Color3.fromRGB(255, 150, 60), Enum.Material.Neon, noCollide()).CFrame = footprint(b.origin, ox, fy + 184, oz - 78.5) * CFrame.Angles(0, math.rad(90), 0)
+	cyl(b, "OvenArch", 4.8, 88, ox, fy + 184, oz - 78.5, Color3.fromRGB(255, 150, 60), Enum.Material.Neon, noCollide()).CFrame = footprint(b.origin, ox, fy + 184, oz - 78.5) * CFrame.Angles(0, math.rad(90), 0)
 	span(b, "OvenLedge", ox - 60, ox + 60, fy + 110, fy + 118, oz - 100, oz - 80, Color3.fromRGB(190, 180, 170), Enum.Material.Concrete)
 	local glow = Instance.new("PointLight")
 	glow.Color = Color3.fromRGB(255, 140, 60)
@@ -3154,6 +3155,61 @@ local function pizzeriaProps(b: Builder, k: RoomStyle)
 		for _, dz in { -95, 95 } do
 			cyl(b, "StoolSeat", 8, 44, tx, fy + 90, tz + dz, red)
 			span(b, "StoolPost", tx - 3, tx + 3, fy, fy + 86, tz + dz - 3, tz + dz + 3, Color3.fromRGB(40, 40, 44), Enum.Material.Metal)
+		end
+	end
+
+	-- Wooden ceiling beams and strings of warm party lights across the room.
+	for z = ROOM_Z_FRONT + 60, ROOM_Z_BACK - 40, 110 do
+		span(b, "Beam", -ROOM_HALF_X, ROOM_HALF_X, fy + ROOM_HEIGHT - 16, fy + ROOM_HEIGHT, z - 8, z + 8, Color3.fromRGB(110, 72, 44), Enum.Material.Wood, noCollide())
+	end
+	local bulbColors = { Color3.fromRGB(255, 200, 90), Color3.fromRGB(255, 120, 90), Color3.fromRGB(120, 220, 140), Color3.fromRGB(255, 240, 200) }
+	for li, z in { -440, -300, -160 } do
+		local n = 18
+		for i = 0, n do
+			local u = i / n
+			local x = -ROOM_HALF_X + 20 + u * (ROOM_HALF_X * 2 - 40)
+			local y = fy + 420 - math.sin(u * math.pi) * 60
+			local bulb = box(b, "PartyBulb", Vector3.new(7, 9, 7), x, y, z, bulbColors[(i + li) % #bulbColors + 1], Enum.Material.Neon, noCollide())
+			bulb.Shape = Enum.PartType.Ball
+			if i &lt; n then
+				local nx = -ROOM_HALF_X + 20 + (i + 1) / n * (ROOM_HALF_X * 2 - 40)
+				local ny = fy + 420 - math.sin((i + 1) / n * math.pi) * 60
+				local len = math.sqrt((nx - x) ^ 2 + (ny - y) ^ 2)
+				local wire = box(b, "LightWire", Vector3.new(len, 0.8, 0.8), (x + nx) / 2, (y + ny) / 2 + 5, z, Color3.fromRGB(40, 40, 40), nil, noCollide())
+				wire.CFrame = footprint(b.origin, (x + nx) / 2, (y + ny) / 2 + 5, z) * CFrame.Angles(0, 0, math.atan2(ny - y, nx - x))
+			end
+		end
+	end
+	-- The front wall: a chalkboard menu, a neon OPEN sign and a glass door.
+	local frontZ = ROOM_Z_FRONT + 3
+	span(b, "MenuFrame", -150, 150, fy + 220, fy + 400, ROOM_Z_FRONT, ROOM_Z_FRONT + 2, Color3.fromRGB(120, 80, 50), Enum.Material.Wood, noCollide())
+	roomSign(b, "MENU\nMargherita  •  Pepperoni\nFour Cheese  •  Hawaiian", Vector3.new(284, 164, 2), 0, fy + 310, frontZ, Color3.fromRGB(35, 40, 38), Color3.fromRGB(245, 240, 225), Enum.NormalId.Front, Enum.Material.Slate)
+	roomSign(b, "OPEN", Vector3.new(110, 44, 2), 260, fy + 330, frontZ, Color3.fromRGB(30, 26, 26), Color3.fromRGB(255, 80, 120), Enum.NormalId.Front)
+	span(b, "DoorFrame", -320, -200, fy, fy + 240, ROOM_Z_FRONT, ROOM_Z_FRONT + 3, Color3.fromRGB(120, 80, 50), Enum.Material.Wood, noCollide())
+	local glass = span(b, "DoorGlass", -310, -210, fy + 10, fy + 230, ROOM_Z_FRONT + 3, ROOM_Z_FRONT + 4, Color3.fromRGB(190, 225, 255), Enum.Material.Neon, noCollide())
+	glass.Transparency = 0.3
+	-- Shelves of ingredients on the left wall: flour sacks, tomato tins, jars of basil.
+	local sx = -ROOM_HALF_X + 3
+	for level, y in { fy + 170, fy + 250 } do
+		span(b, "Shelf", sx, sx + 40, y - 4, y, -460, -300, Color3.fromRGB(140, 95, 60), Enum.Material.Wood)
+		for k = 0, 5 do
+			local z = -450 + k * 26
+			if (k + level) % 3 == 0 then
+				local sack = box(b, "FlourSack", Vector3.new(26, 34, 20), sx + 20, y + 17, z, Color3.fromRGB(240, 232, 215), Enum.Material.Fabric, noCollide())
+				sack.Shape = Enum.PartType.Ball
+			elseif (k + level) % 3 == 1 then
+				cyl(b, "TomatoTin", 22, 16, sx + 20, y + 11, z, Color3.fromRGB(210, 50, 40), Enum.Material.Metal, noCollide())
+			else
+				cyl(b, "BasilJar", 20, 14, sx + 20, y + 10, z, Color3.fromRGB(90, 170, 80), Enum.Material.Glass, noCollide())
+			end
+		end
+	end
+	-- Potted basil by the tables.
+	for _, px in { -250, 250 } do
+		cyl(b, "Pot", 30, 36, px, fy + 15, -470, Color3.fromRGB(190, 100, 60))
+		for k = 0, 4 do
+			local leaf = box(b, "Basil", Vector3.new(22, 22, 22), px + math.cos(k * 1.3) * 10, fy + 38 + (k % 2) * 8, -470 + math.sin(k * 1.3) * 10, Color3.fromRGB(80, 160, 70), nil, noCollide())
+			leaf.Shape = Enum.PartType.Ball
 		end
 	end
 
@@ -3278,6 +3334,52 @@ local function castleProps(b: Builder, k: RoomStyle)
 	for _, x in { -30, 0, 30 } do
 		local spike = box(b, "ThroneSpike", Vector3.new(14, 14, 8), x, fy + 268, tz0 - 26, gold, Enum.Material.Metal, noCollide())
 		spike.Shape = Enum.PartType.Ball
+	end
+
+	-- Wall torches on the pillars' room-facing sides, lighting the hall warmly.
+	for _, side in { -1, 1 } do
+		for _, z in { -460, -340, -220, -100 } do
+			if side == 1 and (z == -220 or z == -340) then
+				continue
+			end
+			local x = side * (ROOM_HALF_X - 52)
+			span(b, "TorchBracket", x - 3, x + 3, fy + 200, fy + 230, z - 3, z + 3, Color3.fromRGB(60, 50, 45), Enum.Material.Metal, noCollide())
+			cyl(b, "TorchCup", 10, 14, x, fy + 234, z, Color3.fromRGB(60, 50, 45), Enum.Material.Metal, noCollide())
+			local flame = box(b, "TorchFlame", Vector3.new(10, 18, 10), x, fy + 248, z, Color3.fromRGB(255, 160, 60), Enum.Material.Neon, noCollide())
+			flame.Shape = Enum.PartType.Ball
+			local light = Instance.new("PointLight")
+			light.Color = Color3.fromRGB(255, 170, 90)
+			light.Brightness = 1.2
+			light.Range = 55
+			light.Parent = flame
+		end
+	end
+	-- Suits of armour guarding the front wall, and shields with crests.
+	for _, ax in { -200, 200 } do
+		local steel = Color3.fromRGB(175, 180, 188)
+		span(b, "ArmourPlinth", ax - 30, ax + 30, fy, fy + 12, ROOM_Z_FRONT + 10, ROOM_Z_FRONT + 70, Color3.fromRGB(110, 104, 98), Enum.Material.Slate)
+		for _, lx in { -9, 9 } do
+			span(b, "ArmourLeg", ax + lx - 7, ax + lx + 7, fy + 12, fy + 92, ROOM_Z_FRONT + 33, ROOM_Z_FRONT + 47, steel, Enum.Material.Metal)
+		end
+		span(b, "ArmourBody", ax - 22, ax + 22, fy + 92, fy + 160, ROOM_Z_FRONT + 30, ROOM_Z_FRONT + 50, steel, Enum.Material.Metal)
+		for _, lx in { -30, 30 } do
+			span(b, "ArmourArm", ax + lx - 6, ax + lx + 6, fy + 100, fy + 158, ROOM_Z_FRONT + 34, ROOM_Z_FRONT + 46, steel, Enum.Material.Metal)
+		end
+		local helm = box(b, "ArmourHelm", Vector3.new(30, 34, 30), ax, fy + 178, ROOM_Z_FRONT + 40, steel, Enum.Material.Metal)
+		helm.Shape = Enum.PartType.Ball
+		span(b, "Visor", ax - 12, ax + 12, fy + 176, fy + 180, ROOM_Z_FRONT + 55, ROOM_Z_FRONT + 56, Color3.fromRGB(30, 30, 34), nil, noCollide())
+		span(b, "Plume", ax - 3, ax + 3, fy + 194, fy + 222, ROOM_Z_FRONT + 36, ROOM_Z_FRONT + 44, red, Enum.Material.Fabric, noCollide())
+		span(b, "Spear", ax + 40, ax + 44, fy + 12, fy + 250, ROOM_Z_FRONT + 38, ROOM_Z_FRONT + 42, Color3.fromRGB(120, 85, 55), Enum.Material.Wood, noCollide())
+		cyl(b, "Shield", 4, 70, ax, fy + 300, ROOM_Z_FRONT + 3, red, Enum.Material.Metal, noCollide()).CFrame = footprint(b.origin, ax, fy + 300, ROOM_Z_FRONT + 3) * CFrame.Angles(0, math.rad(90), 0)
+		cyl(b, "ShieldBoss", 5, 30, ax, fy + 300, ROOM_Z_FRONT + 4, gold, Enum.Material.Metal, noCollide()).CFrame = footprint(b.origin, ax, fy + 300, ROOM_Z_FRONT + 4) * CFrame.Angles(0, math.rad(90), 0)
+	end
+	-- A great tapestry on the front wall, and dark ceiling beams.
+	span(b, "Tapestry", -110, 110, fy + 170, fy + 440, ROOM_Z_FRONT, ROOM_Z_FRONT + 2, Color3.fromRGB(40, 60, 130), Enum.Material.Fabric, noCollide())
+	span(b, "TapestryTrim", -116, 116, fy + 164, fy + 172, ROOM_Z_FRONT, ROOM_Z_FRONT + 2.5, gold, Enum.Material.Metal, noCollide())
+	span(b, "TapestryRod", -124, 124, fy + 440, fy + 448, ROOM_Z_FRONT, ROOM_Z_FRONT + 6, gold, Enum.Material.Metal, noCollide())
+	span(b, "TapestryCrest", -40, 40, fy + 260, fy + 350, ROOM_Z_FRONT + 2, ROOM_Z_FRONT + 2.6, gold, Enum.Material.Metal, noCollide())
+	for z = ROOM_Z_FRONT + 60, ROOM_Z_BACK - 40, 120 do
+		span(b, "Beam", -ROOM_HALF_X, ROOM_HALF_X, fy + ROOM_HEIGHT - 20, fy + ROOM_HEIGHT, z - 10, z + 10, Color3.fromRGB(60, 40, 28), Enum.Material.Wood, noCollide())
 	end
 
 	-- Two chandeliers: a gold ring with glowing candles on a chain.
@@ -3665,7 +3767,7 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 		local riser = 0.4
 		local pedestal = cyl(b, "Pedestal", riser, 6.4, SHOP_X - 0.5, spot.y + 0.03 + riser / 2, spot.z, Color3.new(1, 1, 1), nil, noCollide())
 		pedestal.Name = "ToolDisplay_" .. i
-		cyl(b, "PedestalGlow", 0.12, 7, SHOP_X - 0.5, spot.y + 0.1, spot.z, tool.Color, Enum.Material.Neon, noCollide())
+		cyl(b, "PedestalGlow", 0.12, 7, SHOP_X - 0.5, spot.y + 0.2, spot.z, tool.Color, Enum.Material.Neon, noCollide())
 		local okModel, model = pcall(ToolModels.Build, i, TOOL_SCALE)
 		if okModel and model then
 			local basePos = worldPoint(b.origin, SHOP_X - 0.5, spot.y + 0.03 + riser, spot.z)
@@ -13512,6 +13614,7 @@ local ShopUI = require(Client:WaitForChild("ShopUI"))
 local RanksUI = require(Client:WaitForChild("RanksUI"))
 local RebirthUI = require(Client:WaitForChild("RebirthUI"))
 local DailyUI = require(Client:WaitForChild("DailyUI"))
+local Cutscene = require(Client:WaitForChild("Cutscene"))
 local PetsUI = require(Client:WaitForChild("PetsUI"))
 local SprayController = require(Client:WaitForChild("SprayController"))
 local PetRenderer = require(Client:WaitForChild("PetRenderer"))
@@ -13540,6 +13643,7 @@ step("ShopUI", ShopUI.Init)
 step("RanksUI", RanksUI.Init)
 step("RebirthUI", RebirthUI.Init)
 step("DailyUI", DailyUI.Init)
+step("Cutscene", Cutscene.Init)
 step("PetsUI", PetsUI.Init)
 step("SprayController", SprayController.Init)
 step("PetRenderer", PetRenderer.Init)
@@ -13668,7 +13772,775 @@ function ClientState.LocalPlayer(): Player
 end
 
 return ClientState</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">DailyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">Cutscene</string><ProtectedString name="Source">--[[
+	Cutscene - plays the run-start cutscene (CutsceneScene) when your party's dishwasher starts.
+
+	  * Fades to black, builds the scene far from everything (client-only parts, so each player sees
+	    their own and nobody waits for anybody), and flies the camera through it with cinematic
+	    letterbox bars. The HUD is hidden while it plays.
+	  * SKIP (bottom-right; also Space / Enter / gamepad B) fades out early. Either way it fades to
+	    black, the scene is removed, the camera comes back to your character and it fades in: you're
+	    in the dishwasher, and the run is already going (skippers get a head start).
+	  * Only plays when you join a run at its start, not when rejoining mid-run.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Types = require(Shared:WaitForChild("Types"))
+
+local Client = script.Parent
+local ClientState = require(Client:WaitForChild("ClientState"))
+local UIKit = require(Client:WaitForChild("UIKit"))
+local Scene = require(Client:WaitForChild("CutsceneScene"))
+local Bubbles = require(Client:WaitForChild("Bubbles"))
+
+local Cutscene = {}
+
+local LocalPlayer = Players.LocalPlayer
+local SCENE_ORIGIN = CFrame.new(8000, 400, 0) -- far from the lobby and every arena
+local FADE = 0.45
+local MAX_START_AGE = 12 -- seconds into a run after which we don't start the cutscene
+
+local initialized = false
+local playing = false
+local skipRequested = false
+local lastRunKey: string? = nil
+
+local gui: ScreenGui
+local black: Frame
+local topBar: Frame
+local bottomBar: Frame
+local skipButton: TextButton
+
+local function tweenBlack(to: number, seconds: number)
+	UIKit.Tween(black, { BackgroundTransparency = to }, seconds)
+	task.wait(seconds)
+end
+
+-- Hide every other ScreenGui of ours while the cutscene plays; returns a restore function.
+local function hideHud(): () -&gt; ()
+	local hidden: { ScreenGui } = {}
+	local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	if playerGui then
+		for _, g in playerGui:GetChildren() do
+			if g:IsA("ScreenGui") and g ~= gui and g.Enabled and not string.find(g.Name, "Probe") then
+				g.Enabled = false
+				table.insert(hidden, g)
+			end
+		end
+	end
+	return function()
+		for _, g in hidden do
+			if g.Parent then
+				g.Enabled = true
+			end
+		end
+	end
+end
+
+local function setControls(enabled: boolean)
+	pcall(function()
+		local module = LocalPlayer:WaitForChild("PlayerScripts"):FindFirstChild("PlayerModule")
+		if module then
+			local controls = (require(module :: any) :: any):GetControls()
+			if enabled then
+				controls:Enable()
+			else
+				controls:Disable()
+			end
+		end
+	end)
+end
+
+local function play(levelIndex: number)
+	if playing then
+		return
+	end
+	playing = true
+	skipRequested = false
+	local camera = Workspace.CurrentCamera
+
+	gui.Enabled = true
+	black.BackgroundTransparency = 1
+	topBar.Size = UDim2.new(1, 0, 0, 0)
+	bottomBar.Size = UDim2.new(1, 0, 0, 0)
+	skipButton.Visible = false
+	tweenBlack(0, 0.25)
+
+	local restoreHud = hideHud()
+	setControls(false)
+	local scene
+	local ok = pcall(function()
+		scene = Scene.Build(levelIndex, SCENE_ORIGIN, Workspace)
+	end)
+	if not ok or not scene or not camera then
+		restoreHud()
+		setControls(true)
+		tweenBlack(1, FADE)
+		gui.Enabled = false
+		playing = false
+		return
+	end
+	local oldType, oldFov = camera.CameraType, camera.FieldOfView
+	camera.CameraType = Enum.CameraType.Scriptable
+	scene:Update(0)
+	local cf, fov = scene:Camera(0)
+	camera.CFrame, camera.FieldOfView = cf, fov
+
+	-- Letterbox in, fade up, SKIP appears.
+	UIKit.Tween(topBar, { Size = UDim2.new(1, 0, 0.1, 0) }, 0.5)
+	UIKit.Tween(bottomBar, { Size = UDim2.new(1, 0, 0.1, 0) }, 0.5)
+	tweenBlack(1, FADE)
+	skipButton.Visible = true
+
+	local t = 0
+	local bubbleClock = 0
+	local inside = scene:InsidePoints()
+	local conn = RunService.RenderStepped:Connect(function(dt)
+		t += dt
+		-- Once the dishwasher starts, it fills with bubbles.
+		if t &gt; 16.2 then
+			bubbleClock += dt
+			if bubbleClock &gt; 0.08 then
+				bubbleClock = 0
+				local at = inside[math.random(1, #inside)]
+				pcall(Bubbles.Emit, at, { Count = 2, Spread = 0.5, Velocity = Vector3.new(0, 1, 0), Jitter = 0.8, Size = { 0.08, 0.25 }, Life = { 0.8, 1.6 }, Rise = 1 })
+			end
+		end
+		local okStep = pcall(function()
+			scene:Update(t)
+			local c, f = scene:Camera(t)
+			camera.CFrame, camera.FieldOfView = c, f
+		end)
+		if not okStep then
+			skipRequested = true
+		end
+	end)
+	while t &lt; Scene.Duration - FADE and not skipRequested do
+		task.wait()
+	end
+	skipButton.Visible = false
+	tweenBlack(0, FADE)
+	conn:Disconnect()
+	pcall(function()
+		scene:Destroy()
+	end)
+	camera.CameraType = if oldType == Enum.CameraType.Scriptable then Enum.CameraType.Custom else oldType
+	camera.FieldOfView = oldFov
+	local character = LocalPlayer.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		camera.CameraSubject = humanoid
+	end
+	restoreHud()
+	setControls(true)
+	UIKit.Tween(topBar, { Size = UDim2.new(1, 0, 0, 0) }, 0.4)
+	UIKit.Tween(bottomBar, { Size = UDim2.new(1, 0, 0, 0) }, 0.4)
+	tweenBlack(1, FADE + 0.15)
+	gui.Enabled = false
+	playing = false
+end
+
+function Cutscene.IsPlaying(): boolean
+	return playing
+end
+
+function Cutscene.Skip()
+	if playing then
+		skipRequested = true
+	end
+end
+
+function Cutscene.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+
+	local screen, root = UIKit.CreateScreen("Cutscene", 60)
+	gui = screen
+	gui.Enabled = false
+	local function bar(name: string, anchorY: number): Frame
+		local f = Instance.new("Frame")
+		f.Name = name
+		f.BackgroundColor3 = Color3.new(0, 0, 0)
+		f.BorderSizePixel = 0
+		f.AnchorPoint = Vector2.new(0, anchorY)
+		f.Position = UDim2.fromScale(0, anchorY)
+		f.Size = UDim2.new(1, 0, 0, 0)
+		f.ZIndex = 5
+		f.Parent = root
+		return f
+	end
+	topBar = bar("TopBar", 0)
+	bottomBar = bar("BottomBar", 1)
+	black = Instance.new("Frame")
+	black.Name = "Fade"
+	black.BackgroundColor3 = Color3.new(0, 0, 0)
+	black.BorderSizePixel = 0
+	black.Size = UDim2.fromScale(1, 1)
+	black.BackgroundTransparency = 1
+	black.ZIndex = 20
+	black.Parent = root
+	skipButton = UIKit.Button({
+		Name = "Skip",
+		Text = "Skip  ⏭",
+		Size = UDim2.fromOffset(170, 56),
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -24, 1, -24),
+		Color = Color3.fromRGB(60, 66, 80),
+		TextSize = 24,
+		Visible = false,
+		Parent = root,
+		OnClick = Cutscene.Skip,
+	})
+	skipButton.ZIndex = 10
+	UIKit.LayoutChanged:Connect(function()
+		local safe = UIKit.SafeInsets()
+		skipButton.Position = UDim2.new(1, -(24 + safe.Right), 1, -(24 + safe.Bottom))
+	end)
+
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if not playing or processed then
+			return
+		end
+		local k = input.KeyCode
+		if k == Enum.KeyCode.Space or k == Enum.KeyCode.Return or k == Enum.KeyCode.ButtonB or k == Enum.KeyCode.ButtonA then
+			Cutscene.Skip()
+		end
+	end)
+
+	-- A new run we're starting from the top: play the cutscene for its level.
+	ClientState.Changed:Connect(function(kind)
+		if kind ~= "Run" then
+			return
+		end
+		local run = ClientState.Run :: Types.RunState?
+		if not run then
+			lastRunKey = nil
+			return
+		end
+		local key = tostring(run.ArenaName) .. ":" .. tostring(run.StartedAt)
+		if key == lastRunKey then
+			return
+		end
+		lastRunKey = key
+		local age = Workspace:GetServerTimeNow() - (tonumber(run.StartedAt) or 0)
+		if run.Phase == "Playing" and age &lt; MAX_START_AGE then
+			task.spawn(play, run.Level)
+		end
+	end)
+end
+
+return Cutscene</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">CutsceneScene</string><ProtectedString name="Source">--[[
+	CutsceneScene - the set, actors and timeline for the run-start cutscene (played by Cutscene).
+
+	The story (no words, just implied): a family finishes a meal, Mum stacks the dirty plates,
+	loads them into the dishwasher, shuts the door and presses Start... and the camera pushes into
+	the dishwasher, where (cut to the game) it turns out the cleaning is done by us.
+
+	Everything is a pure function of time: Scene.Build(levelIndex, origin, parent) makes the parts
+	(client-only, far from the map) and returns a scene; scene:Update(t) poses every actor and prop
+	for time t; scene:Camera(t) returns the camera CFrame and field of view. Skipping is just "stop
+	calling Update". Three flavours by level: family dinner (spaghetti), pizza party (pizza, party
+	hats, balloons) and royal banquet (gold plates, crowns, roast, candles).
+
+	Scene space: +X right, +Y up, +Z toward the back wall; the camera mostly looks down +Z.
+]]
+
+local Scene = {}
+Scene.__index = Scene
+
+Scene.Duration = 19.5
+
+local SKIN = Color3.fromRGB(245, 205, 150)
+local WHITE = Color3.fromRGB(250, 250, 248)
+
+-- Level flavours.
+local THEMES = {
+	{ -- 1: Family Dinner
+		Wall = Color3.fromRGB(236, 222, 196), Floor = Color3.fromRGB(176, 128, 86), FloorMat = Enum.Material.WoodPlanks,
+		Table = Color3.fromRGB(150, 104, 70), Cloth = nil, PlateRim = Color3.fromRGB(120, 175, 230), PlateBody = WHITE,
+		Counter = Color3.fromRGB(240, 238, 232), CounterTop = Color3.fromRGB(215, 215, 220),
+		Shirts = { Color3.fromRGB(70, 110, 190), Color3.fromRGB(220, 90, 110), Color3.fromRGB(110, 190, 110) },
+		Pants = { Color3.fromRGB(60, 60, 80), Color3.fromRGB(70, 70, 90), Color3.fromRGB(90, 70, 60) },
+		Food = "Spaghetti", Mess = { Color3.fromRGB(190, 45, 35), Color3.fromRGB(120, 75, 40) },
+	},
+	{ -- 2: Pizza Party
+		Wall = Color3.fromRGB(250, 226, 200), Floor = Color3.fromRGB(235, 235, 230), FloorMat = Enum.Material.SmoothPlastic,
+		Table = Color3.fromRGB(120, 80, 50), Cloth = { Color3.fromRGB(214, 60, 55), WHITE }, PlateRim = Color3.fromRGB(220, 60, 50), PlateBody = WHITE,
+		Counter = Color3.fromRGB(200, 205, 212), CounterTop = Color3.fromRGB(176, 124, 78),
+		Shirts = { Color3.fromRGB(255, 160, 40), Color3.fromRGB(120, 90, 220), Color3.fromRGB(40, 180, 200) },
+		Pants = { Color3.fromRGB(50, 60, 90), Color3.fromRGB(60, 60, 60), Color3.fromRGB(80, 60, 100) },
+		Food = "Pizza", Mess = { Color3.fromRGB(214, 58, 34), Color3.fromRGB(255, 200, 60) }, Party = true,
+	},
+	{ -- 3: Royal Banquet
+		Wall = Color3.fromRGB(150, 144, 136), WallMat = Enum.Material.Cobblestone, Floor = Color3.fromRGB(120, 25, 35), FloorMat = Enum.Material.Fabric,
+		Table = Color3.fromRGB(92, 58, 38), Cloth = nil, PlateRim = Color3.fromRGB(230, 190, 90), PlateBody = Color3.fromRGB(245, 215, 120),
+		Counter = Color3.fromRGB(92, 58, 38), CounterTop = Color3.fromRGB(238, 232, 222),
+		Shirts = { Color3.fromRGB(140, 30, 50), Color3.fromRGB(70, 40, 140), Color3.fromRGB(30, 100, 70) },
+		Pants = { Color3.fromRGB(230, 190, 90), Color3.fromRGB(40, 30, 60), Color3.fromRGB(50, 40, 30) },
+		Food = "Roast", Mess = { Color3.fromRGB(110, 70, 40), Color3.fromRGB(240, 235, 220) }, Royal = true,
+	},
+}
+
+-- Layout (scene space).
+local TABLE_C = Vector3.new(-4, 0, 7)
+local TABLE_TOP = 3
+local DW = Vector3.new(15.5, 0, 13.5) -- dishwasher centre on the floor
+local DW_FRONT_Z = 12 -- its door's plane
+local SEAT_Y = 1.8
+
+----------------------------------------------------------------------------------------------------
+-- Helpers
+----------------------------------------------------------------------------------------------------
+
+local function smooth(x: number): number
+	x = math.clamp(x, 0, 1)
+	return x * x * (3 - 2 * x)
+end
+
+-- 0 before a, 1 after b, smooth in between.
+local function phase(t: number, a: number, b: number): number
+	return smooth((t - a) / (b - a))
+end
+
+function Scene:part(name: string, size: Vector3, cf: CFrame, color: Color3, material: Enum.Material?, shape: Enum.PartType?): Part
+	local p = Instance.new("Part")
+	p.Name = name
+	if shape then
+		p.Shape = shape
+	end
+	p.Size = size
+	p.CFrame = self.Origin * cf
+	p.Color = color
+	p.Material = material or Enum.Material.SmoothPlastic
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	p.Parent = self.Folder
+	return p
+end
+
+function Scene:box(name: string, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, color: Color3, material: Enum.Material?): Part
+	return self:part(name, Vector3.new(math.abs(x1 - x0), math.abs(y1 - y0), math.abs(z1 - z0)), CFrame.new((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), color, material)
+end
+
+-- Upright cylinder centred at (x, y, z).
+function Scene:disc(name: string, h: number, d: number, x: number, y: number, z: number, color: Color3, material: Enum.Material?): Part
+	return self:part(name, Vector3.new(h, d, d), CFrame.new(x, y, z) * CFrame.Angles(0, 0, math.rad(90)), color, material, Enum.PartType.Cylinder)
+end
+
+-- Places a part at a scene-space CFrame (used by Update, every frame).
+function Scene:place(p: BasePart, cf: CFrame)
+	p.CFrame = self.Origin * cf
+end
+
+----------------------------------------------------------------------------------------------------
+-- Actors: a classic blocky figure with a real Roblox head and smile.
+----------------------------------------------------------------------------------------------------
+
+type Actor = { Parts: { [string]: BasePart }, Hat: { { Part: BasePart, Offset: CFrame } }, Scale: number }
+
+function Scene:actor(name: string, shirt: Color3, pants: Color3, scale: number?): Actor
+	local sc = scale or 1
+	local parts: { [string]: BasePart } = {}
+	parts.Torso = self:part(name .. "Torso", Vector3.new(2, 2, 1) * sc, CFrame.new(), shirt)
+	parts.LeftArm = self:part(name .. "LeftArm", Vector3.new(1, 2, 1) * sc, CFrame.new(), shirt)
+	parts.RightArm = self:part(name .. "RightArm", Vector3.new(1, 2, 1) * sc, CFrame.new(), shirt)
+	parts.LeftLeg = self:part(name .. "LeftLeg", Vector3.new(1, 2, 1) * sc, CFrame.new(), pants)
+	parts.RightLeg = self:part(name .. "RightLeg", Vector3.new(1, 2, 1) * sc, CFrame.new(), pants)
+	local head = self:part(name .. "Head", Vector3.new(2, 1, 1) * sc, CFrame.new(), SKIN)
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Head
+	mesh.Scale = Vector3.new(1.25, 1.25, 1.25)
+	mesh.Parent = head
+	local face = Instance.new("Decal")
+	face.Name = "face"
+	face.Face = Enum.NormalId.Front
+	face.Texture = "rbxasset://textures/face.png"
+	face.Parent = head
+	parts.Head = head
+	for _, limb in { "LeftArm", "RightArm" } do
+		-- Hands in skin tone.
+		parts[limb .. "Hand"] = self:part(name .. limb .. "Hand", Vector3.new(1.02, 0.5, 1.02) * sc, CFrame.new(), SKIN)
+	end
+	return { Parts = parts, Hat = {}, Scale = sc }
+end
+
+-- Something worn on the head (party hat, crown), placed relative to the head.
+function Scene:hat(actor: Actor, p: BasePart, offset: CFrame)
+	table.insert(actor.Hat, { Part = p, Offset = offset })
+end
+
+-- Pose an actor. root = feet position + facing (LookVector = where they face). sit bends the legs
+-- forward; walk is a phase (radians) for the stride; armL / armR raise the arms forward (radians).
+function Scene:pose(a: Actor, root: CFrame, pose: { sit: boolean?, walk: number?, armL: number?, armR: number?, bob: number? })
+	local p = a.Parts
+	local sc = a.Scale
+	local hip = if pose.sit then SEAT_Y else 2 * sc
+	local base = root * CFrame.new(0, hip - 2 * sc + (pose.bob or 0), 0)
+	local swing = if pose.walk then math.sin(pose.walk) * 0.65 else 0
+	self:place(p.Torso, base * CFrame.new(0, 3 * sc, 0))
+	self:place(p.Head, base * CFrame.new(0, 4.5 * sc, 0))
+	for _, h in a.Hat do
+		self:place(h.Part, base * CFrame.new(0, 4.5 * sc, 0) * h.Offset)
+	end
+	for side, name in { [-1] = "Left", [1] = "Right" } do
+		local legAngle = if pose.sit then math.rad(90) else swing * side
+		self:place(p[name .. "Leg"], base * CFrame.new(side * 0.5 * sc, 2 * sc, 0) * CFrame.Angles(legAngle, 0, 0) * CFrame.new(0, -sc, 0))
+		local armAngle = (if side &lt; 0 then pose.armL else pose.armR) or (-swing * side * 0.8)
+		local shoulder = base * CFrame.new(side * 1.5 * sc, 3.9 * sc, 0) * CFrame.Angles(armAngle, 0, 0)
+		self:place(p[name .. "Arm"], shoulder * CFrame.new(0, -0.9 * sc, 0))
+		self:place(p[name .. "ArmHand"], shoulder * CFrame.new(0, -1.75 * sc, 0))
+	end
+end
+
+----------------------------------------------------------------------------------------------------
+-- Build
+----------------------------------------------------------------------------------------------------
+
+-- A plate with its meal on it; returns { Plate, Food = {parts}, Mess = {parts} } (scene-space
+-- offsets remembered so the whole stack can be moved as one).
+function Scene:plate(x: number, z: number)
+	local th = self.Theme
+	local items = {}
+	local function add(p: BasePart, kind: string)
+		table.insert(items, { Part = p, Kind = kind, Offset = (CFrame.new(x, TABLE_TOP, z)):ToObjectSpace(self.Origin:ToObjectSpace(p.CFrame)) })
+	end
+	add(self:disc("Plate", 0.1, 1.9, x, TABLE_TOP + 0.05, z, th.PlateRim), "Plate")
+	add(self:disc("PlateFace", 0.12, 1.6, x, TABLE_TOP + 0.06, z, th.PlateBody), "Plate")
+	-- Food (visible while eating).
+	if th.Food == "Spaghetti" then
+		add(self:part("Noodles", Vector3.new(1.1, 0.35, 1.0), CFrame.new(x, TABLE_TOP + 0.25, z), Color3.fromRGB(245, 205, 110), nil, Enum.PartType.Ball), "Food")
+		for i = 0, 2 do
+			local a = i / 3 * math.pi * 2
+			add(self:part("Meatball", Vector3.one * 0.3, CFrame.new(x + math.cos(a) * 0.25, TABLE_TOP + 0.45, z + math.sin(a) * 0.25), Color3.fromRGB(120, 60, 35), nil, Enum.PartType.Ball), "Food")
+		end
+		add(self:part("Sauce", Vector3.new(0.7, 0.2, 0.6), CFrame.new(x, TABLE_TOP + 0.36, z), Color3.fromRGB(200, 50, 35), nil, Enum.PartType.Ball), "Food")
+	elseif th.Food == "Pizza" then
+		for i = 0, 1 do
+			local slice = Instance.new("WedgePart")
+			slice.Name = "PizzaSlice"
+			slice.Size = Vector3.new(0.12, 0.7, 1.1)
+			slice.Color = Color3.fromRGB(245, 200, 90)
+			slice.Anchored = true
+			slice.CanCollide = false
+			slice.CanQuery = false
+			slice.CanTouch = false
+			slice.CFrame = self.Origin * CFrame.new(x - 0.25 + i * 0.5, TABLE_TOP + 0.2, z) * CFrame.Angles(0, 0, math.rad(90)) * CFrame.Angles(0, math.rad(i * 180), 0)
+			slice.Parent = self.Folder
+			add(slice, "Food")
+			add(self:part("Pepperoni", Vector3.new(0.05, 0.22, 0.22), CFrame.new(x - 0.25 + i * 0.5, TABLE_TOP + 0.27, z + 0.1) * CFrame.Angles(0, 0, math.rad(90)), Color3.fromRGB(170, 30, 30), nil, Enum.PartType.Cylinder), "Food")
+		end
+	else
+		add(self:part("Roast", Vector3.new(0.9, 0.6, 0.7), CFrame.new(x, TABLE_TOP + 0.4, z), Color3.fromRGB(150, 85, 40), nil, Enum.PartType.Ball), "Food")
+		add(self:part("Drumstick", Vector3.new(0.7, 0.18, 0.18), CFrame.new(x + 0.45, TABLE_TOP + 0.3, z - 0.2) * CFrame.Angles(0, math.rad(30), 0), Color3.fromRGB(245, 235, 215), nil, Enum.PartType.Cylinder), "Food")
+		add(self:part("Greens", Vector3.new(0.4, 0.2, 0.4), CFrame.new(x - 0.45, TABLE_TOP + 0.22, z + 0.2), Color3.fromRGB(80, 160, 70), nil, Enum.PartType.Ball), "Food")
+	end
+	-- Mess (visible once the meal's eaten).
+	local mess = th.Mess
+	add(self:disc("Smear", 0.02, 0.9, x - 0.15, TABLE_TOP + 0.13, z + 0.1, mess[1]), "Mess")
+	add(self:disc("Smear", 0.02, 0.5, x + 0.3, TABLE_TOP + 0.135, z - 0.25, mess[2]), "Mess")
+	add(self:part("Crumb", Vector3.one * 0.15, CFrame.new(x + 0.1, TABLE_TOP + 0.18, z - 0.35), mess[2], nil, Enum.PartType.Ball), "Mess")
+	return { X = x, Z = z, Items = items }
+end
+
+function Scene.Build(levelIndex: number, origin: CFrame, parent: Instance)
+	local self = setmetatable({}, Scene)
+	self.Theme = THEMES[levelIndex] or THEMES[1]
+	self.Origin = origin
+	local folder = Instance.new("Folder")
+	folder.Name = "CutsceneScene"
+	folder.Parent = parent
+	self.Folder = folder
+	local th = self.Theme
+
+	-- Room.
+	self:box("Floor", -20, 24, -1, 0, -16, 19, th.Floor, th.FloorMat)
+	self:box("BackWall", -20, 24, 0, 16, 18, 19, th.Wall, th.WallMat)
+	self:box("LeftWall", -21, -20, 0, 16, -16, 19, th.Wall, th.WallMat)
+	self:box("RightWall", 23, 24, 0, 16, -16, 19, th.Wall, th.WallMat)
+	self:box("Skirting", -20, 23, 0, 0.6, 17.8, 18, Color3.new(1, 1, 1))
+	-- Window with daylight.
+	self:box("Window", -12, -2, 6, 12, 17.9, 18.1, Color3.fromRGB(190, 225, 255), Enum.Material.Neon)
+	self:box("WindowBar", -7.1, -6.9, 6, 12, 17.7, 17.9, Color3.new(1, 1, 1))
+	self:box("WindowBar", -12, -2, 8.9, 9.1, 17.7, 17.9, Color3.new(1, 1, 1))
+	self:box("Sill", -12.5, -1.5, 5.7, 6, 17.3, 18, Color3.new(1, 1, 1))
+
+	-- Table (and a checked cloth for the party).
+	local tx, tz = TABLE_C.X, TABLE_C.Z
+	self:box("TableTop", tx - 4.2, tx + 4.2, TABLE_TOP - 0.3, TABLE_TOP, tz - 2.4, tz + 2.4, th.Table, Enum.Material.Wood)
+	for _, lx in { tx - 3.8, tx + 3.8 } do
+		for _, lz in { tz - 2, tz + 2 } do
+			self:box("TableLeg", lx - 0.2, lx + 0.2, 0, TABLE_TOP - 0.3, lz - 0.2, lz + 0.2, th.Table, Enum.Material.Wood)
+		end
+	end
+	if th.Cloth then
+		for i = 0, 7 do
+			for j = 0, 4 do
+				self:box("Cloth", tx - 4.2 + i * 1.05, tx - 4.2 + (i + 1) * 1.05, TABLE_TOP, TABLE_TOP + 0.02, tz - 2.4 + j * 0.96, tz - 2.4 + (j + 1) * 0.96, th.Cloth[(i + j) % 2 + 1], Enum.Material.Fabric)
+			end
+		end
+	end
+	-- Chairs.
+	local function chair(x: number, z: number, faceZ: number)
+		self:box("Seat", x - 1, x + 1, SEAT_Y - 0.3, SEAT_Y, z - 1, z + 1, th.Table, Enum.Material.Wood)
+		self:box("ChairBack", x - 1, x + 1, SEAT_Y, SEAT_Y + 2.6, z + faceZ * 0.9, z + faceZ * 1.05, th.Table, Enum.Material.Wood)
+		for _, lx in { x - 0.8, x + 0.8 } do
+			for _, lz in { z - 0.8, z + 0.8 } do
+				self:box("ChairLeg", lx - 0.12, lx + 0.12, 0, SEAT_Y - 0.3, lz - 0.12, lz + 0.12, th.Table, Enum.Material.Wood)
+			end
+		end
+	end
+	chair(tx - 2, tz + 3.4, 1)
+	chair(tx + 2, tz + 3.4, 1)
+
+	-- Kitchen: counter run with the dishwasher in it.
+	self:box("Counter", 11, 23, 0, 3.4, 12.2, 18, th.Counter)
+	self:box("CounterTop", 10.8, 23, 3.4, 3.7, 11.9, 18, th.CounterTop, Enum.Material.Marble)
+	-- The dishwasher is hollow (panels, not a block) so the camera can go inside at the end.
+	local steel = Color3.fromRGB(170, 176, 184)
+	local x0, x1, z0, z1 = DW.X - 1.6, DW.X + 1.6, DW_FRONT_Z + 0.25, 17.5
+	self:box("DWSide", x0, x0 + 0.15, 0.2, 3.1, z0, z1, steel, Enum.Material.Metal)
+	self:box("DWSide", x1 - 0.15, x1, 0.2, 3.1, z0, z1, steel, Enum.Material.Metal)
+	self:box("DWTop", x0, x1, 2.95, 3.1, z0, z1, steel, Enum.Material.Metal)
+	self:box("DWFloor", x0, x1, 0.2, 0.35, z0, z1, steel, Enum.Material.Metal)
+	self:box("DWBack", x0, x1, 0.2, 3.1, z1 - 0.15, z1, steel, Enum.Material.Metal)
+	self:box("DWRack", x0 + 0.2, x1 - 0.2, 0.9, 0.96, z0 + 0.1, z1 - 0.2, Color3.fromRGB(235, 238, 242), Enum.Material.Metal)
+	self.InnerLight = Instance.new("PointLight")
+	self.InnerLight.Color = Color3.fromRGB(150, 220, 255)
+	self.InnerLight.Range = 6
+	self.InnerLight.Brightness = 0
+	self.InnerLight.Parent = self:box("DWLamp", DW.X - 0.3, DW.X + 0.3, 2.85, 2.95, 14.6, 15.2, Color3.fromRGB(220, 240, 255), Enum.Material.Neon)
+	-- The twist: tiny workers already waiting on the rack, sponges in hand (that's us).
+	self.Workers = {}
+	for i, c in { Color3.fromRGB(255, 200, 60), Color3.fromRGB(90, 170, 255), Color3.fromRGB(255, 110, 150) } do
+		local w = self:actor("Worker" .. i, c, Color3.fromRGB(50, 60, 90), 0.22)
+		local sponge = self:part("WorkerSponge", Vector3.new(0.18, 0.1, 0.12), CFrame.new(), Color3.fromRGB(255, 215, 80))
+		table.insert(self.Workers, { Actor = w, Sponge = sponge, X = DW.X - 0.8 + (i - 1) * 0.8 })
+	end
+	self.Door = self:part("DWDoor", Vector3.new(3.1, 2.75, 0.25), CFrame.new(), Color3.fromRGB(225, 229, 234), Enum.Material.Metal)
+	self.DoorHandle = self:part("DWHandle", Vector3.new(1.6, 0.15, 0.2), CFrame.new(), Color3.fromRGB(150, 155, 162), Enum.Material.Metal)
+	self.Panel = self:box("DWPanel", DW.X - 1.55, DW.X + 1.55, 3.1, 3.38, DW_FRONT_Z - 0.05, DW_FRONT_Z + 0.25, Color3.fromRGB(40, 44, 52))
+	self.StartLight = self:part("StartLight", Vector3.new(0.3, 0.12, 0.05), CFrame.new(DW.X + 1, 3.24, DW_FRONT_Z - 0.08), Color3.fromRGB(90, 95, 105))
+	-- A few plates already inside, and a pot on the hob for flavour.
+	self:disc("Pot", 1.2, 1.6, 20, 4.3, 15, Color3.fromRGB(190, 195, 200), Enum.Material.Metal)
+
+	-- Party / royal dressing.
+	if th.Party then
+		self:box("PizzaBox", tx - 1, tx + 1, TABLE_TOP + 0.02, TABLE_TOP + 0.12, tz - 0.6, tz + 1.4, Color3.fromRGB(240, 230, 210), Enum.Material.Cardboard)
+		self:disc("BigPizza", 0.1, 1.8, tx, TABLE_TOP + 0.17, tz + 0.4, Color3.fromRGB(230, 170, 80))
+		for i, c in { Color3.fromRGB(255, 90, 110), Color3.fromRGB(90, 170, 255), Color3.fromRGB(255, 210, 60) } do
+			local bx = tx - 6 + i * 1.2
+			self:part("Balloon", Vector3.new(1.1, 1.4, 1.1), CFrame.new(bx, 8 + i * 0.4, tz + 5), c, nil, Enum.PartType.Ball)
+			self:box("String", bx - 0.02, bx + 0.02, 3, 7.3 + i * 0.4, tz + 4.98, tz + 5.02, Color3.fromRGB(240, 240, 240))
+		end
+		self:box("Banner", -15, 7, 12.5, 13.5, 17.7, 17.8, Color3.fromRGB(255, 120, 60))
+	elseif th.Royal then
+		for _, cx in { tx - 0.7, tx + 0.7 } do
+			self:disc("CandleBase", 0.2, 0.6, cx, TABLE_TOP + 0.1, tz + 0.2, Color3.fromRGB(230, 190, 90), Enum.Material.Metal)
+			self:disc("Candle", 1.2, 0.25, cx, TABLE_TOP + 0.8, tz + 0.2, Color3.fromRGB(250, 245, 230))
+			self:part("Flame", Vector3.new(0.2, 0.35, 0.2), CFrame.new(cx, TABLE_TOP + 1.55, tz + 0.2), Color3.fromRGB(255, 190, 70), Enum.Material.Neon, Enum.PartType.Ball)
+		end
+		for _, bx in { -16, 8 } do
+			self:box("Banner", bx, bx + 3, 6, 14, 17.6, 17.8, Color3.fromRGB(150, 25, 35), Enum.Material.Fabric)
+			self:box("BannerTrim", bx, bx + 3, 5.8, 6.1, 17.55, 17.8, Color3.fromRGB(230, 190, 90), Enum.Material.Metal)
+		end
+	end
+
+	-- Family: Dad and a kid behind the table, Mum at the left end (she does the dishes).
+	local s, p = th.Shirts, th.Pants
+	self.Dad = self:actor("Dad", s[1], p[1])
+	self.Kid = self:actor("Kid", s[3], p[3])
+	self.Mum = self:actor("Mum", s[2], p[2])
+	for _, a in { self.Dad, self.Kid, self.Mum } do
+		if th.Party then
+			for i = 0, 2 do
+				local r = 0.55 - i * 0.18
+				local cone = self:part("PartyHat", Vector3.new(0.3, r * 2, r * 2), CFrame.new(), if i % 2 == 0 then Color3.fromRGB(255, 90, 160) else Color3.fromRGB(90, 200, 255), nil, Enum.PartType.Cylinder)
+				self:hat(a, cone, CFrame.new(0, 0.75 + i * 0.3, 0) * CFrame.Angles(0, 0, math.rad(90)))
+			end
+		elseif th.Royal and a ~= self.Kid then
+			local band = self:part("Crown", Vector3.new(0.35, 1.3, 1.3), CFrame.new(), Color3.fromRGB(240, 200, 80), Enum.Material.Metal, Enum.PartType.Cylinder)
+			self:hat(a, band, CFrame.new(0, 0.75, 0) * CFrame.Angles(0, 0, math.rad(90)))
+			for k = 0, 4 do
+				local ang = k / 5 * math.pi * 2
+				local spike = self:part("CrownPoint", Vector3.new(0.18, 0.3, 0.18), CFrame.new(), Color3.fromRGB(240, 200, 80), Enum.Material.Metal)
+				self:hat(a, spike, CFrame.new(math.cos(ang) * 0.55, 1.05, math.sin(ang) * 0.55))
+			end
+		end
+	end
+
+	-- Plates: in front of each diner.
+	self.Plates = {
+		self:plate(tx - 2, tz + 1.2),
+		self:plate(tx + 2, tz + 1.2),
+		self:plate(tx - 3.2, tz - 0.6),
+	}
+	return self
+end
+
+----------------------------------------------------------------------------------------------------
+-- Timeline
+----------------------------------------------------------------------------------------------------
+
+-- Mum's route: stand up, collect the plates, carry them to the dishwasher, load, close, press.
+local MUM_SEAT = CFrame.new(TABLE_C.X - 5.3, 0, TABLE_C.Z - 0.6) * CFrame.Angles(0, math.rad(-90), 0) -- faces +X (the table)
+local MUM_PICK = CFrame.new(TABLE_C.X, 0, TABLE_C.Z - 3.4) * CFrame.Angles(0, math.rad(180), 0) -- front of the table, facing +Z
+local MUM_DW = CFrame.new(DW.X + 2.1, 0, DW_FRONT_Z - 2.6) * CFrame.Angles(0, math.rad(160), 0) -- beside the door, by the Start button
+
+local function lerpCF(a: CFrame, b: CFrame, k: number): CFrame
+	return a:Lerp(b, k)
+end
+
+function Scene:Update(t: number)
+	local eat = t &lt; 6.2
+
+	-- Diners: eating (forks up and down), then leaning back happy.
+	local chew = math.sin(t * 5)
+	local dadRoot = CFrame.new(TABLE_C.X - 2, 0, TABLE_C.Z + 3.4) * CFrame.Angles(0, 0, 0) -- faces -Z (camera side)
+	local kidRoot = CFrame.new(TABLE_C.X + 2, 0, TABLE_C.Z + 3.4)
+	local dadArm = if eat then 1.1 + chew * 0.35 else 0.2
+	local kidArm = if eat then 1.1 - chew * 0.35 else 0.2
+	self:pose(self.Dad, dadRoot, { sit = true, armR = dadArm, armL = 0.6 })
+	self:pose(self.Kid, kidRoot, { sit = true, armL = kidArm, armR = 0.6 })
+
+	-- Mum.
+	local mum: CFrame
+	local pose: { [string]: any } = { sit = false }
+	local carrying = false
+	if t &lt; 7 then
+		mum = MUM_SEAT
+		pose = { sit = true, armR = if eat then 1.1 + math.sin(t * 5 + 1) * 0.35 else 0.3, armL = 0.6 }
+	elseif t &lt; 9 then
+		local k = phase(t, 7, 9)
+		mum = lerpCF(MUM_SEAT, MUM_PICK, k)
+		pose = { walk = t * 9, armL = 0.3, armR = 0.3 }
+	elseif t &lt; 9.8 then
+		mum = MUM_PICK
+		pose = { armL = 1.2, armR = 1.2, bob = -0.3 * math.sin(phase(t, 9, 9.8) * math.pi) }
+	elseif t &lt; 13 then
+		local k = phase(t, 9.8, 13)
+		local mid = CFrame.new(TABLE_C.X + 8, 0, TABLE_C.Z - 4) * CFrame.Angles(0, math.rad(-120), 0)
+		mum = if k &lt; 0.5 then lerpCF(MUM_PICK, mid, k * 2) else lerpCF(mid, MUM_DW, (k - 0.5) * 2)
+		pose = { walk = t * 9, armL = 1.35, armR = 1.35 }
+		carrying = true
+	elseif t &lt; 15 then
+		mum = MUM_DW
+		local k = phase(t, 13, 14.2)
+		pose = { armL = 1.35 + k * 0.4, armR = 1.35 + k * 0.4, bob = -0.8 * math.sin(k * math.pi) }
+		carrying = t &lt; 14.2
+	else
+		mum = MUM_DW
+		local press = phase(t, 15.6, 16.1) - phase(t, 16.3, 16.8)
+		pose = { armL = 0.2, armR = 0.6 + press * 1.4 }
+	end
+	self:pose(self.Mum, mum, pose)
+
+	-- Plates: on the table, then stacked in Mum's hands, then into the rack.
+	for i, plate in self.Plates do
+		local tableCF = CFrame.new(plate.X, TABLE_TOP, plate.Z)
+		local handCF = mum * CFrame.new(0, 3.1 + i * 0.16, -1.6)
+		local rackCF = CFrame.new(DW.X - 1.2 + i * 0.6, 0.97, 16.3) * CFrame.Angles(math.rad(90), 0, 0)
+		local base: CFrame
+		if t &lt; 9.5 then
+			base = tableCF
+		elseif carrying then
+			base = if t &lt; 9.8 then tableCF:Lerp(handCF, phase(t, 9.5, 9.8)) else handCF
+		else
+			base = handCF:Lerp(rackCF, phase(t, 13.4, 14.2))
+			if t &gt;= 14.2 then
+				base = rackCF
+			end
+		end
+		for _, item in plate.Items do
+			local visible = item.Kind == "Plate" or (item.Kind == "Food" and eat) or (item.Kind == "Mess" and not eat)
+			item.Part.Transparency = if visible then 0 else 1
+			self:place(item.Part, base * item.Offset)
+		end
+	end
+
+	-- Dishwasher door: open (flat, towards the camera) until Mum shuts it, then the Start light.
+	local close = phase(t, 14.6, 15.4)
+	local hinge = CFrame.new(DW.X, 0.25, DW_FRONT_Z) * CFrame.Angles(math.rad(-90 * (1 - close)), 0, 0)
+	self:place(self.Door, hinge * CFrame.new(0, 1.375, 0))
+	self:place(self.DoorHandle, hinge * CFrame.new(0, 2.4, -0.22))
+	local on = t &gt;= 16.2
+	self.StartLight.Color = if on then Color3.fromRGB(90, 255, 140) else Color3.fromRGB(90, 95, 105)
+	self.StartLight.Material = if on then Enum.Material.Neon else Enum.Material.SmoothPlastic
+	-- Inside: the workers stand ready, then cheer when the lights come on.
+	self.InnerLight.Brightness = if on then 2 else 0
+	for i, w in self.Workers do
+		local cheer = if on then math.abs(math.sin(t * 6 + i)) else 0
+		local root = CFrame.new(w.X, 0.96, 14.3)
+		self:pose(w.Actor, root, { armL = 0.4 + cheer * 2.2, armR = 1.2 + cheer * 1.6, bob = cheer * 0.06 })
+		self:place(w.Sponge, root * CFrame.new(0.33, 0.62 + cheer * 0.18, -0.25))
+	end
+	-- Once it's running, it hums (a tiny shake).
+	if on then
+		local shake = math.sin(t * 60) * 0.015
+		self:place(self.Door, hinge * CFrame.new(shake, 1.375, 0))
+	end
+end
+
+-- Camera path (scene space) with gentle eases between keys: { time, eye, look, fov }.
+local KEYS = {
+	{ 0, Vector3.new(-1, 6, -9), Vector3.new(-4, 3.2, 8), 52 },
+	{ 3.2, Vector3.new(-3, 5.6, 0.2), Vector3.new(-4, 3.1, 7.5), 46 },
+	{ 5.8, Vector3.new(-4.2, 7.4, 4.2), Vector3.new(-4, 3, 7.4), 44 },
+	{ 7.2, Vector3.new(-2, 6, -3), Vector3.new(-5, 2.8, 6), 50 },
+	{ 10.2, Vector3.new(4, 6, -3), Vector3.new(9, 2.6, 8), 54 },
+	{ 13, Vector3.new(20.5, 5.4, 6.4), Vector3.new(15.3, 1.8, 11.8), 50 },
+	{ 15.4, Vector3.new(13.2, 4.3, 8.9), Vector3.new(16.3, 3.3, 12), 38 },
+	{ 16.6, Vector3.new(15.5, 2.3, 9.8), Vector3.new(15.5, 2.1, 12.4), 50 },
+	{ 17.6, Vector3.new(15.5, 1.9, 12.7), Vector3.new(15.5, 1.3, 16), 62 },
+	{ 19.5, Vector3.new(15.5, 1.75, 13.1), Vector3.new(15.5, 1.25, 16), 58 },
+}
+
+function Scene:Camera(t: number): (CFrame, number)
+	local a, b = KEYS[1], KEYS[#KEYS]
+	for i = 1, #KEYS - 1 do
+		if t &gt;= KEYS[i][1] and t &lt;= KEYS[i + 1][1] then
+			a, b = KEYS[i], KEYS[i + 1]
+			break
+		end
+	end
+	if t &gt;= KEYS[#KEYS][1] then
+		a, b = KEYS[#KEYS], KEYS[#KEYS]
+	end
+	local k = if b[1] &gt; a[1] then smooth((t - a[1]) / (b[1] - a[1])) else 1
+	local eye = (a[2] :: Vector3):Lerp(b[2] :: Vector3, k)
+	local look = (a[3] :: Vector3):Lerp(b[3] :: Vector3, k)
+	local fov = (a[4] :: number) + ((b[4] :: number) - (a[4] :: number)) * k
+	local cf = self.Origin * CFrame.lookAt(eye, look)
+	return cf, fov
+end
+
+-- World positions inside the running dishwasher, for the client's bubble effect.
+function Scene:InsidePoints(): { Vector3 }
+	local pts = {}
+	for i = -1, 1 do
+		table.insert(pts, (self.Origin * CFrame.new(DW.X + i * 0.8, 1.4, 15)).Position)
+	end
+	return pts
+end
+
+function Scene:Destroy()
+	self.Folder:Destroy()
+end
+
+return Scene</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">DailyUI</string><ProtectedString name="Source">--[[
 	DailyUI - the daily reward calendar. The server claims today's reward when you join
 	(DataService, Config.DailyRewards); this window pops up once per session to show what you got,
 	the streak so far, and what tomorrow brings, so there's always a reason to come back.
@@ -13792,7 +14664,7 @@ function DailyUI.Init()
 end
 
 return DailyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
+<Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
 -- numbers, dish/sale celebrations), CollectionService-driven decoration (spinning arms, lift
 -- pads), the drain guide beam, remaining-dirt sparkle markers, prompt routing (windows and the
 -- in-arena tool shop), and a little lobby ambience.
@@ -14769,7 +15641,7 @@ function Effects.Init()
 end
 
 return Effects</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
+<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
 --   * top centre: the Bubbles pill with a green "+" (opens the Shop)
 --   * right side: big square buttons (Shop/Pets in the lobby, Upgrades/Pets/Leave in a run) with
 --     key hints for keyboard (Tab/G/P) or gamepad (Y/LB)
@@ -15781,7 +16653,18 @@ function HUD.Init()
 		if run and run.Phase == "Playing" then
 			if lastBannerStartedAt ~= run.StartedAt then
 				lastBannerStartedAt = run.StartedAt
-				showRunStartBanner(run.Level)
+				local level = run.Level
+				-- After the run-start cutscene, if one plays (it starts on the same RunState).
+				task.spawn(function()
+					task.wait(0.4)
+					local okCs, Cutscene = pcall(function()
+						return require(script.Parent:WaitForChild("Cutscene")) :: any
+					end)
+					while okCs and Cutscene.IsPlaying() do
+						task.wait(0.2)
+					end
+					showRunStartBanner(level)
+				end)
 			end
 		end
 	end
@@ -15883,7 +16766,7 @@ function HUD.Init()
 end
 
 return HUD</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
 	PartyUI - everything shown while ClientState.Party ~= nil (standing in a lobby pad).
 
 	Two screens, Search-for-the-Needle style:
@@ -16517,7 +17400,7 @@ function PartyUI.Init()
 end
 
 return PartyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
+<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
 -- state (EquippedPets/&lt;slot&gt; StringValue = pet id, its Target ObjectValue = the grime part being
 -- cleaned); this module is the only thing that actually builds and moves pet models. See
 -- DESIGN.md section 6 ("PetRenderer") and section 4 ("Equipped pets for rendering").
@@ -16994,7 +17877,7 @@ function PetRenderer.Init()
 end
 
 return PetRenderer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
+<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
 -- reveal animation. Everything here is built with UIKit; see DESIGN.md section 6 ("PetsUI") for
 -- the contract. Both windows rebuild their contents from ClientState.Meta whenever it changes and
 -- the relevant window is open, so a purchase/hatch/equip anywhere refreshes what's on screen.
@@ -18329,7 +19212,7 @@ function PetsUI.Init()
 end
 
 return PetsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
 	RanksUI - the "Ranks" window (Rank Shrine in the lobby, the HUD's Ranks button, R / gamepad RB).
 
 	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
@@ -18672,7 +19555,7 @@ function RanksUI.Init()
 end
 
 return RanksUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
 	RebirthUI - the "Rebirth" window (the Rebirth Fountain in the lobby).
 
 	The endgame loop: once you've cleaned the last dishwasher, trade your Bubbles, unlocked
@@ -18825,7 +19708,7 @@ function RebirthUI.Init()
 end
 
 return RebirthUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
 	ShopUI - the lobby "Shop" window: Perks (bought with Bubbles, permanent) and Robux (game passes).
 	Opened from the Soap Shop ProximityPrompt (routed by Effects via OpenWindow="Shop"), the HUD [🛒 Shop]
 	button, or the G key - all outside our scope, they just call UIKit.OpenWindow("Shop").
@@ -19337,7 +20220,7 @@ function ShopUI.Init()
 end
 
 return ShopUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
+<Item class="ModuleScript" referent="RBX0000002D"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
 -- Aim comes from the mouse on PC, or the screen centre (with a crosshair) on touch/gamepad, cast
@@ -20291,7 +21174,7 @@ function SprayController.Init()
 end
 
 return SprayController</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002E"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -22761,7 +23644,7 @@ function UIKit.Init()
 end
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002D"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002F"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button

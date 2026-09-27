@@ -912,6 +912,46 @@ rebirth forever plus 50 gems.
 **Bubble lifts** are bubble columns: standing in one carries you up at 18 studs/s, centring you,
 and pushes you out onto the top rack (client, Effects).
 
+## 6d. Round 6 (v0.5): cutscenes, pet tiers, name tags, dailies
+
+**Tools.** The Brush is gone (Hands, Sponge, Nozzle, Pressure Washer, Foam Cannon). The washer's
+line can be turned vertical/horizontal (T, D-pad Up, or the TURN touch button). Nozzle, Washer and
+Cannon each have a game pass (`ToolNozzle`, `ToolWasher`, `ToolCannon`) that hands you the tool at
+run start. The pass still starts at upgrade level 0, so upgrades keep mattering. Clicking a tool you
+can't afford offers its pass (never coins for Robux).
+
+**Pacing** (Config.Levels Toughness/ParTime): about 10 / 20 / 30 minutes solo. Parties get
+`PartyWorkPerPlayer` extra dirt per player, capped at `PartyGrimeCap`, so a full party still takes
+10-15 minutes on Family Dinner.
+
+**Pets.**
+- Every pet has Speed, Capacity (fixed by rarity and egg) and a coin bonus.
+- Pets fill a bag while cleaning and carry it to the drain to sell. They earn coins themselves, not
+  through your tank.
+- Merging 3 identical pets (same tier) gives the Golden version (x1.35), and 3 Golden give
+  Rainbow (x1.75).
+- A tier never beats the next egg's rarity. The Pets and Egg windows show every stat.
+
+**Ranks.** A roll replaces your current rank (the toast shows what you lost). A roll locks for
+1.2 s so you can't roll again until the reel stops. The x2 Luck pass button sits under "Get more
+Gems".
+
+**Name tags** (server `NameTags`): a stud-sized BillboardGui showing the name (with ✨N once
+rebirthed) and the rank in its rarity colour (default 🧽 Trainee). Rebirths also show in the
+player list.
+
+**Retention.** Daily rewards run on a 7-day streak (DailyUI pops up once per session). The Rebirth
+window shows the count, bonuses and requirements. A rebirth is announced to the whole server.
+
+**Cutscenes** (client `Cutscene` + `CutsceneScene`).
+- When a run starts, each client fades into a short client-only scene built at
+  `CFrame(8000, 400, 0)`: a family (pizza party / royal banquet variants) finishes eating, loads the
+  dishwasher, closes it and presses start.
+- The camera dives inside to reveal a tiny crew with sponges: us. There is no text.
+- Skip (bottom-right, or Space/Enter/A/B) fades straight into the run, which is already going, so
+  skippers start playing while others watch.
+- The scene only plays when you join a run within its first 12 s.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family
