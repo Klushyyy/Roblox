@@ -339,7 +339,7 @@ local function sanitizeProfile(profile: Profile, player: Player)
 		p.Perks = Util.DeepCopy(TEMPLATE.Perks)
 	end
 	for _, perk in Config.Perks do
-		p.Perks[perk.Id] = toCount(p.Perks[perk.Id], 0)
+		p.Perks[perk.Id] = math.min(toCount(p.Perks[perk.Id], 0), perk.Max) -- perks were re-capped at 6 levels
 	end
 
 	-- Pets: keep every well-formed entry (extra fields included). Uids become strings, and duplicate

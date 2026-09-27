@@ -34,6 +34,7 @@ local DishFactory = {}
 ----------------------------------------------------------------------------------------------------
 local SIZE = {
 	Plate = { Diameter = 20, Thickness = 1.2 },
+	Tray = { Diameter = 23, Thickness = 0.8 },
 	Bowl = { Diameter = 15, Depth = 7 },
 	Cup = { Diameter = 8, Height = 10 },
 	Glass = { Diameter = 7, Height = 12 },
@@ -207,6 +208,35 @@ local function buildPlate(anchor: CFrame, theme, _rng: Random)
 	}, 2
 end
 
+-- Serving tray (pizza pan / banquet platter) standing on its edge like a plate, face toward
+-- anchor.LookVector: a flat face inside a thick rolled rim (a CSG ring, or 18 short bars without
+-- CSG). The rim is thicker than the face on both sides, so no faces share a plane.
+local function buildTray(anchor: CFrame, theme, _rng: Random)
+	local s = SIZE.Tray
+	local r = s.Diameter / 2
+	local color = theme.Tray or theme.Metal
+	local rimColor = Color3.new(color.R * 0.85, color.G * 0.85, color.B * 0.85)
+	local center = localPos(anchor, 0, r, 0)
+	local cf = axisCFrame(center, anchor.LookVector, anchor.UpVector)
+	local parts = {
+		newPart(Enum.PartType.Cylinder, Vector3.new(s.Thickness, s.Diameter * 0.9, s.Diameter * 0.9), cf, color, Enum.Material.Metal),
+	}
+	local rim = placeTemplate("TrayRim", CFrame.new(anchor.Position) * anchor.Rotation, rimColor, Enum.Material.Metal)
+	if rim then
+		table.insert(parts, rim)
+	else
+		local n = 18
+		local rr = r * 0.94
+		for i = 0, n - 1 do
+			local a0, a1 = i / n * math.pi * 2, (i + 1.08) / n * math.pi * 2
+			local p0 = center + anchor.RightVector * (math.cos(a0) * rr) + anchor.UpVector * (math.sin(a0) * rr)
+			local p1 = center + anchor.RightVector * (math.cos(a1) * rr) + anchor.UpVector * (math.sin(a1) * rr)
+			table.insert(parts, bar(p0, p1, s.Thickness + 1, anchor.LookVector, rimColor, Enum.Material.Metal))
+		end
+	end
+	return parts, 1
+end
+
 -- Bowl, opening along anchor Up. CSG shell when available, otherwise a ring of angled slats.
 local function buildBowl(anchor: CFrame, theme, _rng: Random)
 	local s = SIZE.Bowl
@@ -356,6 +386,7 @@ end
 
 local BUILDERS: { [string]: (CFrame, any, Random) -> ({ BasePart }, number) } = {
 	Plate = buildPlate,
+	Tray = buildTray,
 	Bowl = buildBowl,
 	Cup = buildCup,
 	Glass = buildGlass,
@@ -433,6 +464,11 @@ local function buildTemplates()
 		cut("PlateBody", body, { well, bevel })
 		ring("PlateStripe", d * 0.93, d * 0.86, 0.1, alongZAt(r, front - 0.05))
 		ring("PlateFoot", d * 0.6, d * 0.53, 0.3, alongZAt(r, t / 2 + 0.15))
+	end
+	-- Tray rim: a thick ring around the flat face.
+	do
+		local s = SIZE.Tray
+		ring("TrayRim", s.Diameter, s.Diameter * 0.88, s.Thickness + 1, alongZAt(s.Diameter / 2, 0))
 	end
 	-- Bowl rim band.
 	do
@@ -582,8 +618,17 @@ local function candidateCutlery(height: number, lowFrac: number, rng: Random)
 	return Vector3.new(x, y, side * 4), Vector3.new(0, 0, -side)
 end
 
+local function candidateTray(rng: Random)
+	local s = SIZE.Tray
+	local r = math.sqrt(rng:NextNumber()) * s.Diameter * 0.36
+	local theta = rng:NextNumber() * math.pi * 2
+	local x, y = r * math.cos(theta), s.Diameter / 2 + r * math.sin(theta)
+	return Vector3.new(x, y, 4), Vector3.new(0, 0, -1)
+end
+
 local CANDIDATES: { [string]: (Random) -> (Vector3, Vector3) } = {
 	Plate = candidatePlate,
+	Tray = candidateTray,
 	Bowl = function(rng)
 		return candidateInside(SIZE.Bowl.Diameter, SIZE.Bowl.Depth, rng)
 	end,

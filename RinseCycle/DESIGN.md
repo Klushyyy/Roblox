@@ -14,9 +14,12 @@ of them. Don't let them drift apart.
 
 ## 1. Game flow
 
-1. **Lobby.** A compact, fenced plaza you can cross in seconds. It has six party pads (three each
-   side), a giant dishwasher building with the Egg Hatchery in front, the Soap Shop (perks), a Pet
-   Stand, two leaderboards and a How to Play board.
+1. **Lobby.** A compact plaza on top of a giant wooden dining table (low-poly, flat colours) in a
+   dining room: giant chairs, a pendant lamp, a sideboard, and windows looking out on a garden and
+   mountains (Terrain, outside the room only). It has six party pads (three each side), a giant
+   dishwasher building with the Egg Hatchery in front, the Soap Shop (perks), a Pet Stand, two
+   leaderboards (Fastest Clean has one page per level; each player flips pages with the arrows or
+   the "Next level" prompt, locally) and a How to Play board.
 2. **Party pads.** Step onto an empty pad and you become host. You get the **Create Party** screen:
    pick a dishwasher, Public or Friends, and party size, then press **CREATE** (or **BACK** to
    leave). While you pick, the pad reads "Name is picking a dishwasher..." and nobody else can join.
@@ -268,7 +271,7 @@ Profile (persisted, DataStore `RinseCycle_Profiles_v1`, key `"u_" .. userId`):
   Equipped = {},        -- { "1", ... }  (Uids)
   NextUid = 1,
   Unlocked = 1,
-  BestTimes = { 0, 0, 0, 0, 0 },   -- one per Config.Levels entry, seconds, 0 = none
+  BestTimes = { 0, 0, 0 },   -- one per Config.Levels entry, seconds, 0 = none
   Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
   Receipts = {},        -- recent developer-product PurchaseIds, newest last, max 50
 }
@@ -486,10 +489,10 @@ sized so the player is a tiny person in a real dishwasher: plates are about four
 - **Tub:** interior X ±56, Z −50..+62, height 100. Stainless steel (`theme.Tub`), ribs, rack rails,
   filter, heating element, and seven interior PointLights.
 - **Door:** open, lying flat in front, Z −50 to −121, top at Y = 0, with raised edges, invisible
-  safety walls, a control strip with buttons and a detergent dispenser. Spawns are at Z −100.
+  safety walls and a control strip with buttons. Spawns are at Z −100.
 - **Tool Shop** (left of the door): a chrome wire shelving unit (matches the racks) with two display
   shelves at waist and head height. Each tool (built by `ToolModels`) stands on a pedestal (risers on
-  the upper shelf) with a SurfaceGui price tag and a ProximityPrompt with attribute `BuyTool = index`.
+  the upper shelf) with a floating price card (BillboardGui, in front of the shelf) and a ProximityPrompt with attribute `BuyTool = index`.
   The client sends `RunRequest("BuyTool", index)` and shows owned / price on the tags.
 - **Drain:** tub floor, front centre (0, 0, −47), radius `Config.Round.DrainRadius`, spinning swirl
   (tag `SpinY`) and a world-sized "DRAIN" sign.
@@ -499,9 +502,14 @@ sized so the player is a tiny person in a real dishwasher: plates are about four
   basket (forks, knives, spoons mixed).
 - **Top rack** (walkable floor at Y = 50, Z −40..+60): bowls tilted toward the door, upturned mugs
   and upturned glasses.
-- **Getting up and down:** two **Bubble Lift** pads on the tub floor's front corners and a **Chute**
-  pad on the top rack's front edge (it drops you on the drain). Pads are tagged `LiftPad` with a
-  Vector3 attribute `LiftTo`; the client teleports its own character when it steps on one.
+- **Getting up and down:** two **Bubble Lift** pads on the tub floor's front corners. Pads are
+  tagged `LiftPad` with a Vector3 attribute `LiftTo`; the client teleports its own character when it
+  steps on one. To come down you just jump off. **Bubble jets** (client `BubbleJets`): in a run,
+  hold jump in the air to fly up; ~2.6 s of fuel refills on the ground, shown as a bar under the tank.
+- **Rooms:** every level uses the same dishwasher in a different room: 1 Family Dinner (family
+  kitchen), 2 Pizza Party (pizzeria: brick, checker floor, pizza oven, neon sign), 3 Royal Banquet
+  (castle hall: stone, banners, red carpet, banquet table, chandeliers, fireplace). Levels 2 and 3
+  add **Trays** (pizza trays / gold platters) in the plate rows.
 - Spray arms under each rack (tag `SpinY`).
 - Everything aimable lives in two folders on the arena Model, `Dishes` and `Grime`; the spray only
   raycasts those, so walls, rack floors and safety walls never block a scrub.

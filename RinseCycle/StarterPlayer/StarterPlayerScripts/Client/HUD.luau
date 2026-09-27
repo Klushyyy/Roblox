@@ -84,7 +84,7 @@ function HUD.Init()
 		CornerRadius = 10,
 		Parent = topCurrency,
 		OnClick = function()
-			UIKit.ToggleWindow("Shop")
+			UIKit.OpenWindow("Shop", "Bubbles")
 		end,
 	})
 
@@ -117,7 +117,7 @@ function HUD.Init()
 	local gemsPill = Instance.new("Frame")
 	gemsPill.Name = "Gems"
 	gemsPill.AnchorPoint = Vector2.new(0, 0)
-	gemsPill.Size = UDim2.fromOffset(130, 44)
+	gemsPill.Size = UDim2.fromOffset(168, 44)
 	gemsPill.BackgroundColor3 = Color3.new(1, 1, 1)
 	gemsPill.BorderSizePixel = 0
 	UIKit.Corner(gemsPill, 14)
@@ -129,9 +129,23 @@ function HUD.Init()
 		Text = "0",
 		TextSize = 28,
 		Position = UDim2.fromOffset(44, 0),
-		Size = UDim2.new(1, -52, 1, 0),
+		Size = UDim2.new(1, -86, 1, 0),
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Parent = gemsPill,
+	})
+	UIKit.Button({
+		Name = "Plus",
+		Text = "+",
+		Size = UDim2.fromOffset(36, 36),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -4, 0.5, 0),
+		Color = Colors.Good,
+		TextSize = 28,
+		CornerRadius = 9,
+		Parent = gemsPill,
+		OnClick = function()
+			UIKit.OpenWindow("Shop", "Gems")
+		end,
 	})
 	local gemsShown = -1
 	local function setGems(value: number)
@@ -309,7 +323,7 @@ function HUD.Init()
 	local moneyBlock = Instance.new("Frame")
 	moneyBlock.Name = "Money"
 	moneyBlock.AnchorPoint = Vector2.new(0, 1)
-	moneyBlock.Size = UDim2.fromOffset(300, 130)
+	moneyBlock.Size = UDim2.fromOffset(300, 150)
 	moneyBlock.BackgroundTransparency = 1
 	moneyBlock.Visible = false
 	moneyBlock.Parent = root
@@ -324,6 +338,24 @@ function HUD.Init()
 		StrokeThickness = 3,
 		Parent = moneyBlock,
 	})
+	-- Green "+" right after the number: opens the shop on the Coins tab.
+	local coinsPlus = UIKit.Button({
+		Name = "CoinsPlus",
+		Text = "+",
+		Size = UDim2.fromOffset(44, 44),
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.fromOffset(200, 31),
+		Color = Colors.Good,
+		TextSize = 32,
+		CornerRadius = 10,
+		Parent = moneyBlock,
+		OnClick = function()
+			UIKit.OpenWindow("Shop", "Coins")
+		end,
+	})
+	coinsLabel:GetPropertyChangedSignal("TextBounds"):Connect(function()
+		coinsPlus.Position = UDim2.fromOffset(math.floor(coinsLabel.TextBounds.X / UIKit.GetScale()) + 12, 31)
+	end)
 	local coinsNV = Instance.new("NumberValue")
 	coinsNV.Parent = moneyBlock
 	coinsNV:GetPropertyChangedSignal("Value"):Connect(function()
@@ -356,6 +388,26 @@ function HUD.Init()
 		Parent = moneyBlock,
 	})
 	tankBar.Frame.Name = "Tank"
+
+	-- Bubble-jet fuel (BubbleJets writes the LocalPlayer's JetFuel attribute, 0..1).
+	local jetBar = UIKit.ProgressBar({
+		Size = UDim2.new(0, 280, 0, 26),
+		Position = UDim2.fromOffset(0, 122),
+		Color = Color3.fromRGB(150, 215, 255),
+		Text = "🧼 Hold jump to fly",
+		TextSize = 16,
+		Value = 1,
+		Parent = moneyBlock,
+	})
+	jetBar.Frame.Name = "JetFuel"
+	local lastJet = 1
+	Players.LocalPlayer:GetAttributeChangedSignal("JetFuel"):Connect(function()
+		local f = tonumber(Players.LocalPlayer:GetAttribute("JetFuel")) or 1
+		if math.abs(f - lastJet) > 0.02 or (f >= 1 and lastJet < 1) then
+			lastJet = f
+			jetBar.Set(f, if f <= 0.01 then "🧼 Land to refill" else "🧼 Hold jump to fly")
+		end
+	end)
 
 	local tankFlash: Tween? = nil
 	local function setTankFull(isFull: boolean)
@@ -424,7 +476,7 @@ function HUD.Init()
 		topCurrency.Position = UDim2.new(0.5, 0, 0, 2)
 		gemsPill.Position = UDim2.new(0.5, 133, 0, 7)
 		hotbar.Position = UDim2.new(0.5, 0, 1, -(if touch then 24 else 12) - safe.Bottom)
-		topBar.Position = UDim2.new(0.5, 0, 0, 66)
+		topBar.Position = UDim2.new(0.5, 0, 0, 72)
 
 		-- Right column: vertically centred, but on touch kept above the jump button.
 		local colH = rightColumn.AbsoluteSize.Y / UIKit.GetScale()
@@ -653,7 +705,7 @@ function HUD.Init()
 	local countdownLabel = UIKit.Label({
 		Text = "",
 		Size = UDim2.new(1, -40, 0, 24),
-		Position = UDim2.new(0, 20, 1, -84),
+		Position = UDim2.new(0, 20, 1, -108),
 		TextSize = 18,
 		TextColor3 = Colors.TextDim,
 		TextXAlignment = Enum.TextXAlignment.Center,

@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "0.2.0"
+Config.Version = "0.3.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -66,23 +66,23 @@ Config.Round = {
 ----------------------------------------------------------------------------------------------------
 Config.Base = {
 	Radius = 1.6, -- studs
-	RadiusPerLevel = 0.3,
+	RadiusPerLevel = 0.55,
 	Power = 2.5, -- dirt HP removed per second
-	PowerGrowth = 1.3, -- per Scrub Power level
+	PowerGrowth = 1.45, -- per Power level
 	Tank = 15, -- units
-	TankGrowth = 1.35, -- per Tank Size level
+	TankGrowth = 1.6, -- per Tank Size level
 	WalkSpeed = 20,
-	WalkSpeedPerLevel = 1.5,
+	WalkSpeedPerLevel = 2.5,
 }
 
 -- In-run upgrades bought with Coins. Price = Base * Growth^level * level Mult (2 significant figures).
 -- PerTool upgrades are bought separately for every tool (and cost more on better tools: x UpgradeMult);
 -- the others (Tank, Sneakers) are yours whatever you're holding.
 Config.Upgrades = {
-	{ Id = "ScrubPower", Name = "Power", Icon = "💪", Desc = "This tool cleans faster.", Base = 6, Growth = 1.5, Max = 15, PerTool = true },
-	{ Id = "HandSize", Name = "Size", Icon = "🖐️", Desc = "This tool cleans a bigger area.", Base = 8, Growth = 1.55, Max = 12, PerTool = true },
-	{ Id = "TankSize", Name = "Tank Size", Icon = "🛢️", Desc = "Carry more dirt per trip.", Base = 5, Growth = 1.5, Max = 15 },
-	{ Id = "Sneakers", Name = "Sneakers", Icon = "👟", Desc = "Run to the drain faster.", Base = 10, Growth = 1.6, Max = 8 },
+	{ Id = "ScrubPower", Name = "Power", Icon = "💪", Desc = "This tool cleans faster.", Base = 8, Growth = 2, Max = 6, PerTool = true },
+	{ Id = "HandSize", Name = "Size", Icon = "🖐️", Desc = "This tool cleans a bigger area.", Base = 10, Growth = 2, Max = 6, PerTool = true },
+	{ Id = "TankSize", Name = "Tank Size", Icon = "🛢️", Desc = "Carry more dirt per trip.", Base = 6, Growth = 2, Max = 6 },
+	{ Id = "Sneakers", Name = "Sneakers", Icon = "👟", Desc = "Run to the drain faster.", Base = 12, Growth = 2, Max = 6 },
 }
 
 -- Tools, bought with Coins inside a run in ANY order, then picked from the hotbar (keys 1-6). Each
@@ -130,7 +130,7 @@ Config.GrimeTypes = {
 -- Spots = base grime spots per dish of that kind (solo), before PartyGrimeScale.
 -- Theme colours are used by the arena and dish builders.
 ----------------------------------------------------------------------------------------------------
-Config.DishKinds = { "Plate", "Bowl", "Cup", "Glass", "Fork", "Knife", "Spoon", "Pan", "Pot" }
+Config.DishKinds = { "Plate", "Tray", "Bowl", "Cup", "Glass", "Fork", "Knife", "Spoon", "Pan", "Pot" }
 
 Config.Levels = {
 	{
@@ -138,12 +138,13 @@ Config.Levels = {
 		Name = "Family Dinner",
 		Subtitle = "Crumbs, ketchup and a whole lot of gravy.",
 		Icon = "🍝",
+		Place = "Family Kitchen",
 		Mult = 1,
-		ParTime = 330,
+		ParTime = 360,
 		Bubbles = 40,
 		GoldenChance = 0.02,
-		Dishes = { Plate = 14, Bowl = 5, Cup = 5, Glass = 0, Fork = 4, Knife = 3, Spoon = 3, Pan = 0, Pot = 0 },
-		Spots = { Plate = 6, Bowl = 6, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16 },
+		Dishes = { Plate = 16, Tray = 0, Bowl = 6, Cup = 6, Glass = 2, Fork = 4, Knife = 3, Spoon = 3, Pan = 0, Pot = 0 },
+		Spots = { Plate = 6, Tray = 8, Bowl = 6, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16 },
 		Grime = { { Type = "Crumbs", Weight = 45 }, { Type = "Ketchup", Weight = 35 }, { Type = "Gravy", Weight = 20 } },
 		Theme = {
 			Tub = Color3.fromRGB(172, 178, 187),
@@ -155,106 +156,73 @@ Config.Levels = {
 			Cup = Color3.fromRGB(255, 180, 120),
 			Glass = Color3.fromRGB(200, 235, 255),
 			Metal = Color3.fromRGB(190, 195, 200),
+			Tray = Color3.fromRGB(190, 195, 200),
 			Light = Color3.fromRGB(210, 235, 255),
 		},
 	},
 	{
 		Id = 2,
 		Name = "Pizza Party",
-		Subtitle = "Sauce everywhere. Watch out for burnt crust.",
+		Subtitle = "Greasy pizza trays, sauce everywhere and burnt crust.",
 		Icon = "🍕",
-		Mult = 3,
-		ParTime = 540,
-		Bubbles = 90,
-		GoldenChance = 0.02,
-		Dishes = { Plate = 16, Bowl = 6, Cup = 6, Glass = 2, Fork = 5, Knife = 4, Spoon = 3, Pan = 1, Pot = 0 },
-		Spots = { Plate = 5, Bowl = 5, Cup = 3, Glass = 2, Fork = 2, Knife = 2, Spoon = 2, Pan = 11, Pot = 13 },
-		Grime = { { Type = "TomatoSauce", Weight = 40 }, { Type = "MeltedCheese", Weight = 30 }, { Type = "Crumbs", Weight = 15 }, { Type = "BurntCrust", Weight = 15 } },
+		Place = "Pizzeria",
+		Mult = 4,
+		ParTime = 600,
+		Bubbles = 120,
+		GoldenChance = 0.025,
+		Dishes = { Plate = 12, Tray = 9, Bowl = 8, Cup = 7, Glass = 4, Fork = 5, Knife = 4, Spoon = 4, Pan = 2, Pot = 0 },
+		Spots = { Plate = 5, Tray = 8, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 13, Pot = 15 },
+		Grime = {
+			{ Type = "TomatoSauce", Weight = 32 },
+			{ Type = "MeltedCheese", Weight = 26 },
+			{ Type = "Grease", Weight = 15 },
+			{ Type = "Crumbs", Weight = 10 },
+			{ Type = "BurntCrust", Weight = 17 },
+		},
 		Theme = {
-			Tub = Color3.fromRGB(200, 205, 210),
-			Rack = Color3.fromRGB(230, 90, 70),
+			Tub = Color3.fromRGB(196, 200, 206),
+			Rack = Color3.fromRGB(225, 85, 65),
 			Accent = Color3.fromRGB(255, 120, 60),
 			Plate = Color3.fromRGB(255, 250, 240),
-			PlateRim = Color3.fromRGB(220, 60, 50),
+			PlateRim = Color3.fromRGB(215, 55, 45),
 			Bowl = Color3.fromRGB(255, 230, 190),
-			Cup = Color3.fromRGB(120, 200, 120),
+			Cup = Color3.fromRGB(110, 190, 110),
 			Glass = Color3.fromRGB(210, 240, 255),
 			Metal = Color3.fromRGB(185, 190, 195),
+			Tray = Color3.fromRGB(160, 165, 172),
 			Light = Color3.fromRGB(255, 225, 190),
 		},
 	},
 	{
 		Id = 3,
-		Name = "Burger Diner",
-		Subtitle = "Grease, mustard, and char that needs a brush.",
-		Icon = "🍔",
-		Mult = 10,
-		ParTime = 600,
-		Bubbles = 200,
-		GoldenChance = 0.025,
-		Dishes = { Plate = 18, Bowl = 6, Cup = 6, Glass = 4, Fork = 5, Knife = 5, Spoon = 4, Pan = 2, Pot = 0 },
-		Spots = { Plate = 5, Bowl = 5, Cup = 3, Glass = 2, Fork = 2, Knife = 2, Spoon = 2, Pan = 11, Pot = 13 },
-		Grime = { { Type = "Grease", Weight = 35 }, { Type = "Mustard", Weight = 25 }, { Type = "Ketchup", Weight = 25 }, { Type = "Char", Weight = 15 } },
-		Theme = {
-			Tub = Color3.fromRGB(190, 196, 202),
-			Rack = Color3.fromRGB(70, 180, 190),
-			Accent = Color3.fromRGB(255, 80, 90),
-			Plate = Color3.fromRGB(252, 250, 245),
-			PlateRim = Color3.fromRGB(230, 50, 60),
-			Bowl = Color3.fromRGB(255, 235, 150),
-			Cup = Color3.fromRGB(230, 60, 70),
-			Glass = Color3.fromRGB(220, 245, 255),
-			Metal = Color3.fromRGB(175, 180, 185),
-			Light = Color3.fromRGB(255, 240, 210),
-		},
-	},
-	{
-		Id = 4,
-		Name = "Birthday Bash",
-		Subtitle = "Frosting, sprinkles and stubborn burnt sugar.",
-		Icon = "🎂",
-		Mult = 40,
-		ParTime = 660,
-		Bubbles = 450,
-		GoldenChance = 0.03,
-		Dishes = { Plate = 20, Bowl = 8, Cup = 8, Glass = 4, Fork = 6, Knife = 5, Spoon = 5, Pan = 0, Pot = 2 },
-		Spots = { Plate = 5, Bowl = 5, Cup = 3, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 11, Pot = 13 },
-		Grime = { { Type = "Frosting", Weight = 35 }, { Type = "Sprinkles", Weight = 25 }, { Type = "Chocolate", Weight = 25 }, { Type = "BurntSugar", Weight = 15 } },
-		Theme = {
-			Tub = Color3.fromRGB(215, 205, 225),
-			Rack = Color3.fromRGB(255, 150, 210),
-			Accent = Color3.fromRGB(170, 110, 255),
-			Plate = Color3.fromRGB(255, 252, 255),
-			PlateRim = Color3.fromRGB(255, 120, 190),
-			Bowl = Color3.fromRGB(180, 230, 255),
-			Cup = Color3.fromRGB(255, 220, 120),
-			Glass = Color3.fromRGB(235, 220, 255),
-			Metal = Color3.fromRGB(195, 190, 205),
-			Light = Color3.fromRGB(255, 215, 245),
-		},
-	},
-	{
-		Id = 5,
 		Name = "Royal Banquet",
-		Subtitle = "Gold plates, fancy food and ancient gravy.",
+		Subtitle = "Golden platters, fancy food and ancient gravy.",
 		Icon = "👑",
-		Mult = 150,
+		Place = "Castle Hall",
+		Mult = 16,
 		ParTime = 780,
-		Bubbles = 1000,
-		GoldenChance = 0.04,
-		Dishes = { Plate = 24, Bowl = 8, Cup = 4, Glass = 8, Fork = 6, Knife = 6, Spoon = 6, Pan = 2, Pot = 2 },
-		Spots = { Plate = 5, Bowl = 5, Cup = 3, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 12, Pot = 14 },
-		Grime = { { Type = "TruffleGunk", Weight = 35 }, { Type = "CaviarSmear", Weight = 30 }, { Type = "Gravy", Weight = 20 }, { Type = "AncientGravy", Weight = 15 } },
+		Bubbles = 400,
+		GoldenChance = 0.035,
+		Dishes = { Plate = 14, Tray = 10, Bowl = 10, Cup = 6, Glass = 10, Fork = 6, Knife = 6, Spoon = 5, Pan = 2, Pot = 2 },
+		Spots = { Plate = 5, Tray = 9, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16 },
+		Grime = {
+			{ Type = "TruffleGunk", Weight = 30 },
+			{ Type = "CaviarSmear", Weight = 25 },
+			{ Type = "Gravy", Weight = 15 },
+			{ Type = "Chocolate", Weight = 12 },
+			{ Type = "AncientGravy", Weight = 18 },
+		},
 		Theme = {
-			Tub = Color3.fromRGB(60, 55, 70),
+			Tub = Color3.fromRGB(70, 64, 80),
 			Rack = Color3.fromRGB(230, 190, 90),
 			Accent = Color3.fromRGB(255, 205, 80),
 			Plate = Color3.fromRGB(255, 250, 235),
-			PlateRim = Color3.fromRGB(230, 185, 70),
+			PlateRim = Color3.fromRGB(215, 170, 60),
 			Bowl = Color3.fromRGB(245, 235, 210),
 			Cup = Color3.fromRGB(150, 40, 60),
 			Glass = Color3.fromRGB(255, 240, 200),
 			Metal = Color3.fromRGB(230, 190, 90),
+			Tray = Color3.fromRGB(235, 195, 85),
 			Light = Color3.fromRGB(255, 225, 160),
 		},
 	},
@@ -265,9 +233,9 @@ Config.Levels = {
 -- Cost = Base * Growth^level (2 significant figures), or Costs[level + 1] when Costs is given.
 ----------------------------------------------------------------------------------------------------
 Config.Perks = {
-	{ Id = "HeadStart", Name = "Head Start", Icon = "💰", Desc = "Start every run with +15 coins per level (times the dishwasher's multiplier).", Base = 30, Growth = 1.6, Max = 10, PerLevel = 15 },
-	{ Id = "CoinSoap", Name = "Coin Soap", Icon = "💰", Desc = "+10% coins from the drain per level.", Base = 50, Growth = 1.6, Max = 10, PerLevel = 0.10 },
-	{ Id = "DeepTank", Name = "Deep Tank", Icon = "🛢️", Desc = "+15% tank size per level.", Base = 40, Growth = 1.6, Max = 10, PerLevel = 0.15 },
+	{ Id = "HeadStart", Name = "Head Start", Icon = "💰", Desc = "Start every run with +25 coins per level (times the dishwasher's multiplier).", Base = 40, Growth = 2, Max = 6, PerLevel = 25 },
+	{ Id = "CoinSoap", Name = "Coin Soap", Icon = "💰", Desc = "+15% coins from the drain per level.", Base = 60, Growth = 2, Max = 6, PerLevel = 0.15 },
+	{ Id = "DeepTank", Name = "Deep Tank", Icon = "🛢️", Desc = "+25% tank size per level.", Base = 50, Growth = 2, Max = 6, PerLevel = 0.25 },
 	{ Id = "LuckySuds", Name = "Lucky Suds", Icon = "🍀", Desc = "+1% golden dirt per level (best in the party counts).", Base = 60, Growth = 1.8, Max = 5, PerLevel = 0.01 },
 	{ Id = "PetSlot", Name = "Pet Slot", Icon = "🐾", Desc = "Equip one more pet.", Costs = { 300, 1500 }, Max = 2, PerLevel = 1 },
 }
@@ -337,7 +305,7 @@ Config.Eggs = {
 		Id = "Sparkle",
 		Name = "Sparkle Egg",
 		Cost = 2500,
-		RequiredLevel = 4,
+		RequiredLevel = 3,
 		Color = Color3.fromRGB(255, 220, 90),
 		Pets = { { Pet = "FoamFox", Chance = 60 }, { Pet = "SteamOwl", Chance = 25 }, { Pet = "CrystalTurtle", Chance = 11 }, { Pet = "TidalDragon", Chance = 3.5 }, { Pet = "KrakenKing", Chance = 0.5 } },
 	},

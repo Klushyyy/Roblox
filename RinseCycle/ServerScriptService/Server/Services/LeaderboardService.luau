@@ -1,4 +1,4 @@
--- Lobby leaderboards: "Fastest Clean" (one board that cycles through the levels) and
+-- Lobby leaderboards: "Fastest Clean" (one page per level; players flip pages with the arrows) and
 -- "Most Dishes Cleaned".
 --
 --   * OrderedDataStores: RinseCycle_Fastest_L<n> holds best times in tenths of a second (ascending,
@@ -8,7 +8,7 @@
 --     improved, and only values that changed since this server last wrote them), read the top 10
 --     of every store, and redraw.
 --   * Offline (Studio without API access) the boards rank the players in this server instead.
---   * The Times board switches level every CYCLE_INTERVAL seconds, from cached rows.
+--   * The Times board draws every level's page; each client shows the page it picked (Effects).
 
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
@@ -30,7 +30,6 @@ local LeaderboardService = {}
 local REFRESH_INTERVAL = 120
 local OFFLINE_REFRESH_INTERVAL = 10 -- offline boards are free to rebuild, so keep them fresh
 local FIRST_REFRESH_DELAY = 8 -- give the first players' profiles a moment to load
-local CYCLE_INTERVAL = 8
 local TOP_N = 10
 local KEY_PREFIX = "u_"
 local ROW_HEIGHT = 34
@@ -51,7 +50,6 @@ type Row = { Name: string, Value: number }
 local levelCount = #Config.Levels
 local timesTop: { [number]: { Row } } = {}
 local dishesTop: { Row } = {}
-local shownLevel = 1
 
 local timeStores: { [number]: OrderedDataStore } = {}
 local dishesStore: OrderedDataStore? = nil
@@ -192,9 +190,14 @@ local function drawTimes()
 		return
 	end
 	local board = lobby.Boards.Times
-	local level = Config.Levels[shownLevel]
-	board.Title.Text = string.format("⏱️ Fastest Clean: %s %s", level.Icon, level.Name)
-	drawRows(board.List, timesTop[shownLevel] or {}, formatTenths, "No clears yet!")
+	local pages = board.Pages or { { Title = board.Title, List = board.List } }
+	for i, page in pages do
+		local level = Config.Levels[i]
+		if level then
+			page.Title.Text = string.format("⏱️ Fastest: %s %s", level.Icon, level.Name)
+			drawRows(page.List, timesTop[i] or {}, formatTenths, "No clears yet!")
+		end
+	end
 end
 
 local function drawDishes()
@@ -355,14 +358,6 @@ function LeaderboardService.Start()
 			drawTimes()
 			drawDishes()
 			task.wait(if offline then OFFLINE_REFRESH_INTERVAL else REFRESH_INTERVAL)
-		end
-	end)
-
-	task.spawn(function()
-		while true do
-			task.wait(CYCLE_INTERVAL)
-			shownLevel = shownLevel % levelCount + 1
-			drawTimes()
 		end
 	end)
 end

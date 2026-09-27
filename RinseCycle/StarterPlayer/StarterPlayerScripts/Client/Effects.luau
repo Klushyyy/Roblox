@@ -498,8 +498,56 @@ local function buyTool(index: number)
 	end
 end
 
+----------------------------------------------------------------------------------------------------
+-- Paged leaderboards: the arrows (tag "BoardArrow") and the "Next level" prompt flip this client's
+-- view of the pages (Page1..PageN in the board's SurfaceGui). Nothing is sent to the server.
+----------------------------------------------------------------------------------------------------
+
+local function flipBoard(board: Instance, dir: number)
+	local gui = board:FindFirstChildOfClass("SurfaceGui")
+	if not gui then
+		return
+	end
+	local pages = {}
+	local current = 1
+	for i = 1, 20 do
+		local page = gui:FindFirstChild("Page" .. i)
+		if not page or not page:IsA("GuiObject") then
+			break
+		end
+		pages[i] = page
+		if page.Visible then
+			current = i
+		end
+	end
+	if #pages < 2 then
+		return
+	end
+	local nextIndex = (current - 1 + dir) % #pages + 1
+	for i, page in pages do
+		page.Visible = i == nextIndex
+	end
+	UIKit.PlaySound("Click")
+end
+
+local function addBoardArrow(inst: Instance)
+	local detector = inst:FindFirstChildOfClass("ClickDetector") or inst:WaitForChild("ClickDetector", 10)
+	if not detector or not detector:IsA("ClickDetector") then
+		return
+	end
+	detector.MouseClick:Connect(function(player)
+		if player == LocalPlayer and inst.Parent then
+			flipBoard(inst.Parent, tonumber(inst:GetAttribute("Dir")) or 1)
+		end
+	end)
+end
+
 local function onPromptTriggered(prompt: ProximityPrompt, player: Player)
 	if player ~= LocalPlayer then
+		return
+	end
+	if prompt:GetAttribute("BoardNext") and prompt.Parent then
+		flipBoard(prompt.Parent, 1)
 		return
 	end
 	local windowName = prompt:GetAttribute("OpenWindow")
@@ -541,7 +589,7 @@ local function updateShopDisplays()
 				prompt.Enabled = not owned
 			end
 		else
-			local gui = inst:FindFirstChildOfClass("SurfaceGui")
+			local gui = inst:FindFirstChildWhichIsA("LayerCollector")
 			local price = gui and gui:FindFirstChild("Price") :: TextLabel?
 			if price then
 				local cost = Config.ToolCost(index, run.Level) or 0
@@ -644,6 +692,13 @@ function Effects.Init()
 	CollectionService:GetInstanceRemovedSignal("LiftPad"):Connect(removeLiftPart)
 
 	ProximityPromptService.PromptTriggered:Connect(onPromptTriggered)
+
+	for _, inst in CollectionService:GetTagged("BoardArrow") do
+		task.spawn(addBoardArrow, inst)
+	end
+	CollectionService:GetInstanceAddedSignal("BoardArrow"):Connect(function(inst)
+		task.spawn(addBoardArrow, inst)
+	end)
 
 	RunService.Heartbeat:Connect(function(dt)
 		stepSpin(dt)

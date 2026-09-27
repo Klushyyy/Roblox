@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "0.2.0"
+Config.Version = "0.3.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -70,23 +70,23 @@ Config.Round = {
 ----------------------------------------------------------------------------------------------------
 Config.Base = {
 	Radius = 1.6, -- studs
-	RadiusPerLevel = 0.3,
+	RadiusPerLevel = 0.55,
 	Power = 2.5, -- dirt HP removed per second
-	PowerGrowth = 1.3, -- per Scrub Power level
+	PowerGrowth = 1.45, -- per Power level
 	Tank = 15, -- units
-	TankGrowth = 1.35, -- per Tank Size level
+	TankGrowth = 1.6, -- per Tank Size level
 	WalkSpeed = 20,
-	WalkSpeedPerLevel = 1.5,
+	WalkSpeedPerLevel = 2.5,
 }
 
 -- In-run upgrades bought with Coins. Price = Base * Growth^level * level Mult (2 significant figures).
 -- PerTool upgrades are bought separately for every tool (and cost more on better tools: x UpgradeMult);
 -- the others (Tank, Sneakers) are yours whatever you're holding.
 Config.Upgrades = {
-	{ Id = "ScrubPower", Name = "Power", Icon = "💪", Desc = "This tool cleans faster.", Base = 6, Growth = 1.5, Max = 15, PerTool = true },
-	{ Id = "HandSize", Name = "Size", Icon = "🖐️", Desc = "This tool cleans a bigger area.", Base = 8, Growth = 1.55, Max = 12, PerTool = true },
-	{ Id = "TankSize", Name = "Tank Size", Icon = "🛢️", Desc = "Carry more dirt per trip.", Base = 5, Growth = 1.5, Max = 15 },
-	{ Id = "Sneakers", Name = "Sneakers", Icon = "👟", Desc = "Run to the drain faster.", Base = 10, Growth = 1.6, Max = 8 },
+	{ Id = "ScrubPower", Name = "Power", Icon = "💪", Desc = "This tool cleans faster.", Base = 8, Growth = 2, Max = 6, PerTool = true },
+	{ Id = "HandSize", Name = "Size", Icon = "🖐️", Desc = "This tool cleans a bigger area.", Base = 10, Growth = 2, Max = 6, PerTool = true },
+	{ Id = "TankSize", Name = "Tank Size", Icon = "🛢️", Desc = "Carry more dirt per trip.", Base = 6, Growth = 2, Max = 6 },
+	{ Id = "Sneakers", Name = "Sneakers", Icon = "👟", Desc = "Run to the drain faster.", Base = 12, Growth = 2, Max = 6 },
 }
 
 -- Tools, bought with Coins inside a run in ANY order, then picked from the hotbar (keys 1-6). Each
@@ -134,7 +134,7 @@ Config.GrimeTypes = {
 -- Spots = base grime spots per dish of that kind (solo), before PartyGrimeScale.
 -- Theme colours are used by the arena and dish builders.
 ----------------------------------------------------------------------------------------------------
-Config.DishKinds = { "Plate", "Bowl", "Cup", "Glass", "Fork", "Knife", "Spoon", "Pan", "Pot" }
+Config.DishKinds = { "Plate", "Tray", "Bowl", "Cup", "Glass", "Fork", "Knife", "Spoon", "Pan", "Pot" }
 
 Config.Levels = {
 	{
@@ -142,12 +142,13 @@ Config.Levels = {
 		Name = "Family Dinner",
 		Subtitle = "Crumbs, ketchup and a whole lot of gravy.",
 		Icon = "🍝",
+		Place = "Family Kitchen",
 		Mult = 1,
-		ParTime = 330,
+		ParTime = 360,
 		Bubbles = 40,
 		GoldenChance = 0.02,
-		Dishes = { Plate = 14, Bowl = 5, Cup = 5, Glass = 0, Fork = 4, Knife = 3, Spoon = 3, Pan = 0, Pot = 0 },
-		Spots = { Plate = 6, Bowl = 6, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16 },
+		Dishes = { Plate = 16, Tray = 0, Bowl = 6, Cup = 6, Glass = 2, Fork = 4, Knife = 3, Spoon = 3, Pan = 0, Pot = 0 },
+		Spots = { Plate = 6, Tray = 8, Bowl = 6, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16 },
 		Grime = { { Type = "Crumbs", Weight = 45 }, { Type = "Ketchup", Weight = 35 }, { Type = "Gravy", Weight = 20 } },
 		Theme = {
 			Tub = Color3.fromRGB(172, 178, 187),
@@ -159,106 +160,73 @@ Config.Levels = {
 			Cup = Color3.fromRGB(255, 180, 120),
 			Glass = Color3.fromRGB(200, 235, 255),
 			Metal = Color3.fromRGB(190, 195, 200),
+			Tray = Color3.fromRGB(190, 195, 200),
 			Light = Color3.fromRGB(210, 235, 255),
 		},
 	},
 	{
 		Id = 2,
 		Name = "Pizza Party",
-		Subtitle = "Sauce everywhere. Watch out for burnt crust.",
+		Subtitle = "Greasy pizza trays, sauce everywhere and burnt crust.",
 		Icon = "🍕",
-		Mult = 3,
-		ParTime = 540,
-		Bubbles = 90,
-		GoldenChance = 0.02,
-		Dishes = { Plate = 16, Bowl = 6, Cup = 6, Glass = 2, Fork = 5, Knife = 4, Spoon = 3, Pan = 1, Pot = 0 },
-		Spots = { Plate = 5, Bowl = 5, Cup = 3, Glass = 2, Fork = 2, Knife = 2, Spoon = 2, Pan = 11, Pot = 13 },
-		Grime = { { Type = "TomatoSauce", Weight = 40 }, { Type = "MeltedCheese", Weight = 30 }, { Type = "Crumbs", Weight = 15 }, { Type = "BurntCrust", Weight = 15 } },
+		Place = "Pizzeria",
+		Mult = 4,
+		ParTime = 600,
+		Bubbles = 120,
+		GoldenChance = 0.025,
+		Dishes = { Plate = 12, Tray = 9, Bowl = 8, Cup = 7, Glass = 4, Fork = 5, Knife = 4, Spoon = 4, Pan = 2, Pot = 0 },
+		Spots = { Plate = 5, Tray = 8, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 13, Pot = 15 },
+		Grime = {
+			{ Type = "TomatoSauce", Weight = 32 },
+			{ Type = "MeltedCheese", Weight = 26 },
+			{ Type = "Grease", Weight = 15 },
+			{ Type = "Crumbs", Weight = 10 },
+			{ Type = "BurntCrust", Weight = 17 },
+		},
 		Theme = {
-			Tub = Color3.fromRGB(200, 205, 210),
-			Rack = Color3.fromRGB(230, 90, 70),
+			Tub = Color3.fromRGB(196, 200, 206),
+			Rack = Color3.fromRGB(225, 85, 65),
 			Accent = Color3.fromRGB(255, 120, 60),
 			Plate = Color3.fromRGB(255, 250, 240),
-			PlateRim = Color3.fromRGB(220, 60, 50),
+			PlateRim = Color3.fromRGB(215, 55, 45),
 			Bowl = Color3.fromRGB(255, 230, 190),
-			Cup = Color3.fromRGB(120, 200, 120),
+			Cup = Color3.fromRGB(110, 190, 110),
 			Glass = Color3.fromRGB(210, 240, 255),
 			Metal = Color3.fromRGB(185, 190, 195),
+			Tray = Color3.fromRGB(160, 165, 172),
 			Light = Color3.fromRGB(255, 225, 190),
 		},
 	},
 	{
 		Id = 3,
-		Name = "Burger Diner",
-		Subtitle = "Grease, mustard, and char that needs a brush.",
-		Icon = "🍔",
-		Mult = 10,
-		ParTime = 600,
-		Bubbles = 200,
-		GoldenChance = 0.025,
-		Dishes = { Plate = 18, Bowl = 6, Cup = 6, Glass = 4, Fork = 5, Knife = 5, Spoon = 4, Pan = 2, Pot = 0 },
-		Spots = { Plate = 5, Bowl = 5, Cup = 3, Glass = 2, Fork = 2, Knife = 2, Spoon = 2, Pan = 11, Pot = 13 },
-		Grime = { { Type = "Grease", Weight = 35 }, { Type = "Mustard", Weight = 25 }, { Type = "Ketchup", Weight = 25 }, { Type = "Char", Weight = 15 } },
-		Theme = {
-			Tub = Color3.fromRGB(190, 196, 202),
-			Rack = Color3.fromRGB(70, 180, 190),
-			Accent = Color3.fromRGB(255, 80, 90),
-			Plate = Color3.fromRGB(252, 250, 245),
-			PlateRim = Color3.fromRGB(230, 50, 60),
-			Bowl = Color3.fromRGB(255, 235, 150),
-			Cup = Color3.fromRGB(230, 60, 70),
-			Glass = Color3.fromRGB(220, 245, 255),
-			Metal = Color3.fromRGB(175, 180, 185),
-			Light = Color3.fromRGB(255, 240, 210),
-		},
-	},
-	{
-		Id = 4,
-		Name = "Birthday Bash",
-		Subtitle = "Frosting, sprinkles and stubborn burnt sugar.",
-		Icon = "🎂",
-		Mult = 40,
-		ParTime = 660,
-		Bubbles = 450,
-		GoldenChance = 0.03,
-		Dishes = { Plate = 20, Bowl = 8, Cup = 8, Glass = 4, Fork = 6, Knife = 5, Spoon = 5, Pan = 0, Pot = 2 },
-		Spots = { Plate = 5, Bowl = 5, Cup = 3, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 11, Pot = 13 },
-		Grime = { { Type = "Frosting", Weight = 35 }, { Type = "Sprinkles", Weight = 25 }, { Type = "Chocolate", Weight = 25 }, { Type = "BurntSugar", Weight = 15 } },
-		Theme = {
-			Tub = Color3.fromRGB(215, 205, 225),
-			Rack = Color3.fromRGB(255, 150, 210),
-			Accent = Color3.fromRGB(170, 110, 255),
-			Plate = Color3.fromRGB(255, 252, 255),
-			PlateRim = Color3.fromRGB(255, 120, 190),
-			Bowl = Color3.fromRGB(180, 230, 255),
-			Cup = Color3.fromRGB(255, 220, 120),
-			Glass = Color3.fromRGB(235, 220, 255),
-			Metal = Color3.fromRGB(195, 190, 205),
-			Light = Color3.fromRGB(255, 215, 245),
-		},
-	},
-	{
-		Id = 5,
 		Name = "Royal Banquet",
-		Subtitle = "Gold plates, fancy food and ancient gravy.",
+		Subtitle = "Golden platters, fancy food and ancient gravy.",
 		Icon = "👑",
-		Mult = 150,
+		Place = "Castle Hall",
+		Mult = 16,
 		ParTime = 780,
-		Bubbles = 1000,
-		GoldenChance = 0.04,
-		Dishes = { Plate = 24, Bowl = 8, Cup = 4, Glass = 8, Fork = 6, Knife = 6, Spoon = 6, Pan = 2, Pot = 2 },
-		Spots = { Plate = 5, Bowl = 5, Cup = 3, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 12, Pot = 14 },
-		Grime = { { Type = "TruffleGunk", Weight = 35 }, { Type = "CaviarSmear", Weight = 30 }, { Type = "Gravy", Weight = 20 }, { Type = "AncientGravy", Weight = 15 } },
+		Bubbles = 400,
+		GoldenChance = 0.035,
+		Dishes = { Plate = 14, Tray = 10, Bowl = 10, Cup = 6, Glass = 10, Fork = 6, Knife = 6, Spoon = 5, Pan = 2, Pot = 2 },
+		Spots = { Plate = 5, Tray = 9, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16 },
+		Grime = {
+			{ Type = "TruffleGunk", Weight = 30 },
+			{ Type = "CaviarSmear", Weight = 25 },
+			{ Type = "Gravy", Weight = 15 },
+			{ Type = "Chocolate", Weight = 12 },
+			{ Type = "AncientGravy", Weight = 18 },
+		},
 		Theme = {
-			Tub = Color3.fromRGB(60, 55, 70),
+			Tub = Color3.fromRGB(70, 64, 80),
 			Rack = Color3.fromRGB(230, 190, 90),
 			Accent = Color3.fromRGB(255, 205, 80),
 			Plate = Color3.fromRGB(255, 250, 235),
-			PlateRim = Color3.fromRGB(230, 185, 70),
+			PlateRim = Color3.fromRGB(215, 170, 60),
 			Bowl = Color3.fromRGB(245, 235, 210),
 			Cup = Color3.fromRGB(150, 40, 60),
 			Glass = Color3.fromRGB(255, 240, 200),
 			Metal = Color3.fromRGB(230, 190, 90),
+			Tray = Color3.fromRGB(235, 195, 85),
 			Light = Color3.fromRGB(255, 225, 160),
 		},
 	},
@@ -269,9 +237,9 @@ Config.Levels = {
 -- Cost = Base * Growth^level (2 significant figures), or Costs[level + 1] when Costs is given.
 ----------------------------------------------------------------------------------------------------
 Config.Perks = {
-	{ Id = "HeadStart", Name = "Head Start", Icon = "💰", Desc = "Start every run with +15 coins per level (times the dishwasher's multiplier).", Base = 30, Growth = 1.6, Max = 10, PerLevel = 15 },
-	{ Id = "CoinSoap", Name = "Coin Soap", Icon = "💰", Desc = "+10% coins from the drain per level.", Base = 50, Growth = 1.6, Max = 10, PerLevel = 0.10 },
-	{ Id = "DeepTank", Name = "Deep Tank", Icon = "🛢️", Desc = "+15% tank size per level.", Base = 40, Growth = 1.6, Max = 10, PerLevel = 0.15 },
+	{ Id = "HeadStart", Name = "Head Start", Icon = "💰", Desc = "Start every run with +25 coins per level (times the dishwasher's multiplier).", Base = 40, Growth = 2, Max = 6, PerLevel = 25 },
+	{ Id = "CoinSoap", Name = "Coin Soap", Icon = "💰", Desc = "+15% coins from the drain per level.", Base = 60, Growth = 2, Max = 6, PerLevel = 0.15 },
+	{ Id = "DeepTank", Name = "Deep Tank", Icon = "🛢️", Desc = "+25% tank size per level.", Base = 50, Growth = 2, Max = 6, PerLevel = 0.25 },
 	{ Id = "LuckySuds", Name = "Lucky Suds", Icon = "🍀", Desc = "+1% golden dirt per level (best in the party counts).", Base = 60, Growth = 1.8, Max = 5, PerLevel = 0.01 },
 	{ Id = "PetSlot", Name = "Pet Slot", Icon = "🐾", Desc = "Equip one more pet.", Costs = { 300, 1500 }, Max = 2, PerLevel = 1 },
 }
@@ -341,7 +309,7 @@ Config.Eggs = {
 		Id = "Sparkle",
 		Name = "Sparkle Egg",
 		Cost = 2500,
-		RequiredLevel = 4,
+		RequiredLevel = 3,
 		Color = Color3.fromRGB(255, 220, 90),
 		Pets = { { Pet = "FoamFox", Chance = 60 }, { Pet = "SteamOwl", Chance = 25 }, { Pet = "CrystalTurtle", Chance = 11 }, { Pet = "TidalDragon", Chance = 3.5 }, { Pet = "KrakenKing", Chance = 0.5 } },
 	},
@@ -1900,16 +1868,23 @@ return Remotes</ProtectedString></Properties></Item>
 --   * Bare Hands (index 1) is just the Grip
 -- ToolModels.HoldOffset(toolIndex) -&gt; CFrame: where the Grip sits relative to a RightHand (R15) so
 -- the tool looks held.
+--
+-- Detail comes from a few helpers: rounded boxes (a core plus cylinders on the edges), rings and
+-- curved runs of short bars (hoses, trigger guards, handles), ribbed knobs, and small trims and
+-- fittings. No two coplanar faces overlap, so nothing flickers.
 
 local ToolModels = {}
 
-local DARK = Color3.fromRGB(45, 45, 52)
+local DARK = Color3.fromRGB(40, 42, 50)
+local RUBBER = Color3.fromRGB(58, 60, 68)
 local WHITE = Color3.fromRGB(245, 247, 250)
-local CHROME = Color3.fromRGB(205, 210, 218)
-local WOOD = Color3.fromRGB(160, 110, 70)
+local CHROME = Color3.fromRGB(210, 215, 224)
+local BRASS = Color3.fromRGB(214, 170, 80)
+local WOOD = Color3.fromRGB(170, 116, 72)
+local WOOD_DARK = Color3.fromRGB(130, 86, 52)
 
-local UPRIGHT = CFrame.Angles(0, 0, math.rad(90)) -- cylinder axis -&gt; up
-local ALONG_Z = CFrame.Angles(0, math.rad(90), 0) -- cylinder axis -&gt; front/back
+local UPRIGHT = CFrame.Angles(0, 0, math.rad(90)) -- cylinder axis -&gt; up (Y)
+local ALONG_Z = CFrame.Angles(0, math.rad(90), 0) -- cylinder axis -&gt; front/back (Z)
 
 local COLORS = {
 	Color3.fromRGB(150, 210, 255),
@@ -1922,14 +1897,20 @@ local COLORS = {
 
 type Ctx = { Model: Model, Scale: number }
 
-local function part(ctx: Ctx, name: string, shape: Enum.PartType?, size: Vector3, offset: Vector3, rot: CFrame?, color: Color3, material: Enum.Material?, transparency: number?): Part
+local function shade(c: Color3, f: number): Color3
+	return Color3.new(math.clamp(c.R * f, 0, 1), math.clamp(c.G * f, 0, 1), math.clamp(c.B * f, 0, 1))
+end
+
+-- A part at `cf` (model-local, unscaled studs).
+local function partCF(ctx: Ctx, name: string, shape: Enum.PartType?, size: Vector3, cf: CFrame, color: Color3, material: Enum.Material?, transparency: number?): Part
 	local p = Instance.new("Part")
 	p.Name = name
 	if shape then
 		p.Shape = shape
 	end
-	p.Size = size * ctx.Scale
-	p.CFrame = CFrame.new(offset * ctx.Scale) * (rot or CFrame.identity)
+	local s = size * ctx.Scale
+	p.Size = Vector3.new(math.max(s.X, 0.05), math.max(s.Y, 0.05), math.max(s.Z, 0.05))
+	p.CFrame = CFrame.new(cf.Position * ctx.Scale) * cf.Rotation
 	p.Color = color
 	p.Material = material or Enum.Material.SmoothPlastic
 	p.Transparency = transparency or 0
@@ -1945,7 +1926,11 @@ local function part(ctx: Ctx, name: string, shape: Enum.PartType?, size: Vector3
 	return p
 end
 
--- A cylinder running from a to b (model-local studs, before scaling).
+local function part(ctx: Ctx, name: string, shape: Enum.PartType?, size: Vector3, offset: Vector3, rot: CFrame?, color: Color3, material: Enum.Material?, transparency: number?): Part
+	return partCF(ctx, name, shape, size, CFrame.new(offset) * (rot or CFrame.identity), color, material, transparency)
+end
+
+-- A cylinder running from a to b.
 local function bar(ctx: Ctx, name: string, a: Vector3, b: Vector3, thickness: number, color: Color3, material: Enum.Material?): Part
 	local dir = (b - a)
 	local mid = (a + b) / 2
@@ -1954,77 +1939,237 @@ local function bar(ctx: Ctx, name: string, a: Vector3, b: Vector3, thickness: nu
 	return part(ctx, name, Enum.PartType.Cylinder, Vector3.new(dir.Magnitude, thickness, thickness), mid, rot, color, material)
 end
 
+-- A smooth run of bars through the given points, with a ball at every joint (hoses, curved handles).
+local function tube(ctx: Ctx, name: string, points: { Vector3 }, thickness: number, color: Color3, material: Enum.Material?)
+	for i = 1, #points - 1 do
+		bar(ctx, name, points[i], points[i + 1], thickness, color, material)
+		if i &gt; 1 then
+			part(ctx, name .. "Joint", Enum.PartType.Ball, Vector3.one * thickness, points[i], nil, color, material)
+		end
+	end
+end
+
+-- Box with rounded edges along its local Y axis (a stadium/rounded-rectangle prism), placed at
+-- `cf`. Two crossing cores plus four corner cylinders.
+local function roundedBox(ctx: Ctx, name: string, size: Vector3, cf: CFrame, r: number, color: Color3, material: Enum.Material?, transparency: number?)
+	r = math.min(r, size.X / 2, size.Z / 2)
+	partCF(ctx, name, nil, Vector3.new(size.X - 2 * r, size.Y, size.Z), cf, color, material, transparency)
+	partCF(ctx, name, nil, Vector3.new(size.X, size.Y, size.Z - 2 * r), cf, color, material, transparency)
+	for _, sx in { -1, 1 } do
+		for _, sz in { -1, 1 } do
+			partCF(ctx, name .. "Edge", Enum.PartType.Cylinder, Vector3.new(size.Y, 2 * r, 2 * r), cf * CFrame.new(sx * (size.X / 2 - r), 0, sz * (size.Z / 2 - r)) * UPRIGHT, color, material, transparency)
+		end
+	end
+end
+
+-- A ring of `n` short bars in the XY plane of `cf` (so its axis is cf's Z).
+local function ring(ctx: Ctx, name: string, cf: CFrame, radius: number, thickness: number, color: Color3, material: Enum.Material?, n: number?, fromAngle: number?, toAngle: number?)
+	local count = n or 14
+	local a0, a1 = fromAngle or 0, toAngle or math.pi * 2
+	local pts = {}
+	for i = 0, count do
+		local a = a0 + (a1 - a0) * i / count
+		table.insert(pts, (cf * CFrame.new(math.cos(a) * radius, math.sin(a) * radius, 0)).Position)
+	end
+	tube(ctx, name, pts, thickness, color, material)
+end
+
+-- A ribbed knob: a cylinder with small ridges around it. Axis along cf's X.
+local function knob(ctx: Ctx, name: string, cf: CFrame, length: number, diameter: number, color: Color3, ridgeColor: Color3)
+	partCF(ctx, name, Enum.PartType.Cylinder, Vector3.new(length, diameter, diameter), cf, color)
+	for i = 0, 9 do
+		local a = i / 10 * math.pi * 2
+		partCF(ctx, name .. "Ridge", nil, Vector3.new(length * 0.9, diameter * 0.12, diameter * 0.12), cf * CFrame.Angles(a, 0, 0) * CFrame.new(0, diameter / 2, 0), ridgeColor)
+	end
+end
+
 local BUILDERS: { [number]: (Ctx, Color3) -&gt; () } = {}
 
--- Sponge: yellow foam with rounded ends, a green scrubber layer, a few pores.
+-- Sponge: a rounded block of yellow foam with dimpled pores, a glue line, and a green scouring pad
+-- on top with a lighter fleck pattern. A bead of soap suds rides on the pad.
 BUILDERS[2] = function(ctx, _color)
-	local yellow = Color3.fromRGB(255, 214, 80)
-	part(ctx, "Foam", nil, Vector3.new(2.8, 1.6, 2.2), Vector3.new(0, 0.8, 0), nil, yellow, Enum.Material.Sand)
-	for _, x in { -1.4, 1.4 } do
-		part(ctx, "FoamEnd", Enum.PartType.Cylinder, Vector3.new(2.2, 1.6, 1.6), Vector3.new(x, 0.8, 0), ALONG_Z, yellow, Enum.Material.Sand)
+	local yellow = Color3.fromRGB(255, 212, 76)
+	local foamCF = CFrame.new(0, 0.85, 0)
+	roundedBox(ctx, "Foam", Vector3.new(3.4, 1.7, 2.3), foamCF, 0.55, yellow, Enum.Material.SmoothPlastic)
+	-- Slightly darker lower lip, so the block reads rounded.
+	roundedBox(ctx, "FoamBase", Vector3.new(3.3, 0.3, 2.2), CFrame.new(0, 0.12, 0), 0.5, shade(yellow, 0.85))
+	partCF(ctx, "Glue", nil, Vector3.new(3.36, 0.08, 2.26), CFrame.new(0, 1.74, 0), Color3.fromRGB(255, 240, 190))
+	roundedBox(ctx, "Pad", Vector3.new(3.4, 0.5, 2.3), CFrame.new(0, 2.03, 0), 0.55, Color3.fromRGB(64, 160, 80), Enum.Material.Fabric)
+	-- Flecks on top of the pad.
+	local rng = Random.new(3)
+	for _ = 1, 10 do
+		part(ctx, "Fleck", nil, Vector3.new(0.35, 0.05, 0.12), Vector3.new(rng:NextNumber(-1.3, 1.3), 2.3, rng:NextNumber(-0.8, 0.8)), CFrame.Angles(0, rng:NextNumber(0, math.pi), 0), Color3.fromRGB(110, 200, 120))
 	end
-	part(ctx, "Scrubber", nil, Vector3.new(3.6, 0.5, 2.2), Vector3.new(0, 1.85, 0), nil, Color3.fromRGB(70, 165, 80), Enum.Material.Fabric)
-	for _, o in { Vector3.new(-0.9, 0.6, -1.08), Vector3.new(0.3, 1.1, -1.08), Vector3.new(1.0, 0.45, -1.08), Vector3.new(-0.2, 0.35, -1.08) } do
-		part(ctx, "Pore", Enum.PartType.Ball, Vector3.new(0.34, 0.34, 0.34), o, nil, Color3.fromRGB(215, 172, 50), Enum.Material.Sand)
+	-- Pores: little dimples on the front, back and sides.
+	for _ = 1, 9 do
+		local x, y = rng:NextNumber(-1.3, 1.3), rng:NextNumber(0.35, 1.45)
+		part(ctx, "Pore", Enum.PartType.Ball, Vector3.one * rng:NextNumber(0.22, 0.36), Vector3.new(x, y, -1.13), nil, Color3.fromRGB(214, 168, 46))
+		part(ctx, "Pore", Enum.PartType.Ball, Vector3.one * rng:NextNumber(0.22, 0.36), Vector3.new(-x, y, 1.13), nil, Color3.fromRGB(214, 168, 46))
+	end
+	for _ = 1, 3 do
+		part(ctx, "Pore", Enum.PartType.Ball, Vector3.one * 0.28, Vector3.new(1.68, rng:NextNumber(0.4, 1.4), rng:NextNumber(-0.5, 0.5)), nil, Color3.fromRGB(214, 168, 46))
+		part(ctx, "Pore", Enum.PartType.Ball, Vector3.one * 0.28, Vector3.new(-1.68, rng:NextNumber(0.4, 1.4), rng:NextNumber(-0.5, 0.5)), nil, Color3.fromRGB(214, 168, 46))
+	end
+	-- Suds.
+	for _, b in { { Vector3.new(0.7, 2.45, -0.3), 0.55 }, { Vector3.new(1.1, 2.4, 0.2), 0.4 }, { Vector3.new(0.35, 2.4, 0.3), 0.35 } } do
+		part(ctx, "Suds", Enum.PartType.Ball, Vector3.one * b[2], b[1], nil, WHITE, nil, 0.1)
 	end
 end
 
--- Scrub brush: rounded coloured head, white bristle rows, angled wooden handle with a knob.
+-- Scrub brush: an oval coloured block with a lighter top rim, tufts of bristles in rows underneath,
+-- and a curved wooden handle with a rubber grip, a chrome ferrule and a hanging ring.
 BUILDERS[3] = function(ctx, color)
-	part(ctx, "Head", nil, Vector3.new(2.6, 0.9, 1.6), Vector3.new(0, 1.0, 0), nil, color)
-	for _, x in { -1.3, 1.3 } do
-		part(ctx, "HeadEnd", Enum.PartType.Cylinder, Vector3.new(0.9, 1.6, 1.6), Vector3.new(x, 1.0, 0), UPRIGHT, color)
+	roundedBox(ctx, "Head", Vector3.new(3.2, 0.8, 1.6), CFrame.new(0, 1.15, 0), 0.8, color)
+	roundedBox(ctx, "HeadTop", Vector3.new(3.0, 0.25, 1.4), CFrame.new(0, 1.66, 0), 0.7, shade(color, 1.18))
+	roundedBox(ctx, "HeadBase", Vector3.new(3.1, 0.15, 1.5), CFrame.new(0, 0.7, 0), 0.75, shade(color, 0.75))
+	-- Bristle tufts: 7 x 3 grid, alternating lengths, white with pale tips.
+	for i = -3, 3 do
+		for j = -1, 1 do
+			if math.abs(i) == 3 and j ~= 0 then
+				continue -- rounded ends of the head
+			end
+			local len = if (i + j) % 2 == 0 then 0.65 else 0.55
+			local pos = Vector3.new(i * 0.42, 0.65 - len / 2, j * 0.42)
+			part(ctx, "Tuft", Enum.PartType.Cylinder, Vector3.new(len, 0.3, 0.3), pos, UPRIGHT, Color3.fromRGB(240, 238, 228), Enum.Material.Fabric)
+			part(ctx, "TuftTip", Enum.PartType.Cylinder, Vector3.new(0.06, 0.32, 0.32), pos - Vector3.new(0, len / 2, 0), UPRIGHT, Color3.fromRGB(255, 250, 235), Enum.Material.Fabric)
+		end
 	end
-	for i = -2, 2 do
-		part(ctx, "Bristles", nil, Vector3.new(0.4, 0.7, 1.3), Vector3.new(i * 0.6, 0.35, 0), nil, WHITE, Enum.Material.Fabric)
+	-- Handle: rises from the back of the head and curves over it.
+	part(ctx, "Ferrule", Enum.PartType.Cylinder, Vector3.new(0.45, 0.72, 0.72), Vector3.new(0, 1.85, 0.55), CFrame.Angles(math.rad(-35), 0, 0) * UPRIGHT, CHROME, Enum.Material.Metal)
+	local pts = { Vector3.new(0, 1.8, 0.45), Vector3.new(0, 2.35, 1.05), Vector3.new(0, 2.8, 1.9), Vector3.new(0, 3.05, 2.8), Vector3.new(0, 3.15, 3.5) }
+	tube(ctx, "Handle", pts, 0.55, WOOD, Enum.Material.Wood)
+	-- Rubber grip wrap near the end, and the end cap with a hanging ring.
+	bar(ctx, "GripWrap", Vector3.new(0, 2.95, 2.35), Vector3.new(0, 3.12, 3.25), 0.66, RUBBER)
+	for _, t in { 0.25, 0.5, 0.75 } do
+		local p = Vector3.new(0, 2.95, 2.35):Lerp(Vector3.new(0, 3.12, 3.25), t)
+		part(ctx, "GripRib", Enum.PartType.Cylinder, Vector3.new(0.1, 0.72, 0.72), p, CFrame.Angles(math.rad(-80), 0, 0) * UPRIGHT, shade(RUBBER, 1.3))
 	end
-	-- Handle: an angled wooden bar rising from the back of the head, with a knob on the end.
-	bar(ctx, "Handle", Vector3.new(0, 1.3, 0.5), Vector3.new(0, 2.9, 3.0), 0.6, WOOD, Enum.Material.Wood)
-	part(ctx, "Knob", Enum.PartType.Ball, Vector3.new(0.9, 0.9, 0.9), Vector3.new(0, 2.95, 3.1), nil, WOOD, Enum.Material.Wood)
-	part(ctx, "Ferrule", Enum.PartType.Cylinder, Vector3.new(0.5, 0.8, 0.8), Vector3.new(0, 1.45, 0.75), CFrame.Angles(math.rad(-58), 0, 0) * UPRIGHT, CHROME, Enum.Material.Metal)
+	part(ctx, "EndCap", Enum.PartType.Ball, Vector3.one * 0.66, Vector3.new(0, 3.15, 3.5), nil, WOOD_DARK, Enum.Material.Wood)
+	ring(ctx, "HangRing", CFrame.new(0, 3.2, 3.95) * CFrame.Angles(0, math.rad(90), 0), 0.3, 0.1, CHROME, Enum.Material.Metal, 10)
 end
 
--- Spray nozzle: pistol grip, barrel, chrome tip, trigger, a stub of green hose.
+-- Spray nozzle: a pistol spray gun. Coloured body with a chrome barrel that steps down to the tip,
+-- an adjustable spray-pattern dial, a rubber pistol grip with finger ridges, a curved trigger inside
+-- a guard, a brass hose fitting, and a coil of hose.
 BUILDERS[4] = function(ctx, color)
-	part(ctx, "Grip", nil, Vector3.new(0.8, 2, 1), Vector3.new(0, 1.1, 0.7), CFrame.Angles(math.rad(-15), 0, 0), DARK)
-	part(ctx, "Barrel", Enum.PartType.Cylinder, Vector3.new(3.2, 1, 1), Vector3.new(0, 2.3, -0.4), ALONG_Z, color)
-	part(ctx, "Collar", Enum.PartType.Cylinder, Vector3.new(0.3, 1.2, 1.2), Vector3.new(0, 2.3, -1.9), ALONG_Z, CHROME, Enum.Material.Metal)
-	part(ctx, "Tip", Enum.PartType.Cylinder, Vector3.new(0.9, 0.6, 0.6), Vector3.new(0, 2.3, -2.4), ALONG_Z, CHROME, Enum.Material.Metal)
-	part(ctx, "Trigger", nil, Vector3.new(0.3, 0.8, 0.3), Vector3.new(0, 1.6, -0.2), nil, DARK)
-	part(ctx, "Hose", Enum.PartType.Cylinder, Vector3.new(2, 0.45, 0.45), Vector3.new(0, 0.3, 1.9), ALONG_Z, Color3.fromRGB(60, 140, 70))
-end
-
--- Pressure washer: rounded body, wheels, push handle, gun and chrome wand.
-BUILDERS[5] = function(ctx, color)
-	part(ctx, "Body", nil, Vector3.new(2.8, 1.6, 3.2), Vector3.new(0, 1.4, 0.4), nil, color)
-	part(ctx, "Top", Enum.PartType.Cylinder, Vector3.new(3.2, 2.8, 2.8), Vector3.new(0, 2.2, 0.4), ALONG_Z, color)
-	part(ctx, "Badge", nil, Vector3.new(1.4, 0.6, 0.1), Vector3.new(0, 1.6, -1.25), nil, WHITE)
-	for _, x in { -1.5, 1.5 } do
-		part(ctx, "Wheel", Enum.PartType.Cylinder, Vector3.new(0.5, 1.4, 1.4), Vector3.new(x, 0.7, 1.3), nil, DARK)
-		part(ctx, "HandlePost", nil, Vector3.new(0.3, 2.4, 0.3), Vector3.new(x * 0.75, 3.4, 1.9), nil, DARK)
+	local y = 2.3
+	-- Body.
+	roundedBox(ctx, "Body", Vector3.new(0.9, 1.1, 2.2), CFrame.new(0, y, 0.2) * CFrame.Angles(0, 0, math.rad(90)), 0.45, color)
+	partCF(ctx, "BodyStripe", nil, Vector3.new(0.95, 0.18, 1.6), CFrame.new(0, y + 0.3, 0.2), shade(color, 0.7))
+	-- Barrel stepping down to the tip.
+	part(ctx, "Barrel", Enum.PartType.Cylinder, Vector3.new(1.2, 0.72, 0.72), Vector3.new(0, y, -1.4), ALONG_Z, CHROME, Enum.Material.Metal)
+	part(ctx, "BarrelCollar", Enum.PartType.Cylinder, Vector3.new(0.25, 0.9, 0.9), Vector3.new(0, y, -0.9), ALONG_Z, shade(color, 0.8))
+	-- Spray-pattern dial at the front.
+	local dialCF = CFrame.new(0, y, -2.15) * ALONG_Z
+	knob(ctx, "Dial", dialCF, 0.45, 1.05, color, shade(color, 0.7))
+	part(ctx, "Tip", Enum.PartType.Cylinder, Vector3.new(0.2, 0.45, 0.45), Vector3.new(0, y, -2.45), ALONG_Z, CHROME, Enum.Material.Metal)
+	part(ctx, "TipHole", Enum.PartType.Cylinder, Vector3.new(0.05, 0.18, 0.18), Vector3.new(0, y, -2.56), ALONG_Z, DARK)
+	-- Pistol grip with finger ridges.
+	local gripCF = CFrame.new(0, 1.2, 0.85) * CFrame.Angles(math.rad(-14), 0, 0)
+	roundedBox(ctx, "Grip", Vector3.new(0.8, 2.0, 0.95), gripCF, 0.38, RUBBER)
+	for i = 0, 2 do
+		partCF(ctx, "FingerRidge", Enum.PartType.Cylinder, Vector3.new(0.82, 0.26, 0.26), gripCF * CFrame.new(0, 0.55 - i * 0.45, -0.47), shade(RUBBER, 1.35))
 	end
-	part(ctx, "HandleBar", nil, Vector3.new(2.6, 0.35, 0.35), Vector3.new(0, 4.6, 1.9), nil, DARK)
-	part(ctx, "Gun", nil, Vector3.new(0.6, 1, 0.9), Vector3.new(1.9, 1.3, -0.3), nil, DARK)
-	part(ctx, "Wand", Enum.PartType.Cylinder, Vector3.new(3.6, 0.3, 0.3), Vector3.new(1.9, 1.7, -2.4), ALONG_Z, CHROME, Enum.Material.Metal)
+	partCF(ctx, "GripCap", nil, Vector3.new(0.9, 0.2, 1.05), gripCF * CFrame.new(0, -1.02, 0), color)
+	-- Trigger and guard.
+	tube(ctx, "Trigger", { Vector3.new(0, 1.75, -0.2), Vector3.new(0, 1.35, -0.3), Vector3.new(0, 1.0, -0.2) }, 0.26, color)
+	tube(ctx, "Guard", { Vector3.new(0, 1.75, -0.65), Vector3.new(0, 1.15, -0.7), Vector3.new(0, 0.75, -0.4), Vector3.new(0, 0.62, 0.25) }, 0.14, DARK)
+	-- Hose fitting and a coil of green hose trailing back.
+	part(ctx, "Fitting", Enum.PartType.Cylinder, Vector3.new(0.5, 0.55, 0.55), Vector3.new(0, 0.1, 1.05), UPRIGHT, BRASS, Enum.Material.Metal)
+	local hose = Color3.fromRGB(70, 160, 80)
+	tube(ctx, "Hose", { Vector3.new(0, 0.05, 1.1), Vector3.new(0, 0.2, 1.8), Vector3.new(0.6, 0.25, 2.2), Vector3.new(1.2, 0.25, 1.9) }, 0.4, hose)
+	ring(ctx, "HoseCoil", CFrame.new(1.35, 0.2, 1.2) * CFrame.Angles(math.rad(90), 0, 0), 0.75, 0.4, hose, nil, 12)
 end
 
--- Foam cannon: pistol grip and trigger, a see-through soap bottle hanging under a white barrel, a
--- wide bell, and foam spilling out of the front.
+-- Pressure washer: a two-tone rounded body on a dark chassis, big wheels with chrome hubs, a hose
+-- reel with coils on the side, a gauge, vents, a telescopic handle with foam grips, and the spray
+-- gun with its long chrome lance clipped to the side.
+BUILDERS[5] = function(ctx, color)
+	local bodyCF = CFrame.new(0, 1.9, 0.3)
+	roundedBox(ctx, "Body", Vector3.new(2.6, 2.1, 3.0), bodyCF, 0.7, color)
+	roundedBox(ctx, "BodyTop", Vector3.new(2.3, 0.4, 2.7), CFrame.new(0, 3.1, 0.3), 0.6, shade(color, 1.2))
+	roundedBox(ctx, "Chassis", Vector3.new(2.8, 0.5, 3.2), CFrame.new(0, 0.75, 0.3), 0.5, DARK)
+	-- Front face: vents and a badge.
+	for i = 0, 3 do
+		part(ctx, "Vent", nil, Vector3.new(1.4, 0.12, 0.08), Vector3.new(0, 1.35 + i * 0.25, -1.23), nil, shade(color, 0.55))
+	end
+	part(ctx, "Badge", nil, Vector3.new(1.2, 0.4, 0.06), Vector3.new(0, 2.55, -1.22), nil, WHITE)
+	part(ctx, "BadgeStripe", nil, Vector3.new(1.0, 0.1, 0.07), Vector3.new(0, 2.55, -1.23), nil, Color3.fromRGB(255, 200, 60))
+	-- Gauge on top.
+	part(ctx, "Gauge", Enum.PartType.Cylinder, Vector3.new(0.2, 0.8, 0.8), Vector3.new(0.6, 3.4, -0.5), UPRIGHT, CHROME, Enum.Material.Metal)
+	part(ctx, "GaugeFace", Enum.PartType.Cylinder, Vector3.new(0.06, 0.65, 0.65), Vector3.new(0.6, 3.52, -0.5), UPRIGHT, WHITE)
+	part(ctx, "GaugeNeedle", nil, Vector3.new(0.05, 0.04, 0.3), Vector3.new(0.6, 3.56, -0.58), CFrame.Angles(0, math.rad(30), 0), Color3.fromRGB(220, 40, 40))
+	-- Power switch.
+	part(ctx, "Switch", nil, Vector3.new(0.35, 0.2, 0.5), Vector3.new(-0.6, 3.38, -0.6), nil, Color3.fromRGB(230, 50, 50))
+	-- Wheels with hubcaps.
+	for _, x in { -1.5, 1.5 } do
+		part(ctx, "Wheel", Enum.PartType.Cylinder, Vector3.new(0.55, 1.5, 1.5), Vector3.new(x, 0.75, 1.2), nil, DARK)
+		part(ctx, "Tread", Enum.PartType.Cylinder, Vector3.new(0.45, 1.56, 1.56), Vector3.new(x, 0.75, 1.2), nil, RUBBER)
+		part(ctx, "Hub", Enum.PartType.Cylinder, Vector3.new(0.6, 0.7, 0.7), Vector3.new(x, 0.75, 1.2), nil, CHROME, Enum.Material.Metal)
+		part(ctx, "HubCap", Enum.PartType.Cylinder, Vector3.new(0.64, 0.3, 0.3), Vector3.new(x, 0.75, 1.2), nil, shade(color, 0.8))
+	end
+	-- Front foot.
+	part(ctx, "Foot", nil, Vector3.new(1.8, 0.35, 0.4), Vector3.new(0, 0.18, -0.9), nil, RUBBER)
+	-- Telescopic handle.
+	for _, x in { -0.95, 0.95 } do
+		bar(ctx, "HandleTube", Vector3.new(x, 2.6, 1.65), Vector3.new(x, 5.0, 1.95), 0.28, CHROME, Enum.Material.Metal)
+		bar(ctx, "HandleSleeve", Vector3.new(x, 2.5, 1.63), Vector3.new(x, 3.4, 1.73), 0.36, DARK)
+	end
+	bar(ctx, "HandleBar", Vector3.new(-1.1, 5.0, 1.95), Vector3.new(1.1, 5.0, 1.95), 0.3, CHROME, Enum.Material.Metal)
+	bar(ctx, "HandleFoam", Vector3.new(-0.75, 5.0, 1.95), Vector3.new(0.75, 5.0, 1.95), 0.45, RUBBER)
+	-- Hose reel on the right side.
+	part(ctx, "Reel", Enum.PartType.Cylinder, Vector3.new(0.5, 1.5, 1.5), Vector3.new(1.55, 2.0, 0.6), nil, shade(color, 0.8))
+	for i = 0, 2 do
+		part(ctx, "ReelCoil", Enum.PartType.Cylinder, Vector3.new(0.12, 1.25 - i * 0.12, 1.25 - i * 0.12), Vector3.new(1.84 + i * 0.001, 2.0, 0.6), nil, if i % 2 == 0 then DARK else RUBBER)
+	end
+	part(ctx, "ReelCrank", nil, Vector3.new(0.12, 0.7, 0.14), Vector3.new(1.9, 2.3, 0.6), nil, CHROME, Enum.Material.Metal)
+	-- Spray gun clipped on the left side, lance pointing forward.
+	local gx = -1.6
+	roundedBox(ctx, "GunBody", Vector3.new(0.45, 0.6, 1.1), CFrame.new(gx, 2.35, 0.5), 0.22, DARK)
+	part(ctx, "GunTrigger", nil, Vector3.new(0.14, 0.45, 0.14), Vector3.new(gx, 1.95, 0.35), nil, Color3.fromRGB(255, 200, 60))
+	bar(ctx, "GunGrip", Vector3.new(gx, 2.1, 0.8), Vector3.new(gx, 1.5, 1.0), 0.4, DARK)
+	bar(ctx, "Lance", Vector3.new(gx, 2.35, -0.05), Vector3.new(gx, 2.35, -2.9), 0.22, CHROME, Enum.Material.Metal)
+	part(ctx, "LanceTip", Enum.PartType.Cylinder, Vector3.new(0.35, 0.36, 0.36), Vector3.new(gx, 2.35, -3.0), ALONG_Z, Color3.fromRGB(255, 200, 60))
+	part(ctx, "Clip", nil, Vector3.new(0.4, 0.3, 0.3), Vector3.new(-1.4, 2.35, -0.3), nil, DARK)
+	-- Hose from the reel round the back to the gun.
+	tube(ctx, "Hose", { Vector3.new(1.55, 1.3, 1.1), Vector3.new(1.0, 0.9, 1.9), Vector3.new(-0.6, 0.9, 2.0), Vector3.new(-1.5, 1.2, 1.4), Vector3.new(gx, 1.5, 1.0) }, 0.2, Color3.fromRGB(30, 32, 38))
+end
+
+-- Foam cannon: a sleek blaster. White rounded body with colour stripes, a see-through soap tank on
+-- top (pink soap, a cap), a brass adjuster knob, a stepped chrome-and-white bell, a rubber pistol
+-- grip and trigger, and a burst of foam from the front.
 BUILDERS[6] = function(ctx, color)
-	part(ctx, "Grip", nil, Vector3.new(0.8, 2.2, 1.1), Vector3.new(0, 1.3, 1.6), CFrame.Angles(math.rad(-12), 0, 0), DARK)
-	part(ctx, "Trigger", nil, Vector3.new(0.3, 0.9, 0.35), Vector3.new(0, 1.7, 0.9), nil, DARK)
-	part(ctx, "TriggerGuard", nil, Vector3.new(0.25, 0.25, 1.2), Vector3.new(0, 1.15, 0.8), nil, DARK)
-	part(ctx, "Body", nil, Vector3.new(1.2, 1.2, 2.6), Vector3.new(0, 2.7, 0.9), nil, WHITE)
-	part(ctx, "Barrel", Enum.PartType.Cylinder, Vector3.new(2.6, 1.1, 1.1), Vector3.new(0, 2.7, -1.0), ALONG_Z, WHITE)
-	part(ctx, "Band", Enum.PartType.Cylinder, Vector3.new(0.35, 1.25, 1.25), Vector3.new(0, 2.7, -0.4), ALONG_Z, color)
-	part(ctx, "Bell", Enum.PartType.Cylinder, Vector3.new(0.9, 2.1, 2.1), Vector3.new(0, 2.7, -2.6), ALONG_Z, WHITE)
-	part(ctx, "BellRim", Enum.PartType.Cylinder, Vector3.new(0.25, 2.3, 2.3), Vector3.new(0, 2.7, -3.1), ALONG_Z, color)
-	-- The soap bottle screws on underneath the front.
-	part(ctx, "BottleNeck", Enum.PartType.Cylinder, Vector3.new(0.6, 0.7, 0.7), Vector3.new(0, 1.9, -0.9), nil, WHITE)
-	part(ctx, "Bottle", Enum.PartType.Cylinder, Vector3.new(1.7, 1.8, 1.8), Vector3.new(0, 0.85, -0.9), UPRIGHT, color, Enum.Material.Glass, 0.3)
-	part(ctx, "Soap", Enum.PartType.Cylinder, Vector3.new(1.0, 1.6, 1.6), Vector3.new(0, 0.55, -0.9), UPRIGHT, Color3.fromRGB(255, 150, 220), nil, 0.15)
-	for _, f in { { Vector3.new(0, 2.7, -3.6), 1.5 }, { Vector3.new(0.7, 3.3, -4.0), 1.0 }, { Vector3.new(-0.6, 3.2, -3.9), 0.9 }, { Vector3.new(0.2, 2.1, -3.9), 0.8 }, { Vector3.new(-0.3, 3.8, -4.3), 0.6 } } do
-		part(ctx, "Foam", Enum.PartType.Ball, Vector3.new(f[2], f[2], f[2]), f[1], nil, WHITE)
+	local y = 2.6
+	roundedBox(ctx, "Body", Vector3.new(1.1, 1.3, 3.2), CFrame.new(0, y, 0.6) * CFrame.Angles(0, 0, math.rad(90)), 0.55, WHITE)
+	for _, dz in { -0.4, 0.2 } do
+		partCF(ctx, "Stripe", nil, Vector3.new(1.16, 1.36, 0.18), CFrame.new(0, y, 0.6 + dz), color)
+	end
+	partCF(ctx, "TopRail", nil, Vector3.new(0.4, 0.2, 2.6), CFrame.new(0, y + 0.72, 0.8), shade(color, 0.75))
+	-- Bell: stepped cylinders widening toward the front, with a coloured rim.
+	part(ctx, "Neck", Enum.PartType.Cylinder, Vector3.new(0.8, 0.95, 0.95), Vector3.new(0, y, -1.3), ALONG_Z, CHROME, Enum.Material.Metal)
+	part(ctx, "Bell1", Enum.PartType.Cylinder, Vector3.new(0.5, 1.4, 1.4), Vector3.new(0, y, -1.9), ALONG_Z, WHITE)
+	part(ctx, "Bell2", Enum.PartType.Cylinder, Vector3.new(0.5, 1.9, 1.9), Vector3.new(0, y, -2.35), ALONG_Z, WHITE)
+	part(ctx, "Bell3", Enum.PartType.Cylinder, Vector3.new(0.4, 2.35, 2.35), Vector3.new(0, y, -2.75), ALONG_Z, WHITE)
+	ring(ctx, "BellRim", CFrame.new(0, y, -2.97), 1.2, 0.2, color, nil, 16)
+	part(ctx, "BellMouth", Enum.PartType.Cylinder, Vector3.new(0.05, 2.1, 2.1), Vector3.new(0, y, -2.96), ALONG_Z, Color3.fromRGB(230, 235, 245))
+	-- Soap tank on top: glass with soap inside, a cap and a brass adjuster.
+	part(ctx, "TankSeat", Enum.PartType.Cylinder, Vector3.new(0.25, 1.35, 1.35), Vector3.new(0, y + 0.78, 0.5), UPRIGHT, shade(color, 0.75))
+	part(ctx, "Tank", Enum.PartType.Cylinder, Vector3.new(1.7, 1.25, 1.25), Vector3.new(0, y + 1.75, 0.5), UPRIGHT, Color3.fromRGB(230, 245, 255), Enum.Material.Glass, 0.45)
+	part(ctx, "Soap", Enum.PartType.Cylinder, Vector3.new(1.05, 1.05, 1.05), Vector3.new(0, y + 1.45, 0.5), UPRIGHT, Color3.fromRGB(255, 140, 210), nil, 0.1)
+	part(ctx, "SoapBubble", Enum.PartType.Ball, Vector3.one * 0.3, Vector3.new(0.2, y + 2.05, 0.4), nil, WHITE, nil, 0.3)
+	part(ctx, "TankCap", Enum.PartType.Cylinder, Vector3.new(0.3, 1.35, 1.35), Vector3.new(0, y + 2.73, 0.5), UPRIGHT, color)
+	knob(ctx, "Adjuster", CFrame.new(0, y + 0.3, -0.6) * UPRIGHT, 0.5, 0.6, BRASS, shade(BRASS, 0.8))
+	-- Pistol grip, trigger and guard.
+	local gripCF = CFrame.new(0, 1.35, 1.55) * CFrame.Angles(math.rad(-14), 0, 0)
+	roundedBox(ctx, "Grip", Vector3.new(0.85, 2.1, 1.0), gripCF, 0.4, RUBBER)
+	for i = 0, 2 do
+		partCF(ctx, "FingerRidge", Enum.PartType.Cylinder, Vector3.new(0.87, 0.26, 0.26), gripCF * CFrame.new(0, 0.55 - i * 0.45, -0.5), shade(RUBBER, 1.35))
+	end
+	tube(ctx, "Trigger", { Vector3.new(0, 1.95, 0.75), Vector3.new(0, 1.55, 0.65), Vector3.new(0, 1.2, 0.75) }, 0.26, color)
+	tube(ctx, "Guard", { Vector3.new(0, 1.95, 0.2), Vector3.new(0, 1.3, 0.2), Vector3.new(0, 0.85, 0.55), Vector3.new(0, 0.75, 1.15) }, 0.14, DARK)
+	-- Foam burst.
+	for _, f in { { Vector3.new(0, y, -3.3), 1.3 }, { Vector3.new(0.6, y + 0.5, -3.6), 0.9 }, { Vector3.new(-0.55, y + 0.45, -3.55), 0.85 }, { Vector3.new(0.3, y - 0.55, -3.5), 0.75 }, { Vector3.new(-0.3, y + 1.0, -3.9), 0.55 }, { Vector3.new(0.15, y + 0.2, -4.1), 0.6 } } do
+		part(ctx, "Foam", Enum.PartType.Ball, Vector3.one * f[2], f[1], nil, WHITE, nil, 0.05)
 	end
 end
 
@@ -2372,8 +2517,8 @@ return Util</ProtectedString></Properties></Item>
 --   * tub interior X +-56, Z -50..62, 100 tall; the open door lies flat in front (Z -50..-121)
 --   * bottom rack floor at Y 4: three rows of standing plates, pans/pots and a cutlery basket
 --   * top rack floor at Y 50: tilted bowls, upturned mugs and glasses
---   * bubble-lift pads (tag "LiftPad", attribute LiftTo) carry you up; a chute on the top rack
---     drops you straight onto the drain. The client does the teleport (Effects).
+--   * bubble-lift pads (tag "LiftPad", attribute LiftTo) carry you up; the client does the
+--     teleport (Effects). Hold jump in the air to fly on bubble jets (BubbleJets, client).
 --   * the kitchen floor is 24 studs below the tub; falling off the door teleports you back.
 --
 -- Everything the spray can hit lives in two folders on the arena Model: "Dishes" and "Grime" (dirt).
@@ -2439,12 +2584,11 @@ local GLASS_Z = { 38, 52 }
 local BOWL_TILT = math.rad(50)
 local PAN_TILT = math.rad(55)
 
--- Lifts (tub floor front corners -&gt; top rack) and the chute (top rack -&gt; drain).
+-- Lifts (tub floor front corners -&gt; top rack). Coming down, you just jump off (or fly with bubble jets).
 local LIFTS = {
 	{ from = Vector3.new(-47, 0, -45), to = Vector3.new(-47, TOP_RACK_Y, -34) },
 	{ from = Vector3.new(47, 0, -45), to = Vector3.new(47, TOP_RACK_Y, -34) },
 }
-local CHUTE = { from = Vector3.new(0, TOP_RACK_Y, -36), to = Vector3.new(0, 0, -49) }
 
 -- Tool shop counter on the left of the open door.
 local SHOP_X = -49
@@ -2586,61 +2730,172 @@ end
 -- The kitchen around the dishwasher
 ----------------------------------------------------------------------------------------------------
 
-local function buildKitchen(b: Builder)
+-- Room styles: every level uses the same dishwasher, set in a different room.
+type RoomStyle = { [string]: any }
+local ROOM_STYLES: { RoomStyle } = {
+	-- 1: Family kitchen.
+	{
+		Floor = K.Floor, FloorMat = Enum.Material.WoodPlanks,
+		Wall = K.Wall, WallMat = Enum.Material.SmoothPlastic,
+		Ceiling = Color3.fromRGB(248, 248, 246),
+		Cabinet = K.Cabinet, CabinetDoor = K.CabinetDoor, CabMat = Enum.Material.SmoothPlastic,
+		Counter = K.Counter, CounterMat = Enum.Material.Marble,
+		Tile = K.Tile, TileMat = Enum.Material.CeramicTiles,
+		Handle = K.Handle, HandleMat = Enum.Material.Metal,
+		Kick = K.Kick,
+		Lamp = Color3.fromRGB(255, 248, 225),
+	},
+	-- 2: Pizzeria: brick walls, black and white floor, steel cabinets, butcher-block counter.
+	{
+		Floor = Color3.fromRGB(240, 238, 232), Floor2 = Color3.fromRGB(38, 38, 42), FloorMat = Enum.Material.SmoothPlastic,
+		Wall = Color3.fromRGB(165, 78, 58), WallMat = Enum.Material.Brick,
+		Ceiling = Color3.fromRGB(60, 50, 46),
+		Cabinet = Color3.fromRGB(188, 193, 200), CabinetDoor = Color3.fromRGB(205, 210, 216), CabMat = Enum.Material.Metal,
+		Counter = Color3.fromRGB(176, 124, 78), CounterMat = Enum.Material.Wood,
+		Tile = Color3.fromRGB(245, 245, 240), TileMat = Enum.Material.CeramicTiles,
+		Handle = Color3.fromRGB(60, 60, 66), HandleMat = Enum.Material.Metal,
+		Kick = Color3.fromRGB(40, 40, 44),
+		Lamp = Color3.fromRGB(255, 214, 150),
+	},
+	-- 3: Castle banquet hall: stone, dark wood, gold, a red carpet.
+	{
+		Floor = Color3.fromRGB(128, 122, 116), FloorMat = Enum.Material.Slate,
+		Wall = Color3.fromRGB(150, 144, 136), WallMat = Enum.Material.Cobblestone,
+		Ceiling = Color3.fromRGB(70, 52, 40),
+		Cabinet = Color3.fromRGB(92, 58, 38), CabinetDoor = Color3.fromRGB(112, 72, 46), CabMat = Enum.Material.Wood,
+		Counter = Color3.fromRGB(238, 232, 222), CounterMat = Enum.Material.Marble,
+		Tile = Color3.fromRGB(120, 112, 104), TileMat = Enum.Material.Slate,
+		Handle = Color3.fromRGB(230, 190, 90), HandleMat = Enum.Material.Metal,
+		Kick = Color3.fromRGB(50, 34, 24),
+		Lamp = Color3.fromRGB(255, 205, 140),
+	},
+}
+
+-- A flat SurfaceGui text sign on a box. `face` is the side the text is on.
+local function roomSign(b: Builder, text: string, size: Vector3, x: number, y: number, z: number, bg: Color3, fg: Color3, face: Enum.NormalId, material: Enum.Material?)
+	local p = box(b, "RoomSign", size, x, y, z, bg, material, noCollide())
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = face
+	gui.LightInfluence = 0
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 8
+	gui.Parent = p
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.fromScale(0.9, 0.8)
+	label.Position = UDim2.fromScale(0.05, 0.1)
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.TextColor3 = fg
+	label.Text = text
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 4
+	stroke.Color = Color3.fromRGB(20, 16, 14)
+	stroke.Parent = label
+	label.Parent = gui
+	return p
+end
+
+-- Floor, walls, ceiling, base and upper cabinets and the counter over the dishwasher.
+local function buildKitchen(b: Builder, k: RoomStyle)
 	local fy = KITCHEN_FLOOR_Y
 	local shadowless = { CastShadow = false }
 
-	-- Floor, walls, ceiling. Walls and ceiling don't cast shadows so daylight still fills the room.
-	span(b, "KitchenFloor", -ROOM_HALF_X, ROOM_HALF_X, fy - 4, fy, ROOM_Z_FRONT, ROOM_Z_BACK, K.Floor, Enum.Material.WoodPlanks)
-	span(b, "BackWall", -ROOM_HALF_X, ROOM_HALF_X, fy, fy + ROOM_HEIGHT, ROOM_Z_BACK, ROOM_Z_BACK + 4, K.Wall, nil, shadowless)
-	span(b, "FrontWall", -ROOM_HALF_X, ROOM_HALF_X, fy, fy + ROOM_HEIGHT, ROOM_Z_FRONT - 4, ROOM_Z_FRONT, K.Wall, nil, shadowless)
-	for _, side in { -1, 1 } do
-		span(b, "SideWall", side * ROOM_HALF_X, side * (ROOM_HALF_X + 4), fy, fy + ROOM_HEIGHT, ROOM_Z_FRONT, ROOM_Z_BACK, K.Wall, nil, shadowless)
-		-- Skirting board.
-		span(b, "Skirting", side * (ROOM_HALF_X - 2), side * ROOM_HALF_X, fy, fy + 10, ROOM_Z_FRONT, ROOM_Z_BACK, Color3.new(1, 1, 1), nil, noCollide())
+	-- Floor: one slab, or a big checkerboard when the style has a second colour.
+	if k.Floor2 then
+		span(b, "KitchenFloor", -ROOM_HALF_X, ROOM_HALF_X, fy - 4, fy - 0.2, ROOM_Z_FRONT, ROOM_Z_BACK, k.Floor2, k.FloorMat)
+		local tile = 60
+		local ix = 0
+		for x = -ROOM_HALF_X, ROOM_HALF_X - 1, tile do
+			local iz = 0
+			for z = ROOM_Z_FRONT, ROOM_Z_BACK - 1, tile do
+				if (ix + iz) % 2 == 0 then
+					span(b, "FloorTile", x, math.min(x + tile, ROOM_HALF_X), fy - 0.2, fy, z, math.min(z + tile, ROOM_Z_BACK), k.Floor, k.FloorMat)
+				end
+				iz += 1
+			end
+			ix += 1
+		end
+	else
+		span(b, "KitchenFloor", -ROOM_HALF_X, ROOM_HALF_X, fy - 4, fy, ROOM_Z_FRONT, ROOM_Z_BACK, k.Floor, k.FloorMat)
 	end
-	span(b, "Ceiling", -ROOM_HALF_X, ROOM_HALF_X, fy + ROOM_HEIGHT, fy + ROOM_HEIGHT + 4, ROOM_Z_FRONT, ROOM_Z_BACK, Color3.fromRGB(248, 248, 246), nil, shadowless)
-	-- Ceiling lamp.
-	local lamp = cyl(b, "CeilingLamp", 4, 70, 0, fy + ROOM_HEIGHT - 4, -200, Color3.fromRGB(255, 248, 225), Enum.Material.Neon, noCollide())
-	lamp.CastShadow = false
+	span(b, "BackWall", -ROOM_HALF_X, ROOM_HALF_X, fy, fy + ROOM_HEIGHT, ROOM_Z_BACK, ROOM_Z_BACK + 4, k.Wall, k.WallMat, shadowless)
+	span(b, "FrontWall", -ROOM_HALF_X, ROOM_HALF_X, fy, fy + ROOM_HEIGHT, ROOM_Z_FRONT - 4, ROOM_Z_FRONT, k.Wall, k.WallMat, shadowless)
+	for _, side in { -1, 1 } do
+		span(b, "SideWall", side * ROOM_HALF_X, side * (ROOM_HALF_X + 4), fy, fy + ROOM_HEIGHT, ROOM_Z_FRONT, ROOM_Z_BACK, k.Wall, k.WallMat, shadowless)
+		span(b, "Skirting", side * (ROOM_HALF_X - 2), side * ROOM_HALF_X, fy, fy + 10, ROOM_Z_FRONT, ROOM_Z_BACK, k.Kick, nil, noCollide())
+	end
+	span(b, "Ceiling", -ROOM_HALF_X, ROOM_HALF_X, fy + ROOM_HEIGHT, fy + ROOM_HEIGHT + 4, ROOM_Z_FRONT, ROOM_Z_BACK, k.Ceiling, nil, shadowless)
 
 	-- Base cabinets either side of the dishwasher, with doors, handles and a toe kick.
 	local cabFront = -54
 	for _, side in { -1, 1 } do
 		local x0, x1 = side * 62, side * ROOM_HALF_X
-		span(b, "Cabinets", x0, x1, fy + 12, COUNTER_TOP_Y - 6, cabFront, ROOM_Z_BACK, K.Cabinet)
-		span(b, "ToeKick", x0, x1, fy, fy + 12, cabFront + 8, ROOM_Z_BACK, K.Kick)
+		span(b, "Cabinets", x0, x1, fy + 12, COUNTER_TOP_Y - 6, cabFront, ROOM_Z_BACK, k.Cabinet, k.CabMat)
+		span(b, "ToeKick", x0, x1, fy, fy + 12, cabFront + 8, ROOM_Z_BACK, k.Kick)
 		local width = math.abs(x1 - x0)
 		local doors = math.floor(width / 80)
 		local doorW = width / doors
 		for i = 0, doors - 1 do
 			local cx = side * (62 + doorW * (i + 0.5))
-			-- Drawer on top, door below.
-			box(b, "Drawer", Vector3.new(doorW - 6, 26, 1.5), cx, COUNTER_TOP_Y - 24, cabFront - 0.75, K.CabinetDoor)
-			box(b, "DrawerHandle", Vector3.new(24, 2.5, 2.5), cx, COUNTER_TOP_Y - 24, cabFront - 2.5, K.Handle, Enum.Material.Metal, noCollide())
-			box(b, "Door", Vector3.new(doorW - 6, 66, 1.5), cx, fy + 12 + 38, cabFront - 0.75, K.CabinetDoor)
-			box(b, "DoorHandle", Vector3.new(2.5, 20, 2.5), cx + side * -(doorW / 2 - 12), fy + 12 + 55, cabFront - 2.5, K.Handle, Enum.Material.Metal, noCollide())
+			box(b, "Drawer", Vector3.new(doorW - 6, 26, 1.5), cx, COUNTER_TOP_Y - 24, cabFront - 0.75, k.CabinetDoor, k.CabMat)
+			box(b, "DrawerHandle", Vector3.new(24, 2.5, 2.5), cx, COUNTER_TOP_Y - 24, cabFront - 2.5, k.Handle, k.HandleMat, noCollide())
+			box(b, "Door", Vector3.new(doorW - 6, 66, 1.5), cx, fy + 12 + 38, cabFront - 0.75, k.CabinetDoor, k.CabMat)
+			box(b, "DoorHandle", Vector3.new(2.5, 20, 2.5), cx + side * -(doorW / 2 - 12), fy + 12 + 55, cabFront - 2.5, k.Handle, k.HandleMat, noCollide())
 		end
 	end
 
-	-- Countertop across the whole run (including over the dishwasher) with a tiled backsplash.
-	span(b, "Countertop", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, ROOM_Z_BACK, K.Counter, Enum.Material.Marble, shadowless)
-	span(b, "Backsplash", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y, COUNTER_TOP_Y + 70, ROOM_Z_BACK - 1, ROOM_Z_BACK, K.Tile, Enum.Material.CeramicTiles, noCollide())
+	-- Countertop across the whole run (including over the dishwasher) with a backsplash.
+	span(b, "Countertop", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, ROOM_Z_BACK, k.Counter, k.CounterMat, shadowless)
+	span(b, "Backsplash", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y, COUNTER_TOP_Y + 70, ROOM_Z_BACK - 1, ROOM_Z_BACK, k.Tile, k.TileMat, noCollide())
 
-	-- Upper cabinets, leaving a gap for the window over the sink.
+	-- Upper cabinets, leaving a gap over the sink area for each room's centrepiece.
 	local upperY0, upperY1 = COUNTER_TOP_Y + 120, COUNTER_TOP_Y + 270
 	for _, seg in { { -ROOM_HALF_X, -220 }, { -40, ROOM_HALF_X } } do
-		span(b, "UpperCabinets", seg[1], seg[2], upperY0, upperY1, ROOM_Z_BACK - 40, ROOM_Z_BACK, K.Cabinet, nil, shadowless)
+		span(b, "UpperCabinets", seg[1], seg[2], upperY0, upperY1, ROOM_Z_BACK - 40, ROOM_Z_BACK, k.Cabinet, k.CabMat, shadowless)
 		local w = seg[2] - seg[1]
 		local n = math.floor(w / 70)
 		for i = 0, n - 1 do
 			local cx = seg[1] + w / n * (i + 0.5)
-			box(b, "UpperDoor", Vector3.new(w / n - 5, upperY1 - upperY0 - 8, 1.2), cx, (upperY0 + upperY1) / 2, ROOM_Z_BACK - 40.6, K.CabinetDoor, nil, noCollide())
-			box(b, "UpperHandle", Vector3.new(2.5, 16, 2.5), cx + (w / n / 2 - 10), upperY0 + 16, ROOM_Z_BACK - 42, K.Handle, Enum.Material.Metal, noCollide())
+			box(b, "UpperDoor", Vector3.new(w / n - 5, upperY1 - upperY0 - 8, 1.2), cx, (upperY0 + upperY1) / 2, ROOM_Z_BACK - 40.6, k.CabinetDoor, k.CabMat, noCollide())
+			box(b, "UpperHandle", Vector3.new(2.5, 16, 2.5), cx + (w / n / 2 - 10), upperY0 + 16, ROOM_Z_BACK - 42, k.Handle, k.HandleMat, noCollide())
 		end
 	end
+end
 
-	-- Window over the sink: frame, glowing sky panel, and cross bars.
+-- A table (top + 4 legs) with chairs either side, in room space.
+local function diningSet(b: Builder, tz: number, halfW: number, color: Color3, material: Enum.Material, chairsPerSide: number, chairColor: Color3?)
+	local fy = KITCHEN_FLOOR_Y
+	local tyTop = fy + 150
+	span(b, "TableTop", -halfW, halfW, tyTop - 8, tyTop, tz - 90, tz + 90, color, material)
+	for _, lx in { -halfW + 15, halfW - 15 } do
+		for _, lz in { tz - 75, tz + 75 } do
+			span(b, "TableLeg", lx - 6, lx + 6, fy, tyTop - 8, lz - 6, lz + 6, color, material)
+		end
+	end
+	local cc = chairColor or color
+	for i = 1, chairsPerSide do
+		local cx = -halfW + (2 * halfW) * (i - 0.5) / chairsPerSide
+		for _, dir in { -1, 1 } do
+			local cz = tz + dir * 125
+			span(b, "ChairSeat", cx - 40, cx + 40, fy + 90, fy + 98, cz - 35, cz + 35, cc, material)
+			span(b, "ChairBack", cx - 40, cx + 40, fy + 98, fy + 200, cz + dir * 30, cz + dir * 36, cc, material)
+			for _, lx in { cx - 34, cx + 34 } do
+				for _, lz in { cz - 29, cz + 29 } do
+					span(b, "ChairLeg", lx - 4, lx + 4, fy, fy + 90, lz - 4, lz + 4, cc, material)
+				end
+			end
+		end
+	end
+	return tyTop
+end
+
+-- Level 1: window over the sink, kettle, fruit, fridge, family table.
+local function familyProps(b: Builder, k: RoomStyle)
+	local fy = KITCHEN_FLOOR_Y
+	local lamp = cyl(b, "CeilingLamp", 4, 70, 0, fy + ROOM_HEIGHT - 4, -200, k.Lamp, Enum.Material.Neon, noCollide())
+	lamp.CastShadow = false
+
 	local wx0, wx1 = -210, -50
 	local wy0, wy1 = COUNTER_TOP_Y + 90, COUNTER_TOP_Y + 260
 	local sky = span(b, "WindowSky", wx0, wx1, wy0, wy1, ROOM_Z_BACK - 0.5, ROOM_Z_BACK + 0.5, Color3.fromRGB(190, 225, 255), Enum.Material.Neon, noCollide())
@@ -2653,18 +2908,15 @@ local function buildKitchen(b: Builder)
 		span(b, "WindowBar", wx0, wx1, y - 3, y + 3, ROOM_Z_BACK - 3, ROOM_Z_BACK, Color3.new(1, 1, 1), nil, noCollide())
 	end
 
-	-- Sink in the counter under the window, and a tall faucet.
 	local sinkX = (wx0 + wx1) / 2
 	span(b, "Sink", sinkX - 60, sinkX + 60, COUNTER_TOP_Y - 0.4, COUNTER_TOP_Y + 0.2, -10, 50, K.Steel, Enum.Material.Metal, noCollide())
 	span(b, "SinkBasin", sinkX - 54, sinkX + 54, COUNTER_TOP_Y - 0.2, COUNTER_TOP_Y + 0.4, -4, 44, Color3.fromRGB(120, 125, 132), Enum.Material.Metal, noCollide())
 	cyl(b, "FaucetBase", 6, 10, sinkX, COUNTER_TOP_Y + 3, 60, K.Steel, Enum.Material.Metal, noCollide())
 	cyl(b, "FaucetPipe", 60, 5, sinkX, COUNTER_TOP_Y + 33, 60, K.Steel, Enum.Material.Metal, noCollide())
 	box(b, "FaucetSpout", Vector3.new(5, 5, 40), sinkX, COUNTER_TOP_Y + 62, 42, K.Steel, Enum.Material.Metal, noCollide())
-	-- Dish soap bottle next to the sink.
 	cyl(b, "SoapBottle", 40, 16, sinkX + 90, COUNTER_TOP_Y + 20, 40, Color3.fromRGB(80, 200, 120), Enum.Material.Glass, { CanCollide = false, Transparency = 0.15 })
 	cyl(b, "SoapCap", 8, 9, sinkX + 90, COUNTER_TOP_Y + 44, 40, Color3.new(1, 1, 1), nil, noCollide())
 
-	-- A kettle and a fruit bowl on the counter to the right.
 	cyl(b, "Kettle", 40, 34, 230, COUNTER_TOP_Y + 20, 30, K.Steel, Enum.Material.Metal, noCollide())
 	box(b, "KettleHandle", Vector3.new(26, 5, 5), 230, COUNTER_TOP_Y + 44, 30, Color3.fromRGB(40, 40, 44), nil, noCollide())
 	cyl(b, "FruitBowl", 14, 60, 330, COUNTER_TOP_Y + 7, 20, Color3.fromRGB(230, 120, 80), nil, noCollide())
@@ -2673,35 +2925,237 @@ local function buildKitchen(b: Builder)
 		ball.Shape = Enum.PartType.Ball
 	end
 
-	-- Fridge on the right wall.
 	span(b, "Fridge", 300, ROOM_HALF_X, fy, fy + 380, -260, -120, Color3.fromRGB(235, 238, 242), Enum.Material.SmoothPlastic)
 	box(b, "FridgeHandle", Vector3.new(3, 90, 3), 297, fy + 230, -150, K.Handle, Enum.Material.Metal, noCollide())
 	box(b, "FridgeHandle", Vector3.new(3, 60, 3), 297, fy + 110, -150, K.Handle, Enum.Material.Metal, noCollide())
 	box(b, "FridgeSeam", Vector3.new(1, 2, 140), 299.8, fy + 170, -190, Color3.fromRGB(180, 185, 190), nil, noCollide())
 
-	-- Kitchen table with chairs out in the room, behind the players.
-	local tz, tyTop = -330, fy + 150
-	span(b, "TableTop", -150, 150, tyTop - 8, tyTop, tz - 90, tz + 90, K.Wood, Enum.Material.Wood)
-	for _, lx in { -135, 135 } do
-		for _, lz in { tz - 75, tz + 75 } do
-			span(b, "TableLeg", lx - 6, lx + 6, fy, tyTop - 8, lz - 6, lz + 6, K.Wood, Enum.Material.Wood)
+	local tz = -330
+	local tyTop = diningSet(b, tz, 150, K.Wood, Enum.Material.Wood, 2)
+	for i = 0, 2 do
+		cyl(b, "TablePlate", 2, 60, -80 + i * 80, tyTop + 1, tz, Color3.new(1, 1, 1), nil, noCollide())
+	end
+end
+
+-- Level 2: a pizzeria. Brick pizza oven with a glowing mouth, a neon PIZZA sign over the counter,
+-- stacks of pizza boxes, red-and-white checked tables and hanging lamps.
+local function pizzeriaProps(b: Builder, k: RoomStyle)
+	local fy = KITCHEN_FLOOR_Y
+	local brick = Color3.fromRGB(150, 70, 52)
+	local red = Color3.fromRGB(205, 45, 40)
+	local cream = Color3.fromRGB(250, 244, 230)
+
+	-- Neon sign in the gap over the counter.
+	span(b, "SignBack", -214, -46, COUNTER_TOP_Y + 110, COUNTER_TOP_Y + 240, ROOM_Z_BACK - 3, ROOM_Z_BACK, Color3.fromRGB(30, 26, 26), nil, noCollide())
+	roomSign(b, "🍕 PIZZA", Vector3.new(150, 70, 2), -130, COUNTER_TOP_Y + 175, ROOM_Z_BACK - 4, Color3.fromRGB(30, 26, 26), Color3.fromRGB(255, 120, 70), Enum.NormalId.Back)
+	for _, y in { COUNTER_TOP_Y + 132, COUNTER_TOP_Y + 218 } do
+		span(b, "NeonStrip", -200, -60, y - 1.5, y + 1.5, ROOM_Z_BACK - 6, ROOM_Z_BACK - 4, Color3.fromRGB(255, 90, 60), Enum.Material.Neon, noCollide())
+	end
+
+	-- Brick pizza oven standing on the floor on the right: a box base and a stepped dome, with a
+	-- glowing arched mouth facing the players.
+	local ox, oz = 250, -170
+	span(b, "OvenBase", ox - 90, ox + 90, fy, fy + 110, oz - 80, oz + 80, brick, Enum.Material.Brick)
+	for i, w in { 86, 74, 58, 38 } do
+		local y0 = fy + 110 + (i - 1) * 34
+		span(b, "OvenDome", ox - w, ox + w, y0, y0 + 34, oz - w * 0.9, oz + w * 0.9, brick, Enum.Material.Brick)
+	end
+	span(b, "OvenChimney", ox - 14, ox + 14, fy + 246, fy + ROOM_HEIGHT, oz - 14, oz + 14, Color3.fromRGB(120, 58, 44), Enum.Material.Brick)
+	span(b, "OvenMouth", ox - 44, ox + 44, fy + 124, fy + 184, oz - 80.5, oz - 76, Color3.fromRGB(255, 130, 40), Enum.Material.Neon, noCollide())
+	cyl(b, "OvenArch", 5, 88, ox, fy + 184, oz - 78.5, Color3.fromRGB(255, 150, 60), Enum.Material.Neon, noCollide()).CFrame = footprint(b.origin, ox, fy + 184, oz - 78.5) * CFrame.Angles(0, math.rad(90), 0)
+	span(b, "OvenLedge", ox - 60, ox + 60, fy + 110, fy + 118, oz - 100, oz - 80, Color3.fromRGB(190, 180, 170), Enum.Material.Concrete)
+	local glow = Instance.new("PointLight")
+	glow.Color = Color3.fromRGB(255, 140, 60)
+	glow.Brightness = 2
+	glow.Range = 60
+	glow.Parent = b.model:FindFirstChild("OvenMouth") or b.model
+	-- A pizza peel leaning on the oven.
+	span(b, "PeelHandle", ox - 110, ox - 104, fy, fy + 190, oz - 60, oz - 54, Color3.fromRGB(170, 120, 70), Enum.Material.Wood, noCollide())
+	cyl(b, "PeelHead", 3, 50, ox - 107, fy + 30, oz - 57, Color3.fromRGB(185, 135, 85), Enum.Material.Wood, noCollide()).CFrame = footprint(b.origin, ox - 107, fy + 30, oz - 57) * CFrame.Angles(0, math.rad(90), 0)
+
+	-- Stacks of pizza boxes on the left.
+	for _, stack in { { -260, -200, 7 }, { -300, -150, 5 }, { -230, -130, 4 } } do
+		for j = 0, stack[3] - 1 do
+			local y = fy + 4 + j * 8
+			span(b, "PizzaBox", stack[1] - 30, stack[1] + 30, y - 4, y + 3.6, stack[2] - 30, stack[2] + 30, cream, Enum.Material.Cardboard)
+			span(b, "PizzaBoxLogo", stack[1] - 12, stack[1] + 12, y + 3.6, y + 3.8, stack[2] - 12, stack[2] + 12, red, nil, noCollide())
 		end
 	end
-	for _, cx in { -80, 80 } do
-		for _, dir in { -1, 1 } do
-			local cz = tz + dir * 125
-			span(b, "ChairSeat", cx - 40, cx + 40, fy + 90, fy + 98, cz - 35, cz + 35, K.Wood, Enum.Material.Wood)
-			span(b, "ChairBack", cx - 40, cx + 40, fy + 98, fy + 200, cz + dir * 30, cz + dir * 36, K.Wood, Enum.Material.Wood)
-			for _, lx in { cx - 34, cx + 34 } do
-				for _, lz in { cz - 29, cz + 29 } do
-					span(b, "ChairLeg", lx - 4, lx + 4, fy, fy + 90, lz - 4, lz + 4, K.Wood, Enum.Material.Wood)
-				end
+
+	-- Two square tables with red-and-white checked cloths and a pizza on each, plus stools.
+	for _, tx in { -150, 150 } do
+		local tz = -400
+		local top = fy + 150
+		span(b, "TableLeg", tx - 5, tx + 5, fy, top - 6, tz - 5, tz + 5, Color3.fromRGB(40, 40, 44), Enum.Material.Metal)
+		cyl(b, "TableFoot", 4, 60, tx, fy + 2, tz, Color3.fromRGB(40, 40, 44), Enum.Material.Metal)
+		span(b, "TableTop", tx - 66, tx + 66, top - 6, top, tz - 66, tz + 66, Color3.fromRGB(120, 80, 50), Enum.Material.Wood)
+		local n, cell = 5, 26
+		for i = 0, n - 1 do
+			for j = 0, n - 1 do
+				local cx = tx - cell * n / 2 + cell * (i + 0.5)
+				local cz = tz - cell * n / 2 + cell * (j + 0.5)
+				box(b, "Cloth", Vector3.new(cell, 0.4, cell), cx, top + 0.2, cz, if (i + j) % 2 == 0 then red else cream, Enum.Material.Fabric, noCollide())
+			end
+		end
+		cyl(b, "Pizza", 3, 70, tx, top + 1.9, tz, Color3.fromRGB(230, 170, 80), Enum.Material.Sand, noCollide())
+		cyl(b, "PizzaSauce", 3.2, 60, tx, top + 2, tz, Color3.fromRGB(200, 60, 35), nil, noCollide())
+		for i = 0, 6 do
+			local a = i / 7 * math.pi * 2
+			cyl(b, "Pepperoni", 3.4, 11, tx + math.cos(a) * 18, top + 2.1, tz + math.sin(a) * 18, Color3.fromRGB(160, 30, 30), nil, noCollide())
+		end
+		for _, dz in { -95, 95 } do
+			cyl(b, "StoolSeat", 8, 44, tx, fy + 90, tz + dz, red)
+			span(b, "StoolPost", tx - 3, tx + 3, fy, fy + 86, tz + dz - 3, tz + dz + 3, Color3.fromRGB(40, 40, 44), Enum.Material.Metal)
+		end
+	end
+
+	-- Hanging pendant lamps.
+	for _, lx in { -200, 0, 200 } do
+		span(b, "LampCord", lx - 0.8, lx + 0.8, fy + 330, fy + ROOM_HEIGHT, -260 - 0.8, -260 + 0.8, Color3.fromRGB(30, 30, 30), nil, noCollide())
+		cyl(b, "LampShade", 26, 60, lx, fy + 330, -260, Color3.fromRGB(40, 40, 44), Enum.Material.Metal, noCollide())
+		local bulb = cyl(b, "LampBulb", 2, 40, lx, fy + 316, -260, k.Lamp, Enum.Material.Neon, noCollide())
+		bulb.CastShadow = false
+	end
+end
+
+-- Level 3: a castle banquet hall. Stone pillars, red banners with gold trim, a red carpet, a long
+-- banquet table with candelabras and goblets, a fireplace, a stained-glass window and chandeliers.
+local function castleProps(b: Builder, k: RoomStyle)
+	local fy = KITCHEN_FLOOR_Y
+	local gold = Color3.fromRGB(230, 190, 90)
+	local red = Color3.fromRGB(150, 25, 35)
+	local stone = Color3.fromRGB(170, 164, 156)
+
+	-- Red carpet from the door to the far wall.
+	span(b, "Carpet", -70, 70, fy, fy + 0.4, ROOM_Z_FRONT, -125, red, Enum.Material.Fabric, noCollide())
+	for _, x in { -72, 72 } do
+		span(b, "CarpetTrim", x - 3, x + 3, fy, fy + 0.5, ROOM_Z_FRONT, -125, gold, Enum.Material.Fabric, noCollide())
+	end
+
+	-- Stained-glass window in the gap over the counter.
+	local wx0, wx1 = -210, -50
+	local wy0, wy1 = COUNTER_TOP_Y + 90, COUNTER_TOP_Y + 260
+	local colors = { Color3.fromRGB(80, 120, 230), Color3.fromRGB(220, 60, 70), Color3.fromRGB(250, 200, 70), Color3.fromRGB(80, 190, 120) }
+	local cols, rows = 4, 5
+	for i = 0, cols - 1 do
+		for j = 0, rows - 1 do
+			local x0 = wx0 + (wx1 - wx0) * i / cols
+			local y0 = wy0 + (wy1 - wy0) * j / rows
+			local pane = span(b, "StainedGlass", x0, x0 + (wx1 - wx0) / cols, y0, y0 + (wy1 - wy0) / rows, ROOM_Z_BACK - 0.5, ROOM_Z_BACK + 0.5, colors[(i + j) % #colors + 1], Enum.Material.Neon, noCollide())
+			pane.Transparency = 0.25
+			pane.CastShadow = false
+		end
+	end
+	for _, x in { wx0, wx0 + 40, wx0 + 80, wx0 + 120, wx1 } do
+		span(b, "Leading", x - 2, x + 2, wy0, wy1, ROOM_Z_BACK - 2.5, ROOM_Z_BACK - 0.5, Color3.fromRGB(40, 36, 34), nil, noCollide())
+	end
+	span(b, "WindowArch", wx0 - 10, wx1 + 10, wy1, wy1 + 16, ROOM_Z_BACK - 6, ROOM_Z_BACK, stone, Enum.Material.Cobblestone, noCollide())
+
+	-- Pillars along both side walls, each with a banner between.
+	for _, side in { -1, 1 } do
+		for i, z in { -460, -340, -220, -100 } do
+			-- The fireplace takes the right wall around z -240.
+			if side == 1 and (z == -220 or z == -340) then
+				continue
+			end
+			local x = side * (ROOM_HALF_X - 30)
+			span(b, "Pillar", x - 20, x + 20, fy, fy + ROOM_HEIGHT, z - 20, z + 20, stone, Enum.Material.Cobblestone)
+			span(b, "PillarBase", x - 26, x + 26, fy, fy + 18, z - 26, z + 26, Color3.fromRGB(130, 124, 116), Enum.Material.Slate)
+			span(b, "PillarCap", x - 26, x + 26, fy + ROOM_HEIGHT - 24, fy + ROOM_HEIGHT, z - 26, z + 26, Color3.fromRGB(130, 124, 116), Enum.Material.Slate)
+			if i &lt; 4 then
+				local bz = z + 60
+				local bx = side * (ROOM_HALF_X - 3)
+				span(b, "Banner", bx - 1, bx + 1, fy + 220, fy + 440, bz - 30, bz + 30, red, Enum.Material.Fabric, noCollide())
+				span(b, "BannerTrim", bx - 1.4, bx + 1.4, fy + 216, fy + 222, bz - 32, bz + 32, gold, Enum.Material.Metal, noCollide())
+				span(b, "BannerRod", bx - 3, bx + 3, fy + 440, fy + 446, bz - 36, bz + 36, gold, Enum.Material.Metal, noCollide())
+				span(b, "BannerCrest", bx - 1.6, bx + 1.6, fy + 320, fy + 350, bz - 12, bz + 12, gold, Enum.Material.Metal, noCollide())
 			end
 		end
 	end
-	-- Plates waiting on the table, for flavour.
-	for i = 0, 2 do
-		cyl(b, "TablePlate", 2, 60, -80 + i * 80, tyTop + 1, tz, Color3.new(1, 1, 1), nil, noCollide())
+
+	-- Fireplace on the right, with a glowing fire.
+	local fx = ROOM_HALF_X - 30
+	span(b, "Hearth", fx - 30, ROOM_HALF_X, fy, fy + 200, -300, -180, stone, Enum.Material.Cobblestone)
+	span(b, "FireBox", fx - 31, fx - 6, fy, fy + 110, -275, -205, Color3.fromRGB(30, 22, 18), Enum.Material.Slate)
+	local fire = span(b, "Fire", fx - 26, fx - 16, fy, fy + 50, -262, -218, Color3.fromRGB(255, 140, 40), Enum.Material.Neon, noCollide())
+	local fireLight = Instance.new("PointLight")
+	fireLight.Color = Color3.fromRGB(255, 150, 70)
+	fireLight.Brightness = 2
+	fireLight.Range = 60
+	fireLight.Parent = fire
+	span(b, "Mantel", fx - 40, ROOM_HALF_X, fy + 200, fy + 212, -310, -170, Color3.fromRGB(92, 58, 38), Enum.Material.Wood)
+
+	-- Long banquet table down the carpet (lengthwise, so the chairs never block the view from the
+	-- door), with a gold runner, candelabras, platters and goblets. Chairs with tall red backs.
+	local wood = Color3.fromRGB(92, 58, 38)
+	local tz0, tz1, thx = -490, -230, 55
+	local tyTop = fy + 150
+	span(b, "TableTop", -thx, thx, tyTop - 8, tyTop, tz0, tz1, wood, Enum.Material.Wood)
+	for _, lx in { -thx + 10, thx - 10 } do
+		for _, lz in { tz0 + 12, (tz0 + tz1) / 2, tz1 - 12 } do
+			span(b, "TableLeg", lx - 6, lx + 6, fy, tyTop - 8, lz - 6, lz + 6, wood, Enum.Material.Wood)
+		end
+	end
+	span(b, "Runner", -16, 16, tyTop, tyTop + 0.3, tz0 + 8, tz1 - 8, gold, Enum.Material.Fabric, noCollide())
+	for i = 0, 4 do
+		local cz = tz0 + 26 + i * 52
+		for _, side in { -1, 1 } do
+			local cx = side * (thx + 45)
+			span(b, "ChairSeat", cx - 32, cx + 32, fy + 90, fy + 98, cz - 20, cz + 20, red, Enum.Material.Fabric)
+			span(b, "ChairBack", cx + side * 28, cx + side * 34, fy + 98, fy + 210, cz - 20, cz + 20, wood, Enum.Material.Wood)
+			span(b, "ChairCrest", cx + side * 27.6, cx + side * 28, fy + 170, fy + 200, cz - 10, cz + 10, gold, Enum.Material.Metal, noCollide())
+			for _, lx in { cx - 27, cx + 27 } do
+				for _, lz in { cz - 15, cz + 15 } do
+					span(b, "ChairLeg", lx - 3, lx + 3, fy, fy + 90, lz - 3, lz + 3, wood, Enum.Material.Wood)
+				end
+			end
+			cyl(b, "PlatterOnTable", 2, 34, side * 32, tyTop + 1, cz, gold, Enum.Material.Metal, noCollide())
+			cyl(b, "GobletStem", 12, 3, side * 32, tyTop + 6, cz + 22, gold, Enum.Material.Metal, noCollide())
+			cyl(b, "GobletCup", 10, 11, side * 32, tyTop + 17, cz + 22, gold, Enum.Material.Metal, noCollide())
+		end
+	end
+	for _, cz in { tz0 + 50, (tz0 + tz1) / 2, tz1 - 50 } do
+		cyl(b, "CandelabraBase", 4, 20, 0, tyTop + 2, cz, gold, Enum.Material.Metal, noCollide())
+		span(b, "CandelabraStem", -2, 2, tyTop, tyTop + 40, cz - 2, cz + 2, gold, Enum.Material.Metal, noCollide())
+		span(b, "CandelabraArm", -2, 2, tyTop + 38, tyTop + 42, cz - 22, cz + 22, gold, Enum.Material.Metal, noCollide())
+		for _, dz in { -20, 0, 20 } do
+			cyl(b, "Candle", 18, 5, 0, tyTop + 51, cz + dz, Color3.fromRGB(250, 245, 230), nil, noCollide())
+			local flame = box(b, "Flame", Vector3.new(3, 5, 3), 0, tyTop + 63, cz + dz, Color3.fromRGB(255, 190, 70), Enum.Material.Neon, noCollide())
+			flame.Shape = Enum.PartType.Ball
+		end
+	end
+	-- A throne at the head of the table.
+	span(b, "ThroneSeat", -40, 40, fy, fy + 100, tz0 - 28, tz0 - 4, red, Enum.Material.Fabric)
+	span(b, "ThroneBack", -44, 44, fy, fy + 260, tz0 - 30, tz0 - 22, gold, Enum.Material.Metal)
+	for _, x in { -30, 0, 30 } do
+		local spike = box(b, "ThroneSpike", Vector3.new(14, 14, 8), x, fy + 268, tz0 - 26, gold, Enum.Material.Metal, noCollide())
+		spike.Shape = Enum.PartType.Ball
+	end
+
+	-- Two chandeliers: a gold ring with glowing candles on a chain.
+	for _, cz in { -400, -230 } do
+		span(b, "Chain", -1, 1, fy + 360, fy + ROOM_HEIGHT, cz - 1, cz + 1, gold, Enum.Material.Metal, noCollide())
+		cyl(b, "ChandelierRing", 6, 120, 0, fy + 360, cz, gold, Enum.Material.Metal, noCollide())
+		for i = 0, 9 do
+			local a = i / 10 * math.pi * 2
+			local x, z = math.cos(a) * 56, cz + math.sin(a) * 56
+			cyl(b, "ChCandle", 14, 5, x, fy + 370, z, Color3.fromRGB(250, 245, 230), nil, noCollide())
+			local flame = box(b, "ChFlame", Vector3.new(4, 6, 4), x, fy + 380, z, Color3.fromRGB(255, 190, 70), Enum.Material.Neon, noCollide())
+			flame.Shape = Enum.PartType.Ball
+		end
+	end
+end
+
+-- The whole room for a level: shell + that room's props.
+local function buildRoom(b: Builder, levelIndex: number)
+	local style = ROOM_STYLES[levelIndex] or ROOM_STYLES[1]
+	buildKitchen(b, style)
+	if levelIndex == 2 then
+		pizzeriaProps(b, style)
+	elseif levelIndex == 3 then
+		castleProps(b, style)
+	else
+		familyProps(b, style)
 	end
 end
 
@@ -2780,8 +3234,6 @@ local function buildTub(b: Builder, theme)
 end
 
 local function buildDoor(b: Builder, theme)
-	local zMid = (DOOR_Z_NEAR + DOOR_Z_FAR) / 2
-
 	-- Inner panel (the floor you stand on) and the outer skin below it.
 	span(b, "DoorInner", -TUB_HALF_X, TUB_HALF_X, -1, 0, DOOR_Z_FAR, DOOR_Z_NEAR, theme.Tub, Enum.Material.Metal)
 	span(b, "DoorOuter", -TUB_HALF_X - 4, TUB_HALF_X + 4, -DOOR_THICK, -1, DOOR_Z_FAR - 6, DOOR_Z_NEAR, K.Frame, Enum.Material.Metal)
@@ -2791,8 +3243,6 @@ local function buildDoor(b: Builder, theme)
 		-- Invisible safety wall so nobody walks off the side.
 		-- Invisible safety wall, as tall as the tub, so nobody can jump off the door.
 		span(b, "SafetyWall", side * TUB_HALF_X, side * (TUB_HALF_X + 1), 0, TUB_HEIGHT, DOOR_Z_FAR - 6, DOOR_Z_NEAR, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
-		-- Hinge.
-		cyl(b, "Hinge", 6, 5, side * (TUB_HALF_X - 6), -2, DOOR_Z_NEAR + 1, K.Steel, Enum.Material.Metal, noCollide())
 	end
 	span(b, "SafetyWall", -TUB_HALF_X - 1, TUB_HALF_X + 1, 0, TUB_HEIGHT, DOOR_Z_FAR - 7, DOOR_Z_FAR - 6, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
 	-- A lid over the door area as well, level with the tub ceiling.
@@ -2805,13 +3255,6 @@ local function buildDoor(b: Builder, theme)
 		box(b, "Button", Vector3.new(4, 0.6, 3), i * 9, 3.3, DOOR_Z_FAR - 3, if lit then theme.Accent else Color3.fromRGB(90, 95, 105), if lit then Enum.Material.Neon else nil, noCollide())
 	end
 
-	-- Detergent dispenser and rinse-aid cap on the inner panel.
-	span(b, "Dispenser", 12, 22, 0, 0.9, zMid - 4, zMid + 4, Color3.fromRGB(220, 224, 230), Enum.Material.SmoothPlastic)
-	span(b, "DispenserLid", 12.4, 21.6, 0.9, 1.2, zMid - 3.6, zMid + 3.6, Color3.fromRGB(245, 247, 250), nil, noCollide())
-	span(b, "DispenserHinge", 12.4, 21.6, 0.9, 1.5, zMid - 3.9, zMid - 3.3, Color3.fromRGB(180, 185, 192), nil, noCollide())
-	cyl(b, "DispenserButton", 0.3, 1.4, 17, 1.35, zMid + 2, theme.Accent, Enum.Material.Neon, noCollide())
-	cyl(b, "RinseAid", 1, 4.5, 28, 0.5, zMid, Color3.fromRGB(220, 224, 230), nil, noCollide())
-	cyl(b, "RinseAidCap", 0.3, 3.2, 28, 1.15, zMid, theme.Accent, nil, noCollide())
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -2955,7 +3398,6 @@ local function buildLifts(b: Builder, theme)
 	for _, lift in LIFTS do
 		pad("BubbleLift", lift.from, lift.to, "⬆️ Bubble Lift", TOP_RACK_Y)
 	end
-	pad("DrainChute", CHUTE.from, CHUTE.to, "⬇️ Chute to the drain", 0)
 end
 
 local function buildDrain(b: Builder, theme): Vector3
@@ -3080,15 +3522,33 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 		end
 
 		local cost = Config.ToolCost(i, levelIndex) or 0
-		-- Lower shelf: the tag stands on the front edge. Upper shelf: it hangs under the lip, so it
-		-- doesn't hide the tool from someone looking up at it.
-		local tagY = if spot.y &gt; shelfYs[1] then spot.y - 1.4 else spot.y + 1.1
-		local tagPos = worldPoint(b.origin, x1 - 0.5, tagY, spot.z)
-		local tag, tagGui = signBoard(b, "PriceTag_" .. i, Vector3.new(6, 2, 0.2), tagPos, toPlayers, Color3.fromRGB(255, 250, 235))
-		tag.CFrame = tag.CFrame * CFrame.Angles(math.rad(if spot.y &gt; shelfYs[1] then 12 else -12), 0, 0)
+		-- Price tag: a camera-facing card floating just in front of the shelf (never inside a shelf,
+		-- post or pedestal). Lower shelf: level with the tool's base; upper shelf: under the lip.
+		local tagY = if spot.y &gt; shelfYs[1] then spot.y - 1.6 else spot.y + 1.3
+		local tag = box(b, "PriceTag_" .. i, Vector3.new(0.2, 0.2, 0.2), x1 + 1.6, tagY, spot.z, Color3.new(1, 1, 1), nil, { Transparency = 1, CanCollide = false, CastShadow = false })
 		tag:SetAttribute("ToolIndex", i)
-		guiText(tagGui, "Title", tool.Icon .. " " .. tool.Name, UDim2.fromScale(0.03, 0.02), UDim2.fromScale(0.94, 0.5), Color3.new(1, 1, 1))
-		guiText(tagGui, "Price", "💰 " .. Format.Short(cost), UDim2.fromScale(0.03, 0.52), UDim2.fromScale(0.94, 0.46), Color3.fromRGB(255, 210, 60))
+		local card = Instance.new("BillboardGui")
+		card.Name = "Tag"
+		card.Size = UDim2.fromScale(6.4, 2.3)
+		card.LightInfluence = 0
+		card.MaxDistance = 70
+		card.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+		card.Parent = tag
+		local bg = Instance.new("Frame")
+		bg.Size = UDim2.fromScale(1, 1)
+		bg.BackgroundColor3 = Color3.fromRGB(22, 44, 78)
+		bg.BackgroundTransparency = 0.1
+		bg.ZIndex = 0
+		bg.Parent = card
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0.25, 0)
+		corner.Parent = bg
+		local stroke = Instance.new("UIStroke")
+		stroke.Thickness = 2
+		stroke.Color = tool.Color
+		stroke.Parent = bg
+		guiText(card, "Title", tool.Icon .. " " .. tool.Name, UDim2.fromScale(0.05, 0.06), UDim2.fromScale(0.9, 0.46), Color3.new(1, 1, 1))
+		guiText(card, "Price", "💰 " .. Format.Short(cost), UDim2.fromScale(0.05, 0.5), UDim2.fromScale(0.9, 0.44), Color3.fromRGB(255, 210, 60))
 
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = "Buy"
@@ -3156,8 +3616,19 @@ local function basketSlots(offset: number): { Slot }
 	return slots
 end
 
+-- Trays share the plate rows, filling from the back (Plate + Tray must fit the 27 plate slots).
+local function traySlots(): { Slot }
+	local all = plateSlots()
+	local slots = {}
+	for i = #all, 1, -1 do
+		table.insert(slots, all[i])
+	end
+	return slots
+end
+
 local KIND_SLOTS: { [string]: () -&gt; { Slot } } = {
 	Plate = plateSlots,
+	Tray = traySlots,
 	Bowl = function()
 		return grid(BOWL_X, BOWL_Z, TOP_RACK_Y)
 	end,
@@ -3187,7 +3658,7 @@ local KIND_SLOTS: { [string]: () -&gt; { Slot } } = {
 -- The CFrame DishFactory builds a dish at: contact point + orientation for that kind.
 local function dishFrame(origin: CFrame, kind: string, slot: Slot, rng: Random): CFrame
 	local toDoor = -origin.LookVector
-	if kind == "Plate" then
+	if kind == "Plate" or kind == "Tray" then
 		-- Plates face the door, with a tiny random lean so the rows don't look copy-pasted.
 		return footprint(origin, slot.x, slot.y, slot.z, toDoor) * CFrame.Angles(math.rad(rng:NextNumber(-4, 4)), 0, 0)
 	elseif kind == "Bowl" then
@@ -3257,7 +3728,7 @@ function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeSc
 		end
 	end
 
-	buildKitchen(b)
+	buildRoom(b, levelIndex)
 	yieldTick()
 	buildTub(b, theme)
 	buildDoor(b, theme)
@@ -3871,7 +4342,7 @@ local function sanitizeProfile(profile: Profile, player: Player)
 		p.Perks = Util.DeepCopy(TEMPLATE.Perks)
 	end
 	for _, perk in Config.Perks do
-		p.Perks[perk.Id] = toCount(p.Perks[perk.Id], 0)
+		p.Perks[perk.Id] = math.min(toCount(p.Perks[perk.Id], 0), perk.Max) -- perks were re-capped at 6 levels
 	end
 
 	-- Pets: keep every well-formed entry (extra fields included). Uids become strings, and duplicate
@@ -4855,6 +5326,7 @@ local DishFactory = {}
 ----------------------------------------------------------------------------------------------------
 local SIZE = {
 	Plate = { Diameter = 20, Thickness = 1.2 },
+	Tray = { Diameter = 23, Thickness = 0.8 },
 	Bowl = { Diameter = 15, Depth = 7 },
 	Cup = { Diameter = 8, Height = 10 },
 	Glass = { Diameter = 7, Height = 12 },
@@ -5028,6 +5500,35 @@ local function buildPlate(anchor: CFrame, theme, _rng: Random)
 	}, 2
 end
 
+-- Serving tray (pizza pan / banquet platter) standing on its edge like a plate, face toward
+-- anchor.LookVector: a flat face inside a thick rolled rim (a CSG ring, or 18 short bars without
+-- CSG). The rim is thicker than the face on both sides, so no faces share a plane.
+local function buildTray(anchor: CFrame, theme, _rng: Random)
+	local s = SIZE.Tray
+	local r = s.Diameter / 2
+	local color = theme.Tray or theme.Metal
+	local rimColor = Color3.new(color.R * 0.85, color.G * 0.85, color.B * 0.85)
+	local center = localPos(anchor, 0, r, 0)
+	local cf = axisCFrame(center, anchor.LookVector, anchor.UpVector)
+	local parts = {
+		newPart(Enum.PartType.Cylinder, Vector3.new(s.Thickness, s.Diameter * 0.9, s.Diameter * 0.9), cf, color, Enum.Material.Metal),
+	}
+	local rim = placeTemplate("TrayRim", CFrame.new(anchor.Position) * anchor.Rotation, rimColor, Enum.Material.Metal)
+	if rim then
+		table.insert(parts, rim)
+	else
+		local n = 18
+		local rr = r * 0.94
+		for i = 0, n - 1 do
+			local a0, a1 = i / n * math.pi * 2, (i + 1.08) / n * math.pi * 2
+			local p0 = center + anchor.RightVector * (math.cos(a0) * rr) + anchor.UpVector * (math.sin(a0) * rr)
+			local p1 = center + anchor.RightVector * (math.cos(a1) * rr) + anchor.UpVector * (math.sin(a1) * rr)
+			table.insert(parts, bar(p0, p1, s.Thickness + 1, anchor.LookVector, rimColor, Enum.Material.Metal))
+		end
+	end
+	return parts, 1
+end
+
 -- Bowl, opening along anchor Up. CSG shell when available, otherwise a ring of angled slats.
 local function buildBowl(anchor: CFrame, theme, _rng: Random)
 	local s = SIZE.Bowl
@@ -5177,6 +5678,7 @@ end
 
 local BUILDERS: { [string]: (CFrame, any, Random) -&gt; ({ BasePart }, number) } = {
 	Plate = buildPlate,
+	Tray = buildTray,
 	Bowl = buildBowl,
 	Cup = buildCup,
 	Glass = buildGlass,
@@ -5254,6 +5756,11 @@ local function buildTemplates()
 		cut("PlateBody", body, { well, bevel })
 		ring("PlateStripe", d * 0.93, d * 0.86, 0.1, alongZAt(r, front - 0.05))
 		ring("PlateFoot", d * 0.6, d * 0.53, 0.3, alongZAt(r, t / 2 + 0.15))
+	end
+	-- Tray rim: a thick ring around the flat face.
+	do
+		local s = SIZE.Tray
+		ring("TrayRim", s.Diameter, s.Diameter * 0.88, s.Thickness + 1, alongZAt(s.Diameter / 2, 0))
 	end
 	-- Bowl rim band.
 	do
@@ -5403,8 +5910,17 @@ local function candidateCutlery(height: number, lowFrac: number, rng: Random)
 	return Vector3.new(x, y, side * 4), Vector3.new(0, 0, -side)
 end
 
+local function candidateTray(rng: Random)
+	local s = SIZE.Tray
+	local r = math.sqrt(rng:NextNumber()) * s.Diameter * 0.36
+	local theta = rng:NextNumber() * math.pi * 2
+	local x, y = r * math.cos(theta), s.Diameter / 2 + r * math.sin(theta)
+	return Vector3.new(x, y, 4), Vector3.new(0, 0, -1)
+end
+
 local CANDIDATES: { [string]: (Random) -&gt; (Vector3, Vector3) } = {
 	Plate = candidatePlate,
+	Tray = candidateTray,
 	Bowl = function(rng)
 		return candidateInside(SIZE.Bowl.Diameter, SIZE.Bowl.Depth, rng)
 	end,
@@ -5766,7 +6282,7 @@ function DishFactory.Sparkle(dish: Model)
 end
 
 return DishFactory</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000012"><Properties><string name="Name">LeaderboardService</string><ProtectedString name="Source">-- Lobby leaderboards: "Fastest Clean" (one board that cycles through the levels) and
+<Item class="ModuleScript" referent="RBX00000012"><Properties><string name="Name">LeaderboardService</string><ProtectedString name="Source">-- Lobby leaderboards: "Fastest Clean" (one page per level; players flip pages with the arrows) and
 -- "Most Dishes Cleaned".
 --
 --   * OrderedDataStores: RinseCycle_Fastest_L&lt;n&gt; holds best times in tenths of a second (ascending,
@@ -5776,7 +6292,7 @@ return DishFactory</ProtectedString></Properties></Item>
 --     improved, and only values that changed since this server last wrote them), read the top 10
 --     of every store, and redraw.
 --   * Offline (Studio without API access) the boards rank the players in this server instead.
---   * The Times board switches level every CYCLE_INTERVAL seconds, from cached rows.
+--   * The Times board draws every level's page; each client shows the page it picked (Effects).
 
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
@@ -5798,7 +6314,6 @@ local LeaderboardService = {}
 local REFRESH_INTERVAL = 120
 local OFFLINE_REFRESH_INTERVAL = 10 -- offline boards are free to rebuild, so keep them fresh
 local FIRST_REFRESH_DELAY = 8 -- give the first players' profiles a moment to load
-local CYCLE_INTERVAL = 8
 local TOP_N = 10
 local KEY_PREFIX = "u_"
 local ROW_HEIGHT = 34
@@ -5819,7 +6334,6 @@ type Row = { Name: string, Value: number }
 local levelCount = #Config.Levels
 local timesTop: { [number]: { Row } } = {}
 local dishesTop: { Row } = {}
-local shownLevel = 1
 
 local timeStores: { [number]: OrderedDataStore } = {}
 local dishesStore: OrderedDataStore? = nil
@@ -5960,9 +6474,14 @@ local function drawTimes()
 		return
 	end
 	local board = lobby.Boards.Times
-	local level = Config.Levels[shownLevel]
-	board.Title.Text = string.format("⏱️ Fastest Clean: %s %s", level.Icon, level.Name)
-	drawRows(board.List, timesTop[shownLevel] or {}, formatTenths, "No clears yet!")
+	local pages = board.Pages or { { Title = board.Title, List = board.List } }
+	for i, page in pages do
+		local level = Config.Levels[i]
+		if level then
+			page.Title.Text = string.format("⏱️ Fastest: %s %s", level.Icon, level.Name)
+			drawRows(page.List, timesTop[i] or {}, formatTenths, "No clears yet!")
+		end
+	end
 end
 
 local function drawDishes()
@@ -6125,14 +6644,6 @@ function LeaderboardService.Start()
 			task.wait(if offline then OFFLINE_REFRESH_INTERVAL else REFRESH_INTERVAL)
 		end
 	end)
-
-	task.spawn(function()
-		while true do
-			task.wait(CYCLE_INTERVAL)
-			shownLevel = shownLevel % levelCount + 1
-			drawTimes()
-		end
-	end)
 end
 
 return LeaderboardService</ProtectedString></Properties></Item>
@@ -6177,7 +6688,10 @@ export type PadInfo = {
 	Barriers: { BasePart },
 	Gui: PadGui,
 }
-export type BoardInfo = { Part: BasePart, Title: TextLabel, List: Frame }
+export type BoardPage = { Title: TextLabel, List: Frame }
+-- Pages: one per level on a paged board (the Fastest Clean board); each client flips them locally
+-- with the arrows (tag "BoardArrow"), so nobody changes the page for anyone else.
+export type BoardInfo = { Part: BasePart, Title: TextLabel, List: Frame, Pages: { BoardPage }? }
 export type Lobby = {
 	Model: Model,
 	Pads: { PadInfo },
@@ -6208,11 +6722,21 @@ local SHOP_X = -40
 local PETSTAND_X = 40
 
 -- Colors
-local TILE_A = Color3.fromRGB(226, 218, 204)
-local TILE_B = Color3.fromRGB(182, 206, 222)
-local GRASS = Color3.fromRGB(116, 170, 86)
-local FENCE = Color3.fromRGB(252, 252, 250)
-local STEEL = Color3.fromRGB(205, 210, 216)
+local WOOD_A = Color3.fromRGB(196, 146, 98) -- table-top planks
+local WOOD_B = Color3.fromRGB(184, 134, 88)
+local WOOD_DARK = Color3.fromRGB(128, 86, 56)
+local CLOTH_RED = Color3.fromRGB(214, 70, 72)
+local CLOTH_WHITE = Color3.fromRGB(250, 246, 238)
+local ROOM_WALL = Color3.fromRGB(236, 222, 196)
+local ROOM_FLOOR = Color3.fromRGB(150, 104, 70)
+local LOW = Enum.Material.SmoothPlastic -- the lobby is flat-shaded, low-poly style
+
+-- The plaza is the top of a giant dining table; the room around it (floor far below).
+local TABLE_MARGIN = 16 -- table top overhang past the plaza
+local ROOM_FLOOR_Y = -130
+local ROOM_X = 420
+local ROOM_Z0, ROOM_Z1 = -560, 400
+local ROOM_TOP = 330
 local NAVY = Color3.fromRGB(18, 55, 100)
 
 ----------------------------------------------------------------------------------------------------
@@ -6316,79 +6840,81 @@ local function worldSign(parent: BasePart, text: string, width: number, height: 
 end
 
 ----------------------------------------------------------------------------------------------------
--- Ground: a lawn, the tiled plaza, a white picket fence and invisible walls.
+-- Ground: the plaza is the top of a giant wooden dining table (planks, a checked runner down the
+-- middle), with invisible walls at its edges. The table stands in a dining room (buildRoom).
 ----------------------------------------------------------------------------------------------------
 local function buildGround(parent: Instance)
-	-- Safety floor under everything (the real ground is Terrain, see buildTerrain).
+	-- Safety floor just under the table top (invisible), so nothing ever falls through.
 	mkPart("Part", {
 		Name = "SafetyFloor",
-		Size = Vector3.new(700, 2, 700),
-		CFrame = at(0, -3, -20),
-		Color = GRASS,
+		Size = Vector3.new(PLAZA_X * 2 + TABLE_MARGIN * 2, 2, PLAZA_Z1 - PLAZA_Z0 + TABLE_MARGIN * 2),
+		CFrame = at(0, -3, (PLAZA_Z0 + PLAZA_Z1) / 2),
 		Transparency = 1,
 		CastShadow = false,
 	}, parent)
 
-	-- Plaza: large two-tone tiles (few parts, still reads as a tiled floor).
-	local tile = 16
-	for x = -PLAZA_X, PLAZA_X - tile, tile do
-		for z = PLAZA_Z0, PLAZA_Z1 - tile, tile do
-			local ix, iz = (x + PLAZA_X) // tile, (z - PLAZA_Z0) // tile
+	-- Table top: planks running along X, alternating two wood tones, over a thick slab.
+	local x0, x1 = -PLAZA_X - TABLE_MARGIN, PLAZA_X + TABLE_MARGIN
+	local z0, z1 = PLAZA_Z0 - TABLE_MARGIN, PLAZA_Z1 + TABLE_MARGIN
+	mkPart("Part", {
+		Name = "TableSlab",
+		Size = Vector3.new(x1 - x0, 6, z1 - z0),
+		CFrame = at(0, -3.2, (z0 + z1) / 2),
+		Color = WOOD_DARK,
+		Material = LOW,
+	}, parent)
+	local plank = 14
+	local i = 0
+	for z = z0, z1 - 0.01, plank do
+		local zEnd = math.min(z + plank, z1)
+		mkPart("Part", {
+			Name = "Plank",
+			Size = Vector3.new(x1 - x0, 0.4, zEnd - z - 0.3),
+			CFrame = at(0, FLOOR_Y - 0.2, (z + zEnd) / 2),
+			Color = if i % 2 == 0 then WOOD_A else WOOD_B,
+			Material = LOW,
+		}, parent)
+		i += 1
+	end
+	-- Low-poly chamfer along the table's edges (wedges sloping down and out).
+	for _, side in { -1, 1 } do
+		mkPart("Part", {
+			Name = "Chamfer",
+			Size = Vector3.new(x1 - x0, 2, 2),
+			CFrame = at(0, -1, if side &lt; 0 then z0 - 1 else z1 + 1) * CFrame.Angles(0, if side &lt; 0 then 0 else math.pi, 0),
+			Color = WOOD_DARK,
+			Material = LOW,
+		}, parent)
+		mkPart("Part", {
+			Name = "Chamfer",
+			Size = Vector3.new(z1 - z0, 2, 2),
+			CFrame = at(if side &lt; 0 then x0 - 1 else x1 + 1, -1, (z0 + z1) / 2) * CFrame.Angles(0, if side &lt; 0 then -math.pi / 2 else math.pi / 2, 0),
+			Color = WOOD_DARK,
+			Material = LOW,
+		}, parent)
+	end
+	-- Checked runner (the path) from the spawn to the dishwasher building.
+	local cell = 7
+	local rz0, rz1 = HATCHERY_Z + 2, SPAWN.Z - 14
+	local row = 0
+	for z = rz0, rz1 - cell, cell do
+		for col = 0, 1 do
 			mkPart("Part", {
-				Name = "Tile",
-				Size = Vector3.new(tile, 0.4, tile),
-				CFrame = at(x + tile / 2, FLOOR_Y - 0.2, z + tile / 2),
-				Color = if (ix + iz) % 2 == 0 then TILE_A else TILE_B,
-				Material = Enum.Material.SmoothPlastic,
+				Name = "Runner",
+				Size = Vector3.new(cell, 0.1, cell),
+				CFrame = at(-cell / 2 + col * cell, FLOOR_Y + 0.05, z + cell / 2),
+				Color = if (row + col) % 2 == 0 then CLOTH_RED else CLOTH_WHITE,
+				Material = LOW,
+				CanCollide = false,
+				CastShadow = false,
 			}, parent)
 		end
+		row += 1
 	end
 
-	-- A path from spawn to the dishwasher building.
-	mkPart("Part", {
-		Name = "Path",
-		Size = Vector3.new(14, 0.1, 110),
-		CFrame = at(0, FLOOR_Y + 0.05, -30),
-		Color = Color3.fromRGB(150, 188, 212),
-		Material = Enum.Material.SmoothPlastic,
-		CanCollide = false,
-		CastShadow = false,
-	}, parent)
-
-	-- Picket fence around the plaza.
+	-- Invisible walls at the plaza edges (nobody falls off the table).
 	local fx0, fx1 = -PLAZA_X - FENCE_MARGIN, PLAZA_X + FENCE_MARGIN
 	local fz0, fz1 = PLAZA_Z0 - FENCE_MARGIN, PLAZA_Z1 + FENCE_MARGIN
-	local function fenceRun(x0: number, z0: number, x1: number, z1: number)
-		local len = math.max(math.abs(x1 - x0), math.abs(z1 - z0))
-		local alongX = math.abs(x1 - x0) &gt; math.abs(z1 - z0)
-		for _, y in { 1.6, 3.4 } do
-			mkPart("Part", {
-				Name = "FenceRail",
-				Size = if alongX then Vector3.new(len, 0.5, 0.3) else Vector3.new(0.3, 0.5, len),
-				CFrame = at((x0 + x1) / 2, y, (z0 + z1) / 2),
-				Color = FENCE,
-				CanCollide = false,
-			}, parent)
-		end
-		local posts = math.floor(len / 3)
-		for i = 0, posts do
-			local t = i / posts
-			local px, pz = x0 + (x1 - x0) * t, z0 + (z1 - z0) * t
-			mkPart("Part", {
-				Name = "Picket",
-				Size = Vector3.new(0.6, 4.6, 0.6),
-				CFrame = at(px, 2.3, pz),
-				Color = FENCE,
-				CanCollide = false,
-			}, parent)
-		end
-	end
-	fenceRun(fx0, fz0, fx1, fz0)
-	fenceRun(fx0, fz1, fx1, fz1)
-	fenceRun(fx0, fz0, fx0, fz1)
-	fenceRun(fx1, fz0, fx1, fz1)
-
-	-- Invisible walls just behind the fence.
 	local h = 80
 	local w = 4
 	for _, spec in {
@@ -6399,6 +6925,143 @@ local function buildGround(parent: Instance)
 	} do
 		mkPart("Part", { Name = "Barrier", Size = spec[1], CFrame = spec[2], Transparency = 1, CastShadow = false }, parent)
 	end
+end
+
+-- The dining room around the table: legs down to a floor far below, giant chairs, a sideboard, a
+-- pendant lamp, and walls with big windows looking out at the garden and mountains (Terrain).
+-- Walls and ceiling cast no shadows, so daylight still fills the room.
+local function buildRoom(parent: Instance)
+	local fy = ROOM_FLOOR_Y
+	local shadowless = { CastShadow = false }
+	local function box(name: string, ax0: number, ax1: number, ay0: number, ay1: number, az0: number, az1: number, color: Color3, extra: { [string]: any }?)
+		local props: { [string]: any } = {
+			Name = name,
+			Size = Vector3.new(math.abs(ax1 - ax0), math.abs(ay1 - ay0), math.abs(az1 - az0)),
+			CFrame = at((ax0 + ax1) / 2, (ay0 + ay1) / 2, (az0 + az1) / 2),
+			Color = color,
+			Material = LOW,
+		}
+		if extra then
+			for k, v in extra do
+				props[k] = v
+			end
+		end
+		return mkPart("Part", props, parent)
+	end
+
+	-- Table legs (chunky, low-poly: a square leg with a wider foot and a collar).
+	local tx0, tx1 = -PLAZA_X - TABLE_MARGIN, PLAZA_X + TABLE_MARGIN
+	local tz0, tz1 = PLAZA_Z0 - TABLE_MARGIN, PLAZA_Z1 + TABLE_MARGIN
+	box("TableApron", tx0 + 6, tx1 - 6, -16, -6.2, tz0 + 6, tz1 - 6, WOOD_DARK)
+	for _, lx in { tx0 + 14, tx1 - 14 } do
+		for _, lz in { tz0 + 14, tz1 - 14 } do
+			box("TableLeg", lx - 8, lx + 8, fy, -16, lz - 8, lz + 8, WOOD_DARK)
+			box("LegCollar", lx - 10, lx + 10, -30, -24, lz - 10, lz + 10, WOOD_A)
+			box("LegFoot", lx - 10, lx + 10, fy, fy + 8, lz - 10, lz + 10, WOOD_A)
+		end
+	end
+
+	-- Floor, walls with windows, ceiling.
+	box("RoomFloor", -ROOM_X, ROOM_X, fy - 4, fy, ROOM_Z0, ROOM_Z1, ROOM_FLOOR)
+	box("Rug", -200, 200, fy, fy + 0.4, -330, 170, Color3.fromRGB(70, 110, 150), { CanCollide = false })
+	box("RugBorder", -210, 210, fy - 0.1, fy + 0.3, -340, 180, Color3.fromRGB(240, 200, 110), { CanCollide = false })
+	box("Ceiling", -ROOM_X, ROOM_X, ROOM_TOP, ROOM_TOP + 4, ROOM_Z0, ROOM_Z1, Color3.fromRGB(250, 246, 238), shadowless)
+
+	local winY0, winY1 = fy + 110, fy + 380
+	-- A wall along X at z (from x = -ROOM_X to ROOM_X) with `n` windows.
+	local function wallX(z: number, n: number)
+		local span = ROOM_X * 2
+		local winW = 120
+		local gap = (span - n * winW) / (n + 1)
+		box("Wall", -ROOM_X, ROOM_X, fy, winY0, z - 2, z + 2, ROOM_WALL, shadowless)
+		box("Wall", -ROOM_X, ROOM_X, winY1, ROOM_TOP, z - 2, z + 2, ROOM_WALL, shadowless)
+		box("Skirting", -ROOM_X, ROOM_X, fy, fy + 10, z - 3, z + 3, Color3.fromRGB(255, 255, 255), shadowless)
+		local x = -ROOM_X
+		for k = 0, n do
+			box("Wall", x, x + gap, winY0, winY1, z - 2, z + 2, ROOM_WALL, shadowless)
+			x += gap
+			if k &lt; n then
+				box("WindowSill", x - 6, x + winW + 6, winY0 - 6, winY0, z - 8, z + 8, Color3.fromRGB(255, 255, 255), shadowless)
+				box("WindowBar", x + winW / 2 - 2, x + winW / 2 + 2, winY0, winY1, z - 1, z + 1, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
+				box("WindowBar", x, x + winW, (winY0 + winY1) / 2 - 2, (winY0 + winY1) / 2 + 2, z - 1, z + 1, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
+				box("WindowGlass", x, x + winW, winY0, winY1, z - 0.3, z + 0.3, Color3.fromRGB(200, 230, 255), { Transparency = 0.85, Material = Enum.Material.Glass, CastShadow = false })
+				x += winW
+			end
+		end
+	end
+	local function wallZ(xw: number, n: number)
+		local span = ROOM_Z1 - ROOM_Z0
+		local winW = 120
+		local gap = (span - n * winW) / (n + 1)
+		box("Wall", xw - 2, xw + 2, fy, winY0, ROOM_Z0, ROOM_Z1, ROOM_WALL, shadowless)
+		box("Wall", xw - 2, xw + 2, winY1, ROOM_TOP, ROOM_Z0, ROOM_Z1, ROOM_WALL, shadowless)
+		box("Skirting", xw - 3, xw + 3, fy, fy + 10, ROOM_Z0, ROOM_Z1, Color3.fromRGB(255, 255, 255), shadowless)
+		local z = ROOM_Z0
+		for k = 0, n do
+			box("Wall", xw - 2, xw + 2, winY0, winY1, z, z + gap, ROOM_WALL, shadowless)
+			z += gap
+			if k &lt; n then
+				box("WindowSill", xw - 8, xw + 8, winY0 - 6, winY0, z - 6, z + winW + 6, Color3.fromRGB(255, 255, 255), shadowless)
+				box("WindowBar", xw - 1, xw + 1, winY0, winY1, z + winW / 2 - 2, z + winW / 2 + 2, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
+				box("WindowBar", xw - 1, xw + 1, (winY0 + winY1) / 2 - 2, (winY0 + winY1) / 2 + 2, z, z + winW, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
+				box("WindowGlass", xw - 0.3, xw + 0.3, winY0, winY1, z, z + winW, Color3.fromRGB(200, 230, 255), { Transparency = 0.85, Material = Enum.Material.Glass, CastShadow = false })
+				z += winW
+			end
+		end
+	end
+	wallX(ROOM_Z0, 3)
+	wallX(ROOM_Z1, 3)
+	wallZ(-ROOM_X, 3)
+	wallZ(ROOM_X, 3)
+
+	-- Giant chairs around the table: seat below the table top, tall back rising above it.
+	local function chair(cx: number, cz: number, faceX: number, faceZ: number)
+		-- (faceX, faceZ): unit direction from the chair toward the table.
+		local seatY = -48
+		local half = 38
+		mkPart("Part", { Name = "ChairSeat", Size = Vector3.new(half * 2, 8, half * 2), CFrame = at(cx, seatY, cz), Color = WOOD_A, Material = LOW }, parent)
+		mkPart("Part", { Name = "ChairCushion", Size = Vector3.new(half * 2 - 10, 3, half * 2 - 10), CFrame = at(cx, seatY + 5.5, cz), Color = CLOTH_RED, Material = LOW }, parent)
+		local bx, bz = cx - faceX * (half - 4), cz - faceZ * (half - 4)
+		local sx = if faceX ~= 0 then 8 else half * 2
+		local sz = if faceZ ~= 0 then 8 else half * 2
+		mkPart("Part", { Name = "ChairBack", Size = Vector3.new(sx, 110, sz), CFrame = at(bx, seatY + 59, bz), Color = WOOD_A, Material = LOW }, parent)
+		mkPart("Part", { Name = "ChairTopRail", Size = Vector3.new(sx + 4, 10, sz + 4), CFrame = at(bx, seatY + 116, bz), Color = WOOD_DARK, Material = LOW }, parent)
+		for _, dx in { -half + 5, half - 5 } do
+			for _, dz in { -half + 5, half - 5 } do
+				mkPart("Part", { Name = "ChairLeg", Size = Vector3.new(7, seatY - 4 - fy, 7), CFrame = at(cx + dx, (fy + seatY - 4) / 2, cz + dz), Color = WOOD_DARK, Material = LOW }, parent)
+			end
+		end
+	end
+	for _, cz in { -60, 20 } do
+		chair(tx0 - 52, cz, 1, 0)
+		chair(tx1 + 52, cz, -1, 0)
+	end
+	chair(0, tz0 - 52, 0, 1)
+
+	-- Sideboard against the back wall with a stack of plates and a vase.
+	box("Sideboard", -150, 150, fy, fy + 90, ROOM_Z0 + 4, ROOM_Z0 + 60, WOOD_DARK)
+	box("SideboardTop", -156, 156, fy + 90, fy + 96, ROOM_Z0 + 2, ROOM_Z0 + 64, WOOD_A)
+	for i = -2, 2 do
+		box("SideboardDoor", i * 58 - 26, i * 58 + 26, fy + 12, fy + 82, ROOM_Z0 + 60, ROOM_Z0 + 62, WOOD_A)
+		box("SideboardKnob", i * 58 - 2, i * 58 + 2, fy + 48, fy + 54, ROOM_Z0 + 62, ROOM_Z0 + 64, Color3.fromRGB(240, 200, 110))
+	end
+
+	-- Pendant lamp over the table (hexagonal-ish shade from two boxes, glowing bulb).
+	local lampY = 150
+	box("LampCord", -1, 1, lampY + 20, ROOM_TOP, -19, -17, Color3.fromRGB(40, 40, 44), { CanCollide = false })
+	for k = 0, 2 do
+		mkPart("Part", {
+			Name = "LampShade",
+			Size = Vector3.new(60, 20, 26),
+			CFrame = at(0, lampY + 10, -18) * CFrame.Angles(0, k * math.pi / 3, 0),
+			Color = Color3.fromRGB(60, 120, 110),
+			Material = LOW,
+			CanCollide = false,
+			CastShadow = false,
+		}, parent)
+	end
+	local bulb = mkPart("Part", { Name = "LampBulb", Shape = Enum.PartType.Ball, Size = Vector3.new(16, 16, 16), CFrame = at(0, lampY - 2, -18), Color = Color3.fromRGB(255, 240, 200), Material = Enum.Material.Neon, CanCollide = false, CastShadow = false }, parent)
+	mk("PointLight", { Range = 60, Brightness = 0.6, Color = Color3.fromRGB(255, 230, 190), Shadows = false }, bulb)
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -6474,46 +7137,41 @@ local function buildSpawn(parent: Instance)
 	end
 end
 
--- Terrain around the plaza: rolling grass, hills, and a ring of snowy mountains on the horizon.
--- Built in the background after the lobby (it's a lot of voxels), with small yields.
+-- Terrain outside the dining room (seen through the windows): a garden lawn below the room floor,
+-- rolling hills and a ring of snowy mountains. Nothing inside the room is Terrain, so grass never
+-- shows up on the table. Built in the background after the lobby, with small yields.
 local function buildTerrain()
 	local terrain = workspace.Terrain
 	pcall(function()
 		terrain:Clear()
 	end)
 	local o = ORIGIN
-	-- Grass ground, top at Y = 0 (a voxel boundary).
-	terrain:FillBlock(CFrame.new(o.X, o.Y - 8, o.Z - 20), Vector3.new(1600, 16, 1600), Enum.Material.Grass)
+	local cz = o.Z + (ROOM_Z0 + ROOM_Z1) / 2
+	-- Lawn, top a few studs under the room floor (the room floor part covers everything inside).
+	local lawnTop = o.Y + ROOM_FLOOR_Y - 8
+	terrain:FillBlock(CFrame.new(o.X, lawnTop - 8, cz), Vector3.new(2600, 16, 2600), Enum.Material.Grass)
 	task.wait()
 	local rng = Random.new(7)
-	-- Rolling hills just outside the fence.
-	for i = 1, 22 do
-		local a = i / 22 * math.pi * 2 + rng:NextNumber(-0.1, 0.1)
-		local dist = rng:NextNumber(180, 290)
-		local r = rng:NextNumber(35, 70)
-		terrain:FillBall(Vector3.new(o.X + math.cos(a) * dist, o.Y - r * 0.55, o.Z - 20 + math.sin(a) * dist), r, Enum.Material.Grass)
+	for i = 1, 20 do
+		local a = i / 20 * math.pi * 2 + rng:NextNumber(-0.1, 0.1)
+		local dist = rng:NextNumber(700, 820)
+		local r = rng:NextNumber(50, 90)
+		terrain:FillBall(Vector3.new(o.X + math.cos(a) * dist, lawnTop - r * 0.5, cz + math.sin(a) * dist), r, Enum.Material.Grass)
 		if i % 4 == 0 then
 			task.wait()
 		end
 	end
-	-- Mountains: rock bodies with snow on top, two ranges deep so the horizon has layers.
 	for i = 1, 16 do
 		local a = i / 16 * math.pi * 2 + rng:NextNumber(-0.08, 0.08)
-		local dist = rng:NextNumber(520, 640)
-		local r = rng:NextNumber(110, 170)
-		local c = Vector3.new(o.X + math.cos(a) * dist, o.Y - r * 0.25, o.Z - 20 + math.sin(a) * dist)
+		local dist = rng:NextNumber(1000, 1150)
+		local r = rng:NextNumber(150, 220)
+		local c = Vector3.new(o.X + math.cos(a) * dist, lawnTop - r * 0.15, cz + math.sin(a) * dist)
 		terrain:FillBall(c, r, Enum.Material.Rock)
-		terrain:FillBall(c + Vector3.new(rng:NextNumber(-60, 60), -r * 0.2, rng:NextNumber(-60, 60)), r * 0.8, Enum.Material.Rock)
+		terrain:FillBall(c + Vector3.new(rng:NextNumber(-70, 70), -r * 0.2, rng:NextNumber(-70, 70)), r * 0.8, Enum.Material.Rock)
 		terrain:FillBall(c + Vector3.new(0, r * 0.62, 0), r * 0.42, Enum.Material.Snow)
-		-- Grassy foothill in front of it.
-		terrain:FillBall(c - (c - Vector3.new(o.X, c.Y, o.Z)).Unit * r * 0.8 - Vector3.new(0, r * 0.3, 0), r * 0.6, Enum.Material.Grass)
 		task.wait()
 	end
-	pcall(function()
-		(terrain :: any).Decoration = true
-	end)
 end
-
 
 ----------------------------------------------------------------------------------------------------
 -- Party pads: flat circles with a low see-through ring (it only blocks party members, so they stay
@@ -6699,24 +7357,39 @@ end
 local function buildDishwasherBuilding(parent: Instance)
 	local w, h, d = 84, 52, 26
 	local z = HATCHERY_Z - d / 2
-	mkPart("Part", { Name = "Body", Size = Vector3.new(w, h, d), CFrame = at(0, h / 2, z), Color = STEEL, Material = Enum.Material.Metal }, parent)
+	-- Low-poly body: flat white box on a navy plinth, a wooden worktop slab on top with an overhang,
+	-- and chamfered front corners (wedges) so it reads chunky rather than boxy.
+	mkPart("Part", { Name = "Body", Size = Vector3.new(w, h - 4, d), CFrame = at(0, (h - 4) / 2 + 4, z), Color = Color3.fromRGB(238, 242, 246), Material = LOW }, parent)
+	mkPart("Part", { Name = "Plinth", Size = Vector3.new(w - 4, 4, d - 3), CFrame = at(0, 2, z - 1.5), Color = Color3.fromRGB(38, 60, 96), Material = LOW }, parent)
+	mkPart("Part", { Name = "Worktop", Size = Vector3.new(w + 10, 3, d + 6), CFrame = at(0, h + 1.5, z + 1), Color = Color3.fromRGB(196, 146, 98), Material = LOW }, parent)
+	mkPart("Part", { Name = "WorktopEdge", Size = Vector3.new(w + 10.4, 1.2, 1), CFrame = at(0, h + 0.6, z + d / 2 + 4.2), Color = Color3.fromRGB(150, 104, 70), Material = LOW }, parent)
+	for _, side in { -1, 1 } do
+		-- Vertical chamfer strips on the front corners.
+		mkPart("Part", {
+			Name = "CornerChamfer",
+			Size = Vector3.new(4, h - 4, 4),
+			CFrame = at(side * (w / 2 - 1.4), (h - 4) / 2 + 4, HATCHERY_Z - 1.4) * CFrame.Angles(0, math.rad(45), 0),
+			Color = Color3.fromRGB(214, 222, 230),
+			Material = LOW,
+		}, parent)
+	end
 	-- Door panel with a recessed window and handle.
-	mkPart("Part", decor({ Name = "Door", Size = Vector3.new(w - 6, h - 16, 1), CFrame = at(0, (h - 16) / 2 + 3, HATCHERY_Z + 0.5), Color = Color3.fromRGB(225, 229, 234), Material = Enum.Material.Metal }), parent)
+	mkPart("Part", decor({ Name = "Door", Size = Vector3.new(w - 6, h - 16, 1), CFrame = at(0, (h - 16) / 2 + 3, HATCHERY_Z + 0.5), Color = Color3.fromRGB(225, 229, 234), Material = LOW }), parent)
 	-- The window shows a rack of plates behind the glass, like a real dishwasher.
 	local winW, winH, winY = w - 26, h - 30, (h - 16) / 2 + 3
-	mkPart("Part", decor({ Name = "WindowBack", Size = Vector3.new(winW, winH, 0.4), CFrame = at(0, winY, HATCHERY_Z + 1.2), Color = Color3.fromRGB(60, 80, 105), Material = Enum.Material.Metal }), parent)
+	mkPart("Part", decor({ Name = "WindowBack", Size = Vector3.new(winW, winH, 0.4), CFrame = at(0, winY, HATCHERY_Z + 1.2), Color = Color3.fromRGB(60, 80, 105), Material = LOW }), parent)
 	for i = 0, 4 do
 		local px = -winW / 2 + 6 + i * ((winW - 12) / 4)
 		mkPart("Part", decor({ Name = "WindowPlate", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.4, 13, 13), CFrame = at(px, winY - 1, HATCHERY_Z + 2.2) * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(110, 170, 230), Material = Enum.Material.SmoothPlastic }), parent)
 		mkPart("Part", decor({ Name = "WindowPlateFace", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.5, 11, 11), CFrame = at(px, winY - 1, HATCHERY_Z + 2.25) * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(250, 250, 248), Material = Enum.Material.SmoothPlastic }), parent)
 	end
-	mkPart("Part", decor({ Name = "WindowRack", Size = Vector3.new(winW - 2, 0.6, 2), CFrame = at(0, winY - 8, HATCHERY_Z + 2.3), Color = Color3.fromRGB(220, 225, 230), Material = Enum.Material.Metal }), parent)
+	mkPart("Part", decor({ Name = "WindowRack", Size = Vector3.new(winW - 2, 0.6, 2), CFrame = at(0, winY - 8, HATCHERY_Z + 2.3), Color = Color3.fromRGB(220, 225, 230), Material = LOW }), parent)
 	local window = mkPart("Part", decor({ Name = "Window", Size = Vector3.new(winW, winH, 0.3), CFrame = at(0, winY, HATCHERY_Z + 3.2), Color = Color3.fromRGB(150, 215, 250), Material = Enum.Material.Glass, Transparency = 0.55 }), parent)
 	for _, side in { -1, 1 } do
-		mkPart("Part", decor({ Name = "WindowFrame", Size = Vector3.new(1.2, winH + 1.2, 3), CFrame = at(side * (winW / 2 + 0.6), winY, HATCHERY_Z + 2), Color = Color3.fromRGB(200, 205, 212), Material = Enum.Material.Metal }), parent)
+		mkPart("Part", decor({ Name = "WindowFrame", Size = Vector3.new(1.2, winH + 1.2, 3), CFrame = at(side * (winW / 2 + 0.6), winY, HATCHERY_Z + 2), Color = Color3.fromRGB(200, 205, 212), Material = LOW }), parent)
 	end
 	for _, side in { -1, 1 } do
-		mkPart("Part", decor({ Name = "WindowFrame", Size = Vector3.new(winW + 2.4, 1.2, 3), CFrame = at(0, winY + side * (winH / 2 + 0.6), HATCHERY_Z + 2), Color = Color3.fromRGB(200, 205, 212), Material = Enum.Material.Metal }), parent)
+		mkPart("Part", decor({ Name = "WindowFrame", Size = Vector3.new(winW + 2.4, 1.2, 3), CFrame = at(0, winY + side * (winH / 2 + 0.6), HATCHERY_Z + 2), Color = Color3.fromRGB(200, 205, 212), Material = LOW }), parent)
 	end
 	-- Suds sloshing behind the window.
 	mk("ParticleEmitter", {
@@ -6730,7 +7403,7 @@ local function buildDishwasherBuilding(parent: Instance)
 		SpreadAngle = Vector2.new(60, 60),
 		EmissionDirection = Enum.NormalId.Top,
 	}, window)
-	mkPart("Part", decor({ Name = "Handle", Size = Vector3.new(30, 2, 2), CFrame = at(0, h - 17, HATCHERY_Z + 2), Color = Color3.fromRGB(170, 176, 184), Material = Enum.Material.Metal }), parent)
+	mkPart("Part", decor({ Name = "Handle", Size = Vector3.new(30, 2, 2), CFrame = at(0, h - 17, HATCHERY_Z + 2), Color = Color3.fromRGB(170, 176, 184), Material = LOW }), parent)
 	-- Control panel strip with the title and a few glowing buttons.
 	local panel = mkPart("Part", { Name = "ControlPanel", Size = Vector3.new(w, 12, 2), CFrame = at(0, h - 6, HATCHERY_Z + 1), Color = Color3.fromRGB(40, 46, 58), Material = Enum.Material.SmoothPlastic }, parent)
 	-- Back is the +Z face of an unrotated part, which is the side facing the spawn.
@@ -6757,19 +7430,15 @@ local function buildDishwasherBuilding(parent: Instance)
 		}), parent)
 	end
 	-- Roof sign.
-	local roofSign = mkPart("Part", { Name = "RoofSign", Size = Vector3.new(44, 9, 1), CFrame = at(0, h + 5.5, HATCHERY_Z - 4) * CFrame.Angles(0, math.pi, 0), Color = Color3.fromRGB(255, 120, 180), Material = Enum.Material.SmoothPlastic }, parent)
+	local roofSign = mkPart("Part", { Name = "RoofSign", Size = Vector3.new(44, 9, 1), CFrame = at(0, h + 8.5, HATCHERY_Z - 4) * CFrame.Angles(0, math.pi, 0), Color = Color3.fromRGB(255, 120, 180), Material = Enum.Material.SmoothPlastic }, parent)
 	local signGui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(880, 180), LightInfluence = 0 }, roofSign)
 	local signText = mk("TextLabel", { Size = UDim2.fromScale(0.94, 0.86), Position = UDim2.fromScale(0.03, 0.07), BackgroundTransparency = 1, Text = "🐾 PETS &amp; EGGS 🥚", Font = Enum.Font.FredokaOne, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, signGui)
 	mk("UIStroke", { Thickness = 5, Color = Color3.fromRGB(140, 40, 90) }, signText)
 	for _, x in { -18, 18 } do
-		mkPart("Part", { Name = "SignPost", Size = Vector3.new(1, 3, 1), CFrame = at(x, h + 0.5, HATCHERY_Z - 4), Color = Color3.fromRGB(200, 205, 212), Material = Enum.Material.Metal }, parent)
-	end
-	-- Feet.
-	for _, x in { -w / 2 + 4, w / 2 - 4 } do
-		mkPart("Part", decor({ Name = "Foot", Size = Vector3.new(6, 2, 6), CFrame = at(x, 1, HATCHERY_Z + 2), Color = Color3.fromRGB(60, 60, 66) }), parent)
+		mkPart("Part", { Name = "SignPost", Size = Vector3.new(1, 3, 1), CFrame = at(x, h + 3.5, HATCHERY_Z - 4), Color = Color3.fromRGB(200, 205, 212), Material = LOW }, parent)
 	end
 	-- Steam puffing out of the top.
-	local vent = mkPart("Part", decor({ Name = "Vent", Size = Vector3.new(10, 1, 4), CFrame = at(-24, h + 0.5, z), Color = Color3.fromRGB(150, 155, 160), Material = Enum.Material.Metal }), parent)
+	local vent = mkPart("Part", decor({ Name = "Vent", Size = Vector3.new(10, 1, 4), CFrame = at(-24, h + 3.5, z), Color = Color3.fromRGB(150, 155, 160), Material = LOW }), parent)
 	mk("ParticleEmitter", {
 		Texture = "rbxasset://textures/particles/smoke_main.dds",
 		Color = ColorSequence.new(Color3.new(1, 1, 1)),
@@ -6950,7 +7619,7 @@ local function boardShell(parent: Instance, x: number, z: number, w: number, h: 
 	return boardPart
 end
 
-local function buildBoard(parent: Instance, x: number, z: number, titleText: string, faceX: number, faceZ: number): BoardInfo
+local function buildBoard(parent: Instance, x: number, z: number, titleText: string, faceX: number, faceZ: number, pageCount: number?): BoardInfo
 	local boardPart = boardShell(parent, x, z, 22, 15, "Board", faceX, faceZ)
 	local gui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(700, 480), LightInfluence = 0 }, boardPart)
 	mk("UIPadding", {
@@ -6959,24 +7628,86 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 		PaddingLeft = UDim.new(0, 12),
 		PaddingRight = UDim.new(0, 12),
 	}, gui)
-	local titleLbl = mk("TextLabel", {
-		Name = "Title",
-		Size = UDim2.new(1, 0, 0, 64),
-		BackgroundTransparency = 1,
-		Text = titleText,
-		Font = Enum.Font.FredokaOne,
-		TextScaled = true,
-		TextColor3 = Color3.new(1, 1, 1),
-	}, gui) :: TextLabel
-	mk("UIStroke", { Thickness = 3, Color = Color3.fromRGB(10, 30, 60) }, titleLbl)
-	local list = mk("Frame", {
-		Name = "List",
-		Size = UDim2.new(1, 0, 1, -70),
-		Position = UDim2.new(0, 0, 0, 70),
-		BackgroundTransparency = 1,
-	}, gui) :: Frame
-	mk("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4) }, list)
-	return { Part = boardPart, Title = titleLbl, List = list }
+	local paged = pageCount and pageCount &gt; 1
+	local function page(i: number, parentGui: Instance): BoardPage
+		local root = mk("Frame", { Name = "Page" .. i, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Visible = i == 1 }, parentGui)
+		local titleLbl = mk("TextLabel", {
+			Name = "Title",
+			Size = if paged then UDim2.new(1, -150, 0, 64) else UDim2.new(1, 0, 0, 64),
+			Position = if paged then UDim2.fromOffset(75, 0) else UDim2.new(),
+			BackgroundTransparency = 1,
+			Text = titleText,
+			Font = Enum.Font.FredokaOne,
+			TextScaled = true,
+			TextColor3 = Color3.new(1, 1, 1),
+		}, root) :: TextLabel
+		mk("UIStroke", { Thickness = 3, Color = Color3.fromRGB(10, 30, 60) }, titleLbl)
+		local list = mk("Frame", {
+			Name = "List",
+			Size = UDim2.new(1, 0, 1, if paged then -104 else -70),
+			Position = UDim2.new(0, 0, 0, 70),
+			BackgroundTransparency = 1,
+		}, root) :: Frame
+		mk("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4) }, list)
+		if paged then
+			mk("TextLabel", {
+				Name = "PageNumber",
+				Size = UDim2.new(1, 0, 0, 28),
+				Position = UDim2.new(0, 0, 1, -28),
+				BackgroundTransparency = 1,
+				Text = string.format("◀  Level %d of %d  ▶", i, pageCount :: number),
+				Font = Enum.Font.FredokaOne,
+				TextScaled = true,
+				TextColor3 = Color3.fromRGB(170, 205, 240),
+			}, root)
+		end
+		return { Title = titleLbl, List = list }
+	end
+
+	if not paged then
+		local only = page(1, gui)
+		return { Part = boardPart, Title = only.Title, List = only.List }
+	end
+
+	local pages = {}
+	for i = 1, pageCount :: number do
+		pages[i] = page(i, gui)
+	end
+	-- Physical arrow buttons either side of the title (click or tap them), plus a prompt for
+	-- controllers. The client flips the pages locally (Effects).
+	local w, h = boardPart.Size.X, boardPart.Size.Y
+	for _, dir in { -1, 1 } do
+		local arrow = mkPart("Part", {
+			Name = "BoardArrow",
+			Size = Vector3.new(2.2, 1.9, 0.4),
+			CFrame = boardPart.CFrame * CFrame.new(dir * (w / 2 - 1.7), h / 2 - 1.5, -0.65),
+			Color = Color3.fromRGB(255, 200, 60),
+			Material = Enum.Material.SmoothPlastic,
+			CanCollide = false,
+		}, boardPart)
+		arrow:SetAttribute("Dir", dir)
+		CollectionService:AddTag(arrow, "BoardArrow")
+		local agui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(110, 95), LightInfluence = 0 }, arrow)
+		mk("TextLabel", {
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			Text = if dir &lt; 0 then "◀" else "▶",
+			Font = Enum.Font.FredokaOne,
+			TextScaled = true,
+			TextColor3 = Color3.fromRGB(40, 30, 10),
+		}, agui)
+		mk("ClickDetector", { MaxActivationDistance = 70 }, arrow)
+	end
+	local prompt = mk("ProximityPrompt", {
+		ActionText = "Next level",
+		ObjectText = "Fastest Clean",
+		RequiresLineOfSight = false,
+		HoldDuration = 0,
+		MaxActivationDistance = 14,
+		KeyboardKeyCode = Enum.KeyCode.F,
+	}, boardPart) :: ProximityPrompt
+	prompt:SetAttribute("BoardNext", true)
+	return { Part = boardPart, Title = pages[1].Title, List = pages[1].List, Pages = pages }
 end
 
 local function buildHowToPlay(parent: Instance, x: number, z: number, faceX: number, faceZ: number)
@@ -7027,20 +7758,112 @@ local function buildHowToPlay(parent: Instance, x: number, z: number, faceX: num
 end
 
 ----------------------------------------------------------------------------------------------------
--- Decorations: trees, hedges, soap bars, a giant sponge, floating bubbles.
+-- Decorations: giant tableware on the table (salt and pepper, a flower vase, a coffee cup, cutlery),
+-- a sponge and soap bars, floating bubbles. Low-poly: hexagonal prisms, flat colours.
 ----------------------------------------------------------------------------------------------------
-local function tree(parent: Instance, x: number, z: number, scale: number)
-	mkPart("Part", { Name = "Trunk", Shape = Enum.PartType.Cylinder, Size = Vector3.new(10 * scale, 2.4 * scale, 2.4 * scale), CFrame = upright(x, 5 * scale, z), Color = Color3.fromRGB(120, 85, 55), Material = Enum.Material.Wood }, parent)
-	for i, off in { Vector3.new(0, 12, 0), Vector3.new(2.5, 10, 1.5), Vector3.new(-2.5, 10.5, -1) } do
-		local s = (if i == 1 then 10 else 7) * scale
-		mkPart("Part", decor({
-			Name = "Leaves",
+
+-- Hexagonal prism (flat-to-flat width d, height h) with its base at y0: three boxes at 0/60/120.
+local function hex(parent: Instance, name: string, x: number, y0: number, z: number, d: number, h: number, color: Color3, collide: boolean?)
+	local side = d / math.sqrt(3)
+	for k = 0, 2 do
+		mkPart("Part", {
+			Name = name,
+			Size = Vector3.new(side, h, d),
+			CFrame = at(x, y0 + h / 2, z) * CFrame.Angles(0, k * math.pi / 3, 0),
+			Color = color,
+			Material = LOW,
+			CanCollide = collide ~= false,
+		}, parent)
+	end
+end
+
+local function shaker(parent: Instance, x: number, z: number, body: Color3, holes: Color3)
+	hex(parent, "Shaker", x, FLOOR_Y, z, 6, 11, body)
+	hex(parent, "ShakerCap", x, FLOOR_Y + 11, z, 6.4, 2.6, Color3.fromRGB(200, 205, 212), false)
+	for k = 0, 2 do
+		local a = k / 3 * math.pi * 2
+		mkPart("Part", decor({ Name = "ShakerHole", Size = Vector3.new(0.7, 0.1, 0.7), CFrame = at(x + math.cos(a) * 1.4, FLOOR_Y + 13.65, z + math.sin(a) * 1.4), Color = holes, Material = LOW }), parent)
+	end
+end
+
+local function flowerVase(parent: Instance, x: number, z: number)
+	hex(parent, "Vase", x, FLOOR_Y, z, 7, 9, Color3.fromRGB(90, 150, 220))
+	hex(parent, "VaseNeck", x, FLOOR_Y + 9, z, 4.4, 2, Color3.fromRGB(70, 125, 200), false)
+	local petals = { Color3.fromRGB(255, 120, 150), Color3.fromRGB(255, 200, 80), Color3.fromRGB(190, 130, 255), Color3.fromRGB(255, 255, 255) }
+	for k = 0, 3 do
+		local a = k / 4 * math.pi * 2
+		local fx, fz = x + math.cos(a) * 2.6, z + math.sin(a) * 2.6
+		local top = FLOOR_Y + 17 + (k % 2) * 2.5
+		mkPart("Part", decor({ Name = "Stem", Size = Vector3.new(0.5, top - FLOOR_Y - 8, 0.5), CFrame = at((x + fx) / 2, (FLOOR_Y + 8 + top) / 2, (z + fz) / 2) * CFrame.Angles(math.sin(a) * 0.2, 0, -math.cos(a) * 0.2), Color = Color3.fromRGB(80, 160, 80), Material = LOW }), parent)
+		hex(parent, "Petals", fx, top, fz, 3.4, 0.8, petals[k + 1], false)
+		mkPart("Part", decor({ Name = "FlowerMiddle", Size = Vector3.new(1.2, 0.9, 1.2), CFrame = at(fx, top + 0.55, fz), Color = Color3.fromRGB(255, 220, 90), Material = LOW }), parent)
+	end
+end
+
+local function coffeeCup(parent: Instance, x: number, z: number)
+	mkPart("Part", { Name = "Saucer", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.8, 13, 13), CFrame = upright(x, FLOOR_Y + 0.4, z), Color = Color3.fromRGB(245, 245, 240), Material = LOW }, parent)
+	hex(parent, "Cup", x, FLOOR_Y + 0.8, z, 8, 8, Color3.fromRGB(245, 245, 240))
+	hex(parent, "Coffee", x, FLOOR_Y + 8.7, z, 6.6, 0.2, Color3.fromRGB(110, 70, 45), false)
+	mkPart("Part", { Name = "CupHandle", Size = Vector3.new(3, 5, 1.2), CFrame = at(x + 5.3, FLOOR_Y + 4.8, z), Color = Color3.fromRGB(245, 245, 240), Material = LOW }, parent)
+	mkPart("Part", decor({ Name = "CupBand", Size = Vector3.new(8.2, 1.2, 4.8), CFrame = at(x, FLOOR_Y + 6.4, z), Color = Color3.fromRGB(90, 170, 230), Material = LOW }), parent)
+end
+
+-- Cutlery lying flat in the table's margin (outside the invisible walls, just to look at).
+local function cutlery(parent: Instance, x: number, z: number, kind: string)
+	local steel = Color3.fromRGB(205, 210, 218)
+	mkPart("Part", decor({ Name = "CutleryHandle", Size = Vector3.new(3, 1, 26), CFrame = at(x, FLOOR_Y + 0.5, z + 14), Color = steel, Material = Enum.Material.Metal }), parent)
+	if kind == "Fork" then
+		mkPart("Part", decor({ Name = "ForkHead", Size = Vector3.new(6, 1, 5), CFrame = at(x, FLOOR_Y + 0.5, z - 1.5), Color = steel, Material = Enum.Material.Metal }), parent)
+		for k = 0, 3 do
+			mkPart("Part", decor({ Name = "ForkTine", Size = Vector3.new(0.9, 1, 10), CFrame = at(x - 2.55 + k * 1.7, FLOOR_Y + 0.5, z - 9), Color = steel, Material = Enum.Material.Metal }), parent)
+		end
+	else
+		mkPart("Part", decor({ Name = "KnifeBlade", Size = Vector3.new(4.5, 0.8, 18), CFrame = at(x + 0.7, FLOOR_Y + 0.4, z - 8), Color = steel, Material = Enum.Material.Metal }), parent)
+	end
+end
+
+local function buildDecorations(parent: Instance)
+	shaker(parent, -91, -94, Color3.fromRGB(250, 250, 250), Color3.fromRGB(60, 60, 60))
+	shaker(parent, -83, -96, Color3.fromRGB(70, 70, 76), Color3.fromRGB(220, 220, 220))
+	flowerVase(parent, -90, 58)
+	coffeeCup(parent, 90, 58)
+	cutlery(parent, -PLAZA_X - TABLE_MARGIN / 2 - 1, -20, "Fork")
+	cutlery(parent, PLAZA_X + TABLE_MARGIN / 2 + 1, -20, "Knife")
+
+	-- Giant sponge and soap bars around the spawn.
+	mkPart("Part", { Name = "GiantSponge", Size = Vector3.new(12, 5, 8), CFrame = at(-78, 2.7, 44) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(255, 215, 90), Material = LOW }, parent)
+	mkPart("Part", decor({ Name = "SpongeScrub", Size = Vector3.new(12.2, 1.6, 8.2), CFrame = at(-78, 5.9, 44) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(80, 180, 100), Material = LOW }), parent)
+	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(10, 3.5, 6), CFrame = at(78, 2, 44) * CFrame.Angles(0, math.rad(-15), 0), Color = Color3.fromRGB(190, 230, 255), Material = LOW }, parent)
+	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(8, 3, 5), CFrame = at(79, 5.3, 44) * CFrame.Angles(0, math.rad(10), 0), Color = Color3.fromRGB(255, 190, 220), Material = LOW }, parent)
+
+	-- Floating soap bubbles bobbing on cheap tween loops.
+	local bubbleFolder = mk("Folder", { Name = "Bubbles" }, parent)
+	for i = 1, 12 do
+		local pos = at(math.random(-80, 80), 14 + math.random(0, 16), math.random(-80, 50)).Position
+		local size = 2 + math.random() * 2
+		local bubble = mkPart("Part", {
+			Name = "Bubble" .. i,
 			Shape = Enum.PartType.Ball,
-			Size = Vector3.new(s, s, s),
-			CFrame = at(x + off.X * scale, off.Y * scale, z + off.Z * scale),
-			Color = Color3.fromRGB(90 + i * 12, 170 + i * 6, 80),
-			Material = Enum.Material.Grass,
-		}), parent)
+			Size = Vector3.new(size, size, size),
+			CFrame = CFrame.new(pos),
+			Color = Color3.fromRGB(255, 255, 255),
+			Material = Enum.Material.ForceField,
+			Transparency = 0.4,
+			CanCollide = false,
+			CastShadow = false,
+		}, bubbleFolder)
+		task.spawn(function()
+			local base = bubble.Position
+			while bubble.Parent do
+				local tw = TweenService:Create(
+					bubble,
+					TweenInfo.new(3 + math.random() * 2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+					{ Position = base + Vector3.new(math.random(-3, 3), math.random(-2, 5), math.random(-3, 3)) }
+				)
+				tw:Play()
+				tw.Completed:Wait()
+			end
+		end)
 	end
 end
 
@@ -7094,55 +7917,10 @@ local function buildPathDressing(parent: Instance)
 			mkPart("Part", { Name = "Planter", Size = Vector3.new(4, 2, 8), CFrame = at(x + side * 4, 1.2, z + 7), Color = Color3.fromRGB(230, 234, 240), Material = Enum.Material.SmoothPlastic }, parent)
 			for k = -1, 1 do
 				local d = 3 + (k + 1) % 2
-				local bush = mkPart("Part", decor({ Name = "Bush", Shape = Enum.PartType.Ball, Size = Vector3.new(d, d, d), CFrame = at(x + side * 4, 2.6, z + 7 + k * 2.4), Color = Color3.fromRGB(80 + k * 10, 160, 80), Material = Enum.Material.Grass }), parent)
+				local bush = mkPart("Part", decor({ Name = "Bush", Size = Vector3.new(d, d, d), CFrame = at(x + side * 4, 2.6, z + 7 + k * 2.4) * CFrame.Angles(math.rad(35), math.rad(45 + k * 20), 0), Color = Color3.fromRGB(80 + k * 10, 160, 80), Material = LOW }), parent)
 				bush.CastShadow = true
 			end
 		end
-	end
-end
-
-local function buildDecorations(parent: Instance)
-	for _, spot in { { -91, -97, 1.2 }, { 91, -97, 1.2 }, { -88, 52, 1 }, { 88, 52, 1 }, { -130, -30, 1.6 }, { 130, -30, 1.6 }, { -120, 70, 1.4 }, { 120, 70, 1.4 }, { 0, -140, 1.8 } } do
-		tree(parent, spot[1], spot[2], spot[3])
-	end
-	-- Hedges along the back fence, either side of the building.
-	for _, x in { -70, 70 } do
-		mkPart("Part", decor({ Name = "Hedge", Size = Vector3.new(40, 5, 5), CFrame = at(x, 2.5, PLAZA_Z0 + 3), Color = Color3.fromRGB(80, 150, 70), Material = Enum.Material.Grass }), parent)
-	end
-	-- Giant sponge and soap bars around the spawn.
-	mkPart("Part", { Name = "GiantSponge", Size = Vector3.new(12, 5, 8), CFrame = at(-80, 2.7, 46) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(255, 215, 90), Material = Enum.Material.Sand }, parent)
-	mkPart("Part", decor({ Name = "SpongeScrub", Size = Vector3.new(12.2, 1.6, 8.2), CFrame = at(-80, 5.9, 46) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(80, 180, 100), Material = Enum.Material.Fabric }), parent)
-	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(10, 3.5, 6), CFrame = at(80, 2, 46) * CFrame.Angles(0, math.rad(-15), 0), Color = Color3.fromRGB(190, 230, 255), Material = Enum.Material.SmoothPlastic }, parent)
-	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(8, 3, 5), CFrame = at(81, 5.3, 46) * CFrame.Angles(0, math.rad(10), 0), Color = Color3.fromRGB(255, 190, 220), Material = Enum.Material.SmoothPlastic }, parent)
-
-	-- Floating soap bubbles bobbing on cheap tween loops.
-	local bubbleFolder = mk("Folder", { Name = "Bubbles" }, parent)
-	for i = 1, 12 do
-		local pos = at(math.random(-80, 80), 14 + math.random(0, 16), math.random(-80, 50)).Position
-		local size = 2 + math.random() * 2
-		local bubble = mkPart("Part", {
-			Name = "Bubble" .. i,
-			Shape = Enum.PartType.Ball,
-			Size = Vector3.new(size, size, size),
-			CFrame = CFrame.new(pos),
-			Color = Color3.fromRGB(255, 255, 255),
-			Material = Enum.Material.ForceField,
-			Transparency = 0.4,
-			CanCollide = false,
-			CastShadow = false,
-		}, bubbleFolder)
-		task.spawn(function()
-			local base = bubble.Position
-			while bubble.Parent do
-				local tw = TweenService:Create(
-					bubble,
-					TweenInfo.new(3 + math.random() * 2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-					{ Position = base + Vector3.new(math.random(-3, 3), math.random(-2, 5), math.random(-3, 3)) }
-				)
-				tw:Play()
-				tw.Completed:Wait()
-			end
-		end)
 	end
 end
 
@@ -7213,6 +7991,7 @@ function LobbyBuilder.Build(): Lobby
 	-- Spawn first, so a player who spawns mid-build has a floor under them.
 	buildSpawn(model)
 	buildGround(model)
+	buildRoom(model)
 
 	local pads: { PadInfo } = {}
 	for i = 1, PAD_COUNT do
@@ -7226,7 +8005,7 @@ function LobbyBuilder.Build(): Lobby
 
 	-- Leaderboards in the back corners, angled at the middle of the plaza; How to Play beside the
 	-- spawn, facing it. Nothing stands behind the spawn, so the default camera has a clear view.
-	local timesBoard = buildBoard(model, -80, -74, "Fastest Clean", 0, 0)
+	local timesBoard = buildBoard(model, -80, -74, "Fastest Clean", 0, 0, #Config.Levels)
 	local dishesBoard = buildBoard(model, 80, -74, "Most Dishes Cleaned", 0, 0)
 	buildHowToPlay(model, 34, 44, SPAWN.X, SPAWN.Z)
 
@@ -11537,7 +12316,109 @@ print(string.format("[%s] v%s server ready", Config.GameName, Config.Version))</
 <Item class="StarterPlayer" referent="RBX0000001A"><Properties><string name="Name">StarterPlayer</string></Properties>
 <Item class="StarterPlayerScripts" referent="RBX0000001B"><Properties><string name="Name">StarterPlayerScripts</string></Properties>
 <Item class="Folder" referent="RBX0000001C"><Properties><string name="Name">Client</string></Properties>
-<Item class="LocalScript" referent="RBX0000001D"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
+<Item class="ModuleScript" referent="RBX0000001D"><Properties><string name="Name">BubbleJets</string><ProtectedString name="Source">-- BubbleJets: inside a run, hold jump while in the air to fly up on a jet of soap bubbles.
+-- Fuel (a few seconds) refills while you stand on something. The HUD shows the fuel bar from the
+-- LocalPlayer's "JetFuel" attribute (0..1), so this module owns no UI.
+--
+-- The character is network-owned by the client, so setting its velocity here is all it takes.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local Client = script.Parent
+local ClientState = require(Client:WaitForChild("ClientState"))
+
+local FUEL_SECONDS = 2.6 -- full tank of flight
+local REFILL_PER_SECOND = 1.3 -- seconds of flight regained per second on the ground
+local RISE_SPEED = 34 -- studs/s upward while jetting
+local HOLD_WINDOW = 0.2 -- JumpRequest repeats while jump is held; this bridges the gaps
+
+local BubbleJets = {}
+local initialized = false
+
+local player = Players.LocalPlayer
+local fuel = FUEL_SECONDS
+local lastJumpRequest = -1
+local emitter: ParticleEmitter? = nil
+
+local function jumpHeld(): boolean
+	if UserInputService:GetFocusedTextBox() then
+		return false
+	end
+	if UserInputService:IsKeyDown(Enum.KeyCode.Space) or UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, Enum.KeyCode.ButtonA) then
+		return true
+	end
+	-- Touch (and anything else): JumpRequest keeps firing while the jump button is held.
+	return os.clock() - lastJumpRequest &lt; HOLD_WINDOW
+end
+
+local function ensureEmitter(root: BasePart): ParticleEmitter
+	local e = emitter
+	if e and e.Parent == root then
+		return e
+	end
+	local new = Instance.new("ParticleEmitter")
+	new.Name = "BubbleJet"
+	new.Texture = "rbxasset://textures/particles/forcefield_glow_main.dds"
+	new.Color = ColorSequence.new(Color3.fromRGB(200, 240, 255), Color3.fromRGB(150, 210, 255))
+	new.Transparency = NumberSequence.new(0.2, 1)
+	new.Size = NumberSequence.new(1.2, 0.3)
+	new.Lifetime = NumberRange.new(0.5, 0.9)
+	new.Speed = NumberRange.new(10, 16)
+	new.SpreadAngle = Vector2.new(25, 25)
+	new.EmissionDirection = Enum.NormalId.Bottom
+	new.Rate = 0
+	new.LightEmission = 0.4
+	new.Parent = root
+	emitter = new
+	return new
+end
+
+local function step(dt: number)
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not ClientState.InRun() or not humanoid or not root or not root:IsA("BasePart") or humanoid.Health &lt;= 0 then
+		fuel = FUEL_SECONDS
+		player:SetAttribute("JetFuel", nil)
+		if emitter then
+			emitter.Rate = 0
+		end
+		return
+	end
+
+	local airborne = humanoid.FloorMaterial == Enum.Material.Air
+	local jetting = airborne and jumpHeld() and fuel &gt; 0
+	if jetting then
+		fuel = math.max(0, fuel - dt)
+		local v = root.AssemblyLinearVelocity
+		root.AssemblyLinearVelocity = Vector3.new(v.X, math.max(v.Y, RISE_SPEED), v.Z)
+	elseif not airborne then
+		fuel = math.min(FUEL_SECONDS, fuel + REFILL_PER_SECOND * dt)
+	end
+	ensureEmitter(root).Rate = if jetting then 40 else 0
+	player:SetAttribute("JetFuel", fuel / FUEL_SECONDS)
+end
+
+function BubbleJets.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+	UserInputService.JumpRequest:Connect(function()
+		lastJumpRequest = os.clock()
+	end)
+	RunService.Heartbeat:Connect(function(dt)
+		local ok, err = pcall(step, dt)
+		if not ok then
+			warn("[BubbleJets] " .. tostring(err))
+		end
+	end)
+end
+
+return BubbleJets</ProtectedString></Properties></Item>
+<Item class="LocalScript" referent="RBX0000001E"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
 -- Each module exposes Init(); anything that fails is reported without stopping the others.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11556,6 +12437,7 @@ local PetsUI = require(Client:WaitForChild("PetsUI"))
 local SprayController = require(Client:WaitForChild("SprayController"))
 local PetRenderer = require(Client:WaitForChild("PetRenderer"))
 local Effects = require(Client:WaitForChild("Effects"))
+local BubbleJets = require(Client:WaitForChild("BubbleJets"))
 
 local function step(name: string, fn: () -&gt; ())
 	local ok, err = xpcall(fn, debug.traceback)
@@ -11579,8 +12461,9 @@ step("RanksUI", RanksUI.Init)
 step("PetsUI", PetsUI.Init)
 step("SprayController", SprayController.Init)
 step("PetRenderer", PetRenderer.Init)
-step("Effects", Effects.Init)</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001E"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
+step("Effects", Effects.Init)
+step("BubbleJets", BubbleJets.Init)</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX0000001F"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
 -- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
 -- Changed instead of each hooking the remotes themselves.
 
@@ -11702,7 +12585,7 @@ function ClientState.LocalPlayer(): Player
 end
 
 return ClientState</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001F"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
+<Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
 -- numbers, dish/sale celebrations), CollectionService-driven decoration (spinning arms, lift
 -- pads), the drain guide beam, remaining-dirt sparkle markers, prompt routing (windows and the
 -- in-arena tool shop), and a little lobby ambience.
@@ -12202,8 +13085,56 @@ local function buyTool(index: number)
 	end
 end
 
+----------------------------------------------------------------------------------------------------
+-- Paged leaderboards: the arrows (tag "BoardArrow") and the "Next level" prompt flip this client's
+-- view of the pages (Page1..PageN in the board's SurfaceGui). Nothing is sent to the server.
+----------------------------------------------------------------------------------------------------
+
+local function flipBoard(board: Instance, dir: number)
+	local gui = board:FindFirstChildOfClass("SurfaceGui")
+	if not gui then
+		return
+	end
+	local pages = {}
+	local current = 1
+	for i = 1, 20 do
+		local page = gui:FindFirstChild("Page" .. i)
+		if not page or not page:IsA("GuiObject") then
+			break
+		end
+		pages[i] = page
+		if page.Visible then
+			current = i
+		end
+	end
+	if #pages &lt; 2 then
+		return
+	end
+	local nextIndex = (current - 1 + dir) % #pages + 1
+	for i, page in pages do
+		page.Visible = i == nextIndex
+	end
+	UIKit.PlaySound("Click")
+end
+
+local function addBoardArrow(inst: Instance)
+	local detector = inst:FindFirstChildOfClass("ClickDetector") or inst:WaitForChild("ClickDetector", 10)
+	if not detector or not detector:IsA("ClickDetector") then
+		return
+	end
+	detector.MouseClick:Connect(function(player)
+		if player == LocalPlayer and inst.Parent then
+			flipBoard(inst.Parent, tonumber(inst:GetAttribute("Dir")) or 1)
+		end
+	end)
+end
+
 local function onPromptTriggered(prompt: ProximityPrompt, player: Player)
 	if player ~= LocalPlayer then
+		return
+	end
+	if prompt:GetAttribute("BoardNext") and prompt.Parent then
+		flipBoard(prompt.Parent, 1)
 		return
 	end
 	local windowName = prompt:GetAttribute("OpenWindow")
@@ -12245,7 +13176,7 @@ local function updateShopDisplays()
 				prompt.Enabled = not owned
 			end
 		else
-			local gui = inst:FindFirstChildOfClass("SurfaceGui")
+			local gui = inst:FindFirstChildWhichIsA("LayerCollector")
 			local price = gui and gui:FindFirstChild("Price") :: TextLabel?
 			if price then
 				local cost = Config.ToolCost(index, run.Level) or 0
@@ -12349,6 +13280,13 @@ function Effects.Init()
 
 	ProximityPromptService.PromptTriggered:Connect(onPromptTriggered)
 
+	for _, inst in CollectionService:GetTagged("BoardArrow") do
+		task.spawn(addBoardArrow, inst)
+	end
+	CollectionService:GetInstanceAddedSignal("BoardArrow"):Connect(function(inst)
+		task.spawn(addBoardArrow, inst)
+	end)
+
 	RunService.Heartbeat:Connect(function(dt)
 		stepSpin(dt)
 		stepLift(dt)
@@ -12361,7 +13299,7 @@ function Effects.Init()
 end
 
 return Effects</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
+<Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
 --   * top centre: the Bubbles pill with a green "+" (opens the Shop)
 --   * right side: big square buttons (Shop/Pets in the lobby, Upgrades/Pets/Leave in a run) with
 --     key hints for keyboard (Tab/G/P) or gamepad (Y/LB)
@@ -12447,7 +13385,7 @@ function HUD.Init()
 		CornerRadius = 10,
 		Parent = topCurrency,
 		OnClick = function()
-			UIKit.ToggleWindow("Shop")
+			UIKit.OpenWindow("Shop", "Bubbles")
 		end,
 	})
 
@@ -12480,7 +13418,7 @@ function HUD.Init()
 	local gemsPill = Instance.new("Frame")
 	gemsPill.Name = "Gems"
 	gemsPill.AnchorPoint = Vector2.new(0, 0)
-	gemsPill.Size = UDim2.fromOffset(130, 44)
+	gemsPill.Size = UDim2.fromOffset(168, 44)
 	gemsPill.BackgroundColor3 = Color3.new(1, 1, 1)
 	gemsPill.BorderSizePixel = 0
 	UIKit.Corner(gemsPill, 14)
@@ -12492,9 +13430,23 @@ function HUD.Init()
 		Text = "0",
 		TextSize = 28,
 		Position = UDim2.fromOffset(44, 0),
-		Size = UDim2.new(1, -52, 1, 0),
+		Size = UDim2.new(1, -86, 1, 0),
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Parent = gemsPill,
+	})
+	UIKit.Button({
+		Name = "Plus",
+		Text = "+",
+		Size = UDim2.fromOffset(36, 36),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -4, 0.5, 0),
+		Color = Colors.Good,
+		TextSize = 28,
+		CornerRadius = 9,
+		Parent = gemsPill,
+		OnClick = function()
+			UIKit.OpenWindow("Shop", "Gems")
+		end,
 	})
 	local gemsShown = -1
 	local function setGems(value: number)
@@ -12672,7 +13624,7 @@ function HUD.Init()
 	local moneyBlock = Instance.new("Frame")
 	moneyBlock.Name = "Money"
 	moneyBlock.AnchorPoint = Vector2.new(0, 1)
-	moneyBlock.Size = UDim2.fromOffset(300, 130)
+	moneyBlock.Size = UDim2.fromOffset(300, 150)
 	moneyBlock.BackgroundTransparency = 1
 	moneyBlock.Visible = false
 	moneyBlock.Parent = root
@@ -12687,6 +13639,24 @@ function HUD.Init()
 		StrokeThickness = 3,
 		Parent = moneyBlock,
 	})
+	-- Green "+" right after the number: opens the shop on the Coins tab.
+	local coinsPlus = UIKit.Button({
+		Name = "CoinsPlus",
+		Text = "+",
+		Size = UDim2.fromOffset(44, 44),
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.fromOffset(200, 31),
+		Color = Colors.Good,
+		TextSize = 32,
+		CornerRadius = 10,
+		Parent = moneyBlock,
+		OnClick = function()
+			UIKit.OpenWindow("Shop", "Coins")
+		end,
+	})
+	coinsLabel:GetPropertyChangedSignal("TextBounds"):Connect(function()
+		coinsPlus.Position = UDim2.fromOffset(math.floor(coinsLabel.TextBounds.X / UIKit.GetScale()) + 12, 31)
+	end)
 	local coinsNV = Instance.new("NumberValue")
 	coinsNV.Parent = moneyBlock
 	coinsNV:GetPropertyChangedSignal("Value"):Connect(function()
@@ -12719,6 +13689,26 @@ function HUD.Init()
 		Parent = moneyBlock,
 	})
 	tankBar.Frame.Name = "Tank"
+
+	-- Bubble-jet fuel (BubbleJets writes the LocalPlayer's JetFuel attribute, 0..1).
+	local jetBar = UIKit.ProgressBar({
+		Size = UDim2.new(0, 280, 0, 26),
+		Position = UDim2.fromOffset(0, 122),
+		Color = Color3.fromRGB(150, 215, 255),
+		Text = "🧼 Hold jump to fly",
+		TextSize = 16,
+		Value = 1,
+		Parent = moneyBlock,
+	})
+	jetBar.Frame.Name = "JetFuel"
+	local lastJet = 1
+	Players.LocalPlayer:GetAttributeChangedSignal("JetFuel"):Connect(function()
+		local f = tonumber(Players.LocalPlayer:GetAttribute("JetFuel")) or 1
+		if math.abs(f - lastJet) &gt; 0.02 or (f &gt;= 1 and lastJet &lt; 1) then
+			lastJet = f
+			jetBar.Set(f, if f &lt;= 0.01 then "🧼 Land to refill" else "🧼 Hold jump to fly")
+		end
+	end)
 
 	local tankFlash: Tween? = nil
 	local function setTankFull(isFull: boolean)
@@ -12787,7 +13777,7 @@ function HUD.Init()
 		topCurrency.Position = UDim2.new(0.5, 0, 0, 2)
 		gemsPill.Position = UDim2.new(0.5, 133, 0, 7)
 		hotbar.Position = UDim2.new(0.5, 0, 1, -(if touch then 24 else 12) - safe.Bottom)
-		topBar.Position = UDim2.new(0.5, 0, 0, 66)
+		topBar.Position = UDim2.new(0.5, 0, 0, 72)
 
 		-- Right column: vertically centred, but on touch kept above the jump button.
 		local colH = rightColumn.AbsoluteSize.Y / UIKit.GetScale()
@@ -13016,7 +14006,7 @@ function HUD.Init()
 	local countdownLabel = UIKit.Label({
 		Text = "",
 		Size = UDim2.new(1, -40, 0, 24),
-		Position = UDim2.new(0, 20, 1, -84),
+		Position = UDim2.new(0, 20, 1, -108),
 		TextSize = 18,
 		TextColor3 = Colors.TextDim,
 		TextXAlignment = Enum.TextXAlignment.Center,
@@ -13418,7 +14408,7 @@ function HUD.Init()
 end
 
 return HUD</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
 	PartyUI - everything shown while ClientState.Party ~= nil (standing in a lobby pad).
 
 	Two screens, Search-for-the-Needle style:
@@ -14051,7 +15041,7 @@ function PartyUI.Init()
 end
 
 return PartyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
+<Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
 -- state (EquippedPets/&lt;slot&gt; StringValue = pet id, its Target ObjectValue = the grime part being
 -- cleaned); this module is the only thing that actually builds and moves pet models. See
 -- DESIGN.md section 6 ("PetRenderer") and section 4 ("Equipped pets for rendering").
@@ -14085,8 +15075,8 @@ local BOB_SPEED = 3
 local BOB_HEIGHT = 0.4
 local LERP_RATE = 10 -- pivot:Lerp(target, 1 - exp(-LERP_RATE * dt))
 local HIDE_DISTANCE = 400
-local TILT_STRENGTH = 0.05
-local MAX_TILT = math.rad(20)
+local TILT_STRENGTH = 0.012
+local MAX_TILT = math.rad(10)
 
 ----------------------------------------------------------------------------------------------------
 -- State
@@ -14099,6 +15089,8 @@ type Slot = {
 	Target: BasePart?,
 	Hidden: boolean?,
 	LastPos: Vector3?,
+	BasePivot: CFrame?, -- the smoothed pose without tilt (tilt is re-applied each frame, never compounded)
+	Tilt: Vector2?, -- smoothed (pitch, roll)
 	Conns: { RBXScriptConnection },
 }
 
@@ -14152,12 +15144,12 @@ local function setHidden(slot: Slot, hidden: boolean)
 	end
 end
 
--- A little pitch/roll based on how the pet is currently moving, so it doesn't glide like a robot.
-local function applyTilt(pivot: CFrame, velocity: Vector3): CFrame
+-- A little pitch/roll target based on how the pet is currently moving, so it doesn't glide like a robot.
+local function tiltFor(pivot: CFrame, velocity: Vector3): Vector2
 	local localVel = pivot:VectorToObjectSpace(velocity)
-	local pitch = math.clamp(localVel.Z * TILT_STRENGTH, -MAX_TILT, MAX_TILT) -- moving forward (-Z) noses down
+	local pitch = math.clamp(localVel.Z * TILT_STRENGTH, -MAX_TILT, MAX_TILT) -- moving forward (-Z) leans in slightly
 	local roll = math.clamp(-localVel.X * TILT_STRENGTH, -MAX_TILT, MAX_TILT)
-	return pivot * CFrame.Angles(pitch, 0, roll)
+	return Vector2.new(pitch, roll)
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -14198,6 +15190,8 @@ local function buildModel(slot: Slot, petId: string)
 	slot.Model = model
 	slot.Hidden = nil -- force the next setHidden call to actually apply
 	slot.LastPos = nil
+	slot.BasePivot = nil
+	slot.Tilt = nil
 end
 
 local function hookTargetValue(slot: Slot, stringValue: StringValue)
@@ -14427,17 +15421,21 @@ local function updateOwner(ownerState: OwnerState, dt: number, camPos: Vector3)
 			targetCFrame = CFrame.new(worldPos) * (root.CFrame - root.CFrame.Position)
 		end
 
-		local current = model:GetPivot()
+		-- Smooth the untilted pose; the tilt is layered on top for display only, so it can't build up.
+		local current = slot.BasePivot or model:GetPivot()
 		local alpha = 1 - math.exp(-LERP_RATE * dt)
 		local newPivot = current:Lerp(targetCFrame :: CFrame, alpha)
+		slot.BasePivot = newPivot
 
+		local tilt = slot.Tilt or Vector2.zero
 		if slot.LastPos and dt &gt; 1e-4 then
 			local velocity = (newPivot.Position - slot.LastPos) / dt
-			newPivot = applyTilt(newPivot, velocity)
+			tilt = tilt:Lerp(tiltFor(newPivot, velocity), 1 - math.exp(-8 * dt))
 		end
+		slot.Tilt = tilt
 		slot.LastPos = newPivot.Position
 
-		model:PivotTo(newPivot)
+		model:PivotTo(newPivot * CFrame.Angles(tilt.X, 0, tilt.Y))
 	end
 end
 
@@ -14475,7 +15473,7 @@ function PetRenderer.Init()
 end
 
 return PetRenderer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
+<Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
 -- reveal animation. Everything here is built with UIKit; see DESIGN.md section 6 ("PetsUI") for
 -- the contract. Both windows rebuild their contents from ClientState.Meta whenever it changes and
 -- the relevant window is open, so a purchase/hatch/equip anywhere refreshes what's on screen.
@@ -15604,7 +16602,7 @@ function PetsUI.Init()
 end
 
 return PetsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
 	RanksUI - the "Ranks" window (Rank Shrine in the lobby, the HUD's Ranks button, R / gamepad RB).
 
 	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
@@ -15941,7 +16939,7 @@ function RanksUI.Init()
 end
 
 return RanksUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
 	ShopUI - the lobby "Shop" window: Perks (bought with Bubbles, permanent) and Robux (game passes).
 	Opened from the Soap Shop ProximityPrompt (routed by Effects via OpenWindow="Shop"), the HUD [🛒 Shop]
 	button, or the G key - all outside our scope, they just call UIKit.OpenWindow("Shop").
@@ -16387,7 +17385,7 @@ function ShopUI.Init()
 end
 
 return ShopUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
+<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
 -- Aim comes from the mouse on PC, or the screen centre (with a crosshair) on touch/gamepad, cast
@@ -17072,7 +18070,7 @@ function SprayController.Init()
 end
 
 return SprayController</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -19488,7 +20486,7 @@ function UIKit.Init()
 end
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button

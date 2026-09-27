@@ -32,8 +32,8 @@ local BOB_SPEED = 3
 local BOB_HEIGHT = 0.4
 local LERP_RATE = 10 -- pivot:Lerp(target, 1 - exp(-LERP_RATE * dt))
 local HIDE_DISTANCE = 400
-local TILT_STRENGTH = 0.05
-local MAX_TILT = math.rad(20)
+local TILT_STRENGTH = 0.012
+local MAX_TILT = math.rad(10)
 
 ----------------------------------------------------------------------------------------------------
 -- State
@@ -46,6 +46,8 @@ type Slot = {
 	Target: BasePart?,
 	Hidden: boolean?,
 	LastPos: Vector3?,
+	BasePivot: CFrame?, -- the smoothed pose without tilt (tilt is re-applied each frame, never compounded)
+	Tilt: Vector2?, -- smoothed (pitch, roll)
 	Conns: { RBXScriptConnection },
 }
 
@@ -99,12 +101,12 @@ local function setHidden(slot: Slot, hidden: boolean)
 	end
 end
 
--- A little pitch/roll based on how the pet is currently moving, so it doesn't glide like a robot.
-local function applyTilt(pivot: CFrame, velocity: Vector3): CFrame
+-- A little pitch/roll target based on how the pet is currently moving, so it doesn't glide like a robot.
+local function tiltFor(pivot: CFrame, velocity: Vector3): Vector2
 	local localVel = pivot:VectorToObjectSpace(velocity)
-	local pitch = math.clamp(localVel.Z * TILT_STRENGTH, -MAX_TILT, MAX_TILT) -- moving forward (-Z) noses down
+	local pitch = math.clamp(localVel.Z * TILT_STRENGTH, -MAX_TILT, MAX_TILT) -- moving forward (-Z) leans in slightly
 	local roll = math.clamp(-localVel.X * TILT_STRENGTH, -MAX_TILT, MAX_TILT)
-	return pivot * CFrame.Angles(pitch, 0, roll)
+	return Vector2.new(pitch, roll)
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -145,6 +147,8 @@ local function buildModel(slot: Slot, petId: string)
 	slot.Model = model
 	slot.Hidden = nil -- force the next setHidden call to actually apply
 	slot.LastPos = nil
+	slot.BasePivot = nil
+	slot.Tilt = nil
 end
 
 local function hookTargetValue(slot: Slot, stringValue: StringValue)
@@ -374,17 +378,21 @@ local function updateOwner(ownerState: OwnerState, dt: number, camPos: Vector3)
 			targetCFrame = CFrame.new(worldPos) * (root.CFrame - root.CFrame.Position)
 		end
 
-		local current = model:GetPivot()
+		-- Smooth the untilted pose; the tilt is layered on top for display only, so it can't build up.
+		local current = slot.BasePivot or model:GetPivot()
 		local alpha = 1 - math.exp(-LERP_RATE * dt)
 		local newPivot = current:Lerp(targetCFrame :: CFrame, alpha)
+		slot.BasePivot = newPivot
 
+		local tilt = slot.Tilt or Vector2.zero
 		if slot.LastPos and dt > 1e-4 then
 			local velocity = (newPivot.Position - slot.LastPos) / dt
-			newPivot = applyTilt(newPivot, velocity)
+			tilt = tilt:Lerp(tiltFor(newPivot, velocity), 1 - math.exp(-8 * dt))
 		end
+		slot.Tilt = tilt
 		slot.LastPos = newPivot.Position
 
-		model:PivotTo(newPivot)
+		model:PivotTo(newPivot * CFrame.Angles(tilt.X, 0, tilt.Y))
 	end
 end
 
