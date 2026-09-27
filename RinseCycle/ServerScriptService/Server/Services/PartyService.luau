@@ -275,7 +275,7 @@ local function statusText(party: Party?, now: number): string
 		return LAUNCH_STATUS
 	end
 	if party.Status == "Picking" then
-		return party.Host.DisplayName .. " is picking a dishwasher..."
+		return party.Host.DisplayName .. " is picking a level..."
 	end
 	local left = math.ceil(party.EndsAt - now)
 	if left <= 0 then
@@ -651,7 +651,7 @@ function admit(player: Player, pad: Pad)
 		return
 	end
 	if party.Status == "Picking" then
-		eject(player, pad, party.Host.DisplayName .. " is picking a dishwasher. Try another pad!")
+		eject(player, pad, party.Host.DisplayName .. " is picking a level. Try another pad!")
 		return
 	end
 	if inLockWindow(party) then
@@ -831,7 +831,7 @@ local function tick()
 			if not party.Dead and party.Status == "Waiting" and now >= party.EndsAt then
 				launch(party)
 			elseif not party.Dead and party.Status == "Picking" and now >= party.EndsAt then
-				removeMember(party.Host, "Exit", "Party cancelled: you didn't pick a dishwasher in time.")
+				removeMember(party.Host, "Exit", "Party cancelled: you didn't pick a level in time.")
 			end
 		end
 	end
@@ -895,7 +895,7 @@ local function onPartyAction(player: Player, action: any, value: any)
 			return
 		end
 		if level > unlockedOf(player) then
-			notify(player, "🔒 That dishwasher is still locked!", "Bad")
+			notify(player, "🔒 That level is still locked!", "Bad")
 			return
 		end
 		if not isInteger(max) or max < 1 or max > MAX_PLAYERS then
@@ -935,7 +935,7 @@ local function onPartyAction(player: Player, action: any, value: any)
 			return
 		end
 		if value > unlockedOf(player) then
-			notify(player, "🔒 That dishwasher is still locked!", "Bad")
+			notify(player, "🔒 That level is still locked!", "Bad")
 			return
 		end
 		party.Level = value

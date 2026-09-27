@@ -378,7 +378,7 @@ local function buildCreateScreen()
 	right.Name = "Dishwashers"
 	right.Position = UDim2.fromOffset(560, 0)
 	UIKit.Label({
-		Text = "DISHWASHERS",
+		Text = "LEVELS",
 		TextSize = 26,
 		Position = UDim2.fromOffset(0, 10),
 		Size = UDim2.new(1, 0, 0, 30),

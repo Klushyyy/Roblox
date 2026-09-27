@@ -1040,6 +1040,21 @@ walls instead of clipping through. All gameplay queries use Include filters.
   mutes, logs, teleports and server tools. It adds Rinse Cycle commands: coins, bubbles, gems,
   ranks, pets, rebirths, gifted passes, the daily streak, and finishing a run.
 
+## 6h. Round 10 (v0.8.1): water you can see, steadier aim
+
+- **Water parts** (client `WaterFX`): the hose draws 20 thin see-through streams from the nozzle
+  over the cleaning circle, plus a core stream. The pressure washer draws a flat sheet of water
+  from the lance tip to its line (across or up and down), with streaks and a centre jet. They are
+  real parts, not camera-facing Beams, so they don't vanish in first person. They are placed
+  after the tool is aimed each frame (RenderStep Camera + 2).
+- **Aim:** the held tool points at the spot under the crosshair or mouse (SprayController's hit,
+  else 40 studs along the aim ray). The angle is measured from the shoulder, eased, and clamped to
+  ±60°. It fades to level when the aim is beside or behind you.
+- **Follow reward:** paid when the follow check can't run (HTTP off, proxy down). A confirmed
+  "not following" still asks the player to follow and rejoin.
+- **Wording:** party pads pick a *level*, and the picker is headed LEVELS. How to Play has five
+  steps (the bubble-flying step is gone). The cutscene bread basket was removed.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

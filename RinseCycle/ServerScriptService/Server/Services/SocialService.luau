@@ -5,7 +5,7 @@
 --   * Follow: the player's public following list is read (friends API, through Config.Social.
 --     ProxyDomain because games can't call roblox.com directly). The dev on it = reward. Not on it =
 --     the pending mark is cleared and they're told to follow first. The check failing (HTTP off,
---     proxy down) keeps it pending for next time.
+--     proxy down) pays it anyway, on trust like a Like.
 --   * Like: Roblox has no API for likes, so it's paid on trust.
 
 local HttpService = game:GetService("HttpService")
@@ -69,15 +69,15 @@ local function settle(player: Player)
 		if player.Parent ~= Players then
 			return
 		end
-		if result == true then
+		-- Checked and following, or the check can't run at all (HTTP off, proxy down): pay it, the
+		-- same trust a Like gets, rather than leave a real follower without their reward.
+		if result ~= false then
 			if DataService.GrantSocialReward(player, "Follow") then
 				DataService.Notice(player, "⭐ Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!", "Good")
 			end
-		elseif result == false then
+		else
 			DataService.SetSocialPending(player, "Follow", false)
 			DataService.Notice(player, "We couldn't find your follow yet. Follow the dev, press the button again, then rejoin.", "Info")
-		else
-			DataService.Notice(player, "Couldn't check your follow right now. It'll be checked next time you join.", "Info")
 		end
 	end
 end
@@ -104,17 +104,16 @@ function SocialService.CheckNow(player: Player, kind: string): (boolean, string)
 			return false, "You already got this reward. Thank you! 💙"
 		end
 		local result = follows(player.UserId, Config.Social.CreatorUserId)
-		if result == true then
+		-- Following, or the list can't be read at all (HTTP off, proxy down): pay it, the same trust a
+		-- Like gets, so a real follower is never stuck without their reward.
+		if result ~= false then
 			DataService.GrantSocialReward(player, "Follow")
 			return true, "⭐ Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!"
 		end
 		-- Roblox can take a little while to show a new follow: keep it pending so the next join
 		-- checks again by itself.
 		DataService.SetSocialPending(player, "Follow", true)
-		if result == false then
-			return false, "We can't see your follow yet. If you followed and it's not working, please leave and rejoin the game."
-		end
-		return false, "Couldn't check right now. If you followed, please leave and rejoin the game."
+		return false, "We can't see your follow yet. If you followed and it's not working, please leave and rejoin the game."
 	end
 	return false, "That reward doesn't exist."
 end

@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "0.8.0"
+Config.Version = "0.8.1"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -9750,7 +9750,7 @@ function DataService.RecordClear(player: Player, levelIndex: number, seconds: nu
 	if levelIndex == #Config.Levels and not profile.RebirthReady then
 		profile.RebirthReady = true
 		-- A few seconds later, so it lands after the results screen.
-		task.delay(6, queueNotice, session, "✨ Every dishwasher is clean! Visit the Rebirth Fountain in the lobby to Rebirth.", "Good")
+		task.delay(6, queueNotice, session, "✨ Every level is clean! Visit the Rebirth Fountain in the lobby to Rebirth.", "Good")
 	end
 
 	-- Unlocks and best times are the progress players care most about: write them soon.
@@ -12363,17 +12363,16 @@ local function buildHowToPlay(parent: Instance, x: number, z: number, faceX: num
 	}, gui)
 	mk("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 6) }, list)
 	local steps = {
-		"Step on a party pad and pick a dishwasher.",
-		"Aim at the dirt and HOLD to scrub it off.",
-		"Stand in the drain to sell your tank for coins.",
-		"Buy better tools and upgrades on the door.",
-		"Hold jump in the air to fly on bubbles!",
+		"Step on a party pad and pick a level.",
+		"Aim at dirt and hold to scrub it off.",
+		"Stand in the drain to sell your dirt for coins.",
+		"Buy better tools and upgrades.",
 		"Clean every dish, earn 🧼 and hatch pets!",
 	}
 	for i, text in steps do
 		mk("TextLabel", {
 			Name = "Step" .. i,
-			Size = UDim2.new(1, 0, 0, 56),
+			Size = UDim2.new(1, 0, 0, 66),
 			BackgroundTransparency = 1,
 			Text = tostring(i) .. ". " .. text,
 			Font = Enum.Font.GothamBold,
@@ -13468,7 +13467,7 @@ local function statusText(party: Party?, now: number): string
 		return LAUNCH_STATUS
 	end
 	if party.Status == "Picking" then
-		return party.Host.DisplayName .. " is picking a dishwasher..."
+		return party.Host.DisplayName .. " is picking a level..."
 	end
 	local left = math.ceil(party.EndsAt - now)
 	if left &lt;= 0 then
@@ -13844,7 +13843,7 @@ function admit(player: Player, pad: Pad)
 		return
 	end
 	if party.Status == "Picking" then
-		eject(player, pad, party.Host.DisplayName .. " is picking a dishwasher. Try another pad!")
+		eject(player, pad, party.Host.DisplayName .. " is picking a level. Try another pad!")
 		return
 	end
 	if inLockWindow(party) then
@@ -14024,7 +14023,7 @@ local function tick()
 			if not party.Dead and party.Status == "Waiting" and now &gt;= party.EndsAt then
 				launch(party)
 			elseif not party.Dead and party.Status == "Picking" and now &gt;= party.EndsAt then
-				removeMember(party.Host, "Exit", "Party cancelled: you didn't pick a dishwasher in time.")
+				removeMember(party.Host, "Exit", "Party cancelled: you didn't pick a level in time.")
 			end
 		end
 	end
@@ -14088,7 +14087,7 @@ local function onPartyAction(player: Player, action: any, value: any)
 			return
 		end
 		if level &gt; unlockedOf(player) then
-			notify(player, "🔒 That dishwasher is still locked!", "Bad")
+			notify(player, "🔒 That level is still locked!", "Bad")
 			return
 		end
 		if not isInteger(max) or max &lt; 1 or max &gt; MAX_PLAYERS then
@@ -14128,7 +14127,7 @@ local function onPartyAction(player: Player, action: any, value: any)
 			return
 		end
 		if value &gt; unlockedOf(player) then
-			notify(player, "🔒 That dishwasher is still locked!", "Bad")
+			notify(player, "🔒 That level is still locked!", "Bad")
 			return
 		end
 		party.Level = value
@@ -16360,7 +16359,7 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 		return false, "Nobody is ready to play."
 	end
 	if type(levelIndex) ~= "number" or levelIndex % 1 ~= 0 or not Config.Levels[levelIndex] then
-		return false, "That dishwasher doesn't exist."
+		return false, "That level doesn't exist."
 	end
 
 	local members: { Player } = {}
@@ -17532,7 +17531,7 @@ return ShopService</ProtectedString></Properties></Item>
 --   * Follow: the player's public following list is read (friends API, through Config.Social.
 --     ProxyDomain because games can't call roblox.com directly). The dev on it = reward. Not on it =
 --     the pending mark is cleared and they're told to follow first. The check failing (HTTP off,
---     proxy down) keeps it pending for next time.
+--     proxy down) pays it anyway, on trust like a Like.
 --   * Like: Roblox has no API for likes, so it's paid on trust.
 
 local HttpService = game:GetService("HttpService")
@@ -17596,15 +17595,15 @@ local function settle(player: Player)
 		if player.Parent ~= Players then
 			return
 		end
-		if result == true then
+		-- Checked and following, or the check can't run at all (HTTP off, proxy down): pay it, the
+		-- same trust a Like gets, rather than leave a real follower without their reward.
+		if result ~= false then
 			if DataService.GrantSocialReward(player, "Follow") then
 				DataService.Notice(player, "⭐ Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!", "Good")
 			end
-		elseif result == false then
+		else
 			DataService.SetSocialPending(player, "Follow", false)
 			DataService.Notice(player, "We couldn't find your follow yet. Follow the dev, press the button again, then rejoin.", "Info")
-		else
-			DataService.Notice(player, "Couldn't check your follow right now. It'll be checked next time you join.", "Info")
 		end
 	end
 end
@@ -17631,17 +17630,16 @@ function SocialService.CheckNow(player: Player, kind: string): (boolean, string)
 			return false, "You already got this reward. Thank you! 💙"
 		end
 		local result = follows(player.UserId, Config.Social.CreatorUserId)
-		if result == true then
+		-- Following, or the list can't be read at all (HTTP off, proxy down): pay it, the same trust a
+		-- Like gets, so a real follower is never stuck without their reward.
+		if result ~= false then
 			DataService.GrantSocialReward(player, "Follow")
 			return true, "⭐ Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!"
 		end
 		-- Roblox can take a little while to show a new follow: keep it pending so the next join
 		-- checks again by itself.
 		DataService.SetSocialPending(player, "Follow", true)
-		if result == false then
-			return false, "We can't see your follow yet. If you followed and it's not working, please leave and rejoin the game."
-		end
-		return false, "Couldn't check right now. If you followed, please leave and rejoin the game."
+		return false, "We can't see your follow yet. If you followed and it's not working, please leave and rejoin the game."
 	end
 	return false, "That reward doesn't exist."
 end
@@ -18130,6 +18128,7 @@ local Effects = require(Client:WaitForChild("Effects"))
 local BubbleJets = require(Client:WaitForChild("BubbleJets"))
 local Bubbles = require(Client:WaitForChild("Bubbles"))
 local HoldPose = require(Client:WaitForChild("HoldPose"))
+local WaterFX = require(Client:WaitForChild("WaterFX"))
 
 local function step(name: string, fn: () -&gt; ())
 	local ok, err = xpcall(fn, debug.traceback)
@@ -18160,7 +18159,8 @@ step("PetRenderer", PetRenderer.Init)
 step("Bubbles", Bubbles.Init)
 step("Effects", Effects.Init)
 step("BubbleJets", BubbleJets.Init)
-step("HoldPose", HoldPose.Init)</ProtectedString></Properties></Item>
+step("HoldPose", HoldPose.Init)
+step("WaterFX", WaterFX.Init)</ProtectedString></Properties></Item>
 <Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
 -- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
 -- Changed instead of each hooking the remotes themselves.
@@ -18972,12 +18972,6 @@ function Scene.Build(levelIndex: number, origin: CFrame, parent: Instance)
 		for _, bx in { -16, 8 } do
 			self:box("Banner", bx, bx + 3, 6, 14, 17.6, 17.8, Color3.fromRGB(150, 25, 35), Enum.Material.Fabric)
 			self:box("BannerTrim", bx - 0.05, bx + 3.05, 5.8, 6.1, 17.55, 17.8, Color3.fromRGB(230, 190, 90), Enum.Material.Metal)
-		end
-	else
-		-- Family dinner: a basket of bread rolls to share.
-		self:disc("BreadBasket", 0.3, 1.3, tx, TABLE_TOP + 0.15, tz + 0.3, Color3.fromRGB(170, 120, 70), Enum.Material.Wood)
-		for i = 0, 3 do
-			self:part("BreadRoll", Vector3.new(0.45, 0.3, 0.35), CFrame.new(tx - 0.3 + (i % 2) * 0.6, TABLE_TOP + 0.38, tz + 0.1 + (i // 2) * 0.4) * CFrame.Angles(0, math.rad(i * 40), 0), Color3.fromRGB(222, 170, 100), nil, Enum.PartType.Ball)
 		end
 	end
 
@@ -20460,8 +20454,11 @@ return Effects</ProtectedString></Properties></Item>
 	    after the animations run (R15 and R6; Motor6D or the newer AnimationConstraint joints).
 	    The tool itself is welded to the torso by the server, so it points forward even if a rig
 	    can't be posed.
-	  * Your own tool follows where you look: it tilts up and down with the camera (the arm with it),
-	    so it's always in view and pointing at what you're aiming at.
+	  * Your own tool points at what you're aiming at: it tilts up and down (the arm with it)
+	    toward the spot under your crosshair / mouse (SprayController hands it over in a run),
+	    else a point straight ahead along the aim. The tilt is measured from your shoulder, eased,
+	    and kept within ±60°, and it levels out when you aim beside or behind you, so the tool
+	    never gets stuck up over your head or down in the floor.
 	  * In first person Roblox hides your whole character, tool included. The held tool and your
 	    right arm are shown again after the camera's update, so you can see what you're holding.
 	    Your own name tag is hidden in first person (it would float in your face looking up).
@@ -20469,7 +20466,10 @@ return Effects</ProtectedString></Properties></Item>
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
+
+local UIKit = require(script.Parent:WaitForChild("UIKit"))
 
 local HoldPose = {}
 
@@ -20479,8 +20479,14 @@ local RAISE_R6 = CFrame.Angles(0, 0, math.rad(90)) -- the R6 shoulder's joint ax
 local ARM_PARTS = { "RightUpperArm", "RightLowerArm", "RightHand", "Right Arm" }
 
 local initialized = false
-local MAX_PITCH = math.rad(75)
+local MAX_PITCH = math.rad(60)
+local AIM_EASE = 16 -- how quickly the tool swings to a new aim (per second, exponential)
+local AIM_FALLBACK = 40 -- studs along the aim ray when nothing is under it
+local TARGET_FRESH = 0.25 -- seconds an aim point from SprayController stays valid
 local localPitch = 0 -- the local player's current aim pitch (radians, up = positive)
+local aimTarget: Vector3? = nil
+local aimTargetAt = 0
+local lastAimAt = os.clock()
 local baseC0: { [Weld]: CFrame } = setmetatable({}, { __mode = "k" }) :: any
 
 local function holding(character: Model): boolean
@@ -20513,7 +20519,24 @@ local function poseAll()
 	end
 end
 
--- Tilts the local player's tool weld about the right shoulder to the camera's pitch.
+-- The point being aimed at: SprayController's hit this frame, else along the mouse / screen-centre
+-- ray (the same ray SprayController uses).
+local function aimPoint(camera: Camera): Vector3
+	if aimTarget and os.clock() - aimTargetAt &lt; TARGET_FRESH then
+		return aimTarget
+	end
+	local ray
+	if UIKit.IsTouch() or UIKit.IsGamepad() then
+		local size = camera.ViewportSize
+		ray = camera:ViewportPointToRay(size.X * 0.5, size.Y * 0.5)
+	else
+		local loc = UserInputService:GetMouseLocation()
+		ray = camera:ViewportPointToRay(loc.X, loc.Y)
+	end
+	return ray.Origin + ray.Direction.Unit * AIM_FALLBACK
+end
+
+-- Tilts the local player's tool weld about the right shoulder toward the aim point.
 local function aimTool(character: Model, camera: Camera)
 	local held = character:FindFirstChild("HeldTool")
 	local grip = held and (held :: Model).PrimaryPart
@@ -20528,9 +20551,18 @@ local function aimTool(character: Model, camera: Camera)
 		base = weld.C0
 		baseC0[weld] = base
 	end
-	localPitch = math.clamp(math.asin(math.clamp(camera.CFrame.LookVector.Y, -1, 1)), -MAX_PITCH, MAX_PITCH)
 	local r15 = torso.Name == "UpperTorso"
 	local shoulder = CFrame.new(1.5 * torso.Size.X / 2, (if r15 then 0.55 else 0.5) * torso.Size.Y / (if r15 then 1.6 else 2), 0)
+	-- The aim in the torso's own frame (forward is -Z). Only the part in front of you counts: aiming
+	-- beside or behind you levels the tool out instead of flipping it over your head.
+	local d = torso.CFrame:VectorToObjectSpace(aimPoint(camera) - (torso.CFrame * shoulder).Position)
+	local flat = math.max(math.sqrt(d.X * d.X + d.Z * d.Z), 1e-3)
+	local facing = math.clamp(-d.Z / flat / 0.4, 0, 1) -- 1 when the aim is in front, 0 beside/behind
+	local want = math.clamp(math.atan2(d.Y, math.max(-d.Z, 3)), -MAX_PITCH, MAX_PITCH) * facing
+	local now = os.clock()
+	local dt = math.min(now - lastAimAt, 0.1)
+	lastAimAt = now
+	localPitch += (want - localPitch) * (1 - math.exp(-AIM_EASE * dt))
 	weld.C0 = shoulder * CFrame.Angles(localPitch, 0, 0) * shoulder:Inverse() * base
 end
 
@@ -20568,6 +20600,14 @@ local function showInFirstPerson()
 		if part and part:IsA("BasePart") then
 			part.LocalTransparencyModifier = 0
 		end
+	end
+end
+
+-- SprayController's aim hit this frame (nil when the aim ray finds nothing to clean).
+function HoldPose.SetAimTarget(point: Vector3?)
+	aimTarget = point
+	if point then
+		aimTargetAt = os.clock()
 	end
 end
 
@@ -22146,7 +22186,7 @@ local function buildCreateScreen()
 	right.Name = "Dishwashers"
 	right.Position = UDim2.fromOffset(560, 0)
 	UIKit.Label({
-		Text = "DISHWASHERS",
+		Text = "LEVELS",
 		TextSize = 26,
 		Position = UDim2.fromOffset(0, 10),
 		Size = UDim2.new(1, 0, 0, 30),
@@ -24706,7 +24746,7 @@ function RebirthUI.Init()
 	reqBubbles = UIKit.Label({ Text = "", TextSize = 20, Size = UDim2.new(1, -24, 0, 36), Position = UDim2.fromOffset(12, 50), TextXAlignment = Enum.TextXAlignment.Left, Parent = reqCard })
 
 	line({
-		Text = "Resets: Bubbles, unlocked dishwashers and perks.\nYou keep: pets, gems, ranks, passes and best times.",
+		Text = "Resets: Bubbles, unlocked levels and perks.\nYou keep: pets, gems, ranks, passes and best times.",
 		TextSize = 16,
 		TextColor3 = Colors.TextDim,
 	}, 48)
@@ -25650,6 +25690,8 @@ local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
 local UIKit = require(Client:WaitForChild("UIKit"))
 local Bubbles = require(Client:WaitForChild("Bubbles"))
+local HoldPose = require(Client:WaitForChild("HoldPose"))
+local WaterFX = require(Client:WaitForChild("WaterFX"))
 
 local SprayController = {}
 
@@ -25692,10 +25734,7 @@ local lastTankFullToastAt = 0
 -- Visuals, built lazily and reused for the whole session.
 local ring: BasePart? = nil
 local ringAttachment: Attachment? = nil
-local beam: Beam? = nil
-local beamOuter: Beam? = nil -- the soft outer body of the water stream around the bright core
 local muzzleMist: ParticleEmitter? = nil -- fine spray puffing out right at the nozzle
-local lineJet: Beam? = nil -- the washer's hard, bright jet to the middle of its line
 local handAttachment: Attachment? = nil
 local handPart: BasePart? = nil
 local splashEmitter: ParticleEmitter? = nil
@@ -25706,11 +25745,8 @@ local hintLabel: TextLabel? = nil
 local hpAnchor: BasePart? = nil
 local hpBillboard: BillboardGui? = nil
 local hpFill: Frame? = nil
--- Pressure Washer line: a thin glowing blade on the surface, with two beams fanning out to its ends.
+-- Pressure Washer line: a thin glowing blade on the surface (the water sheet to it is WaterFX).
 local linePart: BasePart? = nil
-local lineEnds: { Attachment } = {}
-local lineCenter: Attachment? = nil
-local lineBeams: { Beam } = {}
 local lastSudsAt = 0
 -- Spray Nozzle water: droplets flying from the nozzle to the target, and a splash where it lands.
 local sprayAttachment: Attachment? = nil
@@ -25811,12 +25847,9 @@ local function ensureBeam(character: Model)
 	if not hand then
 		return
 	end
-	if handPart ~= hand or not beam or not beam.Parent then
+	if handPart ~= hand or not handAttachment or not handAttachment.Parent then
 		if handAttachment then
 			handAttachment:Destroy()
-		end
-		if beam then
-			beam:Destroy()
 		end
 		handPart = hand
 
@@ -25827,35 +25860,6 @@ local function ensureBeam(character: Model)
 		handAttachment = origin
 
 		ensureRing()
-		-- The water stream: a bright, fast-flowing core inside a softer, wider body.
-		local b = Instance.new("Beam")
-		b.Name = "SprayBeam"
-		b.Attachment0 = origin
-		b.Attachment1 = ringAttachment
-		b.Width0 = 0.12
-		b.Width1 = 0.3
-		b.Segments = 12
-		b.LightEmission = 0.7
-		b.LightInfluence = 0.2
-		b.FaceCamera = true
-		b.Color = ColorSequence.new(Color3.fromRGB(235, 248, 255), Color3.fromRGB(140, 200, 255))
-		b.Transparency = NumberSequence.new(0.05, 0.3)
-		b.Texture = "rbxasset://textures/particles/smoke_main.dds"
-		b.TextureMode = Enum.TextureMode.Wrap
-		b.TextureLength = 1.2
-		b.TextureSpeed = 7
-		b.Enabled = false
-		b.Parent = origin
-		beam = b
-		local outer = b:Clone()
-		outer.Name = "SprayBeamOuter"
-		outer.Width0 = 0.3
-		outer.Width1 = 1.0
-		outer.LightEmission = 0.35
-		outer.Transparency = NumberSequence.new(0.55, 0.85)
-		outer.TextureSpeed = 4.5
-		outer.Parent = origin
-		beamOuter = outer
 		local mist = Instance.new("ParticleEmitter")
 		mist.Name = "MuzzleMist"
 		mist.Texture = "rbxasset://textures/particles/smoke_main.dds"
@@ -25874,88 +25878,21 @@ local function ensureBeam(character: Model)
 end
 
 local function ensureLine()
-	if linePart and linePart.Parent and handAttachment and #lineBeams == 2 and lineBeams[1].Attachment0 == handAttachment then
+	if linePart and linePart.Parent then
 		return
 	end
-	if not linePart or not linePart.Parent then
-		local part = Instance.new("Part")
-		part.Name = "WasherLine"
-		part.Material = Enum.Material.Neon
-		part.Anchored = true
-		part.CanCollide = false
-		part.CanTouch = false
-		part.CanQuery = false
-		part.CastShadow = false
-		part.Transparency = 1
-		part.Size = Vector3.new(4, 0.12, 0.9)
-		part.Parent = workspace
-		linePart = part
-		table.clear(lineEnds)
-		for i = 1, 2 do
-			local a = Instance.new("Attachment")
-			a.Name = "LineEnd" .. i
-			a.Parent = part
-			lineEnds[i] = a
-		end
-		local c = Instance.new("Attachment")
-		c.Name = "LineCenter"
-		c.Parent = part
-		lineCenter = c
-	end
-	for _, b in lineBeams do
-		b:Destroy()
-	end
-	table.clear(lineBeams)
-	if lineJet then
-		lineJet:Destroy()
-		lineJet = nil
-	end
-	if not handAttachment then
-		return
-	end
-	-- A thin, fanned sheet of water out to both ends of the line...
-	for i = 1, 2 do
-		local b = Instance.new("Beam")
-		b.Attachment0 = handAttachment
-		b.Attachment1 = lineEnds[i]
-		b.Width0 = 0.04
-		b.Width1 = 0.25
-		b.Segments = 10
-		b.LightEmission = 0.8
-		b.LightInfluence = 0.1
-		b.FaceCamera = true
-		b.Color = ColorSequence.new(Color3.fromRGB(235, 248, 255), Color3.fromRGB(140, 200, 255))
-		b.Transparency = NumberSequence.new(0.35, 0.75)
-		b.Texture = "rbxasset://textures/particles/smoke_main.dds"
-		b.TextureMode = Enum.TextureMode.Wrap
-		b.TextureLength = 0.8
-		b.TextureSpeed = 12
-		b.Enabled = false
-		b.Parent = handAttachment
-		lineBeams[i] = b
-	end
-	-- ...around one hard, bright, fast jet straight down the middle.
-	if lineCenter then
-		local jet = Instance.new("Beam")
-		jet.Name = "WasherJet"
-		jet.Attachment0 = handAttachment
-		jet.Attachment1 = lineCenter
-		jet.Width0 = 0.07
-		jet.Width1 = 0.16
-		jet.Segments = 10
-		jet.LightEmission = 1
-		jet.LightInfluence = 0
-		jet.FaceCamera = true
-		jet.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(190, 230, 255))
-		jet.Transparency = NumberSequence.new(0, 0.2)
-		jet.Texture = "rbxasset://textures/particles/smoke_main.dds"
-		jet.TextureMode = Enum.TextureMode.Wrap
-		jet.TextureLength = 1.5
-		jet.TextureSpeed = 16
-		jet.Enabled = false
-		jet.Parent = handAttachment
-		lineJet = jet
-	end
+	local part = Instance.new("Part")
+	part.Name = "WasherLine"
+	part.Material = Enum.Material.Neon
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.CastShadow = false
+	part.Transparency = 1
+	part.Size = Vector3.new(4, 0.12, 0.9)
+	part.Parent = workspace
+	linePart = part
 end
 
 local function ensureWater(hand: BasePart)
@@ -26010,12 +25947,6 @@ end
 local function hideLine()
 	if linePart then
 		linePart.Transparency = 1
-	end
-	for _, b in lineBeams do
-		b.Enabled = false
-	end
-	if lineJet then
-		lineJet.Enabled = false
 	end
 end
 
@@ -26259,12 +26190,7 @@ local function hideVisuals()
 	if ring then
 		ring.Transparency = 1
 	end
-	if beam then
-		beam.Enabled = false
-	end
-	if beamOuter then
-		beamOuter.Enabled = false
-	end
+	WaterFX.Hide()
 	if muzzleMist then
 		muzzleMist.Rate = 0
 	end
@@ -26374,9 +26300,11 @@ local function onHeartbeat(dt: number)
 	local stats = run.Stats
 
 	if not result then
+		HoldPose.SetAimTarget(nil)
 		hideVisuals()
 		return
 	end
+	HoldPose.SetAimTarget(result.Position)
 
 	local hitPart = result.Instance
 	local hitPos = result.Position
@@ -26409,8 +26337,6 @@ local function onHeartbeat(dt: number)
 		lp.CFrame = CFrame.fromMatrix(hitPos + normal * 0.08, dir, normal)
 		lp.Color = if inReach then toolColor else UIKit.Theme.Colors.Bad
 		lp.Transparency = if inReach then 0.3 else 0.6
-		lineEnds[1].Position = Vector3.new(-len / 2, 0, 0)
-		lineEnds[2].Position = Vector3.new(len / 2, 0, 0)
 	else
 		hideLine()
 		r.CFrame = CFrame.new(hitPos, hitPos + normal) * CFrame.Angles(0, math.rad(90), 0)
@@ -26492,19 +26418,17 @@ local function onHeartbeat(dt: number)
 		muzzleMist.Rate = if spraying then 30 elseif jetting then 45 else 0
 	end
 
-	-- Water stream: only the Spray nozzle has one; the washer fans out to its line; scrubbing tools
-	-- work right on the dish.
-	if beam then
-		(beam :: Beam).Enabled = spraying
-	end
-	if beamOuter then
-		(beamOuter :: Beam).Enabled = spraying
-	end
-	for _, lb in lineBeams do
-		lb.Enabled = jetting
-	end
-	if lineJet then
-		lineJet.Enabled = jetting
+	-- The water itself (WaterFX): the hose's streams over the circle, or the washer's sheet to its
+	-- line. Scrubbing tools work right on the dish.
+	local nozzle = handPart
+	if spraying and nozzle then
+		WaterFX.Spray(nozzle, hitPos, normal, stats.Radius)
+	elseif jetting and nozzle and linePart and lineDir then
+		local half = (stats.LineLength or 5) / 2
+		local center = hitPos + normal * 0.08
+		WaterFX.Fan(nozzle, center - lineDir * half, center + lineDir * half, normal)
+	else
+		WaterFX.Hide()
 	end
 end
 
@@ -29612,8 +29536,247 @@ function UpgradesUI.Init()
 end
 
 return UpgradesUI</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000035"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
+	WaterFX - the water coming out of your own hose and pressure washer, built from real parts so
+	it looks solid from every angle (a camera-facing Beam flattens to nothing when you look straight
+	down it, which is exactly the first-person view).
+
+	  * Hose (Spray Nozzle): 20 thin see-through streams fanning out from the nozzle over the
+	    cleaning circle, around one thicker core stream. The streams wobble a little every frame
+	    so the spray looks alive.
+	  * Pressure Washer: a flat see-through sheet of water from the lance tip to the cleaning line
+	    (across or up and down, whichever way the line is turned), with bright streaks running
+	    through it and a hard jet down the middle.
+
+	SprayController says what to draw each Heartbeat (Spray / Fan / Hide). The parts are placed in
+	a RenderStep after HoldPose has aimed the tool, from the nozzle's position that frame, so the
+	water never lags behind or comes loose from the tip.
+]]
+
+local RunService = game:GetService("RunService")
+
+local WaterFX = {}
+
+local STREAMS = 20
+local FAN_STREAKS = 9
+local GOLDEN_ANGLE = math.pi * (3 - math.sqrt(5))
+local WATER = Color3.fromRGB(190, 230, 255)
+local WATER_DEEP = Color3.fromRGB(120, 195, 255)
+
+local initialized = false
+local folder: Folder? = nil
+local streams: { BasePart } = {}
+local core: BasePart? = nil
+local fanA: BasePart? = nil
+local fanB: BasePart? = nil
+local fanStreaks: { BasePart } = {}
+local jet: BasePart? = nil
+
+-- What to draw: nil (nothing), "Spray" or "Fan", plus where.
+local mode: string? = nil
+local muzzle: BasePart? = nil
+local target = Vector3.zero
+local normal = Vector3.yAxis
+local radius = 1
+local lineA = Vector3.zero
+local lineB = Vector3.zero
+
+local function newPart(name: string, shape: Enum.PartType?, color: Color3, transparency: number): BasePart
+	local p: BasePart
+	if shape == nil then
+		p = Instance.new("WedgePart")
+	else
+		local part = Instance.new("Part")
+		part.Shape = shape
+		p = part
+	end
+	p.Name = name
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.CastShadow = false
+	p.Material = Enum.Material.Neon
+	p.Color = color
+	p.Transparency = 1
+	p:SetAttribute("Look", transparency)
+	p.Size = Vector3.new(1, 0.1, 0.1)
+	p.Parent = folder
+	return p
+end
+
+local function build()
+	if folder and folder.Parent then
+		return
+	end
+	local f = Instance.new("Folder")
+	f.Name = "WaterFX"
+	f.Parent = workspace
+	folder = f
+	table.clear(streams)
+	table.clear(fanStreaks)
+	for i = 1, STREAMS do
+		streams[i] = newPart("HoseStream", Enum.PartType.Cylinder, if i % 3 == 0 then WATER_DEEP else WATER, 0.45)
+	end
+	core = newPart("HoseCore", Enum.PartType.Cylinder, WATER, 0.3)
+	fanA = newPart("WasherSheet", nil, WATER_DEEP, 0.62)
+	fanB = newPart("WasherSheet", nil, WATER_DEEP, 0.62)
+	for i = 1, FAN_STREAKS do
+		fanStreaks[i] = newPart("WasherStreak", Enum.PartType.Cylinder, WATER, 0.35)
+	end
+	jet = newPart("WasherJet", Enum.PartType.Cylinder, Color3.fromRGB(235, 248, 255), 0.15)
+end
+
+local function show(p: BasePart, visible: boolean)
+	p.Transparency = if visible then p:GetAttribute("Look") :: number else 1
+end
+
+-- A cylinder from `a` to `b`, `width` thick.
+local function stretch(p: BasePart, a: Vector3, b: Vector3, width: number)
+	local d = b - a
+	local len = d.Magnitude
+	if len &lt; 1e-3 then
+		show(p, false)
+		return
+	end
+	p.Size = Vector3.new(len, width, width)
+	p.CFrame = CFrame.lookAt((a + b) / 2, b) * CFrame.Angles(0, math.rad(90), 0)
+	show(p, true)
+end
+
+-- A flat triangle a-b-c made of two wedges (the usual right-angle split).
+local function triangle(w1: BasePart, w2: BasePart, a: Vector3, b: Vector3, c: Vector3, thickness: number)
+	local ab, ac, bc = b - a, c - a, c - b
+	local abd, acd, bcd = ab:Dot(ab), ac:Dot(ac), bc:Dot(bc)
+	if abd &gt; acd and abd &gt; bcd then
+		c, a = a, c
+	elseif acd &gt; bcd and acd &gt; abd then
+		a, b = b, a
+	end
+	ab, ac, bc = b - a, c - a, c - b
+	local cross = ac:Cross(ab)
+	if cross.Magnitude &lt; 1e-4 or bc.Magnitude &lt; 1e-4 then
+		show(w1, false)
+		show(w2, false)
+		return
+	end
+	local right = cross.Unit
+	local up = bc:Cross(right).Unit
+	local back = bc.Unit
+	local height = math.abs(ab:Dot(up))
+	w1.Size = Vector3.new(thickness, height, math.abs(ab:Dot(back)))
+	w1.CFrame = CFrame.fromMatrix((a + b) / 2, right, up, back)
+	w2.Size = Vector3.new(thickness, height, math.abs(ac:Dot(back)))
+	w2.CFrame = CFrame.fromMatrix((a + c) / 2, -right, up, -back)
+	show(w1, true)
+	show(w2, true)
+end
+
+local function hideAll()
+	for _, p in streams do
+		show(p, false)
+	end
+	for _, p in fanStreaks do
+		show(p, false)
+	end
+	for _, p in { core, fanA, fanB, jet } do
+		if p then
+			show(p, false)
+		end
+	end
+end
+
+local function render()
+	if not folder then
+		return
+	end
+	local m = muzzle
+	if mode == nil or not m or not m.Parent then
+		hideAll()
+		return
+	end
+	local from = m.Position
+	local t = os.clock()
+	if mode == "Spray" then
+		for _, p in fanStreaks do
+			show(p, false)
+		end
+		for _, p in { fanA, fanB, jet } do
+			if p then
+				show(p, false)
+			end
+		end
+		-- Spread the stream ends evenly over the cleaning circle (sunflower pattern), each
+		-- wobbling on its own so the spray shimmers.
+		local u = normal:Cross(if math.abs(normal.Y) &lt; 0.9 then Vector3.yAxis else Vector3.xAxis).Unit
+		local v = normal:Cross(u).Unit
+		for i, p in streams do
+			local a = i * GOLDEN_ANGLE + math.sin(t * 7 + i * 1.7) * 0.12
+			local r = radius * 0.9 * math.sqrt((i - 0.5) / STREAMS) * (1 + 0.08 * math.sin(t * 11 + i))
+			local tip = target + (u * math.cos(a) + v * math.sin(a)) * r + normal * 0.05
+			stretch(p, from, tip, 0.08 + 0.03 * (0.5 + 0.5 * math.sin(t * 13 + i * 2.3)))
+		end
+		if core then
+			stretch(core, from, target + normal * 0.05, 0.2)
+		end
+	else
+		for _, p in streams do
+			show(p, false)
+		end
+		if core then
+			show(core, false)
+		end
+		if fanA and fanB then
+			triangle(fanA, fanB, from, lineA, lineB, 0.03)
+		end
+		for i, p in fanStreaks do
+			local k = (i - 1) / (FAN_STREAKS - 1) + math.sin(t * 9 + i * 1.3) * 0.025
+			stretch(p, from, lineA:Lerp(lineB, math.clamp(k, 0, 1)) + normal * 0.04, 0.045)
+		end
+		if jet then
+			stretch(jet, from, lineA:Lerp(lineB, 0.5) + normal * 0.04, 0.1 + 0.02 * math.sin(t * 20))
+		end
+	end
+end
+
+-- The hose: from `nozzle` over the circle of `size` radius at `at` (surface `facing`).
+function WaterFX.Spray(nozzle: BasePart, at: Vector3, facing: Vector3, size: number)
+	mode = "Spray"
+	muzzle = nozzle
+	target = at
+	normal = facing
+	radius = size
+end
+
+-- The pressure washer: a sheet from `nozzle` to the line a-b on a surface facing `facing`.
+function WaterFX.Fan(nozzle: BasePart, a: Vector3, b: Vector3, facing: Vector3)
+	mode = "Fan"
+	muzzle = nozzle
+	lineA = a
+	lineB = b
+	normal = facing
+end
+
+function WaterFX.Hide()
+	mode = nil
+end
+
+function WaterFX.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+	build()
+	-- After the camera (Camera) and HoldPose's tool aim (Camera + 1).
+	RunService:BindToRenderStep("RinseCycleWater", Enum.RenderPriority.Camera.Value + 2, function()
+		build()
+		render()
+	end)
+end
+
+return WaterFX</ProtectedString></Properties></Item>
 </Item>
-<Item class="LocalScript" referent="RBX00000035"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--!nocheck
+<Item class="LocalScript" referent="RBX00000036"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--!nocheck
 -- AdminClient (LocalScript, StarterPlayerScripts) - Rinse Cycle's admin panel.
 --
 -- Ported from the owner's admin system for another game: the command panel (owner only - the

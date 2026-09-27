@@ -121,7 +121,7 @@ function RebirthUI.Init()
 	reqBubbles = UIKit.Label({ Text = "", TextSize = 20, Size = UDim2.new(1, -24, 0, 36), Position = UDim2.fromOffset(12, 50), TextXAlignment = Enum.TextXAlignment.Left, Parent = reqCard })
 
 	line({
-		Text = "Resets: Bubbles, unlocked dishwashers and perks.\nYou keep: pets, gems, ranks, passes and best times.",
+		Text = "Resets: Bubbles, unlocked levels and perks.\nYou keep: pets, gems, ranks, passes and best times.",
 		TextSize = 16,
 		TextColor3 = Colors.TextDim,
 	}, 48)

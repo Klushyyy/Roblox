@@ -1491,7 +1491,7 @@ function DataService.RecordClear(player: Player, levelIndex: number, seconds: nu
 	if levelIndex == #Config.Levels and not profile.RebirthReady then
 		profile.RebirthReady = true
 		-- A few seconds later, so it lands after the results screen.
-		task.delay(6, queueNotice, session, "✨ Every dishwasher is clean! Visit the Rebirth Fountain in the lobby to Rebirth.", "Good")
+		task.delay(6, queueNotice, session, "✨ Every level is clean! Visit the Rebirth Fountain in the lobby to Rebirth.", "Good")
 	end
 
 	-- Unlocks and best times are the progress players care most about: write them soon.

@@ -411,12 +411,6 @@ function Scene.Build(levelIndex: number, origin: CFrame, parent: Instance)
 			self:box("Banner", bx, bx + 3, 6, 14, 17.6, 17.8, Color3.fromRGB(150, 25, 35), Enum.Material.Fabric)
 			self:box("BannerTrim", bx - 0.05, bx + 3.05, 5.8, 6.1, 17.55, 17.8, Color3.fromRGB(230, 190, 90), Enum.Material.Metal)
 		end
-	else
-		-- Family dinner: a basket of bread rolls to share.
-		self:disc("BreadBasket", 0.3, 1.3, tx, TABLE_TOP + 0.15, tz + 0.3, Color3.fromRGB(170, 120, 70), Enum.Material.Wood)
-		for i = 0, 3 do
-			self:part("BreadRoll", Vector3.new(0.45, 0.3, 0.35), CFrame.new(tx - 0.3 + (i % 2) * 0.6, TABLE_TOP + 0.38, tz + 0.1 + (i // 2) * 0.4) * CFrame.Angles(0, math.rad(i * 40), 0), Color3.fromRGB(222, 170, 100), nil, Enum.PartType.Ball)
-		end
 	end
 
 	-- Family: Dad and a kid behind the table, Mum at the left end (she does the dishes).

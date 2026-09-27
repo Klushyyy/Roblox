@@ -25,6 +25,8 @@ local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
 local UIKit = require(Client:WaitForChild("UIKit"))
 local Bubbles = require(Client:WaitForChild("Bubbles"))
+local HoldPose = require(Client:WaitForChild("HoldPose"))
+local WaterFX = require(Client:WaitForChild("WaterFX"))
 
 local SprayController = {}
 
@@ -67,10 +69,7 @@ local lastTankFullToastAt = 0
 -- Visuals, built lazily and reused for the whole session.
 local ring: BasePart? = nil
 local ringAttachment: Attachment? = nil
-local beam: Beam? = nil
-local beamOuter: Beam? = nil -- the soft outer body of the water stream around the bright core
 local muzzleMist: ParticleEmitter? = nil -- fine spray puffing out right at the nozzle
-local lineJet: Beam? = nil -- the washer's hard, bright jet to the middle of its line
 local handAttachment: Attachment? = nil
 local handPart: BasePart? = nil
 local splashEmitter: ParticleEmitter? = nil
@@ -81,11 +80,8 @@ local hintLabel: TextLabel? = nil
 local hpAnchor: BasePart? = nil
 local hpBillboard: BillboardGui? = nil
 local hpFill: Frame? = nil
--- Pressure Washer line: a thin glowing blade on the surface, with two beams fanning out to its ends.
+-- Pressure Washer line: a thin glowing blade on the surface (the water sheet to it is WaterFX).
 local linePart: BasePart? = nil
-local lineEnds: { Attachment } = {}
-local lineCenter: Attachment? = nil
-local lineBeams: { Beam } = {}
 local lastSudsAt = 0
 -- Spray Nozzle water: droplets flying from the nozzle to the target, and a splash where it lands.
 local sprayAttachment: Attachment? = nil
@@ -186,12 +182,9 @@ local function ensureBeam(character: Model)
 	if not hand then
 		return
 	end
-	if handPart ~= hand or not beam or not beam.Parent then
+	if handPart ~= hand or not handAttachment or not handAttachment.Parent then
 		if handAttachment then
 			handAttachment:Destroy()
-		end
-		if beam then
-			beam:Destroy()
 		end
 		handPart = hand
 
@@ -202,35 +195,6 @@ local function ensureBeam(character: Model)
 		handAttachment = origin
 
 		ensureRing()
-		-- The water stream: a bright, fast-flowing core inside a softer, wider body.
-		local b = Instance.new("Beam")
-		b.Name = "SprayBeam"
-		b.Attachment0 = origin
-		b.Attachment1 = ringAttachment
-		b.Width0 = 0.12
-		b.Width1 = 0.3
-		b.Segments = 12
-		b.LightEmission = 0.7
-		b.LightInfluence = 0.2
-		b.FaceCamera = true
-		b.Color = ColorSequence.new(Color3.fromRGB(235, 248, 255), Color3.fromRGB(140, 200, 255))
-		b.Transparency = NumberSequence.new(0.05, 0.3)
-		b.Texture = "rbxasset://textures/particles/smoke_main.dds"
-		b.TextureMode = Enum.TextureMode.Wrap
-		b.TextureLength = 1.2
-		b.TextureSpeed = 7
-		b.Enabled = false
-		b.Parent = origin
-		beam = b
-		local outer = b:Clone()
-		outer.Name = "SprayBeamOuter"
-		outer.Width0 = 0.3
-		outer.Width1 = 1.0
-		outer.LightEmission = 0.35
-		outer.Transparency = NumberSequence.new(0.55, 0.85)
-		outer.TextureSpeed = 4.5
-		outer.Parent = origin
-		beamOuter = outer
 		local mist = Instance.new("ParticleEmitter")
 		mist.Name = "MuzzleMist"
 		mist.Texture = "rbxasset://textures/particles/smoke_main.dds"
@@ -249,88 +213,21 @@ local function ensureBeam(character: Model)
 end
 
 local function ensureLine()
-	if linePart and linePart.Parent and handAttachment and #lineBeams == 2 and lineBeams[1].Attachment0 == handAttachment then
+	if linePart and linePart.Parent then
 		return
 	end
-	if not linePart or not linePart.Parent then
-		local part = Instance.new("Part")
-		part.Name = "WasherLine"
-		part.Material = Enum.Material.Neon
-		part.Anchored = true
-		part.CanCollide = false
-		part.CanTouch = false
-		part.CanQuery = false
-		part.CastShadow = false
-		part.Transparency = 1
-		part.Size = Vector3.new(4, 0.12, 0.9)
-		part.Parent = workspace
-		linePart = part
-		table.clear(lineEnds)
-		for i = 1, 2 do
-			local a = Instance.new("Attachment")
-			a.Name = "LineEnd" .. i
-			a.Parent = part
-			lineEnds[i] = a
-		end
-		local c = Instance.new("Attachment")
-		c.Name = "LineCenter"
-		c.Parent = part
-		lineCenter = c
-	end
-	for _, b in lineBeams do
-		b:Destroy()
-	end
-	table.clear(lineBeams)
-	if lineJet then
-		lineJet:Destroy()
-		lineJet = nil
-	end
-	if not handAttachment then
-		return
-	end
-	-- A thin, fanned sheet of water out to both ends of the line...
-	for i = 1, 2 do
-		local b = Instance.new("Beam")
-		b.Attachment0 = handAttachment
-		b.Attachment1 = lineEnds[i]
-		b.Width0 = 0.04
-		b.Width1 = 0.25
-		b.Segments = 10
-		b.LightEmission = 0.8
-		b.LightInfluence = 0.1
-		b.FaceCamera = true
-		b.Color = ColorSequence.new(Color3.fromRGB(235, 248, 255), Color3.fromRGB(140, 200, 255))
-		b.Transparency = NumberSequence.new(0.35, 0.75)
-		b.Texture = "rbxasset://textures/particles/smoke_main.dds"
-		b.TextureMode = Enum.TextureMode.Wrap
-		b.TextureLength = 0.8
-		b.TextureSpeed = 12
-		b.Enabled = false
-		b.Parent = handAttachment
-		lineBeams[i] = b
-	end
-	-- ...around one hard, bright, fast jet straight down the middle.
-	if lineCenter then
-		local jet = Instance.new("Beam")
-		jet.Name = "WasherJet"
-		jet.Attachment0 = handAttachment
-		jet.Attachment1 = lineCenter
-		jet.Width0 = 0.07
-		jet.Width1 = 0.16
-		jet.Segments = 10
-		jet.LightEmission = 1
-		jet.LightInfluence = 0
-		jet.FaceCamera = true
-		jet.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(190, 230, 255))
-		jet.Transparency = NumberSequence.new(0, 0.2)
-		jet.Texture = "rbxasset://textures/particles/smoke_main.dds"
-		jet.TextureMode = Enum.TextureMode.Wrap
-		jet.TextureLength = 1.5
-		jet.TextureSpeed = 16
-		jet.Enabled = false
-		jet.Parent = handAttachment
-		lineJet = jet
-	end
+	local part = Instance.new("Part")
+	part.Name = "WasherLine"
+	part.Material = Enum.Material.Neon
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.CastShadow = false
+	part.Transparency = 1
+	part.Size = Vector3.new(4, 0.12, 0.9)
+	part.Parent = workspace
+	linePart = part
 end
 
 local function ensureWater(hand: BasePart)
@@ -385,12 +282,6 @@ end
 local function hideLine()
 	if linePart then
 		linePart.Transparency = 1
-	end
-	for _, b in lineBeams do
-		b.Enabled = false
-	end
-	if lineJet then
-		lineJet.Enabled = false
 	end
 end
 
@@ -634,12 +525,7 @@ local function hideVisuals()
 	if ring then
 		ring.Transparency = 1
 	end
-	if beam then
-		beam.Enabled = false
-	end
-	if beamOuter then
-		beamOuter.Enabled = false
-	end
+	WaterFX.Hide()
 	if muzzleMist then
 		muzzleMist.Rate = 0
 	end
@@ -749,9 +635,11 @@ local function onHeartbeat(dt: number)
 	local stats = run.Stats
 
 	if not result then
+		HoldPose.SetAimTarget(nil)
 		hideVisuals()
 		return
 	end
+	HoldPose.SetAimTarget(result.Position)
 
 	local hitPart = result.Instance
 	local hitPos = result.Position
@@ -784,8 +672,6 @@ local function onHeartbeat(dt: number)
 		lp.CFrame = CFrame.fromMatrix(hitPos + normal * 0.08, dir, normal)
 		lp.Color = if inReach then toolColor else UIKit.Theme.Colors.Bad
 		lp.Transparency = if inReach then 0.3 else 0.6
-		lineEnds[1].Position = Vector3.new(-len / 2, 0, 0)
-		lineEnds[2].Position = Vector3.new(len / 2, 0, 0)
 	else
 		hideLine()
 		r.CFrame = CFrame.new(hitPos, hitPos + normal) * CFrame.Angles(0, math.rad(90), 0)
@@ -867,19 +753,17 @@ local function onHeartbeat(dt: number)
 		muzzleMist.Rate = if spraying then 30 elseif jetting then 45 else 0
 	end
 
-	-- Water stream: only the Spray nozzle has one; the washer fans out to its line; scrubbing tools
-	-- work right on the dish.
-	if beam then
-		(beam :: Beam).Enabled = spraying
-	end
-	if beamOuter then
-		(beamOuter :: Beam).Enabled = spraying
-	end
-	for _, lb in lineBeams do
-		lb.Enabled = jetting
-	end
-	if lineJet then
-		lineJet.Enabled = jetting
+	-- The water itself (WaterFX): the hose's streams over the circle, or the washer's sheet to its
+	-- line. Scrubbing tools work right on the dish.
+	local nozzle = handPart
+	if spraying and nozzle then
+		WaterFX.Spray(nozzle, hitPos, normal, stats.Radius)
+	elseif jetting and nozzle and linePart and lineDir then
+		local half = (stats.LineLength or 5) / 2
+		local center = hitPos + normal * 0.08
+		WaterFX.Fan(nozzle, center - lineDir * half, center + lineDir * half, normal)
+	else
+		WaterFX.Hide()
 	end
 end
 

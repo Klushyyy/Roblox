@@ -999,7 +999,7 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 		return false, "Nobody is ready to play."
 	end
 	if type(levelIndex) ~= "number" or levelIndex % 1 ~= 0 or not Config.Levels[levelIndex] then
-		return false, "That dishwasher doesn't exist."
+		return false, "That level doesn't exist."
 	end
 
 	local members: { Player } = {}

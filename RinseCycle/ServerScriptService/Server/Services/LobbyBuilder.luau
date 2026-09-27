@@ -1156,17 +1156,16 @@ local function buildHowToPlay(parent: Instance, x: number, z: number, faceX: num
 	}, gui)
 	mk("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 6) }, list)
 	local steps = {
-		"Step on a party pad and pick a dishwasher.",
-		"Aim at the dirt and HOLD to scrub it off.",
-		"Stand in the drain to sell your tank for coins.",
-		"Buy better tools and upgrades on the door.",
-		"Hold jump in the air to fly on bubbles!",
+		"Step on a party pad and pick a level.",
+		"Aim at dirt and hold to scrub it off.",
+		"Stand in the drain to sell your dirt for coins.",
+		"Buy better tools and upgrades.",
 		"Clean every dish, earn 🧼 and hatch pets!",
 	}
 	for i, text in steps do
 		mk("TextLabel", {
 			Name = "Step" .. i,
-			Size = UDim2.new(1, 0, 0, 56),
+			Size = UDim2.new(1, 0, 0, 66),
 			BackgroundTransparency = 1,
 			Text = tostring(i) .. ". " .. text,
 			Font = Enum.Font.GothamBold,
