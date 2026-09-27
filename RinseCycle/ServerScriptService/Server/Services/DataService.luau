@@ -90,6 +90,10 @@ export type Profile = {
 	DailyStreak: number, -- 1..#Config.DailyRewards, the day of the streak last claimed
 	RedeemedCodes: { string }, -- Config.Codes already used (upper case)
 	GroupReward: boolean, -- the join-the-community reward has been claimed
+	FollowReward: boolean, -- the follow-the-dev reward has been claimed
+	LikeReward: boolean, -- the like-the-game reward has been claimed
+	FollowPending: boolean, -- pressed "I followed!": checked on the next join (SocialService)
+	LikePending: boolean, -- pressed "I liked it!": paid on the next join
 	RebirthReady: boolean, -- the last level has been cleared since the last rebirth
 	Stats: {
 		Runs: number,
@@ -150,6 +154,10 @@ local TEMPLATE: Profile = {
 	DailyStreak = 0,
 	RedeemedCodes = {},
 	GroupReward = false,
+	FollowReward = false,
+	LikeReward = false,
+	FollowPending = false,
+	LikePending = false,
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
 }
@@ -353,6 +361,10 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	end
 	p.RedeemedCodes = codes
 	p.GroupReward = p.GroupReward == true
+	p.FollowReward = p.FollowReward == true
+	p.LikeReward = p.LikeReward == true
+	p.FollowPending = p.FollowPending == true and not p.FollowReward
+	p.LikePending = p.LikePending == true and not p.LikeReward
 	p.RebirthReady = p.RebirthReady == true
 	local ranks, seenRank = {}, {}
 	for _, id in (if type(p.Ranks) == "table" then p.Ranks else {}) do
@@ -575,6 +587,8 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		DailyReadyAt = if profile.DailyLast > 0 then profile.DailyLast + Config.Daily.Cooldown else 0,
 		DailyBroken = dailyBroken(profile),
 		GroupReward = profile.GroupReward,
+		FollowState = if profile.FollowReward then "Claimed" elseif profile.FollowPending then "Pending" else "",
+		LikeState = if profile.LikeReward then "Claimed" elseif profile.LikePending then "Pending" else "",
 		Stats = {
 			Runs = stats.Runs,
 			DishesCleaned = stats.DishesCleaned,
@@ -1246,6 +1260,59 @@ function DataService.RedeemCode(player: Player, text: string): (boolean, string)
 	end
 	DataService.PushMeta(player)
 	return true, Config.RewardText(def)
+end
+
+-- A toast for this player that waits until their UI is up (safe to call right after joining).
+function DataService.Notice(player: Player, text: string, kind: string)
+	local session = sessions[player]
+	if session then
+		queueNotice(session, text, kind)
+	end
+end
+
+-- Follow / Like rewards (Config.Social): "Follow" or "Like". Pending is set by the button and
+-- settled by SocialService on the next join.
+function DataService.SetSocialPending(player: Player, kind: string, pending: boolean): boolean
+	local profile = DataService.Get(player)
+	if not profile then
+		return false
+	end
+	if kind == "Follow" then
+		profile.FollowPending = pending and not profile.FollowReward
+	elseif kind == "Like" then
+		profile.LikePending = pending and not profile.LikeReward
+	else
+		return false
+	end
+	DataService.PushMeta(player)
+	return true
+end
+
+function DataService.GrantSocialReward(player: Player, kind: string): boolean
+	local profile = DataService.Get(player)
+	if not profile then
+		return false
+	end
+	local reward
+	if kind == "Follow" and not profile.FollowReward then
+		profile.FollowReward = true
+		profile.FollowPending = false
+		reward = Config.Social.FollowReward
+	elseif kind == "Like" and not profile.LikeReward and Config.Social.LikeReward then
+		profile.LikeReward = true
+		profile.LikePending = false
+		reward = Config.Social.LikeReward :: any
+	else
+		return false
+	end
+	profile.Gems += reward.Gems or 0
+	applyBubbles(profile, reward.Bubbles or 0)
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
+	end
+	DataService.PushMeta(player)
+	return true
 end
 
 -- The one-time community reward (ShopService checks membership first).

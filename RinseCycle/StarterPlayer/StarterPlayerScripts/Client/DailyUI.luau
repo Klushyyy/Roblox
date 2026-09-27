@@ -160,7 +160,7 @@ function DailyUI.Init()
 	})
 	local restore = Config.GetProduct("RestoreStreak")
 	restoreButton = UIKit.Button({
-		Text = string.format("🔥 Restore Streak  (R$ %d)", restore and restore.Price or 0),
+		Text = "🔥 Restore Streak",
 		Size = UDim2.fromOffset(320, 48),
 		Position = UDim2.new(0.5, 0, 0, 262),
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -174,6 +174,11 @@ function DailyUI.Init()
 			end
 		end,
 	})
+	if restore then
+		ShopUI.WatchPrice(restore, false, function(price)
+			restoreButton.Text = string.format("🔥 Restore Streak  (R$ %d)", price)
+		end)
+	end
 	UIKit.RegisterWindow("Daily", {
 		Open = function()
 			render()

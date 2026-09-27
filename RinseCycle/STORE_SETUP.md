@@ -27,9 +27,9 @@ These are in `Config.GamePasses`.
 | 7 | `DoubleBubbles` | 2x Bubbles | 179 | Double Bubbles from every finished run |
 | 8 | `VIP` | VIP | 199 | +25% coins and +25% Bubbles forever |
 | 9 | `DoubleLuck` | x2 Luck | 149 | Better odds on Rare+ ranks (button under "Get more Gems") |
-| 10 | `ToolNozzle` | Spray Nozzle Forever | 49 | Start every run with the Spray Nozzle |
-| 11 | `ToolWasher` | Pressure Washer Forever | 99 | Start every run with the Pressure Washer |
-| 12 | `ToolCannon` | Foam Cannon Forever | 199 | Start every run with the Foam Cannon |
+| 10 | `ToolNozzle` | Spray Nozzle | 49 | Start every run with the Spray Nozzle |
+| 11 | `ToolWasher` | Pressure Washer | 99 | Start every run with the Pressure Washer |
+| 12 | `ToolCannon` | Foam Cannon | 199 | Start every run with the Foam Cannon |
 
 ### Developer Products (Monetization → Developer Products), 11 total
 
@@ -52,6 +52,10 @@ These are in `Config.DevProducts`. Players can buy them again and again.
 ### Other settings in Config
 
 - **Community reward:** `Config.Social`. `GroupId = 0` means "the group that owns the game", so if the game is published under your group, you don't need to change anything. The reward is 500 🧼 + 25 💎, once per player.
+- **Follow / Like rewards:** players tap the button, then rejoin.
+  - The follow is checked through the `roproxy.com` proxy, so turn on Game Settings → Security → **Allow HTTP Requests**.
+  - Likes can't be checked by any game, so that reward is paid on trust. Set `LikeReward = nil` to remove it.
+- **Regional pricing:** safe to turn on. The shop asks Roblox for each player's real price once an item has an ID.
 - **Your profile:** `CreatorUserId = 2297538363` is already set (it's shown on the "Follow the dev" card).
 - **Codes:** `Config.Codes` currently has these codes:
   - `RELEASE` (300 🧼 + 10 💎)

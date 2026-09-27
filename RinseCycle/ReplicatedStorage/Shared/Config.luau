@@ -340,20 +340,20 @@ Config.Eggs = {
 -- you set Config.TestPasses.AllowInLiveGame = true (don't!).
 ----------------------------------------------------------------------------------------------------
 Config.GamePasses = {
-	{ Key = "DoubleCoins", Id = 0, Price = 99, Name = "2x Coins", Icon = "💰", Desc = "Double coins from the drain in every run." },
-	{ Key = "SuperScrub", Id = 0, Price = 129, Name = "Super Scrub", Icon = "💪", Desc = "Scrub 50% faster in every run." },
-	{ Key = "MegaTank", Id = 0, Price = 149, Name = "Mega Tank", Icon = "🛢️", Desc = "Your tank holds twice as much." },
-	{ Key = "LuckyCharm", Id = 0, Price = 99, Name = "Lucky Charm", Icon = "🍀", Desc = "Twice as much golden dirt in your dishwasher." },
-	{ Key = "PetSlots", Id = 0, Price = 149, Name = "+2 Pet Slots", Icon = "🐾", Desc = "Equip two more pets." },
-	{ Key = "AutoDrain", Id = 0, Price = 149, Name = "Auto Drain", Icon = "🌀", Desc = "Your tank sells itself the moment it's full. No more walking!" },
-	{ Key = "DoubleBubbles", Id = 0, Price = 179, Name = "2x Bubbles", Icon = "🧼", Desc = "Double Bubbles from every finished run." },
-	{ Key = "VIP", Id = 0, Price = 199, Name = "VIP", Icon = "👑", Desc = "+25% coins and +25% Bubbles, forever." },
-	{ Key = "DoubleLuck", Id = 0, Price = 149, Name = "x2 Luck", Icon = "🍀", Desc = "Double the chance of Rare, Epic, Legendary and Mythic ranks." },
+	{ Key = "DoubleCoins", Id = 0, Price = 99, Name = "2x Coins", Icon = "💰", Desc = "Earn double coins every time you sell at the drain." },
+	{ Key = "SuperScrub", Id = 0, Price = 129, Name = "Super Scrub", Icon = "💪", Desc = "All your tools clean 50% faster." },
+	{ Key = "MegaTank", Id = 0, Price = 149, Name = "Mega Tank", Icon = "🛢️", Desc = "Your tank holds twice as much dirt before you need to sell." },
+	{ Key = "LuckyCharm", Id = 0, Price = 99, Name = "Lucky Charm", Icon = "🍀", Desc = "Twice as much golden dirt appears. Golden dirt drops gems." },
+	{ Key = "PetSlots", Id = 0, Price = 149, Name = "+2 Pet Slots", Icon = "🐾", Desc = "Equip 5 pets at once instead of 3." },
+	{ Key = "AutoDrain", Id = 0, Price = 149, Name = "Auto Drain", Icon = "🌀", Desc = "Your tank sells automatically when it is full, so you never walk to the drain." },
+	{ Key = "DoubleBubbles", Id = 0, Price = 179, Name = "2x Bubbles", Icon = "🧼", Desc = "Earn double Bubbles from every finished wash." },
+	{ Key = "VIP", Id = 0, Price = 199, Name = "VIP", Icon = "👑", Desc = "+25% coins and +25% Bubbles on every wash." },
+	{ Key = "DoubleLuck", Id = 0, Price = 149, Name = "x2 Luck", Icon = "🍀", Desc = "Doubles your chance of rolling Rare, Epic, Legendary and Mythic ranks." },
 	-- Tool passes: start every run already owning that tool (you still upgrade it with coins). They
 	-- pop up when you try to buy the tool without enough coins.
-	{ Key = "ToolNozzle", Id = 0, Price = 49, Name = "Spray Nozzle Forever", Icon = "🚿", Desc = "Start every run with the Spray Nozzle." },
-	{ Key = "ToolWasher", Id = 0, Price = 99, Name = "Pressure Washer Forever", Icon = "💦", Desc = "Start every run with the Pressure Washer." },
-	{ Key = "ToolCannon", Id = 0, Price = 199, Name = "Foam Cannon Forever", Icon = "🌊", Desc = "Start every run with the Foam Cannon." },
+	{ Key = "ToolNozzle", Id = 0, Price = 49, Name = "Spray Nozzle", Icon = "🚿", Desc = "Start every wash with the Spray Nozzle already unlocked." },
+	{ Key = "ToolWasher", Id = 0, Price = 99, Name = "Pressure Washer", Icon = "💦", Desc = "Start every wash with the Pressure Washer already unlocked." },
+	{ Key = "ToolCannon", Id = 0, Price = 199, Name = "Foam Cannon", Icon = "🌊", Desc = "Start every wash with the Foam Cannon already unlocked." },
 }
 
 -- Developer products (buy as many times as you like). Same deal as passes: create a Developer
@@ -787,15 +787,24 @@ function Config.RewardText(reward: { Bubbles: number?, Gems: number? }): string
 end
 
 ----------------------------------------------------------------------------------------------------
--- Community (🎉 Free Rewards button). Joining the game's Roblox community gives a one-time reward;
--- it's checked in game, no rejoin needed. GroupId 0 = the group that owns the game (set a number to
--- use a different one). CreatorUserId is shown on the "Follow the dev" card (Roblox has no way to
--- check follows or likes, so those two are friendly reminders without a reward).
+-- Free Rewards (🎉 button), each once per player:
+--   * Join the community: checked in game right after Roblox's join prompt closes (no rejoin).
+--     GroupId 0 = the group that owns the game (set a number to use a different one).
+--   * Follow the dev (CreatorUserId): press "I followed!", then rejoin. On join the server reads
+--     the player's public "following" list through ProxyDomain (Roblox blocks games from calling
+--     roblox.com directly) and pays out if the dev is on it. Needs Game Settings -> Security ->
+--     "Allow HTTP Requests" ON.
+--   * Like the game: press "I liked it!", then rejoin. Roblox gives games NO way to see likes, so
+--     this one can't be checked: it's paid on trust. (Roblox's rules discourage rewarding likes;
+--     set LikeReward to nil to hide the card.)
 ----------------------------------------------------------------------------------------------------
 Config.Social = {
 	GroupId = 0,
 	CreatorUserId = 2297538363,
+	ProxyDomain = "roproxy.com",
 	GroupReward = { Bubbles = 500, Gems = 25 },
+	FollowReward = { Bubbles = 300, Gems = 15 },
+	LikeReward = { Bubbles = 300, Gems = 15 } :: { Bubbles: number?, Gems: number? }?,
 }
 
 function Config.GetGroupId(): number

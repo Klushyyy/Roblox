@@ -344,20 +344,20 @@ Config.Eggs = {
 -- you set Config.TestPasses.AllowInLiveGame = true (don't!).
 ----------------------------------------------------------------------------------------------------
 Config.GamePasses = {
-	{ Key = "DoubleCoins", Id = 0, Price = 99, Name = "2x Coins", Icon = "💰", Desc = "Double coins from the drain in every run." },
-	{ Key = "SuperScrub", Id = 0, Price = 129, Name = "Super Scrub", Icon = "💪", Desc = "Scrub 50% faster in every run." },
-	{ Key = "MegaTank", Id = 0, Price = 149, Name = "Mega Tank", Icon = "🛢️", Desc = "Your tank holds twice as much." },
-	{ Key = "LuckyCharm", Id = 0, Price = 99, Name = "Lucky Charm", Icon = "🍀", Desc = "Twice as much golden dirt in your dishwasher." },
-	{ Key = "PetSlots", Id = 0, Price = 149, Name = "+2 Pet Slots", Icon = "🐾", Desc = "Equip two more pets." },
-	{ Key = "AutoDrain", Id = 0, Price = 149, Name = "Auto Drain", Icon = "🌀", Desc = "Your tank sells itself the moment it's full. No more walking!" },
-	{ Key = "DoubleBubbles", Id = 0, Price = 179, Name = "2x Bubbles", Icon = "🧼", Desc = "Double Bubbles from every finished run." },
-	{ Key = "VIP", Id = 0, Price = 199, Name = "VIP", Icon = "👑", Desc = "+25% coins and +25% Bubbles, forever." },
-	{ Key = "DoubleLuck", Id = 0, Price = 149, Name = "x2 Luck", Icon = "🍀", Desc = "Double the chance of Rare, Epic, Legendary and Mythic ranks." },
+	{ Key = "DoubleCoins", Id = 0, Price = 99, Name = "2x Coins", Icon = "💰", Desc = "Earn double coins every time you sell at the drain." },
+	{ Key = "SuperScrub", Id = 0, Price = 129, Name = "Super Scrub", Icon = "💪", Desc = "All your tools clean 50% faster." },
+	{ Key = "MegaTank", Id = 0, Price = 149, Name = "Mega Tank", Icon = "🛢️", Desc = "Your tank holds twice as much dirt before you need to sell." },
+	{ Key = "LuckyCharm", Id = 0, Price = 99, Name = "Lucky Charm", Icon = "🍀", Desc = "Twice as much golden dirt appears. Golden dirt drops gems." },
+	{ Key = "PetSlots", Id = 0, Price = 149, Name = "+2 Pet Slots", Icon = "🐾", Desc = "Equip 5 pets at once instead of 3." },
+	{ Key = "AutoDrain", Id = 0, Price = 149, Name = "Auto Drain", Icon = "🌀", Desc = "Your tank sells automatically when it is full, so you never walk to the drain." },
+	{ Key = "DoubleBubbles", Id = 0, Price = 179, Name = "2x Bubbles", Icon = "🧼", Desc = "Earn double Bubbles from every finished wash." },
+	{ Key = "VIP", Id = 0, Price = 199, Name = "VIP", Icon = "👑", Desc = "+25% coins and +25% Bubbles on every wash." },
+	{ Key = "DoubleLuck", Id = 0, Price = 149, Name = "x2 Luck", Icon = "🍀", Desc = "Doubles your chance of rolling Rare, Epic, Legendary and Mythic ranks." },
 	-- Tool passes: start every run already owning that tool (you still upgrade it with coins). They
 	-- pop up when you try to buy the tool without enough coins.
-	{ Key = "ToolNozzle", Id = 0, Price = 49, Name = "Spray Nozzle Forever", Icon = "🚿", Desc = "Start every run with the Spray Nozzle." },
-	{ Key = "ToolWasher", Id = 0, Price = 99, Name = "Pressure Washer Forever", Icon = "💦", Desc = "Start every run with the Pressure Washer." },
-	{ Key = "ToolCannon", Id = 0, Price = 199, Name = "Foam Cannon Forever", Icon = "🌊", Desc = "Start every run with the Foam Cannon." },
+	{ Key = "ToolNozzle", Id = 0, Price = 49, Name = "Spray Nozzle", Icon = "🚿", Desc = "Start every wash with the Spray Nozzle already unlocked." },
+	{ Key = "ToolWasher", Id = 0, Price = 99, Name = "Pressure Washer", Icon = "💦", Desc = "Start every wash with the Pressure Washer already unlocked." },
+	{ Key = "ToolCannon", Id = 0, Price = 199, Name = "Foam Cannon", Icon = "🌊", Desc = "Start every wash with the Foam Cannon already unlocked." },
 }
 
 -- Developer products (buy as many times as you like). Same deal as passes: create a Developer
@@ -791,15 +791,24 @@ function Config.RewardText(reward: { Bubbles: number?, Gems: number? }): string
 end
 
 ----------------------------------------------------------------------------------------------------
--- Community (🎉 Free Rewards button). Joining the game's Roblox community gives a one-time reward;
--- it's checked in game, no rejoin needed. GroupId 0 = the group that owns the game (set a number to
--- use a different one). CreatorUserId is shown on the "Follow the dev" card (Roblox has no way to
--- check follows or likes, so those two are friendly reminders without a reward).
+-- Free Rewards (🎉 button), each once per player:
+--   * Join the community: checked in game right after Roblox's join prompt closes (no rejoin).
+--     GroupId 0 = the group that owns the game (set a number to use a different one).
+--   * Follow the dev (CreatorUserId): press "I followed!", then rejoin. On join the server reads
+--     the player's public "following" list through ProxyDomain (Roblox blocks games from calling
+--     roblox.com directly) and pays out if the dev is on it. Needs Game Settings -&gt; Security -&gt;
+--     "Allow HTTP Requests" ON.
+--   * Like the game: press "I liked it!", then rejoin. Roblox gives games NO way to see likes, so
+--     this one can't be checked: it's paid on trust. (Roblox's rules discourage rewarding likes;
+--     set LikeReward to nil to hide the card.)
 ----------------------------------------------------------------------------------------------------
 Config.Social = {
 	GroupId = 0,
 	CreatorUserId = 2297538363,
+	ProxyDomain = "roproxy.com",
 	GroupReward = { Bubbles = 500, Gems = 25 },
+	FollowReward = { Bubbles = 300, Gems = 15 },
+	LikeReward = { Bubbles = 300, Gems = 15 } :: { Bubbles: number?, Gems: number? }?,
 }
 
 function Config.GetGroupId(): number
@@ -2543,6 +2552,8 @@ export type MetaState = {
 	DailyReadyAt: number, -- os.time() when the next daily reward unlocks (0 = never claimed)
 	DailyBroken: boolean, -- a day was missed: the next claim restarts at day 1 unless restored
 	GroupReward: boolean, -- the community reward has been claimed
+	FollowState: string, -- "" / "Pending" (checked when you rejoin) / "Claimed"
+	LikeState: string, -- "" / "Pending" (paid when you rejoin) / "Claimed"
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
@@ -4455,6 +4466,10 @@ export type Profile = {
 	DailyStreak: number, -- 1..#Config.DailyRewards, the day of the streak last claimed
 	RedeemedCodes: { string }, -- Config.Codes already used (upper case)
 	GroupReward: boolean, -- the join-the-community reward has been claimed
+	FollowReward: boolean, -- the follow-the-dev reward has been claimed
+	LikeReward: boolean, -- the like-the-game reward has been claimed
+	FollowPending: boolean, -- pressed "I followed!": checked on the next join (SocialService)
+	LikePending: boolean, -- pressed "I liked it!": paid on the next join
 	RebirthReady: boolean, -- the last level has been cleared since the last rebirth
 	Stats: {
 		Runs: number,
@@ -4515,6 +4530,10 @@ local TEMPLATE: Profile = {
 	DailyStreak = 0,
 	RedeemedCodes = {},
 	GroupReward = false,
+	FollowReward = false,
+	LikeReward = false,
+	FollowPending = false,
+	LikePending = false,
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
 }
@@ -4718,6 +4737,10 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	end
 	p.RedeemedCodes = codes
 	p.GroupReward = p.GroupReward == true
+	p.FollowReward = p.FollowReward == true
+	p.LikeReward = p.LikeReward == true
+	p.FollowPending = p.FollowPending == true and not p.FollowReward
+	p.LikePending = p.LikePending == true and not p.LikeReward
 	p.RebirthReady = p.RebirthReady == true
 	local ranks, seenRank = {}, {}
 	for _, id in (if type(p.Ranks) == "table" then p.Ranks else {}) do
@@ -4940,6 +4963,8 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		DailyReadyAt = if profile.DailyLast &gt; 0 then profile.DailyLast + Config.Daily.Cooldown else 0,
 		DailyBroken = dailyBroken(profile),
 		GroupReward = profile.GroupReward,
+		FollowState = if profile.FollowReward then "Claimed" elseif profile.FollowPending then "Pending" else "",
+		LikeState = if profile.LikeReward then "Claimed" elseif profile.LikePending then "Pending" else "",
 		Stats = {
 			Runs = stats.Runs,
 			DishesCleaned = stats.DishesCleaned,
@@ -5611,6 +5636,59 @@ function DataService.RedeemCode(player: Player, text: string): (boolean, string)
 	end
 	DataService.PushMeta(player)
 	return true, Config.RewardText(def)
+end
+
+-- A toast for this player that waits until their UI is up (safe to call right after joining).
+function DataService.Notice(player: Player, text: string, kind: string)
+	local session = sessions[player]
+	if session then
+		queueNotice(session, text, kind)
+	end
+end
+
+-- Follow / Like rewards (Config.Social): "Follow" or "Like". Pending is set by the button and
+-- settled by SocialService on the next join.
+function DataService.SetSocialPending(player: Player, kind: string, pending: boolean): boolean
+	local profile = DataService.Get(player)
+	if not profile then
+		return false
+	end
+	if kind == "Follow" then
+		profile.FollowPending = pending and not profile.FollowReward
+	elseif kind == "Like" then
+		profile.LikePending = pending and not profile.LikeReward
+	else
+		return false
+	end
+	DataService.PushMeta(player)
+	return true
+end
+
+function DataService.GrantSocialReward(player: Player, kind: string): boolean
+	local profile = DataService.Get(player)
+	if not profile then
+		return false
+	end
+	local reward
+	if kind == "Follow" and not profile.FollowReward then
+		profile.FollowReward = true
+		profile.FollowPending = false
+		reward = Config.Social.FollowReward
+	elseif kind == "Like" and not profile.LikeReward and Config.Social.LikeReward then
+		profile.LikeReward = true
+		profile.LikePending = false
+		reward = Config.Social.LikeReward :: any
+	else
+		return false
+	end
+	profile.Gems += reward.Gems or 0
+	applyBubbles(profile, reward.Bubbles or 0)
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
+	end
+	DataService.PushMeta(player)
+	return true
 end
 
 -- The one-time community reward (ShopService checks membership first).
@@ -13362,8 +13440,19 @@ local function claimGroup(player: Player, _value: any): Types.RequestResult
 	return { Ok = true, Message = Config.RewardText(Config.Social.GroupReward) }
 end
 
+-- Follow / Like: marks the reward pending; it's checked (follow) or paid (like) on the next join.
+local function socialDone(player: Player, value: any): Types.RequestResult
+	local SocialService = require(script.Parent:WaitForChild("SocialService")) :: any
+	local ok, err = SocialService.MarkDone(player, if type(value) == "string" then value else "")
+	if not ok then
+		return fail(err or ERR_GENERIC)
+	end
+	return { Ok = true }
+end
+
 local HANDLERS: { [string]: (Player, any) -&gt; Types.RequestResult } = {
 	ClaimDaily = claimDaily,
+	SocialDone = socialDone,
 	RedeemCode = redeemCode,
 	ClaimGroup = claimGroup,
 	Rebirth = rebirth,
@@ -13444,8 +13533,119 @@ function ShopService.Start()
 end
 
 return ShopService</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX0000001A"><Properties><string name="Name">SocialService</string><ProtectedString name="Source">-- SocialService: settles the Follow / Like rewards (Config.Social) when a player joins.
+--
+-- The Free Rewards window's "I followed!" / "I liked it!" buttons only mark the reward as pending
+-- (MetaRequest "SocialDone"); the player then leaves and rejoins, and on load:
+--   * Follow: the player's public following list is read (friends API, through Config.Social.
+--     ProxyDomain because games can't call roblox.com directly). The dev on it = reward. Not on it =
+--     the pending mark is cleared and they're told to follow first. The check failing (HTTP off,
+--     proxy down) keeps it pending for next time.
+--   * Like: Roblox has no API for likes, so it's paid on trust.
+
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+
+local DataService = require(script.Parent:WaitForChild("DataService"))
+
+local SocialService = {}
+
+local MAX_PAGES = 20 -- 2,000 followings is plenty
+
+local initialized = false
+
+-- true / false when the list was read, nil when it couldn't be checked.
+local function follows(userId: number, targetId: number): boolean?
+	local cursor = ""
+	for _ = 1, MAX_PAGES do
+		local url = string.format("https://friends.%s/v1/users/%d/followings?limit=100&amp;sortOrder=Desc%s", Config.Social.ProxyDomain, userId, if cursor ~= "" then "&amp;cursor=" .. HttpService:UrlEncode(cursor) else "")
+		local ok, body = pcall(function()
+			return HttpService:GetAsync(url)
+		end)
+		if not ok then
+			warn("[SocialService] follow check failed: " .. tostring(body))
+			return nil
+		end
+		local okJson, data = pcall(function()
+			return HttpService:JSONDecode(body)
+		end)
+		if not okJson or type(data) ~= "table" or type(data.data) ~= "table" then
+			return nil
+		end
+		for _, entry in data.data do
+			if type(entry) == "table" and entry.id == targetId then
+				return true
+			end
+		end
+		if type(data.nextPageCursor) ~= "string" or data.nextPageCursor == "" then
+			return false
+		end
+		cursor = data.nextPageCursor
+	end
+	return false
+end
+
+local function settle(player: Player)
+	local profile = DataService.Get(player)
+	if not profile or player.Parent ~= Players then
+		return
+	end
+	if profile.LikePending and not profile.LikeReward and Config.Social.LikeReward then
+		if DataService.GrantSocialReward(player, "Like") then
+			DataService.Notice(player, "👍 Thanks for liking the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!", "Good")
+		end
+	end
+	if profile.FollowPending and not profile.FollowReward then
+		local result = follows(player.UserId, Config.Social.CreatorUserId)
+		if player.Parent ~= Players then
+			return
+		end
+		if result == true then
+			if DataService.GrantSocialReward(player, "Follow") then
+				DataService.Notice(player, "⭐ Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!", "Good")
+			end
+		elseif result == false then
+			DataService.SetSocialPending(player, "Follow", false)
+			DataService.Notice(player, "We couldn't find your follow yet. Follow the dev, press the button again, then rejoin.", "Info")
+		else
+			DataService.Notice(player, "Couldn't check your follow right now. It'll be checked next time you join.", "Info")
+		end
+	end
+end
+
+-- MetaRequest "SocialDone": "Follow" or "Like".
+function SocialService.MarkDone(player: Player, kind: string): (boolean, string?)
+	if kind ~= "Follow" and kind ~= "Like" then
+		return false, "That reward doesn't exist."
+	end
+	if kind == "Like" and not Config.Social.LikeReward then
+		return false, "That reward isn't available."
+	end
+	if not DataService.SetSocialPending(player, kind, true) then
+		return false, "Your data is still loading."
+	end
+	return true, nil
+end
+
+function SocialService.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+	DataService.ProfileLoaded:Connect(function(player)
+		task.spawn(settle, player)
+	end)
+end
+
+function SocialService.Start() end
+
+return SocialService</ProtectedString></Properties></Item>
 </Item>
-<Item class="Script" referent="RBX0000001A"><Properties><string name="Name">Main</string><bool name="Disabled">false</bool><token name="RunContext">1</token><ProtectedString name="Source">-- Rinse Cycle server entry point. Builds the world, then starts every service in order.
+<Item class="Script" referent="RBX0000001B"><Properties><string name="Name">Main</string><bool name="Disabled">false</bool><token name="RunContext">1</token><ProtectedString name="Source">-- Rinse Cycle server entry point. Builds the world, then starts every service in order.
 -- Each service module exposes Init() (set up state and remote handlers, no long yields)
 -- and Start() (spawn loops). See DESIGN.md for what each one owns.
 
@@ -13474,6 +13674,7 @@ local ShopService = require(ServicesFolder:WaitForChild("ShopService"))
 local PartyService = require(ServicesFolder:WaitForChild("PartyService"))
 local LeaderboardService = require(ServicesFolder:WaitForChild("LeaderboardService"))
 local NameTags = require(ServicesFolder:WaitForChild("NameTags"))
+local SocialService = require(ServicesFolder:WaitForChild("SocialService"))
 
 local function step(name: string, fn: () -&gt; ())
 	local started = os.clock()
@@ -13524,6 +13725,7 @@ local services = {
 	{ "PartyService", PartyService },
 	{ "LeaderboardService", LeaderboardService },
 	{ "NameTags", NameTags },
+	{ "SocialService", SocialService },
 }
 
 for _, entry in services do
@@ -13548,10 +13750,10 @@ end
 print(string.format("[%s] v%s server ready", Config.GameName, Config.Version))</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="StarterPlayer" referent="RBX0000001B"><Properties><string name="Name">StarterPlayer</string></Properties>
-<Item class="StarterPlayerScripts" referent="RBX0000001C"><Properties><string name="Name">StarterPlayerScripts</string></Properties>
-<Item class="Folder" referent="RBX0000001D"><Properties><string name="Name">Client</string></Properties>
-<Item class="ModuleScript" referent="RBX0000001E"><Properties><string name="Name">BubbleJets</string><ProtectedString name="Source">-- BubbleJets: inside a run, hold jump while in the air to fly up on a jet of soap bubbles.
+<Item class="StarterPlayer" referent="RBX0000001C"><Properties><string name="Name">StarterPlayer</string></Properties>
+<Item class="StarterPlayerScripts" referent="RBX0000001D"><Properties><string name="Name">StarterPlayerScripts</string></Properties>
+<Item class="Folder" referent="RBX0000001E"><Properties><string name="Name">Client</string></Properties>
+<Item class="ModuleScript" referent="RBX0000001F"><Properties><string name="Name">BubbleJets</string><ProtectedString name="Source">-- BubbleJets: inside a run, hold jump while in the air to fly up on a jet of soap bubbles.
 -- Fuel (a few seconds) refills while you stand on something. The HUD shows the fuel bar from the
 -- LocalPlayer's "JetFuel" attribute (0..1), so this module owns no UI.
 --
@@ -13674,7 +13876,7 @@ function BubbleJets.Init()
 end
 
 return BubbleJets</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001F"><Properties><string name="Name">Bubbles</string><ProtectedString name="Source">-- Bubbles: pooled, client-only 3D soap bubbles. Every bubble is an anchored ForceField sphere (the
+<Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">Bubbles</string><ProtectedString name="Source">-- Bubbles: pooled, client-only 3D soap bubbles. Every bubble is an anchored ForceField sphere (the
 -- shimmering, see-through film with a bright rim) plus a tiny glowing glint that always sits on
 -- the camera-facing, upper-left side, like a real reflection.
 --
@@ -13887,7 +14089,7 @@ function Bubbles.Init()
 end
 
 return Bubbles</ProtectedString></Properties></Item>
-<Item class="LocalScript" referent="RBX00000020"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
+<Item class="LocalScript" referent="RBX00000021"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
 -- Each module exposes Init(); anything that fails is reported without stopping the others.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -13944,7 +14146,7 @@ step("Bubbles", Bubbles.Init)
 step("Effects", Effects.Init)
 step("BubbleJets", BubbleJets.Init)
 step("HoldPose", HoldPose.Init)</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
+<Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
 -- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
 -- Changed instead of each hooking the remotes themselves.
 
@@ -14066,7 +14268,7 @@ function ClientState.LocalPlayer(): Player
 end
 
 return ClientState</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">Cutscene</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">Cutscene</string><ProtectedString name="Source">--[[
 	Cutscene - plays the run-start cutscene (CutsceneScene) when your party's dishwasher starts.
 
 	  * Fades to black, builds the scene far from everything (client-only parts, so each player sees
@@ -14332,7 +14534,7 @@ function Cutscene.Init()
 end
 
 return Cutscene</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">CutsceneScene</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">CutsceneScene</string><ProtectedString name="Source">--[[
 	CutsceneScene - the set, actors and timeline for the run-start cutscene (played by Cutscene).
 
 	The story (no words, just implied): a family finishes a meal, Mum stacks the dirty plates,
@@ -14952,7 +15154,7 @@ function Scene:Destroy()
 end
 
 return Scene</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">DailyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">DailyUI</string><ProtectedString name="Source">--[[
 	DailyUI - the daily reward calendar (🎁 Daily button on the left; it also pops up by itself once
 	per session when a reward is waiting).
 
@@ -15114,7 +15316,7 @@ function DailyUI.Init()
 	})
 	local restore = Config.GetProduct("RestoreStreak")
 	restoreButton = UIKit.Button({
-		Text = string.format("🔥 Restore Streak  (R$ %d)", restore and restore.Price or 0),
+		Text = "🔥 Restore Streak",
 		Size = UDim2.fromOffset(320, 48),
 		Position = UDim2.new(0.5, 0, 0, 262),
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -15128,6 +15330,11 @@ function DailyUI.Init()
 			end
 		end,
 	})
+	if restore then
+		ShopUI.WatchPrice(restore, false, function(price)
+			restoreButton.Text = string.format("🔥 Restore Streak  (R$ %d)", price)
+		end)
+	end
 	UIKit.RegisterWindow("Daily", {
 		Open = function()
 			render()
@@ -15166,7 +15373,7 @@ function DailyUI.Init()
 end
 
 return DailyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
+<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
 -- numbers, dish/sale celebrations), CollectionService-driven decoration (spinning arms, lift
 -- pads), the drain guide beam, remaining-dirt sparkle markers, prompt routing (windows and the
 -- in-arena tool shop), and a little lobby ambience.
@@ -16143,7 +16350,7 @@ function Effects.Init()
 end
 
 return Effects</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">HoldPose</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">HoldPose</string><ProtectedString name="Source">--[[
 	HoldPose - how a held cleaning tool looks, for every player on this client.
 
 	  * Anyone holding a tool (character attribute HeldToolIndex &gt; 1, R15 rigs) holds it out in
@@ -16228,7 +16435,7 @@ function HoldPose.Init()
 end
 
 return HoldPose</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
+<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
 --   * top centre: the Bubbles pill with a green "+" (opens the Shop)
 --   * right side: big square buttons (Shop/Pets in the lobby, Upgrades/Pets/Leave in a run) with
 --     key hints for keyboard (Tab/G/P) or gamepad (Y/LB)
@@ -17413,7 +17620,7 @@ function HUD.Init()
 end
 
 return HUD</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
 	PartyUI - everything shown while ClientState.Party ~= nil (standing in a lobby pad).
 
 	Two screens, Search-for-the-Needle style:
@@ -18047,7 +18254,7 @@ function PartyUI.Init()
 end
 
 return PartyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
+<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
 -- state (EquippedPets/&lt;slot&gt; StringValue = pet id, its Target ObjectValue = the grime part being
 -- cleaned); this module is the only thing that actually builds and moves pet models. See
 -- DESIGN.md section 6 ("PetRenderer") and section 4 ("Equipped pets for rendering").
@@ -18524,7 +18731,7 @@ function PetRenderer.Init()
 end
 
 return PetRenderer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
+<Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
 -- reveal animation. Everything here is built with UIKit; see DESIGN.md section 6 ("PetsUI") for
 -- the contract. Both windows rebuild their contents from ClientState.Meta whenever it changes and
 -- the relevant window is open, so a purchase/hatch/equip anywhere refreshes what's on screen.
@@ -19858,7 +20065,7 @@ function PetsUI.Init()
 end
 
 return PetsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
 	RanksUI - the "Ranks" window (Rank Shrine in the lobby, the HUD's Ranks button, R / gamepad RB).
 
 	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
@@ -19957,7 +20164,9 @@ local function renderGems()
 		luckButton.Visible = not luck
 		local label = luckButton:FindFirstChildWhichIsA("TextLabel", true)
 		if label and pass then
-			label.Text = string.format("🍀 x2 Luck pass  •  R$ %d", pass.Price or 0)
+			ShopUI.WatchPrice(pass, true, function(price)
+				label.Text = string.format("🍀 x2 Luck pass  •  R$ %d", price)
+			end)
 		end
 	end
 end
@@ -20201,7 +20410,7 @@ function RanksUI.Init()
 end
 
 return RanksUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002D"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
 	RebirthUI - the "Rebirth" window (the Rebirth Fountain in the lobby).
 
 	The endgame loop: once you've cleaned the last dishwasher, trade your Bubbles, unlocked
@@ -20354,17 +20563,17 @@ function RebirthUI.Init()
 end
 
 return RebirthUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002D"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002E"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
 	RewardsUI - two small windows opened from the buttons on the left of the lobby HUD.
 
 	  * "Codes" (🎟️): type a code (Config.Codes) and redeem it. "Look out for codes in the game's
 	    description and our community!"
-	  * "Free" (🎉 Free Rewards):
-	      - Join the community: a real reward (Config.Social.GroupReward). JOIN opens Roblox's own
-	        join prompt in game (GroupService:PromptJoinAsync); as soon as it closes, the server
-	        checks membership live and pays out. No rejoin needed.
-	      - Like the game / Follow the dev: friendly reminders. Roblox gives games no way to see
-	        likes or follows (and rewarding likes breaks Roblox's rules), so these have no reward.
+	  * "Free" (🎉 Free Rewards), one reward each (Config.Social):
+	      - Join the community: JOIN opens Roblox's own join prompt in game
+	        (GroupService:PromptJoinAsync); as soon as it closes, the server checks membership live
+	        and pays out. No rejoin needed.
+	      - Follow the dev / Like the game: press "I followed!" / "I liked it!", then leave and
+	        rejoin. On join the server checks the follow (SocialService) and pays the like.
 ]]
 
 local GroupService = game:GetService("GroupService")
@@ -20388,6 +20597,7 @@ local initialized = false
 local busy = false
 local groupButton: TextButton
 local groupStatus: TextLabel
+local socialRows: { [string]: { Button: TextButton, Status: TextLabel } } = {}
 
 ----------------------------------------------------------------------------------------------------
 -- Codes
@@ -20484,6 +20694,67 @@ local function refreshGroup()
 	groupStatus.Text = if claimed then "Thanks for joining! 💙" else "Reward: " .. Config.RewardText(Config.Social.GroupReward)
 end
 
+local function refreshSocial()
+	local meta = ClientState.Meta :: Types.MetaState?
+	for kind, rowParts in socialRows do
+		local state = if meta then (if kind == "Follow" then meta.FollowState else meta.LikeState) else ""
+		local reward = if kind == "Follow" then Config.Social.FollowReward else Config.Social.LikeReward
+		if state == "Claimed" then
+			rowParts.Button.Text = "Claimed ✅"
+			UIKit.SetButtonColor(rowParts.Button, Colors.Disabled)
+			rowParts.Status.Text = "Thank you! 💙"
+		elseif state == "Pending" then
+			rowParts.Button.Text = "Rejoin to claim"
+			UIKit.SetButtonColor(rowParts.Button, Colors.Warning)
+			rowParts.Status.Text = "Leave and rejoin to get it!"
+		else
+			rowParts.Button.Text = if kind == "Follow" then "I followed!" else "I liked it!"
+			UIKit.SetButtonColor(rowParts.Button, Colors.Good)
+			rowParts.Status.Text = "Reward: " .. Config.RewardText(reward :: any)
+		end
+	end
+end
+
+local function markDone(kind: string)
+	local meta = ClientState.Meta :: Types.MetaState?
+	local state = if meta then (if kind == "Follow" then meta.FollowState else meta.LikeState) else ""
+	if busy or state == "Claimed" then
+		return
+	end
+	if state == "Pending" then
+		UIKit.Toast("Leave and rejoin the game to get this reward!", "Info")
+		return
+	end
+	busy = true
+	local result = ClientState.MetaRequest("SocialDone", kind)
+	busy = false
+	if result.Ok then
+		UIKit.Toast(if kind == "Follow"
+			then "⭐ Nice! Leave and rejoin: we'll check your follow and give you the reward."
+			else "👍 Thank you! Leave and rejoin to get your reward.", "Good")
+	else
+		UIKit.Toast(result.Error or "Couldn't do that.", "Bad")
+	end
+	refreshSocial()
+end
+
+local function socialButton(parent: Frame, kind: string)
+	local button = UIKit.Button({
+		Text = "",
+		Size = UDim2.fromOffset(210, 52),
+		Position = UDim2.new(1, -14, 0.5, -10),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Color = Colors.Good,
+		TextSize = 20,
+		Parent = parent,
+		OnClick = function()
+			task.spawn(markDone, kind)
+		end,
+	})
+	local status = UIKit.Label({ Text = "", TextSize = 15, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(230, 20), Position = UDim2.new(1, -4, 1, -8), AnchorPoint = Vector2.new(1, 1), Parent = parent })
+	socialRows[kind] = { Button = button, Status = status }
+end
+
 local function joinGroup()
 	local meta = ClientState.Meta :: Types.MetaState?
 	if busy or (meta and meta.GroupReward) then
@@ -20562,13 +20833,15 @@ local function buildFree(screenRoot: Instance)
 	})
 	groupStatus = UIKit.Label({ Text = "", TextSize = 15, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(230, 20), Position = UDim2.new(1, -4, 1, -8), AnchorPoint = Vector2.new(1, 1), Parent = group })
 
-	-- Like the game (a reminder: Roblox doesn't let games see likes).
-	local like = card(list, 2, "👍", "Like the game!", "Having fun? Press 👍 on the game page. It helps new players find us!")
-	UIKit.Label({ Text = "Thank you! 💙", TextSize = 18, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(210, 40), Position = UDim2.new(1, -14, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), Parent = like })
+	-- Like the game: press 👍 on the game page, then the button, then rejoin.
+	if Config.Social.LikeReward then
+		local like = card(list, 2, "👍", "Like the game", "Press 👍 on the game page, tap the button, then rejoin.")
+		socialButton(like, "Like")
+	end
 
-	-- Follow the dev (a reminder, with their headshot and name).
+	-- Follow the dev (their headshot and name): follow, tap the button, rejoin (checked on join).
 	local creatorId = Config.Social.CreatorUserId
-	local follow = card(list, 3, "", "Follow the dev", "Follow for update news and new codes!")
+	local follow = card(list, 3, "", "Follow the dev", "Follow on their Roblox profile, tap the button, then rejoin.")
 	local shot = Instance.new("ImageLabel")
 	shot.BackgroundTransparency = 1
 	shot.Size = UDim2.fromOffset(70, 70)
@@ -20577,7 +20850,7 @@ local function buildFree(screenRoot: Instance)
 	shot.Image = string.format("rbxthumb://type=AvatarHeadShot&amp;id=%d&amp;w=150&amp;h=150", creatorId)
 	shot.Parent = follow
 	UIKit.Corner(shot, 35)
-	UIKit.Label({ Text = "Thank you! 💙", TextSize = 18, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(210, 40), Position = UDim2.new(1, -14, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), Parent = follow })
+	socialButton(follow, "Follow")
 	task.spawn(function()
 		local ok, name = pcall(function()
 			return Players:GetNameFromUserIdAsync(creatorId)
@@ -20593,11 +20866,13 @@ local function buildFree(screenRoot: Instance)
 	UIKit.RegisterWindow("Free", {
 		Open = function()
 			refreshGroup()
+			refreshSocial()
 		end,
 	})
 	ClientState.Changed:Connect(function(kind)
 		if kind == "Meta" and UIKit.IsWindowOpen("Free") then
 			refreshGroup()
+			refreshSocial()
 		end
 	end)
 end
@@ -20613,7 +20888,7 @@ function RewardsUI.Init()
 end
 
 return RewardsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002E"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002F"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
 	ShopUI - the lobby "Shop" window: Perks (bought with Bubbles, permanent) and Robux (game passes).
 	Opened from the Soap Shop ProximityPrompt (routed by Effects via OpenWindow="Shop"), the HUD [🛒 Shop]
 	button, or the G key - all outside our scope, they just call UIKit.OpenWindow("Shop").
@@ -20638,6 +20913,43 @@ local Colors = UIKit.Theme.Colors
 local LocalPlayer = Players.LocalPlayer
 
 local ShopUI = {}
+
+-- Live Robux prices. With Roblox's regional pricing on, players in some countries pay a different
+-- price than the one in Config, so once an item has a real Id the shop asks Roblox for the price
+-- this player will actually see and shows that (Config's Price is only the fallback).
+local livePrice: { [string]: number } = {}
+local priceWaiters: { [string]: { (number) -&gt; () } } = {}
+function ShopUI.WatchPrice(def: any, isPass: boolean, apply: (number) -&gt; ())
+	apply(def.Price or 0)
+	if type(def.Id) ~= "number" or def.Id &lt;= 0 then
+		return
+	end
+	local key = (if isPass then "P" else "D") .. def.Id
+	if livePrice[key] then
+		apply(livePrice[key])
+		return
+	end
+	local waiting = priceWaiters[key]
+	if waiting then
+		table.insert(waiting, apply)
+		return
+	end
+	priceWaiters[key] = { apply }
+	task.spawn(function()
+		local ok, info = pcall(function()
+			return MarketplaceService:GetProductInfo(def.Id, if isPass then Enum.InfoType.GamePass else Enum.InfoType.Product)
+		end)
+		local price = if ok and type(info) == "table" and type(info.PriceInRobux) == "number" then info.PriceInRobux else nil
+		local list = priceWaiters[key] or {}
+		priceWaiters[key] = nil
+		if price then
+			livePrice[key] = price
+			for _, fn in list do
+				pcall(fn, price)
+			end
+		end
+	end)
+end
 
 local WINDOW_SIZE = Vector2.new(880, 560)
 
@@ -20793,7 +21105,7 @@ local function buildPassRow(def: any): Frame
 			Parent = row,
 		})
 	else
-		UIKit.Button({
+		local buyButton = UIKit.Button({
 			Text = "R$ " .. tostring(def.Price or "?"),
 			Size = UDim2.fromOffset(130, 46),
 			AnchorPoint = Vector2.new(1, 0.5),
@@ -20815,6 +21127,11 @@ local function buildPassRow(def: any): Frame
 				end
 			end,
 		})
+		ShopUI.WatchPrice(def, true, function(price)
+			if buyButton.Parent then
+				buyButton.Text = "R$ " .. price
+			end
+		end)
 	end
 
 	return row
@@ -20928,7 +21245,7 @@ local function buildProductRow(def: any): Frame
 		Size = UDim2.new(1, -226, 0, 26),
 		Parent = row,
 	})
-	UIKit.Button({
+	local buyButton = UIKit.Button({
 		Text = "R$ " .. tostring(def.Price),
 		Size = UDim2.fromOffset(130, 46),
 		AnchorPoint = Vector2.new(1, 0.5),
@@ -20954,6 +21271,11 @@ local function buildProductRow(def: any): Frame
 			end
 		end,
 	})
+	ShopUI.WatchPrice(def, false, function(price)
+		if buyButton.Parent then
+			buyButton.Text = "R$ " .. price
+		end
+	end)
 	return row
 end
 
@@ -21125,7 +21447,7 @@ function ShopUI.Init()
 end
 
 return ShopUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002F"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
+<Item class="ModuleScript" referent="RBX00000030"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
 -- Aim comes from the mouse on PC, or the screen centre (with a crosshair) on touch/gamepad, cast
@@ -22085,7 +22407,7 @@ function SprayController.Init()
 end
 
 return SprayController</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000030"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000031"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -24555,7 +24877,7 @@ function UIKit.Init()
 end
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000031"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000032"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button

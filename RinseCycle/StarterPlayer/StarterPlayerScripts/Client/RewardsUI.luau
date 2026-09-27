@@ -3,12 +3,12 @@
 
 	  * "Codes" (🎟️): type a code (Config.Codes) and redeem it. "Look out for codes in the game's
 	    description and our community!"
-	  * "Free" (🎉 Free Rewards):
-	      - Join the community: a real reward (Config.Social.GroupReward). JOIN opens Roblox's own
-	        join prompt in game (GroupService:PromptJoinAsync); as soon as it closes, the server
-	        checks membership live and pays out. No rejoin needed.
-	      - Like the game / Follow the dev: friendly reminders. Roblox gives games no way to see
-	        likes or follows (and rewarding likes breaks Roblox's rules), so these have no reward.
+	  * "Free" (🎉 Free Rewards), one reward each (Config.Social):
+	      - Join the community: JOIN opens Roblox's own join prompt in game
+	        (GroupService:PromptJoinAsync); as soon as it closes, the server checks membership live
+	        and pays out. No rejoin needed.
+	      - Follow the dev / Like the game: press "I followed!" / "I liked it!", then leave and
+	        rejoin. On join the server checks the follow (SocialService) and pays the like.
 ]]
 
 local GroupService = game:GetService("GroupService")
@@ -32,6 +32,7 @@ local initialized = false
 local busy = false
 local groupButton: TextButton
 local groupStatus: TextLabel
+local socialRows: { [string]: { Button: TextButton, Status: TextLabel } } = {}
 
 ----------------------------------------------------------------------------------------------------
 -- Codes
@@ -128,6 +129,67 @@ local function refreshGroup()
 	groupStatus.Text = if claimed then "Thanks for joining! 💙" else "Reward: " .. Config.RewardText(Config.Social.GroupReward)
 end
 
+local function refreshSocial()
+	local meta = ClientState.Meta :: Types.MetaState?
+	for kind, rowParts in socialRows do
+		local state = if meta then (if kind == "Follow" then meta.FollowState else meta.LikeState) else ""
+		local reward = if kind == "Follow" then Config.Social.FollowReward else Config.Social.LikeReward
+		if state == "Claimed" then
+			rowParts.Button.Text = "Claimed ✅"
+			UIKit.SetButtonColor(rowParts.Button, Colors.Disabled)
+			rowParts.Status.Text = "Thank you! 💙"
+		elseif state == "Pending" then
+			rowParts.Button.Text = "Rejoin to claim"
+			UIKit.SetButtonColor(rowParts.Button, Colors.Warning)
+			rowParts.Status.Text = "Leave and rejoin to get it!"
+		else
+			rowParts.Button.Text = if kind == "Follow" then "I followed!" else "I liked it!"
+			UIKit.SetButtonColor(rowParts.Button, Colors.Good)
+			rowParts.Status.Text = "Reward: " .. Config.RewardText(reward :: any)
+		end
+	end
+end
+
+local function markDone(kind: string)
+	local meta = ClientState.Meta :: Types.MetaState?
+	local state = if meta then (if kind == "Follow" then meta.FollowState else meta.LikeState) else ""
+	if busy or state == "Claimed" then
+		return
+	end
+	if state == "Pending" then
+		UIKit.Toast("Leave and rejoin the game to get this reward!", "Info")
+		return
+	end
+	busy = true
+	local result = ClientState.MetaRequest("SocialDone", kind)
+	busy = false
+	if result.Ok then
+		UIKit.Toast(if kind == "Follow"
+			then "⭐ Nice! Leave and rejoin: we'll check your follow and give you the reward."
+			else "👍 Thank you! Leave and rejoin to get your reward.", "Good")
+	else
+		UIKit.Toast(result.Error or "Couldn't do that.", "Bad")
+	end
+	refreshSocial()
+end
+
+local function socialButton(parent: Frame, kind: string)
+	local button = UIKit.Button({
+		Text = "",
+		Size = UDim2.fromOffset(210, 52),
+		Position = UDim2.new(1, -14, 0.5, -10),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Color = Colors.Good,
+		TextSize = 20,
+		Parent = parent,
+		OnClick = function()
+			task.spawn(markDone, kind)
+		end,
+	})
+	local status = UIKit.Label({ Text = "", TextSize = 15, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(230, 20), Position = UDim2.new(1, -4, 1, -8), AnchorPoint = Vector2.new(1, 1), Parent = parent })
+	socialRows[kind] = { Button = button, Status = status }
+end
+
 local function joinGroup()
 	local meta = ClientState.Meta :: Types.MetaState?
 	if busy or (meta and meta.GroupReward) then
@@ -206,13 +268,15 @@ local function buildFree(screenRoot: Instance)
 	})
 	groupStatus = UIKit.Label({ Text = "", TextSize = 15, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(230, 20), Position = UDim2.new(1, -4, 1, -8), AnchorPoint = Vector2.new(1, 1), Parent = group })
 
-	-- Like the game (a reminder: Roblox doesn't let games see likes).
-	local like = card(list, 2, "👍", "Like the game!", "Having fun? Press 👍 on the game page. It helps new players find us!")
-	UIKit.Label({ Text = "Thank you! 💙", TextSize = 18, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(210, 40), Position = UDim2.new(1, -14, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), Parent = like })
+	-- Like the game: press 👍 on the game page, then the button, then rejoin.
+	if Config.Social.LikeReward then
+		local like = card(list, 2, "👍", "Like the game", "Press 👍 on the game page, tap the button, then rejoin.")
+		socialButton(like, "Like")
+	end
 
-	-- Follow the dev (a reminder, with their headshot and name).
+	-- Follow the dev (their headshot and name): follow, tap the button, rejoin (checked on join).
 	local creatorId = Config.Social.CreatorUserId
-	local follow = card(list, 3, "", "Follow the dev", "Follow for update news and new codes!")
+	local follow = card(list, 3, "", "Follow the dev", "Follow on their Roblox profile, tap the button, then rejoin.")
 	local shot = Instance.new("ImageLabel")
 	shot.BackgroundTransparency = 1
 	shot.Size = UDim2.fromOffset(70, 70)
@@ -221,7 +285,7 @@ local function buildFree(screenRoot: Instance)
 	shot.Image = string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=150&h=150", creatorId)
 	shot.Parent = follow
 	UIKit.Corner(shot, 35)
-	UIKit.Label({ Text = "Thank you! 💙", TextSize = 18, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(210, 40), Position = UDim2.new(1, -14, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), Parent = follow })
+	socialButton(follow, "Follow")
 	task.spawn(function()
 		local ok, name = pcall(function()
 			return Players:GetNameFromUserIdAsync(creatorId)
@@ -237,11 +301,13 @@ local function buildFree(screenRoot: Instance)
 	UIKit.RegisterWindow("Free", {
 		Open = function()
 			refreshGroup()
+			refreshSocial()
 		end,
 	})
 	ClientState.Changed:Connect(function(kind)
 		if kind == "Meta" and UIKit.IsWindowOpen("Free") then
 			refreshGroup()
+			refreshSocial()
 		end
 	end)
 end

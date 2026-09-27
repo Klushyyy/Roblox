@@ -97,7 +97,9 @@ local function renderGems()
 		luckButton.Visible = not luck
 		local label = luckButton:FindFirstChildWhichIsA("TextLabel", true)
 		if label and pass then
-			label.Text = string.format("🍀 x2 Luck pass  •  R$ %d", pass.Price or 0)
+			ShopUI.WatchPrice(pass, true, function(price)
+				label.Text = string.format("🍀 x2 Luck pass  •  R$ %d", price)
+			end)
 		end
 	end
 end

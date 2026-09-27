@@ -24,6 +24,43 @@ local LocalPlayer = Players.LocalPlayer
 
 local ShopUI = {}
 
+-- Live Robux prices. With Roblox's regional pricing on, players in some countries pay a different
+-- price than the one in Config, so once an item has a real Id the shop asks Roblox for the price
+-- this player will actually see and shows that (Config's Price is only the fallback).
+local livePrice: { [string]: number } = {}
+local priceWaiters: { [string]: { (number) -> () } } = {}
+function ShopUI.WatchPrice(def: any, isPass: boolean, apply: (number) -> ())
+	apply(def.Price or 0)
+	if type(def.Id) ~= "number" or def.Id <= 0 then
+		return
+	end
+	local key = (if isPass then "P" else "D") .. def.Id
+	if livePrice[key] then
+		apply(livePrice[key])
+		return
+	end
+	local waiting = priceWaiters[key]
+	if waiting then
+		table.insert(waiting, apply)
+		return
+	end
+	priceWaiters[key] = { apply }
+	task.spawn(function()
+		local ok, info = pcall(function()
+			return MarketplaceService:GetProductInfo(def.Id, if isPass then Enum.InfoType.GamePass else Enum.InfoType.Product)
+		end)
+		local price = if ok and type(info) == "table" and type(info.PriceInRobux) == "number" then info.PriceInRobux else nil
+		local list = priceWaiters[key] or {}
+		priceWaiters[key] = nil
+		if price then
+			livePrice[key] = price
+			for _, fn in list do
+				pcall(fn, price)
+			end
+		end
+	end)
+end
+
 local WINDOW_SIZE = Vector2.new(880, 560)
 
 local initialized = false
@@ -178,7 +215,7 @@ local function buildPassRow(def: any): Frame
 			Parent = row,
 		})
 	else
-		UIKit.Button({
+		local buyButton = UIKit.Button({
 			Text = "R$ " .. tostring(def.Price or "?"),
 			Size = UDim2.fromOffset(130, 46),
 			AnchorPoint = Vector2.new(1, 0.5),
@@ -200,6 +237,11 @@ local function buildPassRow(def: any): Frame
 				end
 			end,
 		})
+		ShopUI.WatchPrice(def, true, function(price)
+			if buyButton.Parent then
+				buyButton.Text = "R$ " .. price
+			end
+		end)
 	end
 
 	return row
@@ -313,7 +355,7 @@ local function buildProductRow(def: any): Frame
 		Size = UDim2.new(1, -226, 0, 26),
 		Parent = row,
 	})
-	UIKit.Button({
+	local buyButton = UIKit.Button({
 		Text = "R$ " .. tostring(def.Price),
 		Size = UDim2.fromOffset(130, 46),
 		AnchorPoint = Vector2.new(1, 0.5),
@@ -339,6 +381,11 @@ local function buildProductRow(def: any): Frame
 			end
 		end,
 	})
+	ShopUI.WatchPrice(def, false, function(price)
+		if buyButton.Parent then
+			buyButton.Text = "R$ " .. price
+		end
+	end)
 	return row
 end
 

@@ -123,6 +123,8 @@ export type MetaState = {
 	DailyReadyAt: number, -- os.time() when the next daily reward unlocks (0 = never claimed)
 	DailyBroken: boolean, -- a day was missed: the next claim restarts at day 1 unless restored
 	GroupReward: boolean, -- the community reward has been claimed
+	FollowState: string, -- "" / "Pending" (checked when you rejoin) / "Claimed"
+	LikeState: string, -- "" / "Pending" (paid when you rejoin) / "Claimed"
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
