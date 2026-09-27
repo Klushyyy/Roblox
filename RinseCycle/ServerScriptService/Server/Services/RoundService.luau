@@ -275,6 +275,19 @@ local function effectiveUpgrades(pr: PlayerRun): Types.RunUpgrades
 	return merged
 end
 
+-- Tool passes (Config.Tools[i].PassKey): the tool is yours from the start of every run.
+local function grantPassTools(player: Player, pr: any): boolean
+	local passes = getPasses(player)
+	local changed = false
+	for i, tool in Config.Tools do
+		if tool.PassKey and passes[tool.PassKey] and not pr.OwnedTools[i] then
+			pr.OwnedTools[i] = true
+			changed = true
+		end
+	end
+	return changed
+end
+
 local function newToolState(): ({ boolean }, { Types.RunUpgrades })
 	local owned, ups = {}, {}
 	for i in Config.Tools do
@@ -498,7 +511,8 @@ end
 	  cleaner  : the player credited (nil for unrewarded pops)
 	  rewarded : false = no tank units, no Bubbles, no dish bonus, no stats
 ]]
-local function retireGrime(run: Run, part: BasePart, entry: GrimeEntry, cleaner: Player?, fromPet: boolean, rewarded: boolean)
+-- Returns the units the cleaner picked up (for a pet: what goes into its bag).
+local function retireGrime(run: Run, part: BasePart, entry: GrimeEntry, cleaner: Player?, fromPet: boolean, rewarded: boolean): number
 	-- Mark first, before anything that could yield or re-enter, so this runs exactly once per spot.
 	entry.Dead = true
 	entry.HP = 0
@@ -512,9 +526,14 @@ local function retireGrime(run: Run, part: BasePart, entry: GrimeEntry, cleaner:
 	local bubbles = 0
 
 	if rewardPlayer and pr then
-		-- Units go into the tank, capped at TankMax (the overflow is simply lost).
-		gained = math.min(entry.Units, math.max(0, pr.Stats.TankMax - pr.Tank))
-		pr.Tank += gained
+		if fromPet then
+			-- A pet keeps what it cleans in its own bag and sells it itself (PetService).
+			gained = entry.Units
+		else
+			-- Units go into the tank, capped at TankMax (the overflow is simply lost).
+			gained = math.min(entry.Units, math.max(0, pr.Stats.TankMax - pr.Tank))
+			pr.Tank += gained
+		end
 		pr.GrimeCleaned += 1
 
 		local gems = if entry.Golden then Config.Gems.GoldenDrop elseif rng:NextNumber() < Config.Gems.DropChance then 1 else 0
@@ -589,17 +608,19 @@ local function retireGrime(run: Run, part: BasePart, entry: GrimeEntry, cleaner:
 	if run.Remaining <= 0 then
 		completeRun(run)
 	end
+	return gained
 end
 
--- Applies damage to a spot already known to be in `run`. Returns true while the spot is alive.
-local function damageEntry(run: Run, player: Player, pr: PlayerRun, part: BasePart, entry: GrimeEntry, amount: number, fromPet: boolean): boolean
+-- Applies damage to a spot already known to be in `run`. Returns (alive, units picked up if it
+-- was finished).
+local function damageEntry(run: Run, player: Player, pr: PlayerRun, part: BasePart, entry: GrimeEntry, amount: number, fromPet: boolean): (boolean, number)
 	if part.Parent == nil then
 		-- Destroyed between the query and now by something else: count it, reward nobody.
 		retireGrime(run, part, entry, nil, false, false)
-		return false
+		return false, 0
 	end
-	if pr.Tank >= pr.Stats.TankMax then
-		return true -- tank full: the player (or pet) has to go sell first
+	if not fromPet and pr.Tank >= pr.Stats.TankMax then
+		return true, 0 -- tank full: the player has to go sell first (pets have their own bags)
 	end
 	if not fromPet and (pr.Stats.Tier or pr.ToolIndex) < entry.MinTool then
 		-- Too tough for this tool: it still works, just slowly (so nobody can get stuck without the
@@ -613,10 +634,9 @@ local function damageEntry(run: Run, player: Player, pr: PlayerRun, part: BasePa
 		entry.HP = hp
 		setGrimeHealth(part, hp / entry.MaxHP)
 		part:SetAttribute("HP", hp)
-		return true
+		return true, 0
 	end
-	retireGrime(run, part, entry, player, fromPet, true)
-	return false
+	return false, retireGrime(run, part, entry, player, fromPet, true)
 end
 
 -- Reads every grime spot's attributes once, so the hot path never touches attributes.
@@ -939,6 +959,7 @@ local function joinRun(run: Run, player: Player, index: number)
 		Results = nil,
 	}
 	pr.OwnedTools, pr.ToolUpgrades = newToolState()
+	grantPassTools(player, pr)
 	pr.Stats = computeStats(run.Level, player, pr)
 
 	run.Players[player] = pr
@@ -1002,8 +1023,14 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 	if charm then
 		goldenChance *= 2 -- Lucky Charm pass: anyone in the party having it doubles the whole load's gold
 	end
+	-- Party size: more spots (up to PartyGrimeCap), and past that tougher dirt, so the whole party's
+	-- work is PartyWorkPerPlayer x players x solo (a party run takes a bit longer than solo).
+	local n = #members
+	local grimeScale = math.min(R.PartyGrimeCap or 99, 1 + R.PartyGrimeScale * (n - 1))
+	local hpScale = if n <= 1 then 1 else math.max(1, n * (R.PartyWorkPerPlayer or 1) / grimeScale)
 	local options = {
-		GrimeScale = math.min(R.PartyGrimeCap or 99, 1 + R.PartyGrimeScale * (#members - 1)),
+		GrimeScale = grimeScale,
+		HpScale = hpScale,
 		GoldenChance = goldenChance,
 	}
 
@@ -1172,20 +1199,50 @@ end
 
 -- Damages a grime part if it belongs to the player's run. Returns true while the part is alive.
 -- Used by the Scrub handler (fromPet = false) and PetService (fromPet = true).
-function RoundService.DamageGrime(player: Player, part: BasePart, amount: number, fromPet: boolean): boolean
+function RoundService.DamageGrime(player: Player, part: BasePart, amount: number, fromPet: boolean): (boolean, number)
 	local run = runOf[player]
 	if not run or run.Phase ~= "Playing" or run.Ended then
-		return false
+		return false, 0
 	end
 	local pr = run.Players[player]
 	local entry = run.Grime[part]
 	if not pr or not entry or entry.Dead then
-		return false
+		return false, 0
 	end
 	if type(amount) ~= "number" or amount ~= amount or amount <= 0 then
-		return part.Parent ~= nil
+		return part.Parent ~= nil, 0
 	end
 	return damageEntry(run, player, pr, part, entry, math.min(amount, entry.HP), fromPet == true)
+end
+
+-- For pets: the level multiplier of the player's run (bag sizes scale with it), 0 if not in one.
+function RoundService.GetLevelMult(player: Player): number
+	local run = runOf[player]
+	return if run then Config.GetLevel(run.Level).Mult else 0
+end
+
+-- For pets: the drain grate of the player's arena (where a full bag gets sold).
+function RoundService.GetDrainPart(player: Player): BasePart?
+	local run = runOf[player]
+	local model = run and run.Arena and run.Arena.Model
+	local drain = model and model:FindFirstChild("DrainGrate")
+	return if drain and drain:IsA("BasePart") then drain else nil
+end
+
+-- A pet came back from the drain with `units` of dirt: pay its owner like a tank sale.
+function RoundService.PayPetCoins(player: Player, units: number)
+	local run = runOf[player]
+	local pr = run and run.Players[player]
+	if not run or not pr or run.Ended or type(units) ~= "number" or units ~= units or units <= 0 then
+		return
+	end
+	local coins = math.floor(units * pr.Stats.CoinMult)
+	if coins <= 0 then
+		return
+	end
+	pr.Coins += coins
+	fireOne(player, "Sold", { Coins = coins, Units = units, By = player.UserId, Pet = true })
+	queuePush(player)
 end
 
 -- Recomputes a player's run stats (perks, passes, pets). Called after pet equip changes, perk
@@ -1208,6 +1265,7 @@ function RoundService.RefreshStats(player: Player)
 	if not run or not pr or run.Ended then
 		return
 	end
+	grantPassTools(player, pr) -- a tool pass bought mid-run works straight away
 	recomputeStats(run, player, pr)
 	if run.Phase == "Playing" and pr.Tank > 0 and pr.Tank >= pr.Stats.TankMax and getPasses(player).AutoDrain then
 		sell(run, player, pr)

@@ -878,6 +878,7 @@ local function buildSoapShop(parent: Instance)
 		MaxActivationDistance = 12,
 	}, counter) :: ProximityPrompt
 	prompt:SetAttribute("OpenWindow", "Shop")
+	prompt:SetAttribute("WindowArg", "Perks") -- the Soap Shop always opens on its perks
 end
 
 ----------------------------------------------------------------------------------------------------

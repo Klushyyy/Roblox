@@ -35,19 +35,31 @@ local function rarityOrder(rarity: string): number
 	return (def and def.Order) or 0
 end
 
--- meta.Pets sorted best-first: rarity, then PowerShare, then Uid (stable for equal stats).
+local ZERO_STATS = { Speed = 0, Capacity = 0, CoinBonus = 0 }
+local function petStats(id: string, tier: number?)
+	return Config.PetStats(id, tier) or ZERO_STATS
+end
+
+-- "Golden Rubber Duck" / "Rubber Duck".
+local function petTitle(id: string, tier: number?): string
+	local t = Config.PetTier(tier)
+	return if t.Name ~= "" then t.Name .. " " .. petDef(id).Name else petDef(id).Name
+end
+
+-- meta.Pets sorted best-first: speed (tier included), then rarity, then Uid (stable).
 local function sortedPetList(meta: Types.MetaState)
 	local list = {}
 	for _, entry in meta.Pets do
-		table.insert(list, { Uid = entry.Uid, Id = entry.Id, Def = petDef(entry.Id) })
+		local tier = entry.Tier or 1
+		table.insert(list, { Uid = entry.Uid, Id = entry.Id, Tier = tier, Def = petDef(entry.Id), Stats = petStats(entry.Id, tier) })
 	end
 	table.sort(list, function(a, b)
+		if a.Stats.Speed ~= b.Stats.Speed then
+			return a.Stats.Speed > b.Stats.Speed
+		end
 		local ra, rb = rarityOrder(a.Def.Rarity), rarityOrder(b.Def.Rarity)
 		if ra ~= rb then
 			return ra > rb
-		end
-		if a.Def.PowerShare ~= b.Def.PowerShare then
-			return a.Def.PowerShare > b.Def.PowerShare
 		end
 		return a.Uid < b.Uid
 	end)
@@ -58,13 +70,17 @@ local function isEquipped(meta: Types.MetaState, uid: string): boolean
 	return table.find(meta.Equipped, uid) ~= nil
 end
 
--- "Cleans at 45% of your power" / "+12% coins" (DESIGN.md wording, exact).
+-- "⚡ Speed 45%" (share of your pet power it cleans per second), "🎒 Holds 26", "+12% coins".
 local function powerShareText(share: number): string
 	local pct = (Format.Percent(share):gsub("^%+", ""))
-	return string.format("Cleans at %s of your power", pct)
+	return string.format("⚡ Cleans at %s of your power", pct)
 end
-local function coinBonusText(bonus: number): string
-	return Format.Percent(bonus) .. " coins"
+local function coinBonusText(bonus: number, capacity: number?): string
+	local bag = if capacity then string.format("🎒 Holds %d  •  ", capacity) else ""
+	return bag .. "💰 " .. Format.Percent(bonus) .. " coins"
+end
+local function shortStats(stats): string
+	return string.format("⚡ %s  🎒 %d  💰 %s", (Format.Percent(stats.Speed):gsub("^%+", "")), stats.Capacity, Format.Percent(stats.CoinBonus))
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -122,44 +138,25 @@ local currentEggId: string? = nil
 local GRID_CELL = Vector2.new(122, 156)
 local GRID_GAP = 10
 
--- Same rule as the server: the next-rarity pet from the best egg any picked pet came from.
-local EGG_INDEX: { [string]: number } = {}
-for i, egg in Config.Eggs do
-	for _, e in egg.Pets do
-		EGG_INDEX[e.Pet] = math.max(EGG_INDEX[e.Pet] or 0, i)
+-- Merge rule (same as the server): three of the same pet at the same tier -> that pet, next tier.
+local function petOf(uid: string?)
+	local meta = ClientState.Meta
+	if not uid or not meta then
+		return nil
 	end
-end
-local function nextRarityName(rarity: string): string?
-	local order = rarityOrder(rarity)
-	for id, r in Config.Rarities do
-		if r.Order == order + 1 then
-			return id
+	for _, pet in meta.Pets do
+		if pet.Uid == uid then
+			return pet
 		end
 	end
 	return nil
 end
-local function mergeResultId(ids: { string }): string?
-	if #ids == 0 then
-		return nil
+local function canMergeWith(first, pet): boolean
+	local tier = pet.Tier or 1
+	if tier >= #Config.PetTiers then
+		return false
 	end
-	local def = petDef(ids[1])
-	local nextRarity = def and nextRarityName(def.Rarity)
-	if not nextRarity then
-		return nil
-	end
-	local best = 1
-	for _, id in ids do
-		best = math.max(best, EGG_INDEX[id] or 1)
-	end
-	for i = best, 1, -1 do
-		for _, e in Config.Eggs[i].Pets do
-			local d = petDef(e.Pet)
-			if d and d.Rarity == nextRarity then
-				return e.Pet
-			end
-		end
-	end
-	return nil
+	return first == nil or (first.Id == pet.Id and (first.Tier or 1) == tier)
 end
 
 local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick: (uid: string) -> ())
@@ -186,7 +183,7 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 	hit.Parent = card
 
 	local viewport = UIKit.Viewport({
-		Model = PetModels.Build(entry.Id),
+		Model = PetModels.Build(entry.Id, entry.Tier),
 		Size = UDim2.fromOffset(GRID_CELL.X - 16, 86),
 		Position = UDim2.new(0.5, 0, 0, 6),
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -195,7 +192,8 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 	viewport.ZIndex = 1
 
 	UIKit.Label({
-		Text = entry.Def.Name,
+		Text = petTitle(entry.Id, entry.Tier),
+		TextColor3 = Config.PetTier(entry.Tier).Color or C.Text,
 		Size = UDim2.new(1, -10, 0, 20),
 		Position = UDim2.new(0.5, 0, 0, 96),
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -205,7 +203,7 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 		ZIndex = 2,
 	})
 	UIKit.Label({
-		Text = entry.Def.Rarity,
+		Text = entry.Def.Rarity .. "  ⚡" .. (Format.Percent(entry.Stats.Speed):gsub("^%+", "")),
 		Size = UDim2.new(1, -10, 0, 16),
 		Position = UDim2.new(0.5, 0, 0, 118),
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -231,15 +229,7 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 
 	if mergeMode then
 		local pick = table.find(mergeSel, entry.Uid)
-		local firstDef = mergeSel[1] and ClientState.Meta and (function()
-			for _, pet in (ClientState.Meta :: any).Pets do
-				if pet.Uid == mergeSel[1] then
-					return petDef(pet.Id)
-				end
-			end
-			return nil
-		end)()
-		local blocked = nextRarityName(entry.Def.Rarity) == nil or (firstDef ~= nil and firstDef.Rarity ~= entry.Def.Rarity)
+		local blocked = not canMergeWith(petOf(mergeSel[1]), entry)
 		if pick then
 			local ring = UIKit.Stroke(card, C.Good, 4, 0)
 			ring.Name = "MergeRing"
@@ -279,7 +269,7 @@ local function refreshDetailPanel(meta: Types.MetaState?)
 	if meta and selectedUid then
 		for _, pet in meta.Pets do
 			if pet.Uid == selectedUid then
-				entry = { Uid = pet.Uid, Id = pet.Id, Def = petDef(pet.Id) }
+				entry = { Uid = pet.Uid, Id = pet.Id, Tier = pet.Tier or 1, Def = petDef(pet.Id), Stats = petStats(pet.Id, pet.Tier) }
 				break
 			end
 		end
@@ -295,12 +285,12 @@ local function refreshDetailPanel(meta: Types.MetaState?)
 	detailFilled.Visible = true
 	deleteConfirmFrame.Visible = false
 
-	UIKit.SetViewportModel(detailViewport, PetModels.Build(entry.Id), true)
-	detailName.Text = entry.Def.Name
+	UIKit.SetViewportModel(detailViewport, PetModels.Build(entry.Id, entry.Tier), true)
+	detailName.Text = petTitle(entry.Id, entry.Tier)
 	detailRarity.Text = entry.Def.Rarity
 	detailRarity.TextColor3 = UIKit.RarityColor(entry.Def.Rarity)
-	detailPower.Text = powerShareText(entry.Def.PowerShare)
-	detailCoin.Text = coinBonusText(entry.Def.CoinBonus)
+	detailPower.Text = powerShareText(entry.Stats.Speed)
+	detailCoin.Text = coinBonusText(entry.Stats.CoinBonus, entry.Stats.Capacity)
 
 	local equipped = isEquipped(meta :: Types.MetaState, entry.Uid)
 	equipButton.Text = if equipped then "Unequip" else "Equip"
@@ -308,25 +298,15 @@ local function refreshDetailPanel(meta: Types.MetaState?)
 end
 
 local function refreshMergePanel()
-	local meta = ClientState.Meta
-	local ids: { string } = {}
-	if meta then
-		for _, uid in mergeSel do
-			for _, pet in meta.Pets do
-				if pet.Uid == uid then
-					table.insert(ids, pet.Id)
-				end
-			end
-		end
-	end
-	local resultId = mergeResultId(ids)
-	local resultDef = resultId and petDef(resultId)
-	mergeInfo.Text = string.format("Pick %d pets of the same rarity. Picked %d/%d.", MERGE_COUNT, #mergeSel, MERGE_COUNT)
-	if resultDef then
-		mergeResult.Text = string.format("➡️ %s %s", resultDef.Rarity, resultDef.Name)
-		mergeResult.TextColor3 = UIKit.RarityColor(resultDef.Rarity)
+	local first = petOf(mergeSel[1])
+	mergeInfo.Text = string.format("Pick %d of the same pet (same tier). Picked %d/%d.", MERGE_COUNT, #mergeSel, MERGE_COUNT)
+	if first then
+		local nextTier = (first.Tier or 1) + 1
+		local tierDef = Config.PetTier(nextTier)
+		mergeResult.Text = "➡️ " .. petTitle(first.Id, nextTier)
+		mergeResult.TextColor3 = tierDef.Color or C.Text
 	else
-		mergeResult.Text = "➡️ ?"
+		mergeResult.Text = "➡️ Golden, then Rainbow!"
 		mergeResult.TextColor3 = C.TextDim
 	end
 	UIKit.SetButtonColor(mergeGo, if #mergeSel == MERGE_COUNT then C.Good else C.Disabled)
@@ -340,20 +320,12 @@ local function selectPet(uid: string?)
 			if at then
 				table.remove(mergeSel, at)
 			elseif #mergeSel < MERGE_COUNT then
-				local def, firstDef = nil, nil
-				for _, pet in meta.Pets do
-					if pet.Uid == uid then
-						def = petDef(pet.Id)
-					end
-					if pet.Uid == mergeSel[1] then
-						firstDef = petDef(pet.Id)
-					end
-				end
-				if def and nextRarityName(def.Rarity) == nil then
-					UIKit.Toast("Legendary pets are already the best!", "Bad")
-				elseif def and firstDef and def.Rarity ~= firstDef.Rarity then
-					UIKit.Toast("All pets in a merge must be the same rarity.", "Bad")
-				elseif def then
+				local pet = petOf(uid)
+				if pet and (pet.Tier or 1) >= #Config.PetTiers then
+					UIKit.Toast("Rainbow pets are already maxed!", "Bad")
+				elseif pet and not canMergeWith(petOf(mergeSel[1]), pet) then
+					UIKit.Toast("Pick three of the SAME pet at the same tier.", "Bad")
+				elseif pet then
 					table.insert(mergeSel, uid)
 				end
 			end
@@ -397,8 +369,7 @@ local function doMerge()
 	UIKit.PlaySound("Hatch")
 	UIKit.Confetti()
 	local made = result.Pets and result.Pets[1]
-	local def = made and petDef(made.Id)
-	UIKit.Toast(if def then ("✨ Merged into a " .. def.Rarity .. " " .. def.Name .. "!") else "Merged!", "Good")
+	UIKit.Toast(if made then ("✨ You made a " .. petTitle(made.Id, made.Tier) .. "!") else "Merged!", "Good")
 	refreshMergePanel()
 end
 
@@ -568,7 +539,7 @@ local function buildPetsWindow()
 	mergePanel.Parent = details
 	UIKit.Label({ Text = "🔮 Merge Pets", Size = UDim2.new(1, -16, 0, 34), Position = UDim2.new(0.5, 0, 0, 14), AnchorPoint = Vector2.new(0.5, 0), TextSize = 26, Parent = mergePanel })
 	UIKit.Label({
-		Text = string.format("%d pets of the same rarity become 1 pet of the next rarity.", MERGE_COUNT),
+		Text = string.format("%d of the same pet become 1 Golden one; %d Golden make a Rainbow. Better speed, bigger bag, more coins.", MERGE_COUNT, MERGE_COUNT),
 		Size = UDim2.new(1, -24, 0, 48),
 		Position = UDim2.new(0.5, 0, 0, 56),
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -778,10 +749,11 @@ local function buildOddsRow(parent: Instance, entry, layoutOrder: number)
 		Parent = row,
 	})
 	UIKit.Label({
-		Text = def.Rarity,
-		Size = UDim2.new(1, -180, 0, 18),
+		Text = def.Rarity .. "   " .. shortStats(petStats(entry.Pet)),
+		Size = UDim2.new(1, -170, 0, 18),
 		Position = UDim2.new(0, 66, 0, 32),
 		TextSize = 14,
+		TextScaled = true,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextColor3 = UIKit.RarityColor(def.Rarity),
 		Parent = row,

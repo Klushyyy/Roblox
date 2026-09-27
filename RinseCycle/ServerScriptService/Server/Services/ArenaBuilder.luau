@@ -987,30 +987,34 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 	local _, headerGui = signBoard(b, "ShopSign", Vector3.new(z1 - z0 - 4, 4, 0.5), worldPoint(b.origin, x1 - 0.5, topY + 2.6, (z0 + z1) / 2), toPlayers, theme.Accent)
 	guiText(headerGui, "Title", "🧽 TOOL SHOP  •  any tool, any order", UDim2.fromScale(0.03, 0.1), UDim2.fromScale(0.94, 0.8), Color3.new(1, 1, 1))
 
-	-- Tools 2..6: the tall ones (sponge, nozzle, washer) on the middle shelf, the short ones on top.
-	local third = (z1 - z0) / 3
-	local spots = {
-		[2] = { y = shelfYs[1], z = z1 - third / 2 },
-		[4] = { y = shelfYs[1], z = (z0 + z1) / 2 - 3 },
-		[5] = { y = shelfYs[1], z = z0 + third / 2 },
-		[3] = { y = shelfYs[2], z = z1 - third * 0.8 },
-		[6] = { y = shelfYs[2], z = z0 + third * 0.8 },
-	}
+	-- Every tool you can buy stands on the waist-high shelf (easy to reach and read from the door);
+	-- the top shelf holds spare soap. Spots run from the front of the unit to the back.
+	local buyable = #Config.Tools - 1
+	local gap = (z1 - z0) / buyable
+	local spots = {}
+	for k = 1, buyable do
+		spots[k + 1] = { y = shelfYs[1], z = z1 - gap * (k - 0.5) }
+	end
+	for k, c in { Color3.fromRGB(120, 210, 140), Color3.fromRGB(255, 150, 200), Color3.fromRGB(120, 190, 255) } do
+		local bz = z0 + (z1 - z0) * k / 4
+		cyl(b, "SpareSoap", 5, 3.4, SHOP_X - 0.5, shelfYs[2] + 2.52, bz, c, Enum.Material.Glass, { CanCollide = false, Transparency = 0.1 })
+		cyl(b, "SpareSoapCap", 1, 1.6, SHOP_X - 0.5, shelfYs[2] + 5.52, bz, Color3.new(1, 1, 1), nil, noCollide())
+	end
 	for i = 2, #Config.Tools do
 		local tool = Config.Tools[i]
 		local spot = spots[i]
 		if not spot then
 			break
 		end
-		-- Upper-shelf tools stand on a short riser so they show above the shelf lip from the floor
-		-- (and the tallest, the foam cannon, still clears the top of the unit).
-		local riser = if spot.y > shelfYs[1] then 1.0 else 0.4
-		local pedestal = cyl(b, "Pedestal", riser, 6.4, SHOP_X - 0.5, spot.y + riser / 2, spot.z, Color3.new(1, 1, 1), nil, noCollide())
+		-- Pedestal and glow sit a hair above the see-through shelf board, and the glow's faces never
+		-- share a plane with the board or pedestal (that used to flicker as you moved).
+		local riser = 0.4
+		local pedestal = cyl(b, "Pedestal", riser, 6.4, SHOP_X - 0.5, spot.y + 0.03 + riser / 2, spot.z, Color3.new(1, 1, 1), nil, noCollide())
 		pedestal.Name = "ToolDisplay_" .. i
-		cyl(b, "PedestalGlow", 0.12, 7, SHOP_X - 0.5, spot.y + 0.06, spot.z, tool.Color, Enum.Material.Neon, noCollide())
+		cyl(b, "PedestalGlow", 0.12, 7, SHOP_X - 0.5, spot.y + 0.1, spot.z, tool.Color, Enum.Material.Neon, noCollide())
 		local okModel, model = pcall(ToolModels.Build, i, TOOL_SCALE)
 		if okModel and model then
-			local basePos = worldPoint(b.origin, SHOP_X - 0.5, spot.y + riser, spot.z)
+			local basePos = worldPoint(b.origin, SHOP_X - 0.5, spot.y + 0.03 + riser, spot.z)
 			model:PivotTo(CFrame.lookAt(basePos, basePos + toPlayers) * CFrame.Angles(0, math.rad(25), 0))
 			model.Parent = b.model
 			b.count += #model:GetChildren()
@@ -1186,13 +1190,14 @@ function ArenaBuilder.SlotOrigin(slot: number): CFrame
 	return CFrame.new(pos)
 end
 
-function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeScale: number, GoldenChance: number }): any
+function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeScale: number, GoldenChance: number, HpScale: number? }): any
 	assert(type(slot) == "number", "ArenaBuilder.Build: slot must be a number")
 	local level = Config.GetLevel(levelIndex)
 	local theme = level.Theme
 	local origin = ArenaBuilder.SlotOrigin(slot)
 	local rng = Random.new()
 	local grimeScale = (options and options.GrimeScale) or 1
+	local hpScale = (options and (options :: any).HpScale) or 1
 	local goldenChance = (options and options.GoldenChance) or level.GoldenChance
 
 	local arenasFolder = getArenasFolder()
@@ -1259,7 +1264,7 @@ function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeSc
 				dish.Parent = dishesFolder
 
 				nextId += 1
-				local grime = DishFactory.ApplyGrime(dish, nextId, spotsPerDish, levelIndex, rng, goldenChance, grimeFolder)
+				local grime = DishFactory.ApplyGrime(dish, nextId, spotsPerDish, levelIndex, rng, goldenChance, grimeFolder, hpScale)
 				dishes[nextId] = {
 					Id = nextId,
 					Kind = kind,

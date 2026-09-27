@@ -51,6 +51,8 @@ Config.Round = {
 	DrainRadius = 8,
 	PartyGrimeScale = 0.6, -- total grime = base * min(PartyGrimeCap, 1 + 0.6 * (players - 1))
 	PartyGrimeCap = 3.6, -- big parties (up to 8) share a fuller load rather than an endless one
+	PartyWorkPerPlayer = 1.25, -- total work = solo work x players x this, so a party run takes ~25% longer
+	-- than solo (the extra beyond PartyGrimeCap spots goes into tougher dirt; coins scale with it).
 	MarkerThreshold = 12, -- clients mark every remaining spot when this few are left
 	StuckSeconds = 60, -- if nobody damages anything for this long...
 	StuckMaxRemaining = 3, -- ...and this few spots are left, they pop on their own
@@ -101,10 +103,9 @@ Config.Upgrades = {
 Config.Tools = {
 	{ Id = "Hands", Name = "Bare Hands", Icon = "🖐️", Mode = "Scrub", Tier = 1, Cost = 0, Radius = 1.0, Power = 1.0, Reach = 12, UpgradeMult = 1, Color = Color3.fromRGB(150, 210, 255), Desc = "Free, but slow. Get close and scrub." },
 	{ Id = "Sponge", Name = "Sponge", Icon = "🧽", Mode = "Scrub", Tier = 1, Cost = 60, Radius = 1.4, Power = 2.2, Reach = 12, UpgradeMult = 1.5, Color = Color3.fromRGB(255, 221, 87), Desc = "Soft and quick. Scrub up close." },
-	{ Id = "Brush", Name = "Scrub Brush", Icon = "🧹", Mode = "Scrub", Tier = 2, Cost = 180, Radius = 0.9, Power = 5.5, Reach = 8, UpgradeMult = 2, Color = Color3.fromRGB(120, 230, 160), Desc = "Right up close: small but tough, shifts burnt-on bits." },
-	{ Id = "Nozzle", Name = "Spray Nozzle", Icon = "🚿", Mode = "Spray", Tier = 2, Cost = 350, Radius = 1.5, Power = 3.2, Reach = 34, UpgradeMult = 3, Color = Color3.fromRGB(90, 200, 255), Desc = "A water stream: clean from far away." },
-	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Mode = "Line", Tier = 3, Cost = 700, Radius = 1.0, Power = 12, Reach = 26, UpgradeMult = 5, LineLength = 3.5, LineWidth = 0.9, Color = Color3.fromRGB(60, 140, 255), Desc = "A long thin blast: sweep it across and dirt melts away." },
-	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Mode = "Foam", Tier = 3, Cost = 1500, Radius = 1.8, Power = 4.5, Reach = 40, UpgradeMult = 8, FoamInterval = 0.4, FoamSeconds = 2.5, FoamShare = 0.6, Color = Color3.fromRGB(200, 150, 255), Desc = "Shoots foam blobs that keep cleaning where they land." },
+	{ Id = "Nozzle", Name = "Spray Nozzle", Icon = "🚿", Mode = "Spray", PassKey = "ToolNozzle", Tier = 2, Cost = 350, Radius = 1.5, Power = 3.2, Reach = 34, UpgradeMult = 3, Color = Color3.fromRGB(90, 200, 255), Desc = "A water stream: clean from far away." },
+	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Mode = "Line", PassKey = "ToolWasher", Tier = 3, Cost = 700, Radius = 1.0, Power = 22, Reach = 26, UpgradeMult = 5, LineLength = 3.5, LineWidth = 0.9, Color = Color3.fromRGB(60, 140, 255), Desc = "A long thin blast: sweep it across and dirt melts away." },
+	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Mode = "Foam", PassKey = "ToolCannon", Tier = 3, Cost = 1500, Radius = 1.8, Power = 4.5, Reach = 40, UpgradeMult = 8, FoamInterval = 0.4, FoamSeconds = 2.5, FoamShare = 0.6, Color = Color3.fromRGB(200, 150, 255), Desc = "Shoots foam blobs that keep cleaning where they land." },
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -149,10 +150,10 @@ Config.Levels = {
 		Subtitle = "Crumbs, ketchup and a whole lot of gravy.",
 		Icon = "🍝",
 		Place = "Family Kitchen",
-		Toughness = 1.0, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
+		Toughness = 5.5, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 1,
-		ParTime = 300,
-		Bubbles = 40,
+		ParTime = 540,
+		Bubbles = 80,
 		GoldenChance = 0.02,
 		Dishes = { Plate = 16, Tray = 0, Bowl = 6, Cup = 6, Glass = 2, Fork = 4, Knife = 3, Spoon = 3, Pan = 0, Pot = 0 },
 		Spots = { Plate = 6, Tray = 8, Bowl = 6, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16 },
@@ -177,10 +178,10 @@ Config.Levels = {
 		Subtitle = "Greasy pizza trays, sauce everywhere and burnt crust.",
 		Icon = "🍕",
 		Place = "Pizzeria",
-		Toughness = 1.5, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
+		Toughness = 6.0, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 4,
-		ParTime = 540,
-		Bubbles = 120,
+		ParTime = 1260,
+		Bubbles = 250,
 		GoldenChance = 0.025,
 		Dishes = { Plate = 12, Tray = 9, Bowl = 8, Cup = 7, Glass = 4, Fork = 5, Knife = 4, Spoon = 4, Pan = 2, Pot = 0 },
 		Spots = { Plate = 5, Tray = 8, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 13, Pot = 15 },
@@ -211,10 +212,10 @@ Config.Levels = {
 		Subtitle = "Golden platters, fancy food and ancient gravy.",
 		Icon = "👑",
 		Place = "Castle Hall",
-		Toughness = 2.0, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
+		Toughness = 8.5, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 16,
-		ParTime = 720,
-		Bubbles = 400,
+		ParTime = 1860,
+		Bubbles = 700,
 		GoldenChance = 0.035,
 		Dishes = { Plate = 14, Tray = 10, Bowl = 10, Cup = 6, Glass = 10, Fork = 6, Knife = 6, Spoon = 5, Pan = 2, Pot = 2 },
 		Spots = { Plate = 5, Tray = 9, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16 },
@@ -276,23 +277,23 @@ Config.PetRules = {
 
 Config.Pets = {
 	-- Bubble Egg
-	RubberDuck = { Name = "Rubber Duck", Rarity = "Common", PowerShare = 0.20, CoinBonus = 0.05, Model = "Duck", Colors = { Body = Color3.fromRGB(255, 220, 60), Accent = Color3.fromRGB(255, 140, 30) } },
-	SoapSlime = { Name = "Soap Slime", Rarity = "Uncommon", PowerShare = 0.30, CoinBonus = 0.08, Model = "Slime", Colors = { Body = Color3.fromRGB(150, 230, 255), Accent = Color3.fromRGB(255, 255, 255) } },
-	SpongePup = { Name = "Sponge Pup", Rarity = "Rare", PowerShare = 0.45, CoinBonus = 0.12, Model = "Pup", Colors = { Body = Color3.fromRGB(255, 225, 90), Accent = Color3.fromRGB(90, 190, 90) } },
-	BubbleFish = { Name = "Bubble Fish", Rarity = "Epic", PowerShare = 0.70, CoinBonus = 0.18, Model = "Fish", Colors = { Body = Color3.fromRGB(120, 180, 255), Accent = Color3.fromRGB(255, 255, 255) } },
-	GoldenDuck = { Name = "Golden Duck", Rarity = "Legendary", PowerShare = 1.10, CoinBonus = 0.30, Model = "Duck", Colors = { Body = Color3.fromRGB(255, 200, 40), Accent = Color3.fromRGB(255, 240, 150) }, Shiny = true },
+	RubberDuck = { Name = "Rubber Duck", Rarity = "Common", PowerShare = 0.12, Capacity = 12, CoinBonus = 0.05, Model = "Duck", Colors = { Body = Color3.fromRGB(255, 220, 60), Accent = Color3.fromRGB(255, 140, 30) } },
+	SoapSlime = { Name = "Soap Slime", Rarity = "Uncommon", PowerShare = 0.18, Capacity = 18, CoinBonus = 0.08, Model = "Slime", Colors = { Body = Color3.fromRGB(150, 230, 255), Accent = Color3.fromRGB(255, 255, 255) } },
+	SpongePup = { Name = "Sponge Pup", Rarity = "Rare", PowerShare = 0.27, Capacity = 26, CoinBonus = 0.12, Model = "Pup", Colors = { Body = Color3.fromRGB(255, 225, 90), Accent = Color3.fromRGB(90, 190, 90) } },
+	BubbleFish = { Name = "Bubble Fish", Rarity = "Epic", PowerShare = 0.42, Capacity = 38, CoinBonus = 0.18, Model = "Fish", Colors = { Body = Color3.fromRGB(120, 180, 255), Accent = Color3.fromRGB(255, 255, 255) } },
+	GoldenDuck = { Name = "Golden Duck", Rarity = "Legendary", PowerShare = 0.66, Capacity = 55, CoinBonus = 0.30, Model = "Duck", Colors = { Body = Color3.fromRGB(255, 200, 40), Accent = Color3.fromRGB(255, 240, 150) }, Shiny = true },
 	-- Suds Egg
-	ScrubBunny = { Name = "Scrub Bunny", Rarity = "Common", PowerShare = 0.35, CoinBonus = 0.08, Model = "Bunny", Colors = { Body = Color3.fromRGB(245, 245, 250), Accent = Color3.fromRGB(255, 170, 200) } },
-	SudsCrab = { Name = "Suds Crab", Rarity = "Uncommon", PowerShare = 0.50, CoinBonus = 0.12, Model = "Crab", Colors = { Body = Color3.fromRGB(255, 110, 90), Accent = Color3.fromRGB(255, 255, 255) } },
-	MopCat = { Name = "Mop Cat", Rarity = "Rare", PowerShare = 0.70, CoinBonus = 0.16, Model = "Cat", Colors = { Body = Color3.fromRGB(170, 170, 185), Accent = Color3.fromRGB(240, 240, 240) } },
-	OctoScrubber = { Name = "Octo-Scrubber", Rarity = "Epic", PowerShare = 1.00, CoinBonus = 0.24, Model = "Octopus", Colors = { Body = Color3.fromRGB(200, 110, 255), Accent = Color3.fromRGB(255, 200, 255) } },
-	RainbowJelly = { Name = "Rainbow Jelly", Rarity = "Legendary", PowerShare = 1.60, CoinBonus = 0.40, Model = "Jelly", Colors = { Body = Color3.fromRGB(255, 120, 200), Accent = Color3.fromRGB(120, 255, 230) }, Shiny = true },
+	ScrubBunny = { Name = "Scrub Bunny", Rarity = "Common", PowerShare = 0.21, Capacity = 18, CoinBonus = 0.08, Model = "Bunny", Colors = { Body = Color3.fromRGB(245, 245, 250), Accent = Color3.fromRGB(255, 170, 200) } },
+	SudsCrab = { Name = "Suds Crab", Rarity = "Uncommon", PowerShare = 0.30, Capacity = 27, CoinBonus = 0.12, Model = "Crab", Colors = { Body = Color3.fromRGB(255, 110, 90), Accent = Color3.fromRGB(255, 255, 255) } },
+	MopCat = { Name = "Mop Cat", Rarity = "Rare", PowerShare = 0.42, Capacity = 39, CoinBonus = 0.16, Model = "Cat", Colors = { Body = Color3.fromRGB(170, 170, 185), Accent = Color3.fromRGB(240, 240, 240) } },
+	OctoScrubber = { Name = "Octo-Scrubber", Rarity = "Epic", PowerShare = 0.60, Capacity = 57, CoinBonus = 0.24, Model = "Octopus", Colors = { Body = Color3.fromRGB(200, 110, 255), Accent = Color3.fromRGB(255, 200, 255) } },
+	RainbowJelly = { Name = "Rainbow Jelly", Rarity = "Legendary", PowerShare = 0.96, Capacity = 82, CoinBonus = 0.40, Model = "Jelly", Colors = { Body = Color3.fromRGB(255, 120, 200), Accent = Color3.fromRGB(120, 255, 230) }, Shiny = true },
 	-- Sparkle Egg
-	FoamFox = { Name = "Foam Fox", Rarity = "Common", PowerShare = 0.60, CoinBonus = 0.12, Model = "Fox", Colors = { Body = Color3.fromRGB(255, 150, 70), Accent = Color3.fromRGB(255, 255, 255) } },
-	SteamOwl = { Name = "Steam Owl", Rarity = "Uncommon", PowerShare = 0.85, CoinBonus = 0.18, Model = "Owl", Colors = { Body = Color3.fromRGB(150, 130, 110), Accent = Color3.fromRGB(255, 230, 150) } },
-	CrystalTurtle = { Name = "Crystal Turtle", Rarity = "Rare", PowerShare = 1.20, CoinBonus = 0.25, Model = "Turtle", Colors = { Body = Color3.fromRGB(120, 230, 200), Accent = Color3.fromRGB(200, 255, 255) } },
-	TidalDragon = { Name = "Tidal Dragon", Rarity = "Epic", PowerShare = 1.70, CoinBonus = 0.35, Model = "Dragon", Colors = { Body = Color3.fromRGB(60, 150, 255), Accent = Color3.fromRGB(180, 240, 255) } },
-	KrakenKing = { Name = "Kraken King", Rarity = "Legendary", PowerShare = 2.60, CoinBonus = 0.60, Model = "Kraken", Colors = { Body = Color3.fromRGB(120, 40, 160), Accent = Color3.fromRGB(255, 210, 60) }, Shiny = true },
+	FoamFox = { Name = "Foam Fox", Rarity = "Common", PowerShare = 0.36, Capacity = 26, CoinBonus = 0.12, Model = "Fox", Colors = { Body = Color3.fromRGB(255, 150, 70), Accent = Color3.fromRGB(255, 255, 255) } },
+	SteamOwl = { Name = "Steam Owl", Rarity = "Uncommon", PowerShare = 0.51, Capacity = 40, CoinBonus = 0.18, Model = "Owl", Colors = { Body = Color3.fromRGB(150, 130, 110), Accent = Color3.fromRGB(255, 230, 150) } },
+	CrystalTurtle = { Name = "Crystal Turtle", Rarity = "Rare", PowerShare = 0.72, Capacity = 57, CoinBonus = 0.25, Model = "Turtle", Colors = { Body = Color3.fromRGB(120, 230, 200), Accent = Color3.fromRGB(200, 255, 255) } },
+	TidalDragon = { Name = "Tidal Dragon", Rarity = "Epic", PowerShare = 1.02, Capacity = 84, CoinBonus = 0.35, Model = "Dragon", Colors = { Body = Color3.fromRGB(60, 150, 255), Accent = Color3.fromRGB(180, 240, 255) } },
+	KrakenKing = { Name = "Kraken King", Rarity = "Legendary", PowerShare = 1.56, Capacity = 121, CoinBonus = 0.60, Model = "Kraken", Colors = { Body = Color3.fromRGB(120, 40, 160), Accent = Color3.fromRGB(255, 210, 60) }, Shiny = true },
 }
 
 -- Eggs cost Bubbles. Bubbles can never be bought with Robux, so eggs are not "paid random items";
@@ -348,6 +349,11 @@ Config.GamePasses = {
 	{ Key = "DoubleBubbles", Id = 0, Price = 179, Name = "2x Bubbles", Icon = "🧼", Desc = "Double Bubbles from every finished run." },
 	{ Key = "VIP", Id = 0, Price = 199, Name = "VIP", Icon = "👑", Desc = "+25% coins and +25% Bubbles, forever." },
 	{ Key = "DoubleLuck", Id = 0, Price = 149, Name = "x2 Luck", Icon = "🍀", Desc = "Double the chance of Rare, Epic, Legendary and Mythic ranks." },
+	-- Tool passes: start every run already owning that tool (you still upgrade it with coins). They
+	-- pop up when you try to buy the tool without enough coins.
+	{ Key = "ToolNozzle", Id = 0, Price = 49, Name = "Spray Nozzle Forever", Icon = "🚿", Desc = "Start every run with the Spray Nozzle." },
+	{ Key = "ToolWasher", Id = 0, Price = 99, Name = "Pressure Washer Forever", Icon = "💦", Desc = "Start every run with the Pressure Washer." },
+	{ Key = "ToolCannon", Id = 0, Price = 199, Name = "Foam Cannon Forever", Icon = "🌊", Desc = "Start every run with the Foam Cannon." },
 }
 
 -- Developer products (buy as many times as you like). Same deal as passes: create a Developer
@@ -416,7 +422,7 @@ Config.Ranks = {
 	{ Id = "Rinser", Name = "Rinser", Icon = "💧", Rarity = "Common", Chance = 24, Desc = "+10% coins", Effects = { Coins = 0.10 } },
 	{ Id = "DishHand", Name = "Dish Hand", Icon = "🍽️", Rarity = "Common", Chance = 22, Desc = "+15% tank size", Effects = { Tank = 0.15 } },
 	{ Id = "SpongeMaster", Name = "Sponge Master", Icon = "🧽", Rarity = "Uncommon", Chance = 10, Desc = "Sponge cleans 60% faster", Effects = { ToolPower = { Sponge = 0.6 } } },
-	{ Id = "BristleBoss", Name = "Bristle Boss", Icon = "🧹", Rarity = "Uncommon", Chance = 10, Desc = "Scrub Brush cleans 60% faster", Effects = { ToolPower = { Brush = 0.6 } } },
+	{ Id = "FoamFanatic", Name = "Foam Fanatic", Icon = "🌊", Rarity = "Uncommon", Chance = 10, Desc = "Foam Cannon cleans 60% faster", Effects = { ToolPower = { Cannon = 0.6 } } },
 	{ Id = "Speedy", Name = "Speedy Sudser", Icon = "👟", Rarity = "Uncommon", Chance = 9, Desc = "+4 walk speed", Effects = { Speed = 4 } },
 	{ Id = "SpraySniper", Name = "Spray Sniper", Icon = "🚿", Rarity = "Rare", Chance = 8, Desc = "Nozzle and Washer clean 50% faster", Effects = { ToolPower = { Nozzle = 0.5, Washer = 0.5 } } },
 	{ Id = "TankTitan", Name = "Tank Titan", Icon = "🛢️", Rarity = "Rare", Chance = 7, Desc = "+50% tank size, +10% coins", Effects = { Tank = 0.5, Coins = 0.1 } },
@@ -560,16 +566,41 @@ function Config.PerkCost(perkId: string, currentLevel: number): number?
 end
 
 -- Sum of CoinBonus over equipped pets. pets = profile.Pets ({ {Uid, Id} }), equipped = { uid, ... }.
+-- Pet tiers: merging three of the same pet (same tier) makes one of the next tier. A Golden pet
+-- beats normal ones of its kind but not the next egg's pets.
+Config.PetTiers = {
+	{ Name = "", Mult = 1 },
+	{ Name = "Golden", Mult = 1.35, Color = Color3.fromRGB(255, 205, 60) },
+	{ Name = "Rainbow", Mult = 1.75, Color = Color3.fromRGB(255, 120, 220) },
+}
+
+function Config.PetTier(tier: number?)
+	return Config.PetTiers[math.clamp(math.floor(tonumber(tier) or 1), 1, #Config.PetTiers)]
+end
+
+-- A pet's stats at a tier: Speed (share of your pet power it cleans per second), Capacity (dirt
+-- units its bag holds before it flies to the drain to sell, x the level multiplier in a run) and
+-- CoinBonus (added to your coin multiplier while it's out).
+function Config.PetStats(petId: string, tier: number?)
+	local def = Config.Pets[petId]
+	if not def then
+		return nil
+	end
+	local mult = Config.PetTier(tier).Mult
+	return { Speed = def.PowerShare * mult, Capacity = math.floor((def.Capacity or 12) * mult + 0.5), CoinBonus = def.CoinBonus * mult }
+end
+
 function Config.PetCoinBonus(pets, equipped): number
 	local byUid = {}
 	for _, pet in pets or {} do
-		byUid[pet.Uid] = pet.Id
+		byUid[pet.Uid] = pet
 	end
 	local total = 0
 	for _, uid in equipped or {} do
-		local def = Config.Pets[byUid[uid] or ""]
-		if def then
-			total += def.CoinBonus
+		local pet = byUid[uid]
+		local stats = pet and Config.PetStats(pet.Id, pet.Tier)
+		if stats then
+			total += stats.CoinBonus
 		end
 	end
 	return total
@@ -646,10 +677,22 @@ function Config.StartCoins(levelIndex: number, perks): number
 	return math.floor(lvl * Config.GetPerk("HeadStart").PerLevel * Config.GetLevel(levelIndex).Mult)
 end
 
+-- Daily rewards: claimed automatically the first time you join each (UTC) day. Coming back the next
+-- day moves the streak on; missing a day starts it again. Day 7 is the big one, then it loops.
+Config.DailyRewards = {
+	{ Kind = "Bubbles", Amount = 60 },
+	{ Kind = "Bubbles", Amount = 120 },
+	{ Kind = "Gems", Amount = 5 },
+	{ Kind = "Bubbles", Amount = 250 },
+	{ Kind = "Gems", Amount = 10 },
+	{ Kind = "Bubbles", Amount = 500 },
+	{ Kind = "Gems", Amount = 30 },
+}
+
 -- Rebirth (the endgame loop): after clearing the last dishwasher, trade your Bubbles, unlocked levels
 -- and perks for a permanent bonus. Pets, gems, ranks, passes and best times are kept.
 Config.Rebirth = {
-	BaseCost = 2000, -- Bubbles needed for the first rebirth
+	BaseCost = 5000, -- Bubbles needed for the first rebirth (a Royal Banquet clear pays ~700)
 	CostGrowth = 1.6, -- each rebirth costs this much more
 	CoinsPer = 0.25, -- +25% coins per rebirth
 	BubblesPer = 0.5, -- +50% Bubbles per rebirth

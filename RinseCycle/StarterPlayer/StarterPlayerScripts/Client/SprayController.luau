@@ -83,7 +83,16 @@ local linePart: BasePart? = nil
 local lineEnds: { Attachment } = {}
 local lineBeams: { Beam } = {}
 local lastSudsAt = 0
+-- Spray Nozzle water: droplets flying from the nozzle to the target, and a splash where it lands.
+local sprayAttachment: Attachment? = nil
+local sprayDrops: ParticleEmitter? = nil
+local waterSplash: ParticleEmitter? = nil
 local lastFoamAt = 0
+-- Pressure Washer: the line runs across (false) or up and down (true). T / D-pad up / touch button.
+local washerVertical = false
+local turnButton: TextButton? = nil
+local turnHint: TextLabel? = nil
+local currentMode = "Scrub"
 
 -- Touch-only UI.
 local touchGui: ScreenGui? = nil
@@ -254,6 +263,52 @@ local function ensureLine()
 	end
 end
 
+local function ensureWater(hand: BasePart)
+	if sprayAttachment and sprayAttachment.Parent == hand and sprayDrops and waterSplash and waterSplash.Parent then
+		return
+	end
+	if sprayAttachment then
+		sprayAttachment:Destroy()
+	end
+	local a = Instance.new("Attachment")
+	a.Name = "SprayWater"
+	a.Parent = hand
+	sprayAttachment = a
+	local drops = Instance.new("ParticleEmitter")
+	drops.Name = "Droplets"
+	drops.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	drops.Color = ColorSequence.new(Color3.fromRGB(200, 235, 255), Color3.fromRGB(120, 190, 255))
+	drops.LightEmission = 0.5
+	drops.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.18), NumberSequenceKeypoint.new(1, 0.35) })
+	drops.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(1, 0.8) })
+	drops.Lifetime = NumberRange.new(0.3, 0.45)
+	drops.Speed = NumberRange.new(70, 85)
+	drops.SpreadAngle = Vector2.new(5, 5)
+	drops.Acceleration = Vector3.new(0, -60, 0)
+	drops.EmissionDirection = Enum.NormalId.Front
+	drops.Rate = 0
+	drops.Parent = a
+	sprayDrops = drops
+	-- Splash at the target: rides on the aim ring's attachment.
+	if ringAttachment then
+		local splash = Instance.new("ParticleEmitter")
+		splash.Name = "WaterSplash"
+		splash.Texture = "rbxasset://textures/particles/smoke_main.dds"
+		splash.Color = ColorSequence.new(Color3.fromRGB(215, 240, 255))
+		splash.LightEmission = 0.3
+		splash.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.4), NumberSequenceKeypoint.new(1, 1.4) })
+		splash.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.35), NumberSequenceKeypoint.new(1, 1) })
+		splash.Lifetime = NumberRange.new(0.25, 0.5)
+		splash.Speed = NumberRange.new(8, 16)
+		splash.SpreadAngle = Vector2.new(70, 70)
+		splash.Acceleration = Vector3.new(0, -30, 0)
+		splash.EmissionDirection = Enum.NormalId.Right -- the ring's X axis is the surface normal
+		splash.Rate = 0
+		splash.Parent = ringAttachment
+		waterSplash = splash
+	end
+end
+
 local function hideLine()
 	if linePart then
 		linePart.Transparency = 1
@@ -409,6 +464,17 @@ local function ensureTouchUI()
 	UIKit.Stroke(cross, UIKit.Theme.Colors.Stroke, 2, 0.3)
 	crosshair = cross
 
+	turnHint = UIKit.Label({
+		Name = "WasherHint",
+		Text = "",
+		TextSize = 18,
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -150),
+		Size = UDim2.fromOffset(420, 26),
+		Visible = false,
+		Parent = touchRoot,
+	})
+
 	sprayButton = UIKit.IconButton({
 		Name = "SprayButton",
 		Icon = "💧",
@@ -430,7 +496,23 @@ local function ensureTouchUI()
 			-(JUMP_ZONE_CLEARANCE + TOUCH_BUTTON_MARGIN + insets.Bottom)
 		)
 		;(sprayButton :: TextButton).Position = pos
+		if turnButton then
+			turnButton.Position = pos - UDim2.fromOffset(TOUCH_BUTTON_SIZE + 14, 0)
+		end
 	end
+	turnButton = UIKit.IconButton({
+		Name = "TurnLine",
+		Icon = "↕️",
+		Label = "TURN",
+		Color = UIKit.Theme.Colors.Accent,
+		Size = UDim2.fromOffset(96, 96),
+		AnchorPoint = Vector2.new(1, 1),
+		Visible = false,
+		Parent = touchRoot,
+		OnClick = function()
+			SprayController.ToggleWasher()
+		end,
+	})
 	reposition()
 	UIKit.LayoutChanged:Connect(reposition)
 
@@ -455,6 +537,14 @@ local function updateTouchUIVisibility()
 	local gamepad = UIKit.IsGamepad()
 	sprayButton.Visible = active and touch
 	crosshair.Visible = active and (touch or gamepad)
+	local line = active and currentMode == "Line"
+	if turnButton then
+		turnButton.Visible = line and touch
+	end
+	if turnHint then
+		turnHint.Visible = line and not touch
+		turnHint.Text = string.format("%s  %s: turn the line", if washerVertical then "↕️ Up and down" else "↔️ Across", if gamepad then "D-pad ↑" else "T")
+	end
 	if not sprayButton.Visible then
 		touchHeld = false
 	end
@@ -478,6 +568,12 @@ local function hideVisuals()
 		hpBillboard.Enabled = false
 	end
 	hideLine()
+	if sprayDrops then
+		sprayDrops.Rate = 0
+	end
+	if waterSplash then
+		waterSplash.Rate = 0
+	end
 end
 
 local function cleanupForRunEnd()
@@ -582,7 +678,10 @@ local function onHeartbeat(dt: number)
 	local toolColor = (Config.Tools[stats.ToolIndex] or Config.Tools[1]).Color
 
 	local mode = stats.Mode or "Scrub"
-	local toolIndex = stats.ToolIndex
+	if mode ~= currentMode then
+		currentMode = mode
+		updateTouchUIVisibility()
+	end
 	local normal = result.Normal
 	local r = ring :: BasePart
 
@@ -593,8 +692,8 @@ local function onHeartbeat(dt: number)
 		r.Transparency = 1
 		r.CFrame = CFrame.new(hitPos, hitPos + normal) * CFrame.Angles(0, math.rad(90), 0) -- splash source
 		ensureLine()
-		local right = camera.CFrame.RightVector
-		local dir = right - normal * right:Dot(normal)
+		local base = if washerVertical then camera.CFrame.UpVector else camera.CFrame.RightVector
+		local dir = base - normal * base:Dot(normal)
 		dir = if dir.Magnitude > 1e-3 then dir.Unit else normal:Cross(Vector3.xAxis).Unit
 		lineDir = dir
 		local len = stats.LineLength or 5
@@ -656,7 +755,7 @@ local function onHeartbeat(dt: number)
 		-- Scrubbing tools froth up suds right on the dish.
 		if sending and mode == "Scrub" and now - lastSudsAt > 0.12 then
 			lastSudsAt = now
-			Bubbles.Emit(hitPos + normal * 0.3, { Count = 2, Spread = stats.Radius * 0.6, Velocity = normal * 2 + Vector3.new(0, 1, 0), Jitter = 1.2, Size = { 0.2, 0.55 }, Life = { 0.5, 1.0 }, Rise = 2 })
+			Bubbles.Emit(hitPos + normal * 0.3, { Count = 4, Spread = stats.Radius * 0.7, Velocity = normal * 1.5 + Vector3.new(0, 0.8, 0), Jitter = 1, Size = { 0.25, 0.8 }, Life = { 1.4, 2.6 }, Rise = 1.2 })
 		end
 	elseif tankFull and pressed then
 		if now - lastTankFullToastAt > TANK_FULL_TOAST_GAP then
@@ -665,13 +764,28 @@ local function onHeartbeat(dt: number)
 		end
 	end
 
+	-- Spray Nozzle: a real spray of droplets from the hand to the target, splashing where it lands.
+	local spraying = sending and mode == "Spray"
+	if handPart then
+		ensureWater(handPart)
+	end
+	if sprayAttachment and spraying then
+		sprayAttachment.WorldCFrame = CFrame.lookAt(sprayAttachment.WorldPosition, hitPos)
+	end
+	if sprayDrops then
+		sprayDrops.Rate = if spraying then 90 else 0
+	end
+	if waterSplash then
+		waterSplash.Rate = if spraying then 40 else 0
+	end
+
 	-- Water stream: only the Spray nozzle has one; the washer fans out to its line; scrubbing tools
 	-- work right on the dish.
 	if beam then
 		local b = beam :: Beam
 		b.Enabled = sending and mode == "Spray"
-		b.Width0 = 0.2 + (toolIndex - 1) * 0.08
-		b.Width1 = b.Width0 * 1.6
+		b.Width0 = 0.35
+		b.Width1 = 0.9
 		b.Color = ColorSequence.new(toolColor)
 	end
 	for _, lb in lineBeams do
@@ -719,8 +833,24 @@ end
 -- Input wiring
 ----------------------------------------------------------------------------------------------------
 
+function SprayController.ToggleWasher()
+	washerVertical = not washerVertical
+	UIKit.PlaySound("Click")
+	if turnButton then
+		local label = turnButton:FindFirstChild("Icon", true)
+		if label and label:IsA("TextLabel") then
+			label.Text = if washerVertical then "↔️" else "↕️"
+		end
+	end
+	updateTouchUIVisibility()
+end
+
 local function onInputBegan(input: InputObject, processed: boolean)
 	if processed then
+		return
+	end
+	if active and currentMode == "Line" and (input.KeyCode == Enum.KeyCode.T or input.KeyCode == Enum.KeyCode.DPadUp) then
+		SprayController.ToggleWasher()
 		return
 	end
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then

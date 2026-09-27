@@ -100,6 +100,7 @@ export type RunState = {
 export type PetEntry = {
 	Uid: string,
 	Id: string, -- key into Config.Pets
+	Tier: number?, -- 1 normal (nil = 1), 2 Golden, 3 Rainbow (Config.PetTiers)
 }
 
 -- MetaState (S->C) - the player's permanent data.
@@ -117,6 +118,8 @@ export type MetaState = {
 	BestTimes: { number }, -- per level index, seconds; 0 = never cleared
 	Rebirths: number,
 	RebirthReady: boolean, -- the last level was cleared since the last rebirth
+	DailyStreak: number, -- day of the daily-reward streak last claimed (1..7)
+	DailyClaimedToday: boolean,
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
@@ -133,7 +136,8 @@ export type RequestResult = {
 	Error: string?,
 	Pets: { PetEntry }?, -- MetaRequest "Hatch"
 	Rank: string?, -- MetaRequest "RollRank": the rank rolled
-	Equipped: boolean?, -- MetaRequest "RollRank": it was better, so it was put on
+	Equipped: boolean?, -- MetaRequest "RollRank": always true now (a roll replaces your rank)
+	Previous: string?, -- MetaRequest "RollRank": the rank you had before
 }
 
 -- RunFX payloads (S->C), by kind.

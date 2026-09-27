@@ -85,6 +85,8 @@ export type Profile = {
 	Unlocked: number, -- highest level index the player may pick
 	BestTimes: { number }, -- one per Config.Levels entry, seconds, 0 = never cleared
 	Rebirths: number, -- times the player has rebirthed (Config.Rebirth)
+	DailyDay: number, -- UTC day number of the last daily reward claimed (0 = never)
+	DailyStreak: number, -- 1..#Config.DailyRewards, the day of the streak last claimed
 	RebirthReady: boolean, -- the last level has been cleared since the last rebirth
 	Stats: {
 		Runs: number,
@@ -140,6 +142,8 @@ local TEMPLATE: Profile = {
 	BestTimes = {},
 	Rebirths = 0,
 	RebirthReady = false,
+	DailyDay = 0,
+	DailyStreak = 0,
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
 }
@@ -329,6 +333,8 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.Bubbles = toCount(p.Bubbles, 0)
 	p.Gems = toCount(p.Gems, 0)
 	p.Rebirths = toCount(p.Rebirths, 0)
+	p.DailyDay = toCount(p.DailyDay, 0)
+	p.DailyStreak = math.clamp(toCount(p.DailyStreak, 0), 0, #Config.DailyRewards)
 	p.RebirthReady = p.RebirthReady == true
 	local ranks, seenRank = {}, {}
 	for _, id in (if type(p.Ranks) == "table" then p.Ranks else {}) do
@@ -510,7 +516,7 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 	local pets, known = {}, {}
 	for _, pet in profile.Pets do
 		if type(pet) == "table" and Config.Pets[pet.Id] then
-			table.insert(pets, { Uid = pet.Uid, Id = pet.Id })
+			table.insert(pets, { Uid = pet.Uid, Id = pet.Id, Tier = if pet.Tier and pet.Tier > 1 then pet.Tier else nil })
 			known[pet.Uid] = true
 		end
 	end
@@ -535,6 +541,8 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		BestTimes = table.clone(profile.BestTimes),
 		Rebirths = profile.Rebirths,
 		RebirthReady = profile.RebirthReady,
+		DailyStreak = profile.DailyStreak,
+		DailyClaimedToday = profile.DailyDay == math.floor(os.time() / 86400),
 		Stats = {
 			Runs = stats.Runs,
 			DishesCleaned = stats.DishesCleaned,
@@ -593,6 +601,29 @@ local function flushNotices(session: Session)
 	for _, notice in list do
 		notifyRemote:FireClient(player, notice[1], notice[2])
 	end
+end
+
+-- Daily reward (Config.DailyRewards): the first join of each UTC day claims the next day of the
+-- streak; a missed day restarts it. The client shows the reward calendar (DailyUI).
+local function claimDaily(session: Session, profile: Profile)
+	local today = math.floor(os.time() / 86400)
+	if profile.DailyDay == today then
+		return
+	end
+	local streak = if profile.DailyDay == today - 1 then profile.DailyStreak % #Config.DailyRewards + 1 else 1
+	local reward = Config.DailyRewards[streak]
+	profile.DailyDay = today
+	profile.DailyStreak = streak
+	if reward.Kind == "Gems" then
+		profile.Gems += reward.Amount
+	else
+		profile.Bubbles += reward.Amount
+	end
+	session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
+	-- The client pops the calendar only when the reward was claimed on THIS join.
+	pcall(function()
+		session.Player:SetAttribute("DailyJustClaimed", true)
+	end)
 end
 
 -- Toasts sent the instant a player joins can arrive before their UI exists, so they wait until the
@@ -860,6 +891,7 @@ local function loadSession(session: Session)
 	if notice then
 		queueNotice(session, notice, noticeKind)
 	end
+	claimDaily(session, profile)
 	DataService.ProfileLoaded:Fire(player, profile)
 	pushNow(player)
 

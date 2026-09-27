@@ -22,6 +22,7 @@ local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
 local UIKit = require(Client:WaitForChild("UIKit"))
 local Bubbles = require(Client:WaitForChild("Bubbles"))
+local ShopUI = require(Client:WaitForChild("ShopUI"))
 
 local Effects = {}
 
@@ -236,7 +237,17 @@ local function onFoam(data: any)
 	UIKit.PlaySound("Splash", 1.1 + math.random() * 0.2)
 end
 
-local function onSold(data: Types.FXSold)
+local function onSold(data: any)
+	if data and data.Pet then
+		-- A pet sold its bag: a small floater over you instead of a toast (pets sell often).
+		local character = LocalPlayer.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if root and root:IsA("BasePart") then
+			billboardNumber(root.Position + Vector3.new(0, 3, 0), "🐾 +" .. UIKit.Short(data.Coins) .. " 💰", UIKit.Theme.Colors.Coin, FLOATER_RISE + 1)
+		end
+		UIKit.PlaySound("Coins", 1.2)
+		return
+	end
 	UIKit.PlaySound("Coins")
 	UIKit.Toast("+" .. UIKit.Commas(data.Coins) .. " 💰", "Good")
 end
@@ -358,35 +369,78 @@ local function stepLiftBubbles(dt: number)
 	end
 end
 
--- Bubble columns (like Minecraft's bubble elevators): stand in a lift's column and the bubbles
--- carry you up smoothly, drifting you to the middle; at the top they push you out onto the rack.
-local LIFT_RISE_SPEED = 18 -- studs per second
-local LIFT_EXIT_SPEED = 16
-local LIFT_EXIT_SECONDS = 0.7
-local liftExit: { Until: number, Dir: Vector3 }? = nil
-local wasInColumn = false
+-- Bubble columns (like Minecraft's bubble elevators). Step into a lift's column and the bubbles take
+-- you on a ride: you float straight up the middle of the column (the character is moved directly,
+-- so nothing can stall it), rise a little above the top rack, then drift across onto it and land.
+-- Physics comes back the moment the ride ends.
+local LIFT_RISE_SPEED = 20 -- studs per second
+local LIFT_OVERSHOOT = 4 -- rise this far above the landing height before drifting across
+local LIFT_ACROSS_SPEED = 16
+
+type LiftRide = { Pad: BasePart, Target: Vector3, Phase: "Up" | "Across", X: number, Z: number, Y: number }
+local ride: LiftRide? = nil
+local liftCooldownUntil = 0
+
+local function endRide(rootPart: BasePart?)
+	ride = nil
+	liftCooldownUntil = os.clock() + 1
+	if rootPart then
+		rootPart.AssemblyLinearVelocity = Vector3.new(0, -2, 0)
+	end
+end
 
 local function stepLift(dt: number)
 	local character = LocalPlayer.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not character or not root or not root:IsA("BasePart") then
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not character or not root or not root:IsA("BasePart") or not humanoid then
+		ride = nil
 		return
 	end
 	local rootPart = root :: BasePart
-	local pos = rootPart.Position
 	local now = os.clock()
 
-	-- Pushing out at the top.
-	if liftExit then
-		if now < liftExit.Until then
-			local v = rootPart.AssemblyLinearVelocity
-			rootPart.AssemblyLinearVelocity = Vector3.new(liftExit.Dir.X * LIFT_EXIT_SPEED, math.max(v.Y, 0), liftExit.Dir.Z * LIFT_EXIT_SPEED)
+	local r = ride
+	if r then
+		if not r.Pad.Parent or humanoid.Health <= 0 then
+			endRide(rootPart)
 			return
 		end
-		liftExit = nil
+		local topY = r.Target.Y + LIFT_OVERSHOOT
+		if r.Phase == "Up" then
+			r.Y = math.min(topY, r.Y + LIFT_RISE_SPEED * dt)
+			-- Ease into the middle of the column on the way up.
+			local k = math.min(1, 5 * dt)
+			r.X += (r.Pad.Position.X - r.X) * k
+			r.Z += (r.Pad.Position.Z - r.Z) * k
+			if r.Y >= topY then
+				r.Phase = "Across"
+				popBubbles(Vector3.new(r.X, r.Y, r.Z), 6, 2)
+			end
+		else
+			local to = Vector3.new(r.Target.X - r.X, 0, r.Target.Z - r.Z)
+			local step = LIFT_ACROSS_SPEED * dt
+			if to.Magnitude <= step then
+				r.X, r.Z = r.Target.X, r.Target.Z
+				local facing = rootPart.CFrame.Rotation
+				character:PivotTo(CFrame.new(r.X, r.Y, r.Z) * facing)
+				endRide(rootPart) -- drop the last few studs onto the rack
+				return
+			end
+			local d = to.Unit * step
+			r.X += d.X
+			r.Z += d.Z
+		end
+		local facing = rootPart.CFrame.Rotation
+		character:PivotTo(CFrame.new(r.X, r.Y, r.Z) * facing)
+		rootPart.AssemblyLinearVelocity = Vector3.zero
+		return
 	end
 
-	local inColumn = false
+	if now < liftCooldownUntil then
+		return
+	end
+	local pos = rootPart.Position
 	for pad in liftPads do
 		if not pad.Parent then
 			liftPads[pad] = nil
@@ -397,31 +451,14 @@ local function stepLift(dt: number)
 			continue
 		end
 		local d = pos - pad.Position
-		local flat = Vector3.new(d.X, 0, d.Z)
-		if flat.Magnitude <= LIFT_RADIUS and d.Y > -1 and pos.Y < target.Y + 2 then
-			inColumn = true
-			if not wasInColumn then
-				popBubbles(pad.Position + Vector3.new(0, 2, 0), 8, 3)
-				UIKit.PlaySound("Splash", 1.3)
-			end
-			if pos.Y >= target.Y then
-				-- Top of the column: shove out toward the landing spot.
-				local out = Vector3.new(target.X - pos.X, 0, target.Z - pos.Z)
-				local dir = if out.Magnitude > 0.1 then out.Unit else Vector3.new(0, 0, 1)
-				liftExit = { Until = now + LIFT_EXIT_SECONDS, Dir = dir }
-				rootPart.AssemblyLinearVelocity = Vector3.new(dir.X * LIFT_EXIT_SPEED, 6, dir.Z * LIFT_EXIT_SPEED)
-				popBubbles(pos, 6, 2)
-			else
-				-- Rise, easing toward the column's middle so you don't bump the edges.
-				local centering = -flat * math.min(1, 4 * dt) / math.max(dt, 1e-3) * 0.25
-				local v = rootPart.AssemblyLinearVelocity
-				local vy = v.Y + (LIFT_RISE_SPEED - v.Y) * math.min(1, 10 * dt)
-				rootPart.AssemblyLinearVelocity = Vector3.new(v.X * 0.9 + centering.X, vy, v.Z * 0.9 + centering.Z)
-			end
+		if Vector3.new(d.X, 0, d.Z).Magnitude <= LIFT_RADIUS and d.Y > -1 and d.Y < 8 then
+			ride = { Pad = pad, Target = target, Phase = "Up", X = pos.X, Z = pos.Z, Y = pos.Y }
+			humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+			popBubbles(pad.Position + Vector3.new(0, 2, 0), 10, 3)
+			UIKit.PlaySound("Splash", 1.3)
 			break
 		end
 	end
-	wasInColumn = inColumn
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -615,9 +652,12 @@ local function buyTool(index: number)
 		return
 	end
 	buyingTool = true
-	local result = ClientState.RunRequest("BuyTool", index)
+	local result = ShopUI.GetTool(index)
 	buyingTool = false
 	local tool = Config.Tools[index]
+	if not result then
+		return -- the tool's pass was offered instead
+	end
 	if result.Ok then
 		UIKit.PlaySound("Coins")
 		UIKit.Toast(string.format("%s %s bought!", tool and tool.Icon or "", tool and tool.Name or "Tool"), "Good")
@@ -710,7 +750,7 @@ local function onPromptTriggered(prompt: ProximityPrompt, player: Player)
 	end
 	local windowName = prompt:GetAttribute("OpenWindow")
 	if type(windowName) == "string" then
-		UIKit.OpenWindow(windowName, prompt:GetAttribute("EggId"))
+		UIKit.OpenWindow(windowName, prompt:GetAttribute("WindowArg") or prompt:GetAttribute("EggId"))
 		return
 	end
 	local toolIndex = prompt:GetAttribute("BuyTool")

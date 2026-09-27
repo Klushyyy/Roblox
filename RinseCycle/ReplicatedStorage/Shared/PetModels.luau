@@ -998,14 +998,57 @@ end
 
 -- A cute pet model for Config.Pets[petId] (a placeholder for unknown ids). Unparented; the caller
 -- parents it and moves it with PivotTo. Facing -Z, PrimaryPart "Root" at the centre.
-function PetModels.Build(petId: string): Model
+-- Tier looks (Config.PetTiers): Golden turns the body gold and glinting, Rainbow paints each part a
+-- different pastel hue; both get a sparkle. Eyes and shines keep their colours.
+local KEEP = { Eye = true, EyeShine = true, Shine = true }
+local function applyTier(model: Model, tier: number)
+	if tier <= 1 then
+		return
+	end
+	local parts = {}
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") and not KEEP[d.Name] and d.Transparency < 1 then
+			table.insert(parts, d)
+		end
+	end
+	table.sort(parts, function(a, b)
+		return a.Position.Y < b.Position.Y
+	end)
+	for i, part in parts do
+		if tier == 2 then
+			local h, _, v = part.Color:ToHSV()
+			part.Color = Color3.fromHSV(0.12 + (h - 0.12) * 0.1, 0.75, math.max(v, 0.85))
+			part.Reflectance = 0.15
+		else
+			part.Color = Color3.fromHSV((i / math.max(#parts, 1) * 0.85) % 1, 0.45, 1)
+		end
+	end
+	local root = model.PrimaryPart or parts[1]
+	if root then
+		local sparkle = Instance.new("ParticleEmitter")
+		sparkle.Name = "TierSparkle"
+		sparkle.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+		sparkle.Color = ColorSequence.new(if tier == 2 then Color3.fromRGB(255, 220, 110) else Color3.fromRGB(255, 170, 240))
+		sparkle.LightEmission = 0.6
+		sparkle.Size = NumberSequence.new(0.35, 0)
+		sparkle.Lifetime = NumberRange.new(0.6, 1)
+		sparkle.Rate = if tier == 2 then 4 else 7
+		sparkle.Speed = NumberRange.new(0.5, 1.5)
+		sparkle.SpreadAngle = Vector2.new(180, 180)
+		sparkle.Parent = root
+	end
+end
+
+function PetModels.Build(petId: string, tier: number?): Model
 	local key = if type(petId) == "string" and Config.Pets[petId] then petId else PLACEHOLDER_KEY
 	local template = templates[key]
 	if not template then
 		template = makePet(key)
 		templates[key] = template
 	end
-	return template:Clone()
+	local model = template:Clone()
+	applyTier(model, math.floor(tonumber(tier) or 1))
+	return model
 end
 
 -- An egg model for Config.Eggs (by Id) for UI and lobby displays; a plain grey egg for unknown ids.

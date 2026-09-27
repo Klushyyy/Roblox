@@ -13,6 +13,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
+local Types = require(Shared:WaitForChild("Types"))
 
 local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
@@ -207,6 +208,71 @@ end
 ----------------------------------------------------------------------------------------------------
 -- Developer products (Bubbles / Gems / Coins packs)
 ----------------------------------------------------------------------------------------------------
+
+-- Buy helpers other windows use too (Ranks' x2 Luck button, the "not enough coins" offer).
+function ShopUI.BuyPass(key: string)
+	local def = Config.GetPass(key)
+	if not def then
+		return
+	end
+	if type(def.Id) == "number" and def.Id ~= 0 then
+		pcall(function()
+			MarketplaceService:PromptGamePassPurchase(LocalPlayer, def.Id)
+		end)
+		return
+	end
+	local result = ClientState.MetaRequest("TestPass", def.Key)
+	if not result.Ok then
+		UIKit.Toast(result.Error or "Coming soon!", "Info")
+	end
+end
+
+-- "I want this tool": buy it with coins if you can afford it, otherwise offer its tool pass
+-- (Config.Tools[i].PassKey), which gives it in every run. Returns the RunRequest result, or nil
+-- when a pass was offered instead.
+local offering = false
+function ShopUI.GetTool(index: number): Types.RequestResult?
+	local run = ClientState.Run
+	local tool = Config.Tools[index]
+	if not run or not tool or offering then
+		return nil
+	end
+	local cost = Config.ToolCost(index, run.Level) or 0
+	if run.Coins < cost and tool.PassKey then
+		local pass = Config.GetPass(tool.PassKey)
+		if pass and not (ClientState.Meta and ClientState.Meta.Passes[tool.PassKey]) then
+			UIKit.Toast(string.format("Need %s 💰 more for the %s - or get it forever!", UIKit.Commas(cost - run.Coins), tool.Name), "Info")
+			ShopUI.BuyPass(tool.PassKey)
+			return nil
+		end
+	end
+	offering = true
+	local result = ClientState.RunRequest("BuyTool", index)
+	offering = false
+	return result
+end
+
+-- Returns true if the purchase went through right away (test mode); a real prompt returns false
+-- (MarketService grants the goods when Roblox confirms it).
+function ShopUI.BuyProduct(key: string): boolean
+	local def = Config.GetProduct(key)
+	if not def then
+		return false
+	end
+	if type(def.Id) == "number" and def.Id ~= 0 then
+		pcall(function()
+			MarketplaceService:PromptProductPurchase(LocalPlayer, def.Id)
+		end)
+		return false
+	end
+	local result = ClientState.MetaRequest("TestProduct", def.Key)
+	if not result.Ok then
+		UIKit.Toast(result.Error or "Coming soon!", "Info")
+		return false
+	end
+	UIKit.Confetti(50)
+	return true
+end
 
 local function buildProductRow(def: any): Frame
 	local run = ClientState.Run

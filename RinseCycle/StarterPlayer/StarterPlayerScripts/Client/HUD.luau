@@ -244,7 +244,12 @@ function HUD.Init()
 			return
 		end
 		if not (run.OwnedTools and run.OwnedTools[index]) then
-			UIKit.OpenWindow("Upgrades")
+			-- Not yours yet: buy it (or get offered its pass if you're short of coins).
+			local ShopUI = require(script.Parent:WaitForChild("ShopUI")) :: any
+			local result = ShopUI.GetTool(index)
+			if result and not result.Ok then
+				UIKit.Toast(result.Error or "Can't buy that yet.", "Bad")
+			end
 			return
 		end
 		if run.ToolIndex == index then

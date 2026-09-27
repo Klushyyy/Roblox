@@ -59,14 +59,18 @@ type Profile = {
 	Unlocked: number,
 }
 
-type ActiveEntry = { Uid: string, Id: string, Share: number }
+type ActiveEntry = { Uid: string, Id: string, Tier: number, Share: number, Capacity: number }
 
 -- One active pet slot: the replicated StringValue/ObjectValue pair plus server-only cleaning state.
 type Slot = {
 	Uid: string,
 	PetId: string,
-	Share: number, -- def.PowerShare
-	Value: StringValue, -- EquippedPets["<index>"], Value = pet id
+	Share: number, -- Config.PetStats Speed (share of the owner's pet power per second)
+	Tier: number,
+	Capacity: number, -- bag size in dirt units, before the level multiplier
+	Bag: number, -- units cleaned and not yet sold
+	SellUntil: number?, -- set while the pet is off selling at the drain (os.clock() it's back)
+	Value: StringValue, -- EquippedPets["<index>"], Value = pet id; attributes Uid, Tier, Bag (0..1)
 	TargetValue: ObjectValue, -- its "Target" child
 	Target: BasePart?, -- the grime part this pet is cleaning (mirrors TargetValue.Value)
 	ArriveAt: number, -- os.clock() when the pet reaches Target
@@ -217,6 +221,10 @@ local function sanitize(profile: Profile)
 	local maxUid = 0
 	for _, pet in p.Pets do
 		if type(pet) == "table" and type(pet.Uid) == "string" and type(pet.Id) == "string" and not byUid[pet.Uid] then
+			-- Tier: nil (normal), 2 (Golden) or 3 (Rainbow); anything else is dropped.
+			if pet.Tier ~= nil and not (pet.Tier == 2 or pet.Tier == 3) then
+				pet.Tier = nil
+			end
 			byUid[pet.Uid] = pet
 			table.insert(pets, pet)
 			local n = tonumber(pet.Uid)
@@ -265,9 +273,9 @@ local function activeEntries(profile: Profile, cap: number): { ActiveEntry }
 			break
 		end
 		local pet = byUid[uid]
-		local def = pet and Config.Pets[pet.Id]
-		if pet and def then
-			table.insert(out, { Uid = uid, Id = pet.Id, Share = def.PowerShare })
+		local stats = pet and Config.PetStats(pet.Id, pet.Tier)
+		if pet and stats then
+			table.insert(out, { Uid = uid, Id = pet.Id, Tier = pet.Tier or 1, Share = stats.Speed, Capacity = stats.Capacity })
 		end
 	end
 	return out
@@ -326,6 +334,8 @@ local function newSlot(folder: Folder, index: number, entry: ActiveEntry): Slot
 	value.Name = tostring(index)
 	value.Value = entry.Id
 	value:SetAttribute("Uid", entry.Uid)
+	value:SetAttribute("Tier", entry.Tier)
+	value:SetAttribute("Bag", 0)
 
 	local target = Instance.new("ObjectValue")
 	target.Name = "Target"
@@ -336,6 +346,10 @@ local function newSlot(folder: Folder, index: number, entry: ActiveEntry): Slot
 		Uid = entry.Uid,
 		PetId = entry.Id,
 		Share = entry.Share,
+		Tier = entry.Tier,
+		Capacity = entry.Capacity,
+		Bag = 0,
+		SellUntil = nil,
 		Value = value,
 		TargetValue = target,
 		Target = nil,
@@ -368,9 +382,10 @@ local function rebuild(player: Player)
 
 	for i, entry in active do
 		local slot = state.Slots[i]
-		if slot and slot.PetId == entry.Id and slot.Value.Parent == folder then
+		if slot and slot.PetId == entry.Id and slot.Tier == entry.Tier and slot.Value.Parent == folder then
 			slot.Uid = entry.Uid
 			slot.Share = entry.Share
+			slot.Capacity = entry.Capacity
 			if slot.Value:GetAttribute("Uid") ~= entry.Uid then
 				slot.Value:SetAttribute("Uid", entry.Uid)
 			end
@@ -409,10 +424,6 @@ end
 --   * outside a run every Target is nil
 ----------------------------------------------------------------------------------------------------
 
-local function tankFull(player: Player): boolean
-	local ok, full = safe(RoundService.IsTankFull, player)
-	return ok and full == true
-end
 
 local function runPower(player: Player): number
 	local ok, power = safe(RoundService.GetRunPower, player)
@@ -422,10 +433,21 @@ local function runPower(player: Player): number
 	return 0
 end
 
--- true while the part is still alive (see RoundService.DamageGrime).
-local function damageGrime(owner: Player, part: BasePart, amount: number): boolean
-	local ok, alive = safe(RoundService.DamageGrime, owner, part, amount, true)
-	return ok and alive == true
+-- (alive, units): alive while the part still stands; units the pet picked up if it finished it.
+local function damageGrime(owner: Player, part: BasePart, amount: number): (boolean, number)
+	local ok, alive, units = pcall(RoundService.DamageGrime, owner, part, amount, true)
+	if not ok then
+		warn("[PetService] " .. tostring(alive))
+		return false, 0
+	end
+	return alive == true, tonumber(units) or 0
+end
+
+local function setBag(slot: Slot, fraction: number)
+	local shown = math.floor(math.clamp(fraction, 0, 1) * 20 + 0.5) / 20
+	if slot.Value:GetAttribute("Bag") ~= shown then
+		slot.Value:SetAttribute("Bag", shown)
+	end
 end
 
 local function grimeFolderOf(player: Player): Folder?
@@ -482,9 +504,20 @@ local function think(player: Player, state: OwnerState, now: number)
 		clearTargets(state)
 		return
 	end
-	if tankFull(player) then
-		clearTargets(state)
-		return
+	-- Pets don't use the owner's tank: each has its own bag (see below).
+	local levelMult = 1
+	do
+		local ok, m = safe(RoundService.GetLevelMult, player)
+		if ok and type(m) == "number" and m > 0 then
+			levelMult = m
+		end
+	end
+	local drain: BasePart? = nil
+	do
+		local ok, d = safe(RoundService.GetDrainPart, player)
+		if ok and typeof(d) == "Instance" and d:IsA("BasePart") then
+			drain = d
+		end
 	end
 
 	-- Parts already spoken for this tick, so two slots of the same owner never chase the same spot.
@@ -498,6 +531,32 @@ local function think(player: Player, state: OwnerState, now: number)
 	local power = runPower(player)
 
 	for _, slot in state.Slots do
+		-- Selling: the pet flew to the drain with a full bag; when it's back, pay the owner.
+		if slot.SellUntil then
+			if now >= slot.SellUntil then
+				local units = slot.Bag
+				slot.Bag = 0
+				slot.SellUntil = nil
+				setBag(slot, 0)
+				setTarget(slot, nil)
+				slot.From = if drain then drain.Position else nil
+				if units > 0 then
+					safe(RoundService.PayPetCoins, player, units)
+				end
+			end
+			continue
+		end
+		local capacity = slot.Capacity * levelMult
+		if slot.Bag >= capacity and drain then
+			local from = if slot.Target then slot.Target.Position else root.Position
+			slot.SellUntil = now + (drain.Position - from).Magnitude / RULES.Speed + 0.8
+			if slot.Target then
+				claimed[slot.Target] = nil
+			end
+			setTarget(slot, drain)
+			continue
+		end
+
 		local target = slot.Target
 		if target then
 			local alive = target.Parent == grimeFolder
@@ -532,7 +591,11 @@ local function think(player: Player, state: OwnerState, now: number)
 				slot.LastHit = now
 				local amount = power * slot.Share * sinceLast
 				if amount > 0 then
-					local alive = damageGrime(player, target, amount)
+					local alive, units = damageGrime(player, target, amount)
+					if units > 0 then
+						slot.Bag += units
+						setBag(slot, slot.Bag / capacity)
+					end
 					if not alive then
 						if target.Parent then
 							-- Refused for a reason other than dying (e.g. it stopped belonging to this
@@ -762,9 +825,9 @@ local function equipBest(player: Player): Types.RequestResult
 
 	local ranked: { Ranked } = {}
 	for _, pet in profile.Pets do
-		local def = Config.Pets[pet.Id]
-		if def then
-			table.insert(ranked, { Uid = pet.Uid, Share = def.PowerShare, Coin = def.CoinBonus })
+		local stats = Config.PetStats(pet.Id, pet.Tier)
+		if stats then
+			table.insert(ranked, { Uid = pet.Uid, Share = stats.Speed + stats.Capacity * 0.002, Coin = stats.CoinBonus })
 		end
 	end
 	if #ranked == 0 then
@@ -841,24 +904,13 @@ local function delete(player: Player, rawUid: any): Types.RequestResult
 	return { Ok = true }
 end
 
--- Merge: three pets of the same rarity (below Legendary) become one pet of the next rarity. The new
--- pet comes from the best egg any of the three came from. If any of them was out, the new pet takes
--- its slot.
+-- Merge: three of the SAME pet at the same tier become one of that pet at the next tier (normal ->
+-- Golden -> Rainbow; Config.PetTiers). If any of them was out, the new one takes its slot.
 local MERGE_COUNT = RULES.MergeCount or 3
-local eggIndexOf: { [string]: number } = {}
-for i, egg in Config.Eggs do
-	for _, entry in egg.Pets do
-		eggIndexOf[entry.Pet] = math.max(eggIndexOf[entry.Pet] or 0, i)
-	end
-end
-local rarityByOrder: { [number]: string } = {}
-for id, r in Config.Rarities do
-	rarityByOrder[r.Order] = id
-end
 
 local function merge(player: Player, rawUids: any): Types.RequestResult
 	if type(rawUids) ~= "table" then
-		return fail("Pick three pets to merge.")
+		return fail("Pick three of the same pet to merge.")
 	end
 	local profile = getProfile(player)
 	if not profile then
@@ -867,49 +919,24 @@ local function merge(player: Player, rawUids: any): Types.RequestResult
 	sanitize(profile)
 	local uids: { string } = {}
 	local seen: { [string]: boolean } = {}
+	local petId: string? = nil
+	local tier = 1
 	for i = 1, MERGE_COUNT do
 		local uid = normalizeUid(rawUids[i])
-		if not uid or seen[uid] or not findPet(profile, uid) then
+		local pet = uid and findPet(profile, uid)
+		if not uid or seen[uid] or not pet or not Config.Pets[pet.Id] then
 			return fail("Pick three different pets to merge.")
 		end
+		local petTier = pet.Tier or 1
+		if petId and (pet.Id ~= petId or petTier ~= tier) then
+			return fail("Merging needs three of the SAME pet at the same tier.")
+		end
+		petId, tier = pet.Id, petTier
 		seen[uid] = true
 		uids[i] = uid
 	end
-	local rarity: string? = nil
-	local bestEgg = 1
-	for _, uid in uids do
-		local pet = findPet(profile, uid)
-		local def = pet and Config.Pets[pet.Id]
-		if not pet or not def then
-			return fail("That pet can't be merged.")
-		end
-		if rarity and def.Rarity ~= rarity then
-			return fail("All three pets must be the same rarity.")
-		end
-		rarity = def.Rarity
-		bestEgg = math.max(bestEgg, eggIndexOf[pet.Id] or 1)
-	end
-	local order = Config.Rarities[rarity :: string].Order
-	local nextRarity = rarityByOrder[order + 1]
-	if not nextRarity then
-		return fail("Legendary pets are already the best!")
-	end
-	-- The next-rarity pet from the best egg (every egg has one pet per rarity).
-	local resultId: string? = nil
-	for i = bestEgg, 1, -1 do
-		for _, entry in Config.Eggs[i].Pets do
-			local def = Config.Pets[entry.Pet]
-			if def and def.Rarity == nextRarity then
-				resultId = entry.Pet
-				break
-			end
-		end
-		if resultId then
-			break
-		end
-	end
-	if not resultId then
-		return fail("Couldn't find a pet to merge into.")
+	if tier >= #Config.PetTiers then
+		return fail("Rainbow pets are already maxed!")
 	end
 
 	-- Everything is checked: remove the three, add the new one (no yields in between).
@@ -935,16 +962,13 @@ local function merge(player: Player, rawUids: any): Types.RequestResult
 	end
 	local uid = tostring(nextUid)
 	profile.NextUid = nextUid + 1
-	table.insert(profile.Pets, { Uid = uid, Id = resultId })
+	local newTier = tier + 1
+	table.insert(profile.Pets, { Uid = uid, Id = petId :: string, Tier = newTier })
 	if slot then
 		table.insert(profile.Equipped, math.min(slot, #profile.Equipped + 1), uid)
 	end
 	afterChange(player, true)
-	if nextRarity == "Legendary" then
-		local def = Config.Pets[resultId]
-		announceLegendary(player, def and def.Name or resultId)
-	end
-	return { Ok = true, Pets = { { Uid = uid, Id = resultId } } }
+	return { Ok = true, Pets = { { Uid = uid, Id = petId :: string, Tier = newTier } } }
 end
 
 -- Public API: each returns a Types.RequestResult and never throws.

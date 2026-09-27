@@ -278,7 +278,48 @@ local layoutHooks: { () -> () } = {}
 -- changes. Windows and toasts have already been re-laid out when it fires.
 UIKit.LayoutChanged = Util.Signal.new()
 
+-- Console text boost: TVs are read from the sofa, so text is 20% bigger with a gamepad (boxes keep
+-- their size; scaled text still fits because it shrinks to its box). Every label made through
+-- UIKit.Label / UIKit.Button registers here with its design size.
+local GAMEPAD_TEXT_BOOST = 1.2
+type TextEntry = { Base: number, Limit: UITextSizeConstraint? }
+local textEntries: { [TextLabel]: TextEntry } = setmetatable({}, { __mode = "k" }) :: any
+local textBoost = 1
+
+local function applyTextBoost(label: TextLabel, entry: TextEntry)
+	local size = math.clamp(math.floor(entry.Base * textBoost + 0.5), 1, 100)
+	label.TextSize = size
+	if entry.Limit then
+		entry.Limit.MaxTextSize = size
+	end
+end
+
+local function registerText(label: TextLabel, base: number, limit: UITextSizeConstraint?)
+	local entry = { Base = base, Limit = limit }
+	textEntries[label] = entry
+	if textBoost ~= 1 then
+		applyTextBoost(label, entry)
+	end
+end
+
 local function readViewport(): Vector2
+	-- The truth is the size of a full-screen ScreenGui (ScreenInsets None, IgnoreGuiInset): that is
+	-- exactly the space every Root lives in. The camera's ViewportSize can disagree with it on some
+	-- phones (iOS), which used to leave the canvas narrower than the screen - side buttons ended up
+	-- towards the middle and windows off-centre.
+	local probes = safeProbes
+	if probes and probes.Full.Parent then
+		local abs = probes.Full.AbsoluteSize
+		if abs.X >= 2 and abs.Y >= 2 then
+			return abs
+		end
+	end
+	for _, s in screens do
+		local abs = s.Gui.AbsoluteSize
+		if abs.X >= 2 and abs.Y >= 2 then
+			return abs
+		end
+	end
 	local camera = workspace.CurrentCamera
 	if camera then
 		local size = camera.ViewportSize
@@ -384,10 +425,18 @@ local function applyLayout(force: boolean)
 		return
 	end
 	viewport, scale, insetPx, lastTouch, lastGamepad, safePx = vp, newScale, newInset, touch, pad, newSafe
+	local boost = if pad then GAMEPAD_TEXT_BOOST else 1
+	if boost ~= textBoost then
+		textBoost = boost
+		for label, entry in textEntries do
+			if label.Parent then
+				applyTextBoost(label, entry)
+			end
+		end
+	end
 
-	local canvas = canvasSize()
 	for _, s in screens do
-		s.Root.Size = UDim2.fromOffset(canvas.X, canvas.Y)
+		s.Root.Size = UDim2.fromScale(1 / scale, 1 / scale)
 		s.Scale.Scale = scale
 	end
 	for _, hook in layoutHooks do
@@ -486,13 +535,14 @@ function UIKit.CreateScreen(name: string, displayOrder: number?): (ScreenGui, Fr
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 	-- Root is the virtual canvas: viewport / scale in size, scaled back up by its UIScale.
-	local canvas = canvasSize()
 	local root = Instance.new("Frame")
 	root.Name = "Root"
 	root.BackgroundTransparency = 1
 	root.BorderSizePixel = 0
 	root.Position = UDim2.fromOffset(0, 0)
-	root.Size = UDim2.fromOffset(canvas.X, canvas.Y)
+	-- Scale-based so the (UIScale'd) root always covers its ScreenGui exactly, whatever the
+	-- device reports elsewhere; canvasSize() is only used for layout maths.
+	root.Size = UDim2.fromScale(1 / scale, 1 / scale)
 	local uiScale = Instance.new("UIScale")
 	uiScale.Scale = scale
 	uiScale.Parent = root
@@ -588,12 +638,15 @@ function UIKit.Label(props: { [string]: any }?): TextLabel
 	label.TextColor3 = Colors.Text
 	label.Text = if p.Text ~= nil then tostring(p.Text) else ""
 	local parent = assign(label, p, LABEL_SKIP)
+	local labelLimit: UITextSizeConstraint? = nil
 	if label.TextScaled then
 		local limit = Instance.new("UITextSizeConstraint")
 		limit.MaxTextSize = math.clamp(math.floor(textSize), 1, 100)
 		limit.MinTextSize = math.clamp(math.min(12, math.floor(textSize)), 1, 100)
 		limit.Parent = label
+		labelLimit = limit
 	end
+	registerText(label, textSize, labelLimit)
 	if p.Stroke ~= false then
 		addTextStroke(label, textSize, p.StrokeColor, p.StrokeThickness, p.StrokeTransparency)
 	end
@@ -1002,6 +1055,7 @@ function UIKit.Button(props: { [string]: any }?): TextButton
 	local limit = Instance.new("UITextSizeConstraint")
 	limit.MaxTextSize = math.clamp(math.floor(textSize), 1, 100)
 	limit.MinTextSize = 10
+	registerText(label, textSize, limit)
 	limit.Parent = label
 	addTextStroke(label, textSize)
 	label.Parent = parts.Face

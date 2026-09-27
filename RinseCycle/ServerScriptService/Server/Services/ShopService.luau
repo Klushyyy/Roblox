@@ -208,10 +208,19 @@ local function testProduct(player: Player, value: any): Types.RequestResult
 	return { Ok = true }
 end
 
--- Rank roll: spend gems, pick a weighted random rank (x2 Luck pass boosts Rare+), keep it, and
--- equip it if it's rarer than the one you have on.
+-- Rank roll: spend gems, pick a weighted random rank (x2 Luck pass boosts Rare+) and it REPLACES
+-- your rank - a gamble, so a good rank is worth keeping. One roll at a time per player.
 local rankRng = Random.new()
+local ROLL_SECONDS = 1.2 -- matches the client's reel; no second roll until it has landed
+local rollingUntil: { [Player]: number } = {}
+Players.PlayerRemoving:Connect(function(player)
+	rollingUntil[player] = nil
+end)
 local function rollRank(player: Player, _value: any): Types.RequestResult
+	local now = os.clock()
+	if now < (rollingUntil[player] or 0) then
+		return fail("Wait for your roll to finish!")
+	end
 	local cost = Config.RankRoll.Cost
 	local profile = DataService.Get(player)
 	if not profile then
@@ -223,6 +232,7 @@ local function rollRank(player: Player, _value: any): Types.RequestResult
 	if not DataService.SpendGems(player, cost) then
 		return fail(ERR_GENERIC)
 	end
+	rollingUntil[player] = now + ROLL_SECONDS
 	local weights, total = Config.RankWeights(DataService.GetPasses(player).DoubleLuck == true)
 	local r = rankRng:NextNumber() * total
 	local picked = weights[#weights].Rank
@@ -233,24 +243,12 @@ local function rollRank(player: Player, _value: any): Types.RequestResult
 			break
 		end
 	end
+	local previous = profile.Rank
 	DataService.AddRank(player, picked.Id)
-	local current = Config.GetRank(profile.Rank)
-	local better = not current or Config.RankRarities[picked.Rarity].Order > Config.RankRarities[current.Rarity].Order
-	if better then
-		DataService.SetRank(player, picked.Id)
-	end
-	return { Ok = true, Rank = picked.Id, Equipped = better }
+	DataService.SetRank(player, picked.Id)
+	return { Ok = true, Rank = picked.Id, Equipped = true, Previous = previous }
 end
 
-local function equipRank(player: Player, value: any): Types.RequestResult
-	if type(value) ~= "string" then
-		return fail(ERR_UNKNOWN)
-	end
-	if not DataService.SetRank(player, value) then
-		return fail("You don't have that rank yet.")
-	end
-	return { Ok = true }
-end
 
 local function rebirth(player: Player, _value: any): Types.RequestResult
 	if RoundService.IsInRun(player) then
@@ -259,6 +257,15 @@ local function rebirth(player: Player, _value: any): Types.RequestResult
 	local ok, err = DataService.Rebirth(player)
 	if not ok then
 		return fail(err or ERR_GENERIC)
+	end
+	-- Everyone hears about it: rebirths are the big flex.
+	local profile = DataService.Get(player)
+	local count = profile and profile.Rebirths or 1
+	local notify = Remotes.Event("Notify")
+	for _, other in Players:GetPlayers() do
+		if other ~= player then
+			notify:FireClient(other, string.format("✨ %s just reached Rebirth %d!", player.DisplayName, count), "Good")
+		end
 	end
 	return { Ok = true }
 end
@@ -269,7 +276,6 @@ local HANDLERS: { [string]: (Player, any) -> Types.RequestResult } = {
 	TestPass = testPass,
 	TestProduct = testProduct,
 	RollRank = rollRank,
-	EquipRank = equipRank,
 	Hatch = hatch,
 	Equip = petAction("Equip"),
 	Unequip = petAction("Unequip"),

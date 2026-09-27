@@ -13,6 +13,8 @@
 -- curved runs of short bars (hoses, trigger guards, handles), ribbed knobs, and small trims and
 -- fittings. No two coplanar faces overlap, so nothing flickers.
 
+local Config = require(script.Parent:WaitForChild("Config"))
+
 local ToolModels = {}
 
 local DARK = Color3.fromRGB(40, 42, 50)
@@ -26,14 +28,6 @@ local WOOD_DARK = Color3.fromRGB(130, 86, 52)
 local UPRIGHT = CFrame.Angles(0, 0, math.rad(90)) -- cylinder axis -> up (Y)
 local ALONG_Z = CFrame.Angles(0, math.rad(90), 0) -- cylinder axis -> front/back (Z)
 
-local COLORS = {
-	Color3.fromRGB(150, 210, 255),
-	Color3.fromRGB(255, 221, 87),
-	Color3.fromRGB(120, 230, 160),
-	Color3.fromRGB(90, 200, 255),
-	Color3.fromRGB(60, 140, 255),
-	Color3.fromRGB(200, 150, 255),
-}
 
 type Ctx = { Model: Model, Scale: number }
 
@@ -128,11 +122,11 @@ local function knob(ctx: Ctx, name: string, cf: CFrame, length: number, diameter
 	end
 end
 
-local BUILDERS: { [number]: (Ctx, Color3) -> () } = {}
+local BUILDERS: { [string]: (Ctx, Color3) -> () } = {}
 
 -- Sponge: a rounded block of yellow foam with dimpled pores, a glue line, and a green scouring pad
 -- on top with a lighter fleck pattern. A bead of soap suds rides on the pad.
-BUILDERS[2] = function(ctx, _color)
+BUILDERS.Sponge = function(ctx, _color)
 	local yellow = Color3.fromRGB(255, 212, 76)
 	local foamCF = CFrame.new(0, 0.85, 0)
 	roundedBox(ctx, "Foam", Vector3.new(3.4, 1.7, 2.3), foamCF, 0.55, yellow, Enum.Material.SmoothPlastic)
@@ -163,7 +157,7 @@ end
 
 -- Scrub brush: an oval coloured block with a lighter top rim, tufts of bristles in rows underneath,
 -- and a curved wooden handle with a rubber grip, a chrome ferrule and a hanging ring.
-BUILDERS[3] = function(ctx, color)
+BUILDERS.Brush = function(ctx, color)
 	roundedBox(ctx, "Head", Vector3.new(3.2, 0.8, 1.6), CFrame.new(0, 1.15, 0), 0.8, color)
 	roundedBox(ctx, "HeadTop", Vector3.new(3.0, 0.25, 1.4), CFrame.new(0, 1.68, 0), 0.7, shade(color, 1.18))
 	roundedBox(ctx, "HeadBase", Vector3.new(3.0, 0.15, 1.5), CFrame.new(0, 0.7, 0), 0.75, shade(color, 0.75))
@@ -196,7 +190,7 @@ end
 -- Spray nozzle: a pistol spray gun. Coloured body with a chrome barrel that steps down to the tip,
 -- an adjustable spray-pattern dial, a rubber pistol grip with finger ridges, a curved trigger inside
 -- a guard, a brass hose fitting, and a coil of hose.
-BUILDERS[4] = function(ctx, color)
+BUILDERS.Nozzle = function(ctx, color)
 	local y = 2.3
 	-- Body.
 	roundedBox(ctx, "Body", Vector3.new(0.9, 1.1, 2.2), CFrame.new(0, y, 0.2) * CFrame.Angles(0, 0, math.rad(90)), 0.45, color)
@@ -229,7 +223,7 @@ end
 -- Pressure washer: a two-tone rounded body on a dark chassis, big wheels with chrome hubs, a hose
 -- reel with coils on the side, a gauge, vents, a telescopic handle with foam grips, and the spray
 -- gun with its long chrome lance clipped to the side.
-BUILDERS[5] = function(ctx, color)
+BUILDERS.Washer = function(ctx, color)
 	local bodyCF = CFrame.new(0, 1.9, 0.3)
 	roundedBox(ctx, "Body", Vector3.new(2.6, 2.1, 3.0), bodyCF, 0.7, color)
 	roundedBox(ctx, "BodyTop", Vector3.new(2.3, 0.4, 2.7), CFrame.new(0, 3.1, 0.3), 0.6, shade(color, 1.2))
@@ -283,7 +277,7 @@ end
 -- Foam cannon: a sleek blaster. White rounded body with colour stripes, a see-through soap tank on
 -- top (pink soap, a cap), a brass adjuster knob, a stepped chrome-and-white bell, a rubber pistol
 -- grip and trigger, and a burst of foam from the front.
-BUILDERS[6] = function(ctx, color)
+BUILDERS.Cannon = function(ctx, color)
 	local y = 2.6
 	roundedBox(ctx, "Body", Vector3.new(1.1, 1.3, 3.2), CFrame.new(0, y, 0.6) * CFrame.Angles(0, 0, math.rad(90)), 0.55, WHITE)
 	for _, dz in { -0.4, 0.2 } do
@@ -325,9 +319,11 @@ function ToolModels.Build(toolIndex: number, scale: number?): Model
 	local grip = part(ctx, "Grip", nil, Vector3.new(0.2, 0.2, 0.2) / ctx.Scale, Vector3.zero, nil, WHITE)
 	grip.Transparency = 1
 	model.PrimaryPart = grip
-	local builder = BUILDERS[toolIndex]
+	-- Builders are keyed by tool Id, so reordering or removing tools in Config never mixes models up.
+	local tool = Config.Tools[toolIndex]
+	local builder = tool and BUILDERS[tool.Id]
 	if builder then
-		builder(ctx, COLORS[toolIndex] or WHITE)
+		builder(ctx, tool.Color or WHITE)
 	end
 	return model
 end
@@ -335,7 +331,8 @@ end
 -- Grip placement relative to an R15 RightHand (R6 Right Arm is handled by the caller's offset).
 -- The tool sits just in front of the hand, business end pointing forward.
 function ToolModels.HoldOffset(toolIndex: number): CFrame
-	local lift = if toolIndex == 5 then -1.6 else -0.9
+	local tool = Config.Tools[toolIndex]
+	local lift = if tool and tool.Id == "Washer" then -1.6 else -0.9
 	return CFrame.new(0, lift, -0.6)
 end
 

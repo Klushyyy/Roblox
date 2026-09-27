@@ -287,9 +287,10 @@ local function buildGlass(anchor: CFrame, theme, _rng: Random)
 	local body = newPart(Enum.PartType.Cylinder, Vector3.new(s.Height, s.Diameter, s.Diameter), upright(anchor, s.Height / 2), theme.Glass, Enum.Material.Glass)
 	body.Transparency = 0.35
 	body.Reflectance = 0.15
-	local base = newPart(Enum.PartType.Cylinder, Vector3.new(1.2, s.Diameter * 0.96, s.Diameter * 0.96), upright(anchor, s.Height - 0.6), theme.Glass, Enum.Material.Glass)
+	-- The thick base sits just inside the top (its faces never share a plane with the body's).
+	local base = newPart(Enum.PartType.Cylinder, Vector3.new(1.2, s.Diameter * 0.96, s.Diameter * 0.96), upright(anchor, s.Height - 0.68), theme.Glass, Enum.Material.Glass)
 	base.Transparency = 0.2
-	local lip = decor(newPart(Enum.PartType.Cylinder, Vector3.new(0.3, s.Diameter + 0.1, s.Diameter + 0.1), upright(anchor, 0.15), Color3.new(1, 1, 1), Enum.Material.Glass))
+	local lip = decor(newPart(Enum.PartType.Cylinder, Vector3.new(0.3, s.Diameter + 0.1, s.Diameter + 0.1), upright(anchor, 0.2), Color3.new(1, 1, 1), Enum.Material.Glass))
 	lip.Transparency = 0.4
 	return { body, base, lip }, 1
 end
@@ -320,8 +321,21 @@ local function buildPot(anchor: CFrame, theme, _rng: Random)
 	local body = placeTemplate("Pot", CFrame.new(anchor.Position) * anchor.Rotation, theme.Metal, Enum.Material.Metal)
 		or newPart(Enum.PartType.Cylinder, Vector3.new(s.Height, s.Diameter, s.Diameter), upright(anchor, s.Height / 2), theme.Metal, Enum.Material.Metal)
 	local parts = { body }
-	-- Rolled rim.
-	table.insert(parts, decor(newPart(Enum.PartType.Cylinder, Vector3.new(0.6, s.Diameter + 0.5, s.Diameter + 0.5), upright(anchor, s.Height - 0.3), STEEL, Enum.Material.Metal)))
+	-- Rolled rim: a ring hugging the outside of the top edge (a CSG ring, or short bars without CSG).
+	-- It never covers the opening, so the pot stays open and nothing overlaps its walls' top faces.
+	local rim = placeTemplate("PotRim", CFrame.new(anchor.Position) * anchor.Rotation, STEEL, Enum.Material.Metal)
+	if rim then
+		table.insert(parts, decor(rim))
+	else
+		local rr = s.Diameter / 2 + 0.1
+		local n = 20
+		for i = 0, n - 1 do
+			local a0, a1 = i / n * math.pi * 2, (i + 1.1) / n * math.pi * 2
+			local p0 = localPos(anchor, math.cos(a0) * rr, s.Height - 0.45, math.sin(a0) * rr)
+			local p1 = localPos(anchor, math.cos(a1) * rr, s.Height - 0.45, math.sin(a1) * rr)
+			table.insert(parts, decor(bar(p0, p1, 0.55, anchor.UpVector, STEEL, Enum.Material.Metal)))
+		end
+	end
 	for _, side in { 1, -1 } do
 		for _, h in loopHandle(anchor, r, s.Height * 0.72, s.Height * 0.9, 1.8, 0.8, STEEL, Enum.Material.Metal, side) do
 			table.insert(parts, h)
@@ -469,6 +483,11 @@ local function buildTemplates()
 	do
 		local s = SIZE.Tray
 		ring("TrayRim", s.Diameter, s.Diameter * 0.88, s.Thickness + 1, alongZAt(s.Diameter / 2, 0))
+	end
+	-- Pot rim: a band around the outside of the top edge, below the top face.
+	do
+		local s = SIZE.Pot
+		ring("PotRim", s.Diameter + 0.5, s.Diameter - 0.02, 0.55, BUILD_AT * CFrame.new(0, s.Height - 0.45, 0) * CFrame.Angles(0, 0, math.rad(90)))
 	end
 	-- Bowl rim band.
 	do
@@ -782,7 +801,8 @@ local function snapToSurface(params: RaycastParams, child: BasePart, basePos: Ve
 	return true
 end
 
-function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, levelIndex: number, rng: Random, goldenChance: number, folder: Folder): { BasePart }
+function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, levelIndex: number, rng: Random, goldenChance: number, folder: Folder, hpScale: number?): { BasePart }
+	local partyHp = math.max(1, hpScale or 1) -- bigger parties: tougher dirt worth more units
 	local kind = dish:GetAttribute("Kind")
 	local anchor = dish:GetAttribute("Anchor")
 	if typeof(anchor) ~= "CFrame" or typeof(kind) ~= "string" then
@@ -872,8 +892,8 @@ function DishFactory.ApplyGrime(dish: Model, dishId: number, count: number, leve
 			-- raycasts) skip parts whose group can't collide with the query's group, so a
 			-- "collides with nothing" group would make dirt impossible to clean.
 
-			local hp = math.max(1, math.floor(grimeType.HP * levelMult * (level.Toughness or 1) + 0.5))
-			local units = math.max(1, math.floor(grimeType.Units * levelMult + 0.5))
+			local hp = math.max(1, math.floor(grimeType.HP * levelMult * (level.Toughness or 1) * partyHp + 0.5))
+			local units = math.max(1, math.floor(grimeType.Units * levelMult * partyHp + 0.5))
 			local minTool = grimeType.MinTool
 			if golden then
 				units = math.floor(units * Config.Round.GoldenUnitsMult + 0.5)

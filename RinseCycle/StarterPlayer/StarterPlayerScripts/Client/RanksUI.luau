@@ -6,7 +6,8 @@
 	Right: every rank with its exact odds (x2 Luck applied if you own the pass: gems can be bought with
 	Robux, so the odds are always shown before rolling), its perk, and Equip for the ones you own.
 
-	All rolling happens on the server (MetaRequest "RollRank"); equipping is MetaRequest "EquipRank".
+	All rolling happens on the server (MetaRequest "RollRank"). A roll REPLACES your rank (there is
+	no collection), so rolling again is a gamble; the button stays locked until the reel has landed.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18,6 +19,7 @@ local Types = require(Shared:WaitForChild("Types"))
 local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
 local UIKit = require(Client:WaitForChild("UIKit"))
+local ShopUI = require(Client:WaitForChild("ShopUI"))
 
 local Colors = UIKit.Theme.Colors
 
@@ -33,6 +35,7 @@ local list: ScrollingFrame
 local reel: TextLabel
 local rollButton: TextButton
 local gemsLabel: TextLabel
+local luckButton: TextButton
 
 local function rarityColor(rarity: string): Color3
 	local r = Config.RankRarities[rarity]
@@ -89,6 +92,14 @@ local function renderGems()
 	local luck = meta ~= nil and meta.Passes.DoubleLuck == true
 	gemsLabel.Text = string.format("You have 💎 %s%s", UIKit.Commas(gems), if luck then "   🍀 x2 Luck!" else "")
 	UIKit.SetDisabled(rollButton, rolling or gems < Config.RankRoll.Cost)
+	if luckButton then
+		local pass = Config.GetPass("DoubleLuck")
+		luckButton.Visible = not luck
+		local label = luckButton:FindFirstChildWhichIsA("TextLabel", true)
+		if label and pass then
+			label.Text = string.format("🍀 x2 Luck pass  •  R$ %d", pass.Price or 0)
+		end
+	end
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -102,7 +113,6 @@ local function renderList()
 	local weights, total = Config.RankWeights(luck)
 	for i, entry in weights do
 		local rank = entry.Rank
-		local owned = meta ~= nil and table.find(meta.Ranks or {}, rank.Id) ~= nil
 		local equipped = meta ~= nil and meta.Rank == rank.Id
 		local color = rarityColor(rank.Rarity)
 		local row = UIKit.Card({ Size = UDim2.new(1, -8, 0, 68), LayoutOrder = i, Parent = list })
@@ -138,24 +148,7 @@ local function renderList()
 			Parent = row,
 		})
 		if equipped then
-			UIKit.Label({ Text = "✅ On", TextSize = 18, TextColor3 = Colors.Good, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(96, 36), Parent = row })
-		elseif owned then
-			UIKit.Button({
-				Text = "Equip",
-				Size = UDim2.fromOffset(96, 40),
-				AnchorPoint = Vector2.new(1, 0.5),
-				Position = UDim2.new(1, -10, 0.5, 0),
-				Color = Colors.Primary,
-				Parent = row,
-				OnClick = function()
-					local result = ClientState.MetaRequest("EquipRank", rank.Id)
-					if not result.Ok then
-						UIKit.Toast(result.Error or "Couldn't equip that.", "Bad")
-					end
-				end,
-			})
-		else
-			UIKit.Label({ Text = "🔒", TextSize = 22, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(96, 36), Parent = row })
+			UIKit.Label({ Text = "✅ Yours", TextSize = 18, TextColor3 = Colors.Good, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(96, 36), Parent = row })
 		end
 	end
 end
@@ -190,7 +183,7 @@ local function roll()
 		end
 	end)
 	local result = ClientState.MetaRequest("RollRank")
-	task.wait(0.9)
+	task.wait(1.2)
 	spinning = false
 	rolling = false
 	if not result.Ok or not result.Rank then
@@ -210,7 +203,9 @@ local function roll()
 		if order >= 4 then
 			UIKit.Confetti(if order >= 5 then 140 else 90)
 		end
-		UIKit.Toast(string.format("%s %s (%s)%s", rank.Icon, rank.Name, rank.Rarity, if result.Equipped then " equipped!" else ""), if order >= 3 then "Good" else "Info")
+		local before = result.Previous and Config.GetRank(result.Previous)
+		local lost = if before and before.Id ~= rank.Id then string.format("  (replaced %s %s)", before.Icon, before.Name) else ""
+		UIKit.Toast(string.format("%s %s (%s)!%s", rank.Icon, rank.Name, rank.Rarity, lost), if order >= 3 then "Good" else "Info")
 	end
 	render()
 end
@@ -286,13 +281,24 @@ function RanksUI.Init()
 			UIKit.OpenWindow("Shop", "Gems")
 		end,
 	})
+	luckButton = UIKit.Button({
+		Text = "🍀 x2 Luck pass",
+		Size = UDim2.new(1, 0, 0, 44),
+		Position = UDim2.fromOffset(0, 418),
+		Color = Color3.fromRGB(90, 190, 110),
+		TextSize = 20,
+		Parent = leftPanel,
+		OnClick = function()
+			ShopUI.BuyPass("DoubleLuck")
+		end,
+	})
 	UIKit.Label({
-		Text = "Gems drop rarely while cleaning, from golden dirt, and for every clear.",
+		Text = "⚠️ A roll replaces your current rank! Rare+ ranks are twice as likely with x2 Luck.",
 		TextSize = 14,
-		TextColor3 = Colors.TextDim,
+		TextColor3 = Colors.Warning,
 		TextWrapped = true,
-		Position = UDim2.fromOffset(0, 420),
-		Size = UDim2.new(1, 0, 0, 40),
+		Position = UDim2.fromOffset(0, 466),
+		Size = UDim2.new(1, 0, 0, 36),
 		Parent = leftPanel,
 	})
 

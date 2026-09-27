@@ -19,6 +19,7 @@ local Types = require(Shared:WaitForChild("Types"))
 local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
 local UIKit = require(Client:WaitForChild("UIKit"))
+local ShopUI = require(Client:WaitForChild("ShopUI"))
 
 local Colors = UIKit.Theme.Colors
 
@@ -71,7 +72,10 @@ local function previewStats(run: Types.RunState, upgradeId: string): Types.RunSt
 end
 
 local function buy(action: string, value: any, onRow: GuiObject)
-	local result = ClientState.RunRequest(action, value)
+	local result = if action == "BuyTool" then ShopUI.GetTool(value) else ClientState.RunRequest(action, value)
+	if not result then
+		return -- short of coins: the tool's pass was offered
+	end
 	if result.Ok then
 		UIKit.Bounce(onRow)
 		UIKit.PlaySound("Coins")
