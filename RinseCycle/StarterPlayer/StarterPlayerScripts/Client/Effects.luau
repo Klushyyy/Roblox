@@ -310,6 +310,25 @@ local function removeLiftPart(inst: Instance)
 	liftPads[inst :: BasePart] = nil
 end
 
+-- Bubble spouts (the Rebirth Fountain): a gentle stream of bubbles near the camera.
+local spoutClock = 0
+local function stepSpouts(dt: number)
+	spoutClock += dt
+	if spoutClock < 0.2 then
+		return
+	end
+	spoutClock = 0
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	for _, spout in CollectionService:GetTagged("BubbleSpout") do
+		if spout:IsA("BasePart") and (spout.Position - camera.CFrame.Position).Magnitude < 150 then
+			Bubbles.Emit(spout.Position, { Count = 1, Spread = 0.6, Velocity = Vector3.new(0, 7, 0), Jitter = 1.2, Size = { 0.4, 1.1 }, Life = { 1.6, 2.6 }, Rise = 1.5 })
+		end
+	end
+end
+
 -- Bubbles streaming up every lift column near the camera.
 local liftBubbleClock = 0
 local function stepLiftBubbles(dt: number)
@@ -897,6 +916,7 @@ function Effects.Init()
 		stepSpin(dt)
 		stepLift(dt)
 		stepLiftBubbles(dt)
+		stepSpouts(dt)
 		updateDrainGuide()
 		stepLobbyAmbience()
 	end)

@@ -439,7 +439,8 @@ local function computeStats(levelIndex: number, player: Player, pr: PlayerRun): 
 		petBonus = (ok and positive(bonus)) or 0
 	end
 	local rank = profile and profile.Rank or nil
-	return Config.GetRunStats(levelIndex, effectiveUpgrades(pr), pr.ToolIndex, perks, getPasses(player), petBonus, rank)
+	local rebirths = profile and profile.Rebirths or 0
+	return Config.GetRunStats(levelIndex, effectiveUpgrades(pr), pr.ToolIndex, perks, getPasses(player), petBonus, rank, rebirths)
 end
 
 -- Recomputes a member's stats from their upgrades, tool, perks, passes and pets, and re-applies
@@ -743,6 +744,8 @@ local function rewardRun(run: Run, members: { Player }, seconds: number, returnA
 			if getPasses(p).VIP then
 				bubbles *= 1.25
 			end
+			local profile = getProfile(p)
+			bubbles *= Config.RebirthBubbleMult(profile and profile.Rebirths or 0)
 			bubbles = math.floor(bubbles)
 
 			safe(DataService.AddBubbles, p, bubbles, "RunClear")
@@ -1158,7 +1161,7 @@ end
 function RoundService.GetRunPower(player: Player): number
 	local run = runOf[player]
 	local pr = run and run.Players[player]
-	return if pr then pr.Stats.Power else 0
+	return if pr then (pr.Stats.PetPower or pr.Stats.Power) else 0
 end
 
 function RoundService.IsTankFull(player: Player): boolean

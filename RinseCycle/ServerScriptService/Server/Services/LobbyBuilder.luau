@@ -1275,6 +1275,42 @@ local function buildDecorations(parent: Instance)
 	end
 end
 
+-- Rebirth Fountain: a low-poly stone fountain with glowing water and a spinning gold star; bubbles
+-- stream up from its spout (tag "BubbleSpout", client). Opens the Rebirth window.
+local function buildRebirthFountain(parent: Instance)
+	local x, z = -34, 14
+	local stone = Color3.fromRGB(236, 232, 224)
+	local water = Color3.fromRGB(120, 200, 255)
+	hex(parent, "FountainBasin", x, FLOOR_Y, z, 13, 2.2, stone)
+	hex(parent, "FountainWater", x, FLOOR_Y + 2.2, z, 11.6, 0.2, water, false)
+	hex(parent, "FountainPillar", x, FLOOR_Y + 2.2, z, 2.6, 5, stone)
+	hex(parent, "FountainBowl", x, FLOOR_Y + 7.2, z, 6.5, 1.2, stone)
+	hex(parent, "FountainBowlWater", x, FLOOR_Y + 8.4, z, 5.4, 0.2, water, false)
+	local spout = mkPart("Part", decor({ Name = "BubbleSpout", Size = Vector3.new(1, 1, 1), CFrame = at(x, FLOOR_Y + 9, z), Transparency = 1, CastShadow = false }), parent)
+	CollectionService:AddTag(spout, "BubbleSpout")
+	local star = mkPart("Part", decor({
+		Name = "RebirthStar",
+		Size = Vector3.new(3, 3, 0.8),
+		CFrame = at(x, FLOOR_Y + 14, z) * CFrame.Angles(0, 0, math.rad(45)),
+		Color = Color3.fromRGB(255, 210, 80),
+		Material = Enum.Material.Neon,
+		CastShadow = false,
+	}), parent)
+	star:SetAttribute("SpinSpeed", 1.2)
+	CollectionService:AddTag(star, "SpinY")
+	mk("PointLight", { Range = 16, Brightness = 0.8, Color = Color3.fromRGB(255, 220, 140) }, star)
+	local base = mkPart("Part", { Name = "FountainPrompt", Size = Vector3.new(1, 1, 1), CFrame = at(x, FLOOR_Y + 2, z), Transparency = 1, CanCollide = false, CastShadow = false }, parent)
+	worldSign(base, "✨ REBIRTH", 10, 2.6, 16, Color3.fromRGB(255, 225, 130))
+	local prompt = mk("ProximityPrompt", {
+		ActionText = "Rebirth",
+		ObjectText = "Rebirth Fountain",
+		RequiresLineOfSight = false,
+		HoldDuration = 0,
+		MaxActivationDistance = 12,
+	}, base) :: ProximityPrompt
+	prompt:SetAttribute("OpenWindow", "Rebirth")
+end
+
 -- Rank Shrine: a floating, spinning crystal over a pedestal. Opens the Ranks window.
 local function buildRankShrine(parent: Instance)
 	local x, z = -32, 40
@@ -1417,6 +1453,7 @@ function LobbyBuilder.Build(): Lobby
 	buildHowToPlay(model, 34, 44, SPAWN.X, SPAWN.Z)
 
 	buildRankShrine(model)
+	buildRebirthFountain(model)
 	buildPathDressing(model)
 	buildDecorations(model)
 	setupLighting()

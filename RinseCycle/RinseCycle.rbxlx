@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "0.3.0"
+Config.Version = "0.4.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -72,7 +72,7 @@ Config.Round = {
 ----------------------------------------------------------------------------------------------------
 Config.Base = {
 	Radius = 1.6, -- studs
-	RadiusPerLevel = 0.55,
+	RadiusPerLevel = 0.3,
 	Power = 2.5, -- dirt HP removed per second
 	PowerGrowth = 1.45, -- per Power level
 	Tank = 15, -- units
@@ -107,8 +107,8 @@ Config.Tools = {
 	{ Id = "Sponge", Name = "Sponge", Icon = "🧽", Mode = "Scrub", Tier = 1, Cost = 60, Radius = 1.4, Power = 2.2, Reach = 12, UpgradeMult = 1.5, Color = Color3.fromRGB(255, 221, 87), Desc = "Soft and quick. Scrub up close." },
 	{ Id = "Brush", Name = "Scrub Brush", Icon = "🧹", Mode = "Scrub", Tier = 2, Cost = 180, Radius = 0.9, Power = 5.5, Reach = 8, UpgradeMult = 2, Color = Color3.fromRGB(120, 230, 160), Desc = "Right up close: small but tough, shifts burnt-on bits." },
 	{ Id = "Nozzle", Name = "Spray Nozzle", Icon = "🚿", Mode = "Spray", Tier = 2, Cost = 350, Radius = 1.5, Power = 3.2, Reach = 34, UpgradeMult = 3, Color = Color3.fromRGB(90, 200, 255), Desc = "A water stream: clean from far away." },
-	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Mode = "Line", Tier = 3, Cost = 700, Radius = 1.0, Power = 12, Reach = 26, UpgradeMult = 5, LineLength = 5, LineWidth = 0.9, Color = Color3.fromRGB(60, 140, 255), Desc = "A long thin blast: sweep it across and dirt melts away." },
-	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Mode = "Foam", Tier = 3, Cost = 1500, Radius = 2.1, Power = 4.5, Reach = 40, UpgradeMult = 8, FoamInterval = 0.4, FoamSeconds = 2.5, FoamShare = 0.6, Color = Color3.fromRGB(200, 150, 255), Desc = "Shoots foam blobs that keep cleaning where they land." },
+	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Mode = "Line", Tier = 3, Cost = 700, Radius = 1.0, Power = 12, Reach = 26, UpgradeMult = 5, LineLength = 3.5, LineWidth = 0.9, Color = Color3.fromRGB(60, 140, 255), Desc = "A long thin blast: sweep it across and dirt melts away." },
+	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Mode = "Foam", Tier = 3, Cost = 1500, Radius = 1.8, Power = 4.5, Reach = 40, UpgradeMult = 8, FoamInterval = 0.4, FoamSeconds = 2.5, FoamShare = 0.6, Color = Color3.fromRGB(200, 150, 255), Desc = "Shoots foam blobs that keep cleaning where they land." },
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -588,7 +588,7 @@ end
 	  passes     : { DoubleCoins = bool, MegaTank = bool, ... }
 	  petCoinBonus : Config.PetCoinBonus(...)
 ]]
-function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, perks, passes, petCoinBonus: number?, rankId: string?)
+function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, perks, passes, petCoinBonus: number?, rankId: string?, rebirths: number?)
 	local level = Config.GetLevel(levelIndex)
 	local tool = Config.Tools[toolIndex] or Config.Tools[1]
 	upgrades = upgrades or {}
@@ -618,6 +618,7 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 		coinMult *= 1.25
 	end
 	coinMult *= 1 + (fx.Coins or 0)
+	coinMult *= Config.RebirthCoinMult(rebirths)
 
 	local mode = tool.Mode or "Scrub"
 	return {
@@ -626,8 +627,11 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 		TankMax = math.floor(tank),
 		Reach = tool.Reach,
 		Mode = mode,
+		-- Pets clean off this, not Power, so which tool you hold doesn't change them (the washer's
+		-- high Power pays for its thin line; pets shouldn't get it free). Sponge-level strength.
+		PetPower = power / (tool.Power or 1) * 2.5,
 		-- Line: length grows with the Size upgrade (Radius), width is fixed.
-		LineLength = if mode == "Line" then radius * (tool.LineLength or 5) else nil,
+		LineLength = if mode == "Line" then radius * (tool.LineLength or 3.5) else nil,
 		LineWidth = if mode == "Line" then tool.LineWidth or 0.9 else nil,
 		FoamInterval = if mode == "Foam" then tool.FoamInterval or 0.4 else nil,
 		FoamSeconds = if mode == "Foam" then tool.FoamSeconds or 2.5 else nil,
@@ -644,6 +648,28 @@ end
 function Config.StartCoins(levelIndex: number, perks): number
 	local lvl = (perks and perks.HeadStart) or 0
 	return math.floor(lvl * Config.GetPerk("HeadStart").PerLevel * Config.GetLevel(levelIndex).Mult)
+end
+
+-- Rebirth (the endgame loop): after clearing the last dishwasher, trade your Bubbles, unlocked levels
+-- and perks for a permanent bonus. Pets, gems, ranks, passes and best times are kept.
+Config.Rebirth = {
+	BaseCost = 2000, -- Bubbles needed for the first rebirth
+	CostGrowth = 1.6, -- each rebirth costs this much more
+	CoinsPer = 0.25, -- +25% coins per rebirth
+	BubblesPer = 0.5, -- +50% Bubbles per rebirth
+	Gems = 50, -- gems granted per rebirth
+}
+
+function Config.RebirthCost(rebirths: number): number
+	return Config.Round2(Config.Rebirth.BaseCost * (Config.Rebirth.CostGrowth ^ (rebirths or 0)))
+end
+
+function Config.RebirthCoinMult(rebirths: number?): number
+	return 1 + Config.Rebirth.CoinsPer * (rebirths or 0)
+end
+
+function Config.RebirthBubbleMult(rebirths: number?): number
+	return 1 + Config.Rebirth.BubblesPer * (rebirths or 0)
 end
 
 -- Equip slots for pets: 3, or 5 with the +2 Pet Slots pass.
@@ -2270,6 +2296,7 @@ export type RunStats = {
 	ToolIndex: number,
 	Tier: number, -- the tool's Tier (dirt with MinTool above this cleans slowly)
 	Mode: string, -- "Scrub" | "Spray" | "Line" | "Foam" (see Config.Tools)
+	PetPower: number, -- what pets' PowerShare multiplies (tool-independent)
 	LineLength: number?, -- Line only
 	LineWidth: number?,
 	FoamInterval: number?, -- Foam only
@@ -2337,6 +2364,8 @@ export type MetaState = {
 	MaxPets: number,
 	Unlocked: number, -- highest level index unlocked
 	BestTimes: { number }, -- per level index, seconds; 0 = never cleared
+	Rebirths: number,
+	RebirthReady: boolean, -- the last level was cleared since the last rebirth
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
@@ -4063,6 +4092,7 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
+local Format = require(Shared:WaitForChild("Format"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local Types = require(Shared:WaitForChild("Types"))
 local Util = require(Shared:WaitForChild("Util"))
@@ -4119,6 +4149,8 @@ export type Profile = {
 	NextUid: number,
 	Unlocked: number, -- highest level index the player may pick
 	BestTimes: { number }, -- one per Config.Levels entry, seconds, 0 = never cleared
+	Rebirths: number, -- times the player has rebirthed (Config.Rebirth)
+	RebirthReady: boolean, -- the last level has been cleared since the last rebirth
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
@@ -4171,6 +4203,8 @@ local TEMPLATE: Profile = {
 	NextUid = 1,
 	Unlocked = 1,
 	BestTimes = {},
+	Rebirths = 0,
+	RebirthReady = false,
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
 }
@@ -4359,6 +4393,8 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.Version = if isFinite(p.Version) then math.max(p.Version, PROFILE_VERSION) else PROFILE_VERSION
 	p.Bubbles = toCount(p.Bubbles, 0)
 	p.Gems = toCount(p.Gems, 0)
+	p.Rebirths = toCount(p.Rebirths, 0)
+	p.RebirthReady = p.RebirthReady == true
 	local ranks, seenRank = {}, {}
 	for _, id in (if type(p.Ranks) == "table" then p.Ranks else {}) do
 		if type(id) == "string" and Config.GetRank(id) and not seenRank[id] then
@@ -4438,11 +4474,17 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	end
 	p.BestTimes = times
 
-	-- Unlocked: a valid level, and never below "one past every level already cleared".
+	-- Unlocked: a valid level. Before anyone has rebirthed it is never below "one past every level
+	-- already cleared" (repairs old saves); after a rebirth, best times stay but levels re-lock.
 	local unlocked = math.clamp(toCount(p.Unlocked, 1), 1, #Config.Levels)
-	for i, t in times do
-		if t &gt; 0 then
-			unlocked = math.max(unlocked, math.min(i + 1, #Config.Levels))
+	if p.Rebirths == 0 then
+		for i, t in times do
+			if t &gt; 0 then
+				unlocked = math.max(unlocked, math.min(i + 1, #Config.Levels))
+			end
+		end
+		if (times[#Config.Levels] or 0) &gt; 0 then
+			p.RebirthReady = true
 		end
 	end
 	p.Unlocked = unlocked
@@ -4556,6 +4598,8 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		MaxPets = Config.PetRules.MaxInventory,
 		Unlocked = profile.Unlocked,
 		BestTimes = table.clone(profile.BestTimes),
+		Rebirths = profile.Rebirths,
+		RebirthReady = profile.RebirthReady,
 		Stats = {
 			Runs = stats.Runs,
 			DishesCleaned = stats.DishesCleaned,
@@ -5158,6 +5202,39 @@ function DataService.SpendGems(player: Player, amount: number): boolean
 	return true
 end
 
+-- Rebirth: needs the last level cleared since the last rebirth and Config.RebirthCost Bubbles.
+-- Resets Bubbles, unlocked levels and perks; keeps pets, gems, ranks, passes and best times; adds
+-- one rebirth (permanent coin and Bubble bonuses, see Config.Rebirth) and some gems.
+function DataService.Rebirth(player: Player): (boolean, string?)
+	local profile = DataService.Get(player)
+	if not profile then
+		return false, "Your data is still loading."
+	end
+	if not profile.RebirthReady then
+		local last = Config.Levels[#Config.Levels]
+		return false, string.format("Clean %s %s first!", last.Icon, last.Name)
+	end
+	local cost = Config.RebirthCost(profile.Rebirths)
+	if profile.Bubbles &lt; cost then
+		return false, string.format("You need %s 🧼 to rebirth.", Format.Commas(cost))
+	end
+	profile.Rebirths += 1
+	profile.RebirthReady = false
+	profile.Bubbles = 0
+	profile.Unlocked = 1
+	for id in profile.Perks do
+		profile.Perks[id] = 0
+	end
+	profile.Gems += Config.Rebirth.Gems
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
+	end
+	DataService.PushMeta(player)
+	DataService.PassesChanged:Fire(player) -- run stats depend on rebirths too
+	return true, nil
+end
+
 -- Adds a rank to the collection (no-op if owned). Returns true if it was new.
 function DataService.AddRank(player: Player, rankId: string): boolean
 	local profile = DataService.Get(player)
@@ -5280,6 +5357,11 @@ function DataService.RecordClear(player: Player, levelIndex: number, seconds: nu
 		unlocked = nextLevel
 	end
 	profile.Stats.Runs += 1
+	if levelIndex == #Config.Levels and not profile.RebirthReady then
+		profile.RebirthReady = true
+		-- A few seconds later, so it lands after the results screen.
+		task.delay(6, queueNotice, session, "✨ Every dishwasher is clean! Visit the Rebirth Fountain in the lobby to Rebirth.", "Good")
+	end
 
 	-- Unlocks and best times are the progress players care most about: write them soon.
 	session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
@@ -7957,6 +8039,42 @@ local function buildDecorations(parent: Instance)
 	end
 end
 
+-- Rebirth Fountain: a low-poly stone fountain with glowing water and a spinning gold star; bubbles
+-- stream up from its spout (tag "BubbleSpout", client). Opens the Rebirth window.
+local function buildRebirthFountain(parent: Instance)
+	local x, z = -34, 14
+	local stone = Color3.fromRGB(236, 232, 224)
+	local water = Color3.fromRGB(120, 200, 255)
+	hex(parent, "FountainBasin", x, FLOOR_Y, z, 13, 2.2, stone)
+	hex(parent, "FountainWater", x, FLOOR_Y + 2.2, z, 11.6, 0.2, water, false)
+	hex(parent, "FountainPillar", x, FLOOR_Y + 2.2, z, 2.6, 5, stone)
+	hex(parent, "FountainBowl", x, FLOOR_Y + 7.2, z, 6.5, 1.2, stone)
+	hex(parent, "FountainBowlWater", x, FLOOR_Y + 8.4, z, 5.4, 0.2, water, false)
+	local spout = mkPart("Part", decor({ Name = "BubbleSpout", Size = Vector3.new(1, 1, 1), CFrame = at(x, FLOOR_Y + 9, z), Transparency = 1, CastShadow = false }), parent)
+	CollectionService:AddTag(spout, "BubbleSpout")
+	local star = mkPart("Part", decor({
+		Name = "RebirthStar",
+		Size = Vector3.new(3, 3, 0.8),
+		CFrame = at(x, FLOOR_Y + 14, z) * CFrame.Angles(0, 0, math.rad(45)),
+		Color = Color3.fromRGB(255, 210, 80),
+		Material = Enum.Material.Neon,
+		CastShadow = false,
+	}), parent)
+	star:SetAttribute("SpinSpeed", 1.2)
+	CollectionService:AddTag(star, "SpinY")
+	mk("PointLight", { Range = 16, Brightness = 0.8, Color = Color3.fromRGB(255, 220, 140) }, star)
+	local base = mkPart("Part", { Name = "FountainPrompt", Size = Vector3.new(1, 1, 1), CFrame = at(x, FLOOR_Y + 2, z), Transparency = 1, CanCollide = false, CastShadow = false }, parent)
+	worldSign(base, "✨ REBIRTH", 10, 2.6, 16, Color3.fromRGB(255, 225, 130))
+	local prompt = mk("ProximityPrompt", {
+		ActionText = "Rebirth",
+		ObjectText = "Rebirth Fountain",
+		RequiresLineOfSight = false,
+		HoldDuration = 0,
+		MaxActivationDistance = 12,
+	}, base) :: ProximityPrompt
+	prompt:SetAttribute("OpenWindow", "Rebirth")
+end
+
 -- Rank Shrine: a floating, spinning crystal over a pedestal. Opens the Ranks window.
 local function buildRankShrine(parent: Instance)
 	local x, z = -32, 40
@@ -8099,6 +8217,7 @@ function LobbyBuilder.Build(): Lobby
 	buildHowToPlay(model, 34, 44, SPAWN.X, SPAWN.Z)
 
 	buildRankShrine(model)
+	buildRebirthFountain(model)
 	buildPathDressing(model)
 	buildDecorations(model)
 	setupLighting()
@@ -11016,7 +11135,8 @@ local function computeStats(levelIndex: number, player: Player, pr: PlayerRun): 
 		petBonus = (ok and positive(bonus)) or 0
 	end
 	local rank = profile and profile.Rank or nil
-	return Config.GetRunStats(levelIndex, effectiveUpgrades(pr), pr.ToolIndex, perks, getPasses(player), petBonus, rank)
+	local rebirths = profile and profile.Rebirths or 0
+	return Config.GetRunStats(levelIndex, effectiveUpgrades(pr), pr.ToolIndex, perks, getPasses(player), petBonus, rank, rebirths)
 end
 
 -- Recomputes a member's stats from their upgrades, tool, perks, passes and pets, and re-applies
@@ -11320,6 +11440,8 @@ local function rewardRun(run: Run, members: { Player }, seconds: number, returnA
 			if getPasses(p).VIP then
 				bubbles *= 1.25
 			end
+			local profile = getProfile(p)
+			bubbles *= Config.RebirthBubbleMult(profile and profile.Rebirths or 0)
 			bubbles = math.floor(bubbles)
 
 			safe(DataService.AddBubbles, p, bubbles, "RunClear")
@@ -11735,7 +11857,7 @@ end
 function RoundService.GetRunPower(player: Player): number
 	local run = runOf[player]
 	local pr = run and run.Players[player]
-	return if pr then pr.Stats.Power else 0
+	return if pr then (pr.Stats.PetPower or pr.Stats.Power) else 0
 end
 
 function RoundService.IsTankFull(player: Player): boolean
@@ -12447,7 +12569,19 @@ local function equipRank(player: Player, value: any): Types.RequestResult
 	return { Ok = true }
 end
 
+local function rebirth(player: Player, _value: any): Types.RequestResult
+	if RoundService.IsInRun(player) then
+		return fail("Finish your wash first!")
+	end
+	local ok, err = DataService.Rebirth(player)
+	if not ok then
+		return fail(err or ERR_GENERIC)
+	end
+	return { Ok = true }
+end
+
 local HANDLERS: { [string]: (Player, any) -&gt; Types.RequestResult } = {
+	Rebirth = rebirth,
 	BuyPerk = buyPerk,
 	TestPass = testPass,
 	TestProduct = testProduct,
@@ -12982,6 +13116,7 @@ local PartyUI = require(Client:WaitForChild("PartyUI"))
 local UpgradesUI = require(Client:WaitForChild("UpgradesUI"))
 local ShopUI = require(Client:WaitForChild("ShopUI"))
 local RanksUI = require(Client:WaitForChild("RanksUI"))
+local RebirthUI = require(Client:WaitForChild("RebirthUI"))
 local PetsUI = require(Client:WaitForChild("PetsUI"))
 local SprayController = require(Client:WaitForChild("SprayController"))
 local PetRenderer = require(Client:WaitForChild("PetRenderer"))
@@ -13008,6 +13143,7 @@ step("PartyUI", PartyUI.Init)
 step("UpgradesUI", UpgradesUI.Init)
 step("ShopUI", ShopUI.Init)
 step("RanksUI", RanksUI.Init)
+step("RebirthUI", RebirthUI.Init)
 step("PetsUI", PetsUI.Init)
 step("SprayController", SprayController.Init)
 step("PetRenderer", PetRenderer.Init)
@@ -13446,6 +13582,25 @@ end
 
 local function removeLiftPart(inst: Instance)
 	liftPads[inst :: BasePart] = nil
+end
+
+-- Bubble spouts (the Rebirth Fountain): a gentle stream of bubbles near the camera.
+local spoutClock = 0
+local function stepSpouts(dt: number)
+	spoutClock += dt
+	if spoutClock &lt; 0.2 then
+		return
+	end
+	spoutClock = 0
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	for _, spout in CollectionService:GetTagged("BubbleSpout") do
+		if spout:IsA("BasePart") and (spout.Position - camera.CFrame.Position).Magnitude &lt; 150 then
+			Bubbles.Emit(spout.Position, { Count = 1, Spread = 0.6, Velocity = Vector3.new(0, 7, 0), Jitter = 1.2, Size = { 0.4, 1.1 }, Life = { 1.6, 2.6 }, Rise = 1.5 })
+		end
+	end
 end
 
 -- Bubbles streaming up every lift column near the camera.
@@ -14035,6 +14190,7 @@ function Effects.Init()
 		stepSpin(dt)
 		stepLift(dt)
 		stepLiftBubbles(dt)
+		stepSpouts(dt)
 		updateDrainGuide()
 		stepLobbyAmbience()
 	end)
@@ -17928,7 +18084,160 @@ function RanksUI.Init()
 end
 
 return RanksUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
+	RebirthUI - the "Rebirth" window (the Rebirth Fountain in the lobby).
+
+	The endgame loop: once you've cleaned the last dishwasher, trade your Bubbles, unlocked
+	dishwashers and perks for a permanent bonus (Config.Rebirth). Shows how many rebirths you have,
+	your current bonuses, what the next one gives, the two requirements (with ticks), exactly what
+	resets and what you keep, and the REBIRTH button. The server does all the checks (MetaRequest
+	"Rebirth").
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+local Types = require(Shared:WaitForChild("Types"))
+
+local Client = script.Parent
+local ClientState = require(Client:WaitForChild("ClientState"))
+local UIKit = require(Client:WaitForChild("UIKit"))
+
+local Colors = UIKit.Theme.Colors
+
+local RebirthUI = {}
+
+local initialized = false
+local busy = false
+
+local countLabel: TextLabel
+local nowLabel: TextLabel
+local nextLabel: TextLabel
+local reqLevel: TextLabel
+local reqBubbles: TextLabel
+local rebirthButton: TextButton
+
+local function pct(x: number): string
+	return string.format("%d%%", math.floor(x * 100 + 0.5))
+end
+
+local function render()
+	local meta = ClientState.Meta :: Types.MetaState?
+	local rebirths = (meta and meta.Rebirths) or 0
+	local rb = Config.Rebirth
+	countLabel.Text = string.format("✨ Rebirth %d", rebirths)
+	nowLabel.Text = if rebirths &gt; 0
+		then string.format("Now: +%s coins, +%s Bubbles", pct(rb.CoinsPer * rebirths), pct(rb.BubblesPer * rebirths))
+		else "No rebirth bonuses yet."
+	nextLabel.Text = string.format(
+		"Next rebirth: +%s coins and +%s Bubbles forever, and %d 💎",
+		pct(rb.CoinsPer * (rebirths + 1)),
+		pct(rb.BubblesPer * (rebirths + 1)),
+		rb.Gems
+	)
+	local last = Config.Levels[#Config.Levels]
+	local levelDone = meta ~= nil and meta.RebirthReady == true
+	reqLevel.Text = string.format("%s Clean %s %s", if levelDone then "✅" else "⬜", last.Icon, last.Name)
+	reqLevel.TextColor3 = if levelDone then Colors.Good else Colors.Text
+	local cost = Config.RebirthCost(rebirths)
+	local have = (meta and meta.Bubbles) or 0
+	local enough = have &gt;= cost
+	reqBubbles.Text = string.format("%s Have %s / %s 🧼", if enough then "✅" else "⬜", UIKit.Commas(have), UIKit.Commas(cost))
+	reqBubbles.TextColor3 = if enough then Colors.Good else Colors.Text
+	UIKit.SetButtonColor(rebirthButton, if levelDone and enough then Colors.Good else Colors.Disabled)
+end
+
+local function doRebirth()
+	if busy then
+		return
+	end
+	busy = true
+	local result = ClientState.MetaRequest("Rebirth")
+	busy = false
+	if not result.Ok then
+		UIKit.Toast(result.Error or "Can't rebirth yet.", "Bad")
+		return
+	end
+	UIKit.PlaySound("Sparkle")
+	UIKit.Confetti(80)
+	UIKit.Toast("✨ Rebirthed! Your bonuses are now permanent.", "Good")
+	render()
+end
+
+function RebirthUI.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+
+	local _gui, screenRoot = UIKit.CreateScreen("RebirthUI", 10)
+	local _window, content = UIKit.Window({
+		Name = "Rebirth",
+		Title = "Rebirth",
+		Icon = "✨",
+		Size = Vector2.new(620, 520),
+		Parent = screenRoot,
+	})
+
+	local y = 0
+	local function line(props: { [string]: any }, height: number): TextLabel
+		props.Size = UDim2.new(1, -20, 0, height)
+		props.Position = UDim2.new(0.5, 0, 0, y)
+		props.AnchorPoint = Vector2.new(0.5, 0)
+		props.Parent = content
+		props.TextWrapped = true
+		y += height + 6
+		return UIKit.Label(props)
+	end
+
+	countLabel = line({ Text = "", TextSize = 34, TextColor3 = Color3.fromRGB(255, 220, 110) }, 42)
+	nowLabel = line({ Text = "", TextSize = 18, TextColor3 = Colors.TextDim }, 24)
+	nextLabel = line({ Text = "", TextSize = 20 }, 50)
+
+	local reqCard = UIKit.Card({
+		Size = UDim2.new(1, -20, 0, 96),
+		Position = UDim2.new(0.5, 0, 0, y),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Color = Colors.PanelDark,
+		Parent = content,
+	})
+	y += 104
+	reqLevel = UIKit.Label({ Text = "", TextSize = 20, Size = UDim2.new(1, -24, 0, 36), Position = UDim2.fromOffset(12, 8), TextXAlignment = Enum.TextXAlignment.Left, Parent = reqCard })
+	reqBubbles = UIKit.Label({ Text = "", TextSize = 20, Size = UDim2.new(1, -24, 0, 36), Position = UDim2.fromOffset(12, 50), TextXAlignment = Enum.TextXAlignment.Left, Parent = reqCard })
+
+	line({
+		Text = "Resets: Bubbles, unlocked dishwashers and perks.\nYou keep: pets, gems, ranks, passes and best times.",
+		TextSize = 16,
+		TextColor3 = Colors.TextDim,
+	}, 48)
+
+	rebirthButton = UIKit.Button({
+		Text = "REBIRTH",
+		Icon = "✨",
+		Size = UDim2.new(1, -40, 0, 64),
+		Position = UDim2.new(0.5, 0, 0, y + 4),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Color = Colors.Disabled,
+		TextSize = 30,
+		Parent = content,
+		OnClick = doRebirth,
+	})
+
+	UIKit.RegisterWindow("Rebirth", {
+		Open = function()
+			render()
+		end,
+	})
+	ClientState.Changed:Connect(function(kind)
+		if kind == "Meta" and UIKit.IsWindowOpen("Rebirth") then
+			render()
+		end
+	end)
+end
+
+return RebirthUI</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
 	ShopUI - the lobby "Shop" window: Perks (bought with Bubbles, permanent) and Robux (game passes).
 	Opened from the Soap Shop ProximityPrompt (routed by Effects via OpenWindow="Shop"), the HUD [🛒 Shop]
 	button, or the G key - all outside our scope, they just call UIKit.OpenWindow("Shop").
@@ -18374,7 +18683,7 @@ function ShopUI.Init()
 end
 
 return ShopUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
+<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
 -- Aim comes from the mouse on PC, or the screen centre (with a crosshair) on touch/gamepad, cast
@@ -19198,7 +19507,7 @@ function SprayController.Init()
 end
 
 return SprayController</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -21614,7 +21923,7 @@ function UIKit.Init()
 end
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button
@@ -21683,7 +21992,7 @@ local function previewStats(run: Types.RunState, upgradeId: string): Types.RunSt
 	local petBonus = if meta then Config.PetCoinBonus(meta.Pets, meta.Equipped) else 0
 	local nextUpgrades = table.clone(run.Upgrades)
 	;(nextUpgrades :: any)[upgradeId] = ((run.Upgrades :: any)[upgradeId] or 0) + 1
-	return Config.GetRunStats(run.Level, nextUpgrades, run.ToolIndex, perks, passes, petBonus, meta and meta.Rank or nil)
+	return Config.GetRunStats(run.Level, nextUpgrades, run.ToolIndex, perks, passes, petBonus, meta and meta.Rank or nil, meta and meta.Rebirths or 0)
 end
 
 local function buy(action: string, value: any, onRow: GuiObject)

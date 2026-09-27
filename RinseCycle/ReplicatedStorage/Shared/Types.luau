@@ -47,6 +47,7 @@ export type RunStats = {
 	ToolIndex: number,
 	Tier: number, -- the tool's Tier (dirt with MinTool above this cleans slowly)
 	Mode: string, -- "Scrub" | "Spray" | "Line" | "Foam" (see Config.Tools)
+	PetPower: number, -- what pets' PowerShare multiplies (tool-independent)
 	LineLength: number?, -- Line only
 	LineWidth: number?,
 	FoamInterval: number?, -- Foam only
@@ -114,6 +115,8 @@ export type MetaState = {
 	MaxPets: number,
 	Unlocked: number, -- highest level index unlocked
 	BestTimes: { number }, -- per level index, seconds; 0 = never cleared
+	Rebirths: number,
+	RebirthReady: boolean, -- the last level was cleared since the last rebirth
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,

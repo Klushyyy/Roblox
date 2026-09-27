@@ -252,7 +252,19 @@ local function equipRank(player: Player, value: any): Types.RequestResult
 	return { Ok = true }
 end
 
+local function rebirth(player: Player, _value: any): Types.RequestResult
+	if RoundService.IsInRun(player) then
+		return fail("Finish your wash first!")
+	end
+	local ok, err = DataService.Rebirth(player)
+	if not ok then
+		return fail(err or ERR_GENERIC)
+	end
+	return { Ok = true }
+end
+
 local HANDLERS: { [string]: (Player, any) -> Types.RequestResult } = {
+	Rebirth = rebirth,
 	BuyPerk = buyPerk,
 	TestPass = testPass,
 	TestProduct = testProduct,

@@ -27,6 +27,7 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
+local Format = require(Shared:WaitForChild("Format"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local Types = require(Shared:WaitForChild("Types"))
 local Util = require(Shared:WaitForChild("Util"))
@@ -83,6 +84,8 @@ export type Profile = {
 	NextUid: number,
 	Unlocked: number, -- highest level index the player may pick
 	BestTimes: { number }, -- one per Config.Levels entry, seconds, 0 = never cleared
+	Rebirths: number, -- times the player has rebirthed (Config.Rebirth)
+	RebirthReady: boolean, -- the last level has been cleared since the last rebirth
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
@@ -135,6 +138,8 @@ local TEMPLATE: Profile = {
 	NextUid = 1,
 	Unlocked = 1,
 	BestTimes = {},
+	Rebirths = 0,
+	RebirthReady = false,
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
 }
@@ -323,6 +328,8 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.Version = if isFinite(p.Version) then math.max(p.Version, PROFILE_VERSION) else PROFILE_VERSION
 	p.Bubbles = toCount(p.Bubbles, 0)
 	p.Gems = toCount(p.Gems, 0)
+	p.Rebirths = toCount(p.Rebirths, 0)
+	p.RebirthReady = p.RebirthReady == true
 	local ranks, seenRank = {}, {}
 	for _, id in (if type(p.Ranks) == "table" then p.Ranks else {}) do
 		if type(id) == "string" and Config.GetRank(id) and not seenRank[id] then
@@ -402,11 +409,17 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	end
 	p.BestTimes = times
 
-	-- Unlocked: a valid level, and never below "one past every level already cleared".
+	-- Unlocked: a valid level. Before anyone has rebirthed it is never below "one past every level
+	-- already cleared" (repairs old saves); after a rebirth, best times stay but levels re-lock.
 	local unlocked = math.clamp(toCount(p.Unlocked, 1), 1, #Config.Levels)
-	for i, t in times do
-		if t > 0 then
-			unlocked = math.max(unlocked, math.min(i + 1, #Config.Levels))
+	if p.Rebirths == 0 then
+		for i, t in times do
+			if t > 0 then
+				unlocked = math.max(unlocked, math.min(i + 1, #Config.Levels))
+			end
+		end
+		if (times[#Config.Levels] or 0) > 0 then
+			p.RebirthReady = true
 		end
 	end
 	p.Unlocked = unlocked
@@ -520,6 +533,8 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		MaxPets = Config.PetRules.MaxInventory,
 		Unlocked = profile.Unlocked,
 		BestTimes = table.clone(profile.BestTimes),
+		Rebirths = profile.Rebirths,
+		RebirthReady = profile.RebirthReady,
 		Stats = {
 			Runs = stats.Runs,
 			DishesCleaned = stats.DishesCleaned,
@@ -1122,6 +1137,39 @@ function DataService.SpendGems(player: Player, amount: number): boolean
 	return true
 end
 
+-- Rebirth: needs the last level cleared since the last rebirth and Config.RebirthCost Bubbles.
+-- Resets Bubbles, unlocked levels and perks; keeps pets, gems, ranks, passes and best times; adds
+-- one rebirth (permanent coin and Bubble bonuses, see Config.Rebirth) and some gems.
+function DataService.Rebirth(player: Player): (boolean, string?)
+	local profile = DataService.Get(player)
+	if not profile then
+		return false, "Your data is still loading."
+	end
+	if not profile.RebirthReady then
+		local last = Config.Levels[#Config.Levels]
+		return false, string.format("Clean %s %s first!", last.Icon, last.Name)
+	end
+	local cost = Config.RebirthCost(profile.Rebirths)
+	if profile.Bubbles < cost then
+		return false, string.format("You need %s 🧼 to rebirth.", Format.Commas(cost))
+	end
+	profile.Rebirths += 1
+	profile.RebirthReady = false
+	profile.Bubbles = 0
+	profile.Unlocked = 1
+	for id in profile.Perks do
+		profile.Perks[id] = 0
+	end
+	profile.Gems += Config.Rebirth.Gems
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
+	end
+	DataService.PushMeta(player)
+	DataService.PassesChanged:Fire(player) -- run stats depend on rebirths too
+	return true, nil
+end
+
 -- Adds a rank to the collection (no-op if owned). Returns true if it was new.
 function DataService.AddRank(player: Player, rankId: string): boolean
 	local profile = DataService.Get(player)
@@ -1244,6 +1292,11 @@ function DataService.RecordClear(player: Player, levelIndex: number, seconds: nu
 		unlocked = nextLevel
 	end
 	profile.Stats.Runs += 1
+	if levelIndex == #Config.Levels and not profile.RebirthReady then
+		profile.RebirthReady = true
+		-- A few seconds later, so it lands after the results screen.
+		task.delay(6, queueNotice, session, "✨ Every dishwasher is clean! Visit the Rebirth Fountain in the lobby to Rebirth.", "Good")
+	end
 
 	-- Unlocks and best times are the progress players care most about: write them soon.
 	session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)

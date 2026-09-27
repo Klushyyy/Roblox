@@ -877,6 +877,41 @@ buyer isn't in a run). `MarketService.GrantProduct` gives a product's goods for 
 and Studio test purchases (`MetaRequest "TestPass"` / `"TestProduct"`, allowed per
 `Config.TestPasses`). A newly owned pass triggers confetti on the client.
 
+## 6c. Tool modes, merging, rebirth and the economy (v0.4)
+
+**Tool modes** (`Config.Tools[i].Mode`, carried in RunStats as `Mode`):
+- `Scrub` (Hands, Sponge, Brush): a circle at the aim; short reach (12, the Brush 8 but very strong
+  and Tier 2). Suds froth on the dish while you scrub.
+- `Spray` (Nozzle): a circle at the end of a water beam; reach 34.
+- `Line` (Pressure Washer): a thin line `LineLength x LineWidth` lying on the surface, turned with
+  the camera's right vector; the client sends `Scrub(aim, true, { Dir, Normal })` and the server
+  damages `GetPartBoundsInBox` along it. High power, so sweeping it across melts dirt.
+- `Foam` (Foam Cannon): one blob per `FoamInterval`; the server makes a splat (`run.Splats`) that
+  cleans everything in `Radius` at `Power * FoamShare` per second for `FoamSeconds` (foam loop every
+  0.2 s, at most 4 live splats per player) and fires RunFX `"Foam"` so the whole party sees it.
+- Size upgrades grow the circle / line / splat. Pets clean off `PetPower` (tool-independent).
+
+**Economy.** Coins = units sold x `Config.Round.CoinsPerUnit` (4) x bonuses; dish bonuses use the
+same multiplier. Tool prices are set against a run's income so every tool is reachable and skipping
+to a big one is a real choice (pacing sim: L1 ~4-5 min, L2 ~7-9, L3 ~9-12 solo, no perks/pets).
+Each level has a `Toughness` (dirt HP multiplier) on top of `Mult`.
+
+**Pets.** 3 equip slots, 5 with the +2 Pet Slots pass (the Pet Slot perk is gone). `MetaRequest
+"Merge" { uid, uid, uid }`: three pets of one rarity (below Legendary) become one pet of the next
+rarity from the best egg any of them came from; it takes an equipped pet's slot. Pets window:
+the 🔮 Merge button switches the grid into pick mode.
+
+**Rebirth** (`Config.Rebirth`, the endgame). Clearing the last dishwasher sets
+`profile.RebirthReady`. At the lobby's Rebirth Fountain (`MetaRequest "Rebirth"`, not in a run)
+you pay nothing but must hold `Config.RebirthCost(rebirths)` Bubbles; Bubbles, unlocked levels and
+perks reset, pets/gems/ranks/passes/best times stay, and you gain +25% coins and +50% Bubbles per
+rebirth forever plus 50 gems.
+
+**Parties** hold up to 8; the load grows `PartyGrimeScale` per extra player up to `PartyGrimeCap`.
+
+**Bubble lifts** are bubble columns: standing in one carries you up at 18 studs/s, centring you,
+and pushes you out onto the top rack (client, Effects).
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

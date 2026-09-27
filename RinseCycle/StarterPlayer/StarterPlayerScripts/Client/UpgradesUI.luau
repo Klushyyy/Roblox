@@ -67,7 +67,7 @@ local function previewStats(run: Types.RunState, upgradeId: string): Types.RunSt
 	local petBonus = if meta then Config.PetCoinBonus(meta.Pets, meta.Equipped) else 0
 	local nextUpgrades = table.clone(run.Upgrades)
 	;(nextUpgrades :: any)[upgradeId] = ((run.Upgrades :: any)[upgradeId] or 0) + 1
-	return Config.GetRunStats(run.Level, nextUpgrades, run.ToolIndex, perks, passes, petBonus, meta and meta.Rank or nil)
+	return Config.GetRunStats(run.Level, nextUpgrades, run.ToolIndex, perks, passes, petBonus, meta and meta.Rank or nil, meta and meta.Rebirths or 0)
 end
 
 local function buy(action: string, value: any, onRow: GuiObject)

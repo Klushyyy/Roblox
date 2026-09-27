@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "0.3.0"
+Config.Version = "0.4.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -68,7 +68,7 @@ Config.Round = {
 ----------------------------------------------------------------------------------------------------
 Config.Base = {
 	Radius = 1.6, -- studs
-	RadiusPerLevel = 0.55,
+	RadiusPerLevel = 0.3,
 	Power = 2.5, -- dirt HP removed per second
 	PowerGrowth = 1.45, -- per Power level
 	Tank = 15, -- units
@@ -103,8 +103,8 @@ Config.Tools = {
 	{ Id = "Sponge", Name = "Sponge", Icon = "🧽", Mode = "Scrub", Tier = 1, Cost = 60, Radius = 1.4, Power = 2.2, Reach = 12, UpgradeMult = 1.5, Color = Color3.fromRGB(255, 221, 87), Desc = "Soft and quick. Scrub up close." },
 	{ Id = "Brush", Name = "Scrub Brush", Icon = "🧹", Mode = "Scrub", Tier = 2, Cost = 180, Radius = 0.9, Power = 5.5, Reach = 8, UpgradeMult = 2, Color = Color3.fromRGB(120, 230, 160), Desc = "Right up close: small but tough, shifts burnt-on bits." },
 	{ Id = "Nozzle", Name = "Spray Nozzle", Icon = "🚿", Mode = "Spray", Tier = 2, Cost = 350, Radius = 1.5, Power = 3.2, Reach = 34, UpgradeMult = 3, Color = Color3.fromRGB(90, 200, 255), Desc = "A water stream: clean from far away." },
-	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Mode = "Line", Tier = 3, Cost = 700, Radius = 1.0, Power = 12, Reach = 26, UpgradeMult = 5, LineLength = 5, LineWidth = 0.9, Color = Color3.fromRGB(60, 140, 255), Desc = "A long thin blast: sweep it across and dirt melts away." },
-	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Mode = "Foam", Tier = 3, Cost = 1500, Radius = 2.1, Power = 4.5, Reach = 40, UpgradeMult = 8, FoamInterval = 0.4, FoamSeconds = 2.5, FoamShare = 0.6, Color = Color3.fromRGB(200, 150, 255), Desc = "Shoots foam blobs that keep cleaning where they land." },
+	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Mode = "Line", Tier = 3, Cost = 700, Radius = 1.0, Power = 12, Reach = 26, UpgradeMult = 5, LineLength = 3.5, LineWidth = 0.9, Color = Color3.fromRGB(60, 140, 255), Desc = "A long thin blast: sweep it across and dirt melts away." },
+	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Mode = "Foam", Tier = 3, Cost = 1500, Radius = 1.8, Power = 4.5, Reach = 40, UpgradeMult = 8, FoamInterval = 0.4, FoamSeconds = 2.5, FoamShare = 0.6, Color = Color3.fromRGB(200, 150, 255), Desc = "Shoots foam blobs that keep cleaning where they land." },
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -584,7 +584,7 @@ end
 	  passes     : { DoubleCoins = bool, MegaTank = bool, ... }
 	  petCoinBonus : Config.PetCoinBonus(...)
 ]]
-function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, perks, passes, petCoinBonus: number?, rankId: string?)
+function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, perks, passes, petCoinBonus: number?, rankId: string?, rebirths: number?)
 	local level = Config.GetLevel(levelIndex)
 	local tool = Config.Tools[toolIndex] or Config.Tools[1]
 	upgrades = upgrades or {}
@@ -614,6 +614,7 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 		coinMult *= 1.25
 	end
 	coinMult *= 1 + (fx.Coins or 0)
+	coinMult *= Config.RebirthCoinMult(rebirths)
 
 	local mode = tool.Mode or "Scrub"
 	return {
@@ -622,8 +623,11 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 		TankMax = math.floor(tank),
 		Reach = tool.Reach,
 		Mode = mode,
+		-- Pets clean off this, not Power, so which tool you hold doesn't change them (the washer's
+		-- high Power pays for its thin line; pets shouldn't get it free). Sponge-level strength.
+		PetPower = power / (tool.Power or 1) * 2.5,
 		-- Line: length grows with the Size upgrade (Radius), width is fixed.
-		LineLength = if mode == "Line" then radius * (tool.LineLength or 5) else nil,
+		LineLength = if mode == "Line" then radius * (tool.LineLength or 3.5) else nil,
 		LineWidth = if mode == "Line" then tool.LineWidth or 0.9 else nil,
 		FoamInterval = if mode == "Foam" then tool.FoamInterval or 0.4 else nil,
 		FoamSeconds = if mode == "Foam" then tool.FoamSeconds or 2.5 else nil,
@@ -640,6 +644,28 @@ end
 function Config.StartCoins(levelIndex: number, perks): number
 	local lvl = (perks and perks.HeadStart) or 0
 	return math.floor(lvl * Config.GetPerk("HeadStart").PerLevel * Config.GetLevel(levelIndex).Mult)
+end
+
+-- Rebirth (the endgame loop): after clearing the last dishwasher, trade your Bubbles, unlocked levels
+-- and perks for a permanent bonus. Pets, gems, ranks, passes and best times are kept.
+Config.Rebirth = {
+	BaseCost = 2000, -- Bubbles needed for the first rebirth
+	CostGrowth = 1.6, -- each rebirth costs this much more
+	CoinsPer = 0.25, -- +25% coins per rebirth
+	BubblesPer = 0.5, -- +50% Bubbles per rebirth
+	Gems = 50, -- gems granted per rebirth
+}
+
+function Config.RebirthCost(rebirths: number): number
+	return Config.Round2(Config.Rebirth.BaseCost * (Config.Rebirth.CostGrowth ^ (rebirths or 0)))
+end
+
+function Config.RebirthCoinMult(rebirths: number?): number
+	return 1 + Config.Rebirth.CoinsPer * (rebirths or 0)
+end
+
+function Config.RebirthBubbleMult(rebirths: number?): number
+	return 1 + Config.Rebirth.BubblesPer * (rebirths or 0)
 end
 
 -- Equip slots for pets: 3, or 5 with the +2 Pet Slots pass.
