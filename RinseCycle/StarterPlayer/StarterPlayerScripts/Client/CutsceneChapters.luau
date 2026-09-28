@@ -12,6 +12,7 @@ local Chapters = {}
 local STORIES = {
 	require(Client:WaitForChild("CutsceneFamily")),
 	require(Client:WaitForChild("CutscenePizzeria")),
+	require(Client:WaitForChild("CutsceneCastle")),
 }
 
 function Chapters.Count(level: number): number
