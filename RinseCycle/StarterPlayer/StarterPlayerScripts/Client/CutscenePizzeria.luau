@@ -47,6 +47,13 @@ PROPS.PizzaPlate = function()
 	end
 	return t
 end
+PROPS.CheeseSplat = function()
+	return {
+		{ V(44, 14, 40), C(0, 0, 0), rgb(255, 214, 90), nil, "Sphere" },
+		{ V(12, 20, 10), C(-14, -10, -8), rgb(255, 214, 90), nil, "Sphere" },
+		{ V(10, 16, 8), C(12, -8, -10), rgb(250, 200, 70), nil, "Sphere" },
+	}
+end
 PROPS.ScoreCard = function()
 	return {
 		{ V(3, 50, 40), C(0, 0, 0), rgb(250, 250, 244) },
@@ -601,7 +608,266 @@ local function foodCritic(origin: CFrame, parent: Instance): any
 	return ctx
 end
 
+----------------------------------------------------------------------------------------------------
+-- Chapter 3: Pizza in the Park
+----------------------------------------------------------------------------------------------------
+
+local function pizzaPark(origin: CFrame, parent: Instance): any
+	local ctx = Kit.new(origin, parent, 30)
+	Kit.title(ctx, 3, "Pizza in the Park")
+	ctx:mood({ ClockTime = 18.1, Brightness = 1.7, ExposureCompensation = 0, Ambient = rgb(130, 100, 100), OutdoorAmbient = rgb(170, 130, 120) })
+	local scene = ctx.Scene
+
+	-- The park.
+	Kit.grass(ctx, -1600, 1600, -1400, 1400, rgb(104, 170, 84))
+	ctx:box("Path", V(3200, 2, 150), ctx:at(0, 0.5, 330), rgb(214, 196, 150), Enum.Material.Sand)
+	Kit.tree(ctx, -1000, 700, 1.6)
+	Kit.tree(ctx, 900, 820, 1.4)
+	Kit.tree(ctx, 1150, 200, 1.2)
+	Kit.tree(ctx, -1200, -100, 1.3)
+	for _, b in { { -780, 640 }, { 700, 660 }, { -820, 90 } } do
+		Kit.bush(ctx, b[1], b[2], 1.2)
+	end
+	for _, lx in { -1050, 700 } do
+		ctx:post("LampPost", 12, 420, lx, 0, 300, rgb(40, 44, 50), Enum.Material.Metal)
+		ctx:light(lx, 430, 300, rgb(255, 220, 150), 60, 1.5, 30)
+	end
+	-- the pond, with a familiar rubber duck
+	ctx:box("Pond", V(4, 420, 420), ctx:at(480, 1, -120) * CFrame.Angles(0, 0, PI / 2), rgb(80, 150, 210), Enum.Material.Glass, "Cylinder")
+	ctx:box("PondEdge", V(3, 450, 450), ctx:at(480, 0.5, -120) * CFrame.Angles(0, 0, PI / 2), rgb(170, 160, 150), Enum.Material.Slate, "Cylinder")
+	local duckBody = ctx:box("Duck", V(40, 32, 50), ctx:at(430, 18, -100), rgb(255, 212, 50), nil, "Sphere")
+	local duckHead = ctx:box("DuckHead", V(26, 26, 26), ctx:at(430, 40, -118), rgb(255, 212, 50), nil, "Ball")
+	local duckBeak = ctx:box("DuckBeak", V(14, 6, 12), ctx:at(430, 38, -134), rgb(255, 140, 40))
+	Kit.group(ctx, { duckBody, duckHead, duckBeak }, ctx:at(430, 18, -100), function(t)
+		return ctx:at(430 + math.sin(t * 0.4) * 30, 18 + math.sin(t * 2) * 2, -100 + math.cos(t * 0.4) * 20, math.sin(t * 0.4) * 0.8)
+	end)
+
+	-- The food truck: LUIGI'S, with a big serving hatch facing us.
+	local TZ0, TZ1 = 440, 700 -- front (hatch side) and back
+	local TX0, TX1 = -330, 330
+	local red, cream = rgb(200, 50, 44), rgb(250, 240, 220)
+	ctx:box("TruckBack", V(TX1 - TX0, 360, 12), ctx:at(0, 180, TZ1), cream)
+	ctx:box("TruckRoof", V(TX1 - TX0 + 20, 16, TZ1 - TZ0 + 20), ctx:at(0, 368, (TZ0 + TZ1) / 2), cream)
+	ctx:box("TruckFloor", V(TX1 - TX0, 10, TZ1 - TZ0), ctx:at(0, -3, (TZ0 + TZ1) / 2), rgb(150, 150, 156), Enum.Material.DiamondPlate)
+	for _, x in { TX0, TX1 } do
+		ctx:box("TruckEnd", V(12, 360, TZ1 - TZ0), ctx:at(x, 180, (TZ0 + TZ1) / 2), cream)
+	end
+	-- the front wall with the hatch (x -200..200, h 170..330)
+	ctx:box("TruckFront", V(TX1 - TX0, 170, 12), ctx:at(0, 85, TZ0), red)
+	ctx:box("TruckFront", V(TX1 - TX0, 38, 12), ctx:at(0, 349, TZ0), red)
+	ctx:box("TruckFront", V(130, 160, 12), ctx:at(-265, 250, TZ0), red)
+	ctx:box("TruckFront", V(130, 160, 12), ctx:at(265, 250, TZ0), red)
+	ctx:box("HatchLedge", V(420, 8, 50), ctx:at(0, 172, TZ0 - 10), rgb(200, 204, 210), Enum.Material.Metal)
+	for i = 0, 9 do
+		ctx:box("Awning", V(44, 6, 110), ctx:at(-198 + i * 44, 350, TZ0 - 60) * CFrame.Angles(0.3, 0, 0), if i % 2 == 0 then red else cream)
+	end
+	ctx:box("Stripe", V(TX1 - TX0, 20, 13), ctx:at(0, 40, TZ0), cream)
+	-- the cab, wheels and sign
+	ctx:box("Cab", V(200, 250, 250), ctx:at(TX1 + 100, 150, (TZ0 + TZ1) / 2), red)
+	ctx:box("CabWindow", V(150, 90, 4), ctx:at(TX1 + 100, 210, TZ0 - 2), rgb(120, 170, 210), Enum.Material.Glass)
+	for _, wx in { -220, 220, TX1 + 110 } do
+		ctx:box("Wheel", V(30, 90, 90), ctx:at(wx, 40, TZ0 - 10) * CFrame.Angles(0, PI / 2, 0), rgb(34, 34, 38), nil, "Cylinder")
+		ctx:box("Hub", V(32, 40, 40), ctx:at(wx, 40, TZ0 - 12) * CFrame.Angles(0, PI / 2, 0), rgb(200, 204, 210), Enum.Material.Metal, "Cylinder")
+	end
+	local sign = ctx:box("Sign", V(420, 90, 10), ctx:at(0, 420, TZ0 + 20), cream)
+	local g = Instance.new("SurfaceGui")
+	g.Face = Enum.NormalId.Back
+	g.CanvasSize = Vector2.new(840, 180)
+	g.LightInfluence = 0.2
+	g.Parent = sign
+	local tl = Instance.new("TextLabel")
+	tl.Size = UDim2.fromScale(1, 1)
+	tl.BackgroundTransparency = 1
+	tl.Text = "LUIGI'S PIZZA"
+	tl.Font = Enum.Font.FredokaOne
+	tl.TextScaled = true
+	tl.TextColor3 = red
+	tl.Parent = g
+	-- the critic's 10 out of 10, framed on the side of the truck
+	ctx:box("Frame10", V(70, 90, 6), ctx:at(-265, 250, TZ0 - 8), rgb(230, 190, 90), Enum.Material.Wood)
+	ctx:box("Card10", V(56, 74, 2), ctx:at(-265, 250, TZ0 - 12), rgb(250, 250, 244))
+	ctx:box("One", V(8, 44, 2), ctx:at(-278, 250, TZ0 - 13.5), rgb(40, 40, 44))
+	ctx:box("Zero", V(22, 44, 2), ctx:at(-255, 250, TZ0 - 13.5), rgb(40, 40, 44))
+	ctx:box("ZeroHole", V(10, 30, 2), ctx:at(-255, 250, TZ0 - 14.5), rgb(250, 250, 244))
+	-- string lights along the awning
+	for i = 0, 11 do
+		local b = ctx:box("StringLight", V(12, 16, 12), ctx:at(-220 + i * 40, 305 - math.sin(i / 11 * PI) * 20, TZ0 - 110), rgb(255, 214, 140), Enum.Material.Neon, "Sphere")
+		b.CastShadow = false
+	end
+	-- inside: a pizza oven glow at the back
+	ctx:box("TruckOven", V(200, 150, 60), ctx:at(-60, 180, TZ1 - 40), rgb(200, 204, 210), Enum.Material.Metal)
+	local glow = ctx:box("TruckOvenGlow", V(150, 40, 4), ctx:at(-60, 180, TZ1 - 72), rgb(255, 130, 50), Enum.Material.Neon)
+	glow.CastShadow = false
+
+	-- The truck's own little dishwasher, on a steel stand by the truck.
+	local ZF = 470
+	Kit.counter(ctx, -920, -560, ZF, { Gaps = { { -765, -635 } }, Body = rgb(200, 204, 210), BodyMat = Enum.Material.Metal, Top = rgb(220, 224, 230), TopMat = Enum.Material.Metal, Splash = rgb(200, 204, 210) })
+	local dw = Kit.dishwasher(ctx, -700, ZF, 0, { Mess = rgb(214, 150, 70) })
+
+	-- The picnic table.
+	Kit.table(ctx, -250, 120, 260, 130, TABLE, rgb(170, 120, 80))
+	scene:prop("Stack", "SauceStack")
+	scene:place("Stack", 0, 1e5 - 1, ctx:at(-300, TABLE + 1, 120))
+
+	-- The chef in the hatch with a whole pizza.
+	local chef = scene:actor("Chef", "Chef")
+	local pch = R.newPlan(chef, 40, 540, PI)
+	scene:prop("TrayPizza", "HotPizza")
+	scene:prop("ChefCheese", "CheeseSplat")
+	local tray = { TrayPizza = { "both", off = CFrame.new(0, -6, -14) } }
+	local function offer(u: number, c: any): any
+		local s = c.Actor.S
+		local k = smooth(math.min(u / 0.8, 1))
+		return {
+			lean = 0.25 * k,
+			head = { pitch = -0.2 },
+			armL = { at = local3(c, -0.35 * s, 190, (0.9 + 0.7 * k) * s) },
+			armR = { at = local3(c, 0.35 * s, 190, (0.9 + 0.7 * k) * s) },
+		}
+	end
+	pch:still(3.0, function(u, c)
+		local p = P.carry(u, c)
+		p.head = { pitch = -0.15, yaw = math.sin(u) * 0.2 }
+		return p
+	end, tray)
+	local OFFER = pch.T
+	pch:still(6.0, offer, tray)
+	local SNAP = OFFER + 5.4
+	-- splat
+	local cheesed = { TrayPizza = tray.TrayPizza, ChefCheese = { "Head", off = CFrame.new(0, 0, -34) * CFrame.Angles(PI / 2, 0, 0) } }
+	pch:still(1.2, P.startle, cheesed)
+	pch:still(3, function(u, c)
+		local p = P.laugh(u, c)
+		local cr = P.carry(u, c)
+		p.armL, p.armR = cr.armL, cr.armR
+		return p
+	end, cheesed)
+	pch:finish(40, P.carry)
+	pch.Steps[#pch.Steps].Hold = cheesed
+	table.insert(scene.Plans, pch)
+	-- fix the splat timing: the cheese arrives at SNAP + 0.5
+	for _, st in pch.Steps do
+		if st.Hold == cheesed and st.T0 < SNAP + 0.5 then
+			st.Hold = tray
+		end
+	end
+
+	-- The kid: takes a slice, and walks backwards... and backwards... the cheese goes with him.
+	local kid = scene:actor("Kid", "Guest3")
+	local pk = R.newPlan(kid, 60, 330, 0)
+	scene:prop("KidSlice", "Slice")
+	local sliceHold = { KidSlice = { "R", off = CFrame.new(0, 0, 5) * CFrame.Angles(0.5, 0, 0) } }
+	pk:still(OFFER + 0.9, P.idle)
+	pk:swap(0.8, P.reachOne(1.6 * kid.S, 200, 0.8), nil, sliceHold)
+	local PULL = pk.T
+	local function pulling(u: number, c: any): any
+		local s = c.Actor.S
+		return {
+			lean = -0.12,
+			head = { pitch = 0.05 },
+			armR = { at = function(b)
+				return (b.Head * CFrame.new(0.1 * s, -0.25 * s, -0.7 * s)).Position
+			end },
+			armL = { p = 0.4, r = 0.6, e = 0.3 },
+		}
+	end
+	pk:walk({ V2(60, 90) }, sliceHold, pulling, 72, true)
+	pk:still(SNAP - pk.T, pulling, sliceHold)
+	pk:still(1.4, P.startle, sliceHold)
+	pk:still(4, P.laugh, sliceHold)
+	pk:finish(40, P.bite)
+	pk.Steps[#pk.Steps].Hold = sliceHold
+	table.insert(scene.Plans, pk)
+	-- the cheese string: from the pizza in the chef's hands to the kid's slice
+	local cheese = ctx:box("Cheese", V(3, 3, 10), CFrame.new(), rgb(255, 214, 90))
+	cheese.CastShadow = false
+	local blob = ctx:box("CheeseBlob", V(34, 12, 30), CFrame.new(), rgb(255, 214, 90), nil, "Sphere")
+	blob.CastShadow = false
+	ctx:onUpdate(function(t)
+		local cb, kb = chef.Bones, kid.Bones
+		if t < PULL or t >= SNAP or not cb or not kb then
+			cheese.Transparency = 1
+			return
+		end
+		local a = cb.GripL.Position:Lerp(cb.GripR.Position, 0.5) + Vector3.new(0, 2, 0)
+		local b = kb.GripR.Position
+		local len = (b - a).Magnitude
+		local thick = math.max(2.6, 7 - len / 80)
+		cheese.Transparency = 0
+		cheese.Size = V(thick, thick, len)
+		cheese.CFrame = CFrame.lookAt(a:Lerp(b, 0.5) - Vector3.new(0, math.min(len / 12, 18), 0), b)
+	end)
+	Kit.flight(ctx, blob, SNAP, SNAP + 0.5, function(t)
+		local kb = kid.Bones
+		return if kb then kb.GripR.Position else Vector3.zero
+	end, function(t)
+		local cb = chef.Bones
+		return if cb then (cb.Head * CFrame.new(0, 0, -30)).Position else Vector3.zero
+	end, 60, 2)
+
+	-- Two more customers in the queue, laughing.
+	for i, spot in { { 250, 300, -0.5 }, { 380, 250, -0.7 } } do
+		local gg = scene:actor("Guest" .. i, "Guest" .. i)
+		local pg = R.newPlan(gg, spot[1], spot[2], spot[3])
+		pg:still(PULL + 0.5, P.idle)
+		pg:still(SNAP - PULL - 0.5, function(u, c)
+			local p = P.idle(u, c)
+			p.head = { yaw = -0.9, pitch = 0.05 }
+			return p
+		end)
+		pg:still(4.5, P.laugh)
+		pg:still(3, P.clap)
+		pg:finish(40, P.idle)
+		table.insert(scene.Plans, pg)
+	end
+
+	-- The waiter clears the picnic table and loads the truck's dishwasher.
+	local waiter = scene:actor("Waiter", "Waiter")
+	local pw = R.newPlan(waiter, -250, 30, 0)
+	local function wipe(u: number, c: any): any
+		local s = c.Actor.S
+		local w = math.sin(u * 5) * 20
+		return { lean = 0.3, head = { pitch = -0.4 }, armR = { at = local3(c, 0.3 * s + w, TABLE + 8, 1.2 * s) }, armL = { at = local3(c, -0.4 * s, TABLE + 8, 1.1 * s) } }
+	end
+	pw:still(SNAP - 1.5, wipe)
+	pw:still(1.5, function(u, c)
+		local p = P.idle(u, c)
+		p.head = { yaw = 0.8 }
+		return p
+	end)
+	pw:still(2.6, P.laugh)
+	pw:turn(-0.5)
+	local PICK = pw.T
+	pw:swap(1.0, P.reach(-0.25 * S, TABLE + 12, 1.2 * S, 0.25 * S, TABLE + 12, 1.2 * S, 1.0, 0.35), nil, { Stack = { "both", off = CFrame.new(0, -4, -10) } })
+	scene.Placements.Stack[1][2] = PICK + 0.5
+	local carry = { Stack = { "both", off = CFrame.new(0, -4, -10) } }
+	pw:walk({ V2(-520, 250), V2(-700 - 95, ZF - 72) }, carry, P.carry, 180)
+	pw:turn(0, carry, P.carry)
+	local beats = Kit.loadDishwasher(ctx, pw, dw, "Stack")
+	pw:still(3, P.idle)
+	pw:finish(40, P.idle)
+	table.insert(scene.Plans, pw)
+
+	-- Camera.
+	local between = function()
+		local cb, kb = chef.Bones, kid.Bones
+		if not cb or not kb then
+			return ctx:R(60, 200, 300)
+		end
+		return cb.Torso.Position:Lerp(kb.Torso.Position, 0.5)
+	end
+	ctx:shot(0, OFFER, { eye = { ctx:R(560, 560, -640), ctx:R(440, 450, -520) }, look = { ctx:R(0, 200, 420), ctx:R(0, 200, 420) }, fov = { 54, 50 } })
+	ctx:shot(OFFER, PULL + 0.6, { eye = { ctx:R(-150, 240, 230), ctx:R(-140, 235, 245) }, look = { ctx:R(60, 200, 420), ctx:R(60, 200, 420) }, fov = { 40, 38 } })
+	ctx:shot(PULL + 0.6, SNAP, { eye = { ctx:R(-440, 430, 170), ctx:R(-480, 450, 150) }, look = between, fov = { 46, 52 }, ease = "linear" })
+	ctx:shot(SNAP, SNAP + 2.8, { eye = { ctx:R(70, 250, 280), ctx:R(66, 248, 300) }, look = Kit.follow(chef, "Head"), fov = { 34, 30 } })
+	ctx:shot(SNAP + 2.8, PICK, { eye = { ctx:R(80, 300, -260), ctx:R(70, 290, -230) }, look = { ctx:R(110, 180, 260), ctx:R(110, 180, 260) }, fov = { 50, 48 } })
+	ctx:shot(PICK, beats.Open - 0.6, { eye = { ctx:R(-200, 380, -200), ctx:R(-300, 360, -120) }, look = Kit.follow(waiter, "Torso"), fov = { 48, 44 }, ease = "linear" })
+	Kit.endingShots(ctx, dw, beats, 1)
+	return ctx
+end
+
 return {
 	doughShow,
 	foodCritic,
+	pizzaPark,
 }
