@@ -385,6 +385,13 @@ local HANDLERS: { [string]: (Player, any) -> Types.RequestResult } = {
 	EquipBest = function(player: Player, _value: any): Types.RequestResult
 		return callPetService("EquipBest", player)
 	end,
+	-- The run-start cutscene played (or was skipped): move this level's story on a chapter.
+	SawEpisode = function(player: Player, value: any): Types.RequestResult
+		if type(value) ~= "number" or not DataService.SawEpisode(player, value) then
+			return fail(ERR_GENERIC)
+		end
+		return { Ok = true }
+	end,
 }
 
 local function onMetaRequest(player: Player, action: any, value: any): Types.RequestResult

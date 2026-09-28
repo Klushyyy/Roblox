@@ -90,6 +90,7 @@ export type Profile = {
 	DailyStreak: number, -- 1..#Config.DailyRewards, the day of the streak last claimed
 	RedeemedCodes: { string }, -- Config.Codes already used (upper case)
 	Ducks: { string }, -- lobby rubber ducks found (Config.Ducks ids)
+	Episodes: { number }, -- per level index: run-start cutscene chapters seen (picks the next one)
 	GroupReward: boolean, -- the join-the-community reward has been claimed
 	FollowReward: boolean, -- the follow-the-dev reward has been claimed
 	LikeReward: boolean, -- the like-the-game reward has been claimed
@@ -155,6 +156,7 @@ local TEMPLATE: Profile = {
 	DailyStreak = 0,
 	RedeemedCodes = {},
 	Ducks = {},
+	Episodes = {},
 	GroupReward = false,
 	FollowReward = false,
 	LikeReward = false,
@@ -369,6 +371,12 @@ local function sanitizeProfile(profile: Profile, player: Player)
 		end
 	end
 	p.Ducks = ducks
+	local episodes = {}
+	for i = 1, #Config.Levels do
+		local n = if type(p.Episodes) == "table" then p.Episodes[i] else nil
+		episodes[i] = math.min(toCount(n, 0), 1e6)
+	end
+	p.Episodes = episodes
 	p.GroupReward = p.GroupReward == true
 	p.FollowReward = p.FollowReward == true
 	p.LikeReward = p.LikeReward == true
@@ -606,6 +614,7 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 			BubblesEarned = stats.BubblesEarned,
 		},
 		Passes = passCopy,
+		Episodes = table.clone(profile.Episodes),
 	}
 	return state
 end
@@ -1156,6 +1165,21 @@ function DataService.AddBubbles(player: Player, amount: number, reason: string?)
 		return true
 	end
 	applyBubbles(profile, rounded)
+	DataService.PushMeta(player)
+	return true
+end
+
+-- Counts one run-start cutscene chapter as seen for a level (the next run plays the next one).
+function DataService.SawEpisode(player: Player, levelIndex: number): boolean
+	local profile = DataService.Get(player)
+	if not profile or type(levelIndex) ~= "number" or levelIndex ~= levelIndex then
+		return false
+	end
+	local i = math.floor(levelIndex)
+	if i < 1 or i > #Config.Levels then
+		return false
+	end
+	profile.Episodes[i] = math.min((profile.Episodes[i] or 0) + 1, 1e6)
 	DataService.PushMeta(player)
 	return true
 end

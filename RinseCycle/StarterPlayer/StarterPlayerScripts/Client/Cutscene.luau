@@ -23,12 +23,14 @@ local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
 local UIKit = require(Client:WaitForChild("UIKit"))
 local Scene = require(Client:WaitForChild("CutsceneScene"))
+local Chapters = require(Client:WaitForChild("CutsceneChapters"))
 local Bubbles = require(Client:WaitForChild("Bubbles"))
 
 local Cutscene = {}
 
 local LocalPlayer = Players.LocalPlayer
-local SCENE_ORIGIN = CFrame.new(0, -6000, 0) -- deep under the lobby, below every arena
+-- Far out under the map, well away from the lobby and the arenas (so nothing shades the set).
+local SCENE_ORIGIN = CFrame.new(16000, -6000, 16000)
 local FADE = 0.45
 local MAX_START_AGE = 12 -- seconds into a run after which we don't start the cutscene
 
@@ -43,6 +45,9 @@ local topBar: Frame
 local bottomBar: Frame
 local skipButton: TextButton
 local loadingLabel: TextLabel
+local titleCard: Frame
+local titleSmall: TextLabel
+local titleBig: TextLabel
 
 -- A plain fade to black that hides teleports: into a run (from the moment your party launches
 -- until the cutscene is ready) and back out to the lobby. Cleared by play() or Uncover().
@@ -121,10 +126,24 @@ local function play(levelIndex: number)
 
 	local restoreHud = hideHud()
 	setControls(false)
+	-- This level's next story chapter (the profile counts the ones already seen); the old single
+	-- scene is the fallback if a chapter can't be built.
 	local scene
-	local ok = pcall(function()
-		scene = Scene.Build(levelIndex, SCENE_ORIGIN, Workspace)
+	local meta = ClientState.Meta :: any
+	local seen = meta and meta.Episodes and meta.Episodes[levelIndex] or 0
+	local ok, err = pcall(function()
+		scene = Chapters.Build(levelIndex, Chapters.Pick(levelIndex, seen), SCENE_ORIGIN, Workspace)
 	end)
+	if ok and scene then
+		task.spawn(function()
+			pcall(ClientState.MetaRequest, "SawEpisode", levelIndex)
+		end)
+	else
+		warn("[Cutscene] chapter failed, using the classic scene: " .. tostring(err))
+		ok = pcall(function()
+			scene = Scene.Build(levelIndex, SCENE_ORIGIN, Workspace)
+		end)
+	end
 	if not ok or not scene or not camera then
 		loadingLabel.Visible = false
 		reportLoaded()
@@ -138,6 +157,11 @@ local function play(levelIndex: number)
 	loadingLabel.Visible = false
 	local oldType, oldFov = camera.CameraType, camera.FieldOfView
 	camera.CameraType = Enum.CameraType.Scriptable
+	if scene.ApplyMood then
+		pcall(scene.ApplyMood, scene)
+	end
+	local duration = tonumber(scene.Duration) or Scene.Duration
+	local bubbleStart = tonumber(scene.BubbleStart) or 16.2
 	scene:Update(0)
 	local cf, fov = scene:Camera(0)
 	camera.CFrame, camera.FieldOfView = cf, fov
@@ -147,6 +171,19 @@ local function play(levelIndex: number)
 	UIKit.Tween(bottomBar, { Size = UDim2.new(1, 0, 0.1, 0) }, 0.5)
 	tweenBlack(1, FADE)
 	skipButton.Visible = true
+	-- "Chapter 2 / Backyard Barbecue" in the corner for the first few seconds
+	if type(scene.Subtitle) == "string" and scene.Subtitle ~= "" then
+		titleSmall.Text = string.upper(tostring(scene.Title or ""))
+		titleBig.Text = scene.Subtitle
+		titleCard.Visible = true
+		titleSmall.TextTransparency, titleBig.TextTransparency = 1, 1
+		UIKit.Tween(titleSmall, { TextTransparency = 0 }, 0.6)
+		UIKit.Tween(titleBig, { TextTransparency = 0 }, 0.6)
+		task.delay(3.6, function()
+			UIKit.Tween(titleSmall, { TextTransparency = 1 }, 0.6)
+			UIKit.Tween(titleBig, { TextTransparency = 1 }, 0.6)
+		end)
+	end
 
 	local t = 0
 	local bubbleClock = 0
@@ -154,7 +191,7 @@ local function play(levelIndex: number)
 	local conn = RunService.RenderStepped:Connect(function(dt)
 		t += dt
 		-- Once the dishwasher starts, it fills with bubbles.
-		if t > 16.2 then
+		if t > bubbleStart then
 			bubbleClock += dt
 			if bubbleClock > 0.08 then
 				bubbleClock = 0
@@ -171,10 +208,11 @@ local function play(levelIndex: number)
 			skipRequested = true
 		end
 	end)
-	while t < Scene.Duration - FADE and not skipRequested do
+	while t < duration - FADE and not skipRequested do
 		task.wait()
 	end
 	skipButton.Visible = false
+	titleCard.Visible = false
 	tweenBlack(0, FADE)
 	conn:Disconnect()
 	pcall(function()
@@ -304,6 +342,36 @@ function Cutscene.Init()
 		Visible = false,
 		ZIndex = 21,
 		Parent = root,
+	})
+	titleCard = Instance.new("Frame")
+	titleCard.Name = "TitleCard"
+	titleCard.BackgroundTransparency = 1
+	titleCard.AnchorPoint = Vector2.new(0, 1)
+	titleCard.Position = UDim2.new(0, 48, 0.88, -16)
+	titleCard.Size = UDim2.fromOffset(700, 110)
+	titleCard.Visible = false
+	titleCard.ZIndex = 8
+	titleCard.Parent = root
+	titleSmall = UIKit.Label({
+		Name = "Chapter",
+		Text = "",
+		TextSize = 24,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextColor3 = Color3.fromRGB(255, 214, 90),
+		Position = UDim2.fromOffset(0, 0),
+		Size = UDim2.new(1, 0, 0, 30),
+		ZIndex = 8,
+		Parent = titleCard,
+	})
+	titleBig = UIKit.Label({
+		Name = "Name",
+		Text = "",
+		TextSize = 52,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Position = UDim2.fromOffset(0, 32),
+		Size = UDim2.new(1, 0, 0, 64),
+		ZIndex = 8,
+		Parent = titleCard,
 	})
 	UIKit.LayoutChanged:Connect(function()
 		local safe = UIKit.SafeInsets()

@@ -1474,6 +1474,8 @@ function Scene:Update(clock: number)
 						base = CFrame.new(b.GripL.Position:Lerp(b.GripR.Position, 0.5)) * (origin * root).Rotation
 					elseif where == "Rhand" or where == "Lhand" then
 						base = b["Grip" .. string.sub(where, 1, 1)]
+					elseif where == "Head" then
+						base = b.Head
 					else
 						base = origin * root
 					end
@@ -2427,5 +2429,41 @@ LevelNPCs.P = P
 LevelNPCs.newPlan = newPlan
 LevelNPCs.newScene = newScene
 LevelNPCs.rootCF = rootCF
+
+-- Everything the run-start cutscenes (CutsceneKit and the chapters) build their casts from: the
+-- same rig, looks, props, plans and poses as the people in the rooms.
+LevelNPCs.Kit = {
+	S = S,
+	FLOOR = FLOOR,
+	TABLE = TABLE,
+	P = P,
+	LOOKS = LOOKS,
+	PROPS = PROPS,
+	newPlan = newPlan,
+	newScene = newScene,
+	newPart = newPart,
+	rootCF = rootCF,
+	W = W,
+	seat = seat,
+	seated = seated,
+	smooth = smooth,
+	lerp = lerp,
+	local3 = local3,
+	breathe = breathe,
+	lookAround = lookAround,
+	angleDiff = angleDiff,
+	phiOf = phiOf,
+	disc = disc,
+	hairShort = hairShort,
+	hairLong = hairLong,
+	partyHat = partyHat,
+	crown = crown,
+	glasses = glasses,
+	beard = beard,
+	apron = apron,
+	belt = belt,
+	collar = collar,
+	FORK_HOLD = FORK_HOLD,
+}
 
 return LevelNPCs

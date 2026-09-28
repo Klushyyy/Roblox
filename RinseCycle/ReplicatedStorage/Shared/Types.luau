@@ -134,6 +134,7 @@ export type MetaState = {
 		BubblesEarned: number,
 	},
 	Passes: { [string]: boolean }, -- Config.GamePasses[i].Key -> owned
+	Episodes: { number }?, -- per level: cutscene chapters seen (the next run plays the next chapter)
 }
 
 -- Results of RemoteFunction calls.
