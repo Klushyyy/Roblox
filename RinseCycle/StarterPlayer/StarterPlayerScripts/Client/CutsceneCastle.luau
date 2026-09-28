@@ -644,7 +644,316 @@ local function gardenTea(origin: CFrame, parent: Instance): any
 	return ctx
 end
 
+----------------------------------------------------------------------------------------------------
+-- Chapter 3: The Midnight Snack
+----------------------------------------------------------------------------------------------------
+
+LOOKS.KingNight = {
+	Shirt = rgb(236, 236, 250), Pants = rgb(226, 226, 244), ShirtMat = Enum.Material.Fabric, PantsMat = Enum.Material.Fabric, Shoes = rgb(150, 30, 44),
+	Build = function(a)
+		R.hairShort(rgb(235, 235, 235))(a)
+		R.beard(a, rgb(240, 240, 240))
+		-- the nightcap
+		for i = 0, 3 do
+			local r = 0.7 - i * 0.14
+			a:piece("Head", Vector3.new(0.3, r * 2, r * 2), CFrame.new(0.05 * i, 0.62 + i * 0.26, 0.05 * i) * CFrame.Angles(0, 0, PI / 2 + 0.15 * i), rgb(90, 110, 200), Enum.Material.Fabric, "Cylinder")
+		end
+		a:piece("Head", Vector3.new(0.3, 0.3, 0.3), CFrame.new(0.3, 1.66, 0.2), rgb(250, 250, 250), Enum.Material.Fabric, "Ball")
+		-- the gown's hem over the legs, and slippers
+		a:piece("ThighL", Vector3.new(1.08, 1.1, 1.08), CFrame.new(0, -0.5, 0), rgb(236, 236, 250), Enum.Material.Fabric)
+		a:piece("ThighR", Vector3.new(1.08, 1.1, 1.08), CFrame.new(0, -0.5, 0), rgb(236, 236, 250), Enum.Material.Fabric)
+		for i = 0, 2 do
+			a:piece("Torso", Vector3.new(0.14, 0.14, 0.04), CFrame.new(0, 0.6 - i * 0.4, -0.52), rgb(90, 110, 200), nil, "Ball")
+		end
+	end,
+}
+PROPS.CandleStick = function()
+	return {
+		disc(22, 3, 1.5, GOLD, Enum.Material.Metal),
+		{ V(4, 14, 26), C(12, 6, 0), GOLD, Enum.Material.Metal },
+		disc(8, 26, 16, rgb(250, 246, 230)),
+		{ V(6, 11, 6), C(0, 34, 0), rgb(255, 200, 90), Enum.Material.Neon, "Sphere" },
+	}
+end
+PROPS.CastleCake = function()
+	local t = {
+		disc(120, 4, 2, GOLD, Enum.Material.Metal),
+		{ V(92, 44, 92), C(0, 26, 0), rgb(250, 214, 230) },
+		{ V(62, 34, 62), C(0, 65, 0), rgb(250, 240, 246) },
+	}
+	for _, sx in { -1, 1 } do
+		for _, sz in { -1, 1 } do
+			table.insert(t, disc(24, 80, 44, rgb(250, 214, 230), nil, sx * 46, sz * 46))
+			table.insert(t, { V(20, 20, 20), C(sx * 46, 90, sz * 46), rgb(90, 110, 200), nil, "Sphere" })
+		end
+	end
+	for i = -1, 1 do
+		table.insert(t, { V(12, 12, 12), C(i * 22, 88, -31), rgb(250, 240, 246) })
+	end
+	table.insert(t, { V(3, 30, 3), C(0, 97, 0), rgb(100, 70, 44) })
+	table.insert(t, { V(18, 11, 2), C(9, 107, 0), rgb(150, 26, 40), Enum.Material.Fabric })
+	return t
+end
+PROPS.PotStack = function()
+	local t = {}
+	for i = 0, 2 do
+		table.insert(t, disc(52 - i * 6, 14, 7 + i * 15, rgb(190, 110, 70), Enum.Material.Metal))
+		table.insert(t, disc(44 - i * 6, 2, 14.5 + i * 15, rgb(120, 70, 40)))
+	end
+	table.insert(t, { V(40, 4, 4), C(30, 8, 0), rgb(190, 110, 70), Enum.Material.Metal })
+	return t
+end
+
+local function midnightSnack(origin: CFrame, parent: Instance): any
+	local ctx = Kit.new(origin, parent, 32)
+	Kit.title(ctx, 3, "The Midnight Snack")
+	local NIGHT = rgb(46, 46, 80)
+	local ON = rgb(150, 130, 110)
+	ctx:mood({ ClockTime = 23, Brightness = 0.5, ExposureCompensation = 0.4, Ambient = NIGHT, OutdoorAmbient = rgb(50, 50, 80) })
+	local scene = ctx.Scene
+
+	-- The castle kitchen.
+	local ZW = 720
+	Kit.floor(ctx, -800, 800, -800, ZW + 8, rgb(130, 120, 108), Enum.Material.Slate)
+	local wallC = rgb(140, 132, 122)
+	Kit.wall(ctx, -800, ZW, -110, ZW, 780, wallC, Enum.Material.Cobblestone, rgb(100, 92, 84))
+	Kit.wall(ctx, 110, ZW, 800, ZW, 780, wallC, Enum.Material.Cobblestone, rgb(100, 92, 84))
+	ctx:box("Lintel", V(220, 420, 16), ctx:at(0, 570, ZW), wallC, Enum.Material.Cobblestone)
+	ctx:box("Corridor", V(220, 360, 10), ctx:at(0, 180, ZW + 330), rgb(30, 26, 30))
+	ctx:box("CorridorFloor", V(220, 8, 300), ctx:at(0, -4, ZW + 150), rgb(110, 100, 90), Enum.Material.Slate)
+	for _, dx in { -110, 110 } do
+		ctx:box("DoorArch", V(24, 360, 30), ctx:at(dx, 180, ZW), rgb(110, 100, 90), Enum.Material.Slate)
+	end
+	Kit.wall(ctx, -800, -800, -800, ZW, 780, wallC, Enum.Material.Cobblestone, rgb(100, 92, 84))
+	Kit.wall(ctx, 800, -800, 800, ZW, 780, wallC, Enum.Material.Cobblestone, rgb(100, 92, 84))
+	Kit.ceiling(ctx, -800, 800, -800, ZW, 780, rgb(70, 50, 36), Enum.Material.Wood)
+	for i = -3, 3 do
+		ctx:box("Beam", V(1600, 30, 40), ctx:at(0, 760, 100 + i * 200), rgb(60, 42, 30), Enum.Material.Wood)
+	end
+	local fire = hearth(ctx, 480, ZW)
+	-- the moonlit window
+	ctx:box("MoonSky", V(140, 220, 2), ctx:at(-460, 440, ZW - 9), rgb(40, 50, 110), Enum.Material.Neon)
+	ctx:box("Moon", V(2, 60, 60), ctx:at(-430, 500, ZW - 11) * CFrame.Angles(0, PI / 2, 0), rgb(255, 250, 220), Enum.Material.Neon, "Cylinder")
+	ctx:box("WinBar", V(6, 220, 4), ctx:at(-460, 440, ZW - 12), rgb(60, 60, 66), Enum.Material.Metal)
+	ctx:box("WinBar", V(140, 6, 4), ctx:at(-460, 450, ZW - 12), rgb(60, 60, 66), Enum.Material.Metal)
+	local moonbeam = ctx:light(-460, 420, ZW - 80, rgb(150, 170, 255), 60, 1.2, 4)
+	-- hanging copper pots and herbs
+	ctx:box("PotRail", V(500, 8, 8), ctx:at(-360, 600, ZW - 40), rgb(60, 60, 64), Enum.Material.Metal)
+	for i = 0, 4 do
+		ctx:box("CopperPot", V(4, 60 - i * 5, 60 - i * 5), ctx:at(-560 + i * 100, 550, ZW - 40) * CFrame.Angles(0, PI / 2, 0), rgb(200, 116, 70), Enum.Material.Metal, "Cylinder")
+		ctx:box("Herbs", V(24, 40, 12), ctx:at(-510 + i * 100, 560, ZW - 44), rgb(90, 140, 70), nil, "Sphere")
+	end
+	-- the washing-up corner: counter and dishwasher on the left
+	local ZF = 550
+	Kit.counter(ctx, -800, -140, ZF, { Gaps = { { -415, -285 } }, Body = rgb(110, 76, 50), BodyMat = Enum.Material.Wood, Door = rgb(124, 86, 56), Top = rgb(170, 164, 156), TopMat = Enum.Material.Slate, Splash = wallC, SplashMat = Enum.Material.Cobblestone })
+	local dw = Kit.dishwasher(ctx, -350, ZF, 0, { Steel = GOLD, Mess = rgb(120, 70, 40) })
+
+	-- The big table with the castle cake.
+	local CX = 130
+	Kit.table(ctx, CX, 300, 220, 160, TABLE, rgb(110, 76, 50))
+	scene:prop("Cake", "CastleCake")
+	scene:place("Cake", 0, 1e5 - 1, ctx:at(CX, TABLE + 1, 300))
+	scene:prop("Stack", "PotStack")
+	scene:place("Stack", 0, 1e5 - 1, ctx:at(CX - 80, TABLE + 1, 250))
+	ctx:light(CX, TABLE + 180, 300, rgb(170, 180, 255), 50, 0.6, 2)
+
+	-- The king and the jester creep in from opposite sides, candles in hand.
+	local king = scene:actor("King", "KingNight")
+	local jester = scene:actor("Jester", "Jester")
+	scene:prop("KCandle", "CandleStick")
+	scene:prop("JCandle", "CandleStick")
+	scene:prop("Crown", "Crown")
+	for _, n in { "KCandle", "JCandle" } do
+		local l = Instance.new("PointLight")
+		l.Color = rgb(255, 190, 110)
+		l.Range = 40
+		l.Brightness = 2.2
+		l.Parent = scene.Props[n].Pieces[4].Part
+	end
+	local kCandle = { KCandle = { "L", off = CFrame.new(0, 2, 0) } }
+	local jHold = { JCandle = { "R", off = CFrame.new(0, 2, 0) }, Crown = { "Head", off = CFrame.new(0, 58, 0) * CFrame.Angles(0, 0, 0.15) } }
+	local function tiptoe(side: number): (number, any) -> any
+		return function(u: number, c: any): any
+			local s = c.Actor.S
+			local p = { lean = 0.18, stride = 0.45, head = { yaw = math.sin(u * 1.7) * 0.4, pitch = -0.05 } }
+			if side < 0 then
+				p.armL = { at = local3(c, -0.3 * s, 190, 0.8 * s) }
+				p.armR = { p = 0.3, r = 0.3, e = 1.6 }
+			else
+				p.armR = { at = local3(c, 0.3 * s, 190, 0.8 * s) }
+				p.armL = { p = 0.3, r = 0.3, e = 1.6 }
+			end
+			return p
+		end
+	end
+	local pk = R.newPlan(king, -560, 190, PI / 2)
+	pk:still(2.6, tiptoe(-1), kCandle)
+	pk:walk({ V2(CX - 190, 300) }, kCandle, tiptoe(-1), 80)
+	pk:turn(PI / 2, kCandle, tiptoe(-1))
+	local pj = R.newPlan(jester, 560, 190, -PI / 2)
+	pj:still(2.8, tiptoe(1), jHold)
+	pj:walk({ V2(CX + 190, 300) }, jHold, tiptoe(1), 80)
+	pj:turn(-PI / 2, jHold, tiptoe(1))
+	local REACH = math.max(pk.T, pj.T)
+	pk:still(REACH - pk.T, tiptoe(-1), kCandle)
+	pj:still(REACH - pj.T, tiptoe(1), jHold)
+	-- both reach for the cake... and touch hands
+	local function reachCake(side: number): (number, any) -> any
+		return function(u: number, c: any): any
+			local s = c.Actor.S
+			local k = smooth(u / 1.1)
+			local p = tiptoe(side)(u, c)
+			p.stride = nil
+			p.lean = 0.25 * k
+			p.head = { pitch = -0.25 * k }
+			local hand = ctx:R(CX, TABLE + 112, 300 + side * 4)
+			local rest = local3(c, side * 0.3 * s, 190, 0.8 * s)
+			if side < 0 then
+				p.armR = { at = rest:Lerp(hand, k) }
+			else
+				p.armL = { at = rest:Lerp(hand, k) }
+			end
+			return p
+		end
+	end
+	pk:still(1.1, reachCake(-1), kCandle)
+	pj:still(1.1, reachCake(1), jHold)
+	local BUMP = REACH + 1.1
+	pk:still(1.2, P.startle, kCandle)
+	pj:still(1.2, P.startle, jHold)
+	local LIGHTS = BUMP + 1.4
+	-- caught! Both look round at the door, very sheepish
+	local function sheepish(side: number): (number, any) -> any
+		return function(u: number, c: any): any
+			local p = tiptoe(side)(u, c)
+			p.stride = nil
+			p.lean = 0.12
+			p.head = { yaw = -side * 1.0, pitch = -0.2 }
+			return p
+		end
+	end
+	pk:still(LIGHTS - pk.T + 1.8, sheepish(-1), kCandle)
+	pj:still(LIGHTS - pj.T + 1.8, sheepish(1), jHold)
+	-- the jester gives the crown back: a toss over the cake
+	local TOSS = LIGHTS + 1.8
+	pj:still(0.9, function(u, c)
+		local k = math.sin(math.clamp(u / 0.9, 0, 1) * PI)
+		local p = tiptoe(1)(u, c)
+		p.stride = nil
+		p.armL = { p = 2.8 * k, r = 0.2, e = 0.3 }
+		return p
+	end, { JCandle = jHold.JCandle })
+	local jRest = { JCandle = jHold.JCandle }
+	pj:still(3, P.laugh, jRest)
+	pj:still(3, P.wave, jRest)
+	pj:finish(40, P.idle)
+	pj.Steps[#pj.Steps].Hold = jRest
+	table.insert(scene.Plans, pj)
+	local CROWNED = TOSS + 1.2
+	local kingCrown = { Crown = { "Head", off = CFrame.new(0, 90, 0) * CFrame.Angles(0, 0, -0.1) } }
+	pk:still(CROWNED - pk.T, function(u, c)
+		local p = sheepish(-1)(u, c)
+		p.head = { yaw = 0, pitch = 0.4 }
+		return p
+	end, kCandle)
+	-- crowned again (on top of the nightcap), he puts the candle down and gets washing up
+	local withCrown = table.clone(kCandle)
+	withCrown.Crown = kingCrown.Crown
+	pk:still(1.2, P.laugh, withCrown)
+	pk:turn(-PI / 2 - 0.4, withCrown)
+	local PICK = pk.T
+	pk:swap(1.0, P.reach(-0.35 * S, TABLE + 20, 1.2 * S, 0.1 * S, TABLE + 20, 1.2 * S, 1.0, 0.35), kingCrown, { Stack = { "both", off = CFrame.new(0, -4, -10) }, Crown = kingCrown.Crown })
+	scene:place("KCandle", PICK, 1e5 - 1, ctx:at(CX - 90, TABLE + 1, 360))
+	scene.Placements.Stack[1][2] = PICK + 0.5
+	local carry = { Stack = { "both", off = CFrame.new(0, -4, -10) }, Crown = kingCrown.Crown }
+	pk:walk({ V2(-350 - 95, ZF - 72) }, carry, P.carry, 140)
+	pk:turn(0, carry, P.carry)
+	local beats = Kit.loadDishwasher(ctx, pk, dw, "Stack")
+	for _, st in pk.Steps do
+		if st.T0 >= beats.Start - 0.01 then
+			local h = st.Hold and table.clone(st.Hold) or {}
+			h.Crown = kingCrown.Crown
+			st.Hold = h
+		end
+	end
+	pk:still(3, P.idle, kingCrown)
+	pk:finish(40, P.idle)
+	pk.Steps[#pk.Steps].Hold = kingCrown
+	table.insert(scene.Plans, pk)
+	local flyCrown = ctx:box("FlyCrown", V(10, 64, 64), CFrame.new(), GOLD, Enum.Material.Metal, "Cylinder")
+	Kit.flight(ctx, flyCrown, TOSS + 0.35, CROWNED, function()
+		local b = jester.Bones
+		return if b then b.GripL.Position else ctx:R(190, 300, 300)
+	end, function()
+		local b = king.Bones
+		return if b then (b.Head * CFrame.new(0, 90, 0)).Position else ctx:R(-190, 300, 300)
+	end, 150, 2)
+	-- the crown leaves the jester's head as he throws it
+	for _, st in pj.Steps do
+		if st.T0 >= TOSS - 0.01 and st.Hold then
+			st.Hold.Crown = nil
+		end
+	end
+
+	-- The queen appears in the doorway, lantern high: lights up.
+	local queen = scene:actor("Queen", "Queen")
+	local pq = R.newPlan(queen, 0, ZW + 420, PI)
+	scene:prop("Lantern", "CandleStick")
+	local lanternLight = Instance.new("PointLight")
+	lanternLight.Color = rgb(255, 220, 160)
+	lanternLight.Range = 60
+	lanternLight.Brightness = 0
+	lanternLight.Parent = scene.Props.Lantern.Pieces[4].Part
+	local lantern = { Lantern = { "R", off = CFrame.new(0, 2, 0) } }
+	pq:still(LIGHTS - 1.6, P.idle, lantern)
+	pq:walk({ V2(0, ZW + 20) }, lantern, function(u, c)
+		return { armR = { p = 2.4, r = 0.1, e = 0.4 } }
+	end, 260)
+	local function crossArms(u: number, c: any): any
+		local s = c.Actor.S
+		return {
+			bob = R.breathe(u),
+			head = { pitch = 0.05, yaw = math.sin(u * 1.2) * 0.2 },
+			armL = { at = local3(c, 0.25 * s, 165, 0.55 * s) },
+			armR = { p = 2.4, r = 0.1, e = 0.4 },
+		}
+	end
+	pq:still(TOSS - pq.T, crossArms, lantern)
+	pq:still(3.2, P.point(Vector3.new(-350, 0, ZF)), lantern)
+	pq:still(3, P.laugh, lantern)
+	pq:finish(40, crossArms)
+	pq.Steps[#pq.Steps].Hold = lantern
+	table.insert(scene.Plans, pq)
+	ctx:onUpdate(function(t)
+		local on = t >= LIGHTS
+		lanternLight.Brightness = if on then 2.5 else 0
+		pcall(function()
+			game:GetService("Lighting").Ambient = if on then ON else NIGHT
+		end)
+		local fl = fire:FindFirstChildOfClass("PointLight")
+		if fl then
+			fl.Range = if on then 60 else 30
+		end
+		moonbeam:FindFirstChildOfClass("PointLight").Brightness = if on then 0.4 else 1.2
+	end)
+
+	-- Camera.
+	ctx:shot(0, 3.0, { eye = { ctx:R(60, 430, -420), ctx:R(70, 390, -330) }, look = { ctx:R(CX, 200, 330), ctx:R(CX, 200, 330) }, fov = { 50, 46 } })
+	ctx:shot(3.0, 5.6, { eye = { ctx:R(-520, 300, -160), ctx:R(-470, 300, -120) }, look = Kit.follow(king, "Torso"), fov = { 44, 42 }, ease = "linear" })
+	ctx:shot(5.6, REACH - 0.2, { eye = { ctx:R(640, 300, -160), ctx:R(600, 300, -120) }, look = Kit.follow(jester, "Torso"), fov = { 44, 42 }, ease = "linear" })
+	ctx:shot(REACH - 0.2, LIGHTS - 0.1, { eye = { ctx:R(CX, 420, 40), ctx:R(CX, 410, 70) }, look = { ctx:R(CX, 250, 300), ctx:R(CX, 250, 300) }, fov = { 50, 46 } })
+	ctx:shot(LIGHTS - 0.1, TOSS + 0.2, { eye = { ctx:R(100, 270, 460), ctx:R(96, 268, 480) }, look = { ctx:R(0, 240, ZW + 40), ctx:R(0, 240, ZW + 30) }, fov = { 40, 36 } })
+	ctx:shot(TOSS + 0.2, CROWNED + 0.4, { eye = { ctx:R(CX, 380, 20), ctx:R(CX - 20, 380, 20) }, look = function()
+		return flyCrown.Position
+	end, fov = { 50, 50 }, ease = "linear" })
+	ctx:shot(CROWNED + 0.4, PICK + 0.6, { eye = { ctx:R(CX - 200, 290, 110), ctx:R(CX - 210, 285, 125) }, look = Kit.follow(king, "Head", Vector3.new(0, 40, 0)), fov = { 38, 36 } })
+	ctx:shot(PICK + 0.6, beats.Open - 0.6, { eye = { ctx:R(-60, 400, -140), ctx:R(-120, 380, -100) }, look = Kit.follow(king, "Torso"), fov = { 48, 44 }, ease = "linear" })
+	Kit.endingShots(ctx, dw, beats, 1)
+	return ctx
+end
+
 return {
 	royalFeast,
 	gardenTea,
+	midnightSnack,
 }
