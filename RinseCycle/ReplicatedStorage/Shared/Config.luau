@@ -18,9 +18,11 @@ Config.Version = "1.1.0"
 ----------------------------------------------------------------------------------------------------
 Config.World = {
 	LobbyOrigin = Vector3.new(0, 0, 0),
-	-- Arena slot k is built at ArenaRowStart + (k - 1) * ArenaSpacing. Kept within ~5,000 studs of the
-	-- origin (float precision) and far enough apart that parties never see each other.
-	ArenaRowStart = Vector3.new(-3500, 0, 3000),
+	-- Arena slot k is built at ArenaRowStart + (k - 1) * ArenaSpacing: a row deep under the lobby, so
+	-- nobody in the lobby can see other parties' dishwashers (each room is a closed box). Kept within
+	-- ~5,000 studs of the origin (float precision) and far enough apart that parties never see each
+	-- other. The place's FallenPartsDestroyHeight is set well below this (see _tools/build.py).
+	ArenaRowStart = Vector3.new(-3500, -2500, 0),
 	ArenaSpacing = Vector3.new(1000, 0, 0),
 	MaxArenas = 8,
 	LobbyWalkSpeed = 22, -- the lobby is small; this keeps walking between pads and shops snappy
@@ -32,7 +34,8 @@ Config.World = {
 Config.Party = {
 	PadCount = 6,
 	MaxPlayers = 8,
-	Countdown = 15, -- seconds from when the host presses Create until the party teleports
+	Countdown = 30, -- seconds from Create until the party teleports (time for others to join)
+	SoloCountdown = 3, -- the same for a party of one (they just want to start)
 	LockSeconds = 1.5, -- joins and leaves are refused this close to launch
 	RejoinCooldown = 0, -- (unused: a pad just left is ignored only until you've stepped out of it)
 	PollInterval = 0.1, -- how often pads look for players stepping in

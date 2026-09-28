@@ -25,7 +25,11 @@ SERVICE_NAMES = ["Workspace", "ReplicatedStorage", "ReplicatedFirst", "ServerScr
 SPECIAL_FOLDERS = {"StarterPlayerScripts": "StarterPlayerScripts",
                    "StarterCharacterScripts": "StarterCharacterScripts"}
 # Extra properties written onto specific services in the place file.
-SERVICE_PROPS = {"StarterPlayer": "", "Workspace": '<bool name="StreamingEnabled">false</bool>',
+SERVICE_PROPS = {"StarterPlayer": '<float name="NameDisplayDistance">0</float>'
+                                  '<float name="HealthDisplayDistance">0</float>', "Workspace": '<bool name="StreamingEnabled">false</bool>'
+                 # The dishwashers are built 2,500 studs under the lobby; the default kill height
+                 # (-500) would delete them and everyone playing in them.
+                 '<float name="FallenPartsDestroyHeight">-20000</float>',
                  # The modern chat (TextChatService, ChatVersion 1) with its default channels: the
                  # admin :mute works on those channels. A place file that doesn't say can come up on
                  # the legacy chat, which has no TextChannels at all.

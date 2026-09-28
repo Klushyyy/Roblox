@@ -1,5 +1,6 @@
--- NameTags: the overhead tag every player wears: their name (with a ✨N badge once they've
--- rebirthed) and their rank underneath in its rarity colour ("🧽 Trainee" until they roll one).
+-- NameTags: the overhead tag every player wears: their name (with an "R N" badge once they've
+-- rebirthed) and their rank underneath in its rarity colour. No rank yet: just the name. VIPs get
+-- a gold name (and a gold name in chat: the VIP attribute is read by the client's chat hook).
 --
 -- Sizing is what makes or breaks overhead GUIs, so the rules are:
 --   * the BillboardGui is sized in STUDS (UDim2 scale), so it behaves like a real object: it
@@ -27,7 +28,8 @@ local HEIGHT_ABOVE_HEAD = 2.1
 local MAX_DISTANCE = 90
 local NAME_MAX_TEXT = 30
 local RANK_MAX_TEXT = 24
-local DEFAULT_RANK = { Icon = "🧽", Name = "Trainee", Color = Color3.fromRGB(200, 205, 215) }
+local DEFAULT_COLOR = Color3.fromRGB(200, 205, 215)
+local GOLD = Color3.fromRGB(255, 210, 74)
 
 local function makeLabel(name: string, parent: Instance, y: number, h: number, maxText: number): TextLabel
 	local label = Instance.new("TextLabel")
@@ -52,6 +54,11 @@ local function makeLabel(name: string, parent: Instance, y: number, h: number, m
 	return label
 end
 
+local function isVip(player: Player): boolean
+	local ok, passes = pcall(DataService.GetPasses, player)
+	return ok and type(passes) == "table" and passes.VIP == true
+end
+
 local function textFor(player: Player): (string, string, Color3)
 	local profile = DataService.Get(player)
 	local rebirths = (profile and tonumber(profile.Rebirths)) or 0
@@ -62,9 +69,9 @@ local function textFor(player: Player): (string, string, Color3)
 	local rank = profile and Config.GetRank(profile.Rank)
 	if rank then
 		local rarity = Config.RankRarities[rank.Rarity]
-		return name, rank.Icon .. " " .. rank.Name, if rarity then rarity.Color else DEFAULT_RANK.Color
+		return name, rank.Icon .. " " .. rank.Name, if rarity then rarity.Color else DEFAULT_COLOR
 	end
-	return name, DEFAULT_RANK.Icon .. " " .. DEFAULT_RANK.Name, DEFAULT_RANK.Color
+	return name, "", DEFAULT_COLOR
 end
 
 -- The player list shows everyone's rebirths (leaderstats).
@@ -94,14 +101,21 @@ local function refresh(player: Player)
 		return
 	end
 	local nameText, rankText, rankColor = textFor(player)
+	local vip = isVip(player)
+	player:SetAttribute("VIP", vip)
 	local nameLabel = tag:FindFirstChild("PlayerName", true)
 	local rankLabel = tag:FindFirstChild("Rank", true)
+	local hasRank = rankText ~= ""
 	if nameLabel and nameLabel:IsA("TextLabel") then
 		nameLabel.Text = nameText
+		nameLabel.TextColor3 = if vip then GOLD else Color3.new(1, 1, 1)
+		-- without a rank line the name sits in the middle of the tag
+		nameLabel.Position = UDim2.fromScale(0, if hasRank then 0 else 0.3)
 	end
 	if rankLabel and rankLabel:IsA("TextLabel") then
 		rankLabel.Text = rankText
 		rankLabel.TextColor3 = rankColor
+		rankLabel.Visible = hasRank
 	end
 end
 
@@ -154,6 +168,24 @@ function NameTags.Init()
 	for _, player in Players:GetPlayers() do
 		watch(player)
 	end
+	-- Belt and braces: anyone whose character is missing its tag (a respawn that raced us, a
+	-- character swapped by another script) gets one, and Roblox's own name stays off.
+	task.spawn(function()
+		while true do
+			task.wait(2)
+			for _, player in Players:GetPlayers() do
+				local character = player.Character
+				local head = character and character:FindFirstChild("Head")
+				if head and character.Parent and not head:FindFirstChild("NameTag") then
+					task.spawn(attach, player, character)
+				end
+				local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+				if humanoid and humanoid.DisplayDistanceType ~= Enum.HumanoidDisplayDistanceType.None then
+					humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+				end
+			end
+		end
+	end)
 end
 
 return NameTags

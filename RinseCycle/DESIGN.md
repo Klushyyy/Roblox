@@ -1127,6 +1127,15 @@ walls instead of clipping through. All gameplay queries use Include filters.
   layer): Coin, Bubble, Gem, Drop, Gift (Daily), Ticket (Codes), Star (Free), Medal (Ranks),
   Shield (Admin), Lock, and the level emblems Pasta, Pizza, Crown. IconButton takes `Icon = "@Gift"`.
   `_tools/tests/guirender.py` renders a dumped GUI tree to a PNG for checking UI.
+- **Arenas under the lobby:** the dishwasher row is built 2,500 studs below the lobby (the place sets
+  FallenPartsDestroyHeight to -20000; Main also tries at runtime), so nobody in the lobby can see
+  other games. The cutscene set is client-side at y -6000.
+- **Party countdown:** 3 s when the party size is 1 (they just want to play), 30 s otherwise;
+  changing the size to or from 1 restarts the countdown.
+- **Name tags:** Roblox's own overhead names are off (StarterPlayer NameDisplayDistance 0, and every
+  Humanoid's DisplayDistanceType None, re-checked every 2 s along with a missing-tag repair). No
+  rank yet: the tag shows just the name. VIP: gold name overhead and in chat (Player attribute VIP,
+  coloured by the client's ChatNames).
 - **Invisible admins:** name tags follow the AdminHidden attribute on every client, and admin-chosen
   invisibility carries over a respawn, so toggling back always brings the tag back.
 

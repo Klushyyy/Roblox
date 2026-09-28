@@ -44,6 +44,13 @@ StarterPlayer.CameraMaxZoomDistance = 60
 StarterPlayer.CameraMinZoomDistance = 0.5 -- scroll all the way in for first person
 StarterPlayer.CharacterWalkSpeed = Config.World.LobbyWalkSpeed
 
+-- The dishwashers are built deep under the lobby; make sure the kill plane is below them even if the
+-- place file didn't set it (scripts may not be allowed to, hence the pcall).
+pcall(function()
+	if workspace.FallenPartsDestroyHeight > -10000 then
+		workspace.FallenPartsDestroyHeight = -20000
+	end
+end)
 step("Remotes", Remotes.Setup)
 step("Characters", Characters.Setup)
 step("DataService.Init", DataService.Init)

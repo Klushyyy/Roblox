@@ -28,7 +28,7 @@ local Bubbles = require(Client:WaitForChild("Bubbles"))
 local Cutscene = {}
 
 local LocalPlayer = Players.LocalPlayer
-local SCENE_ORIGIN = CFrame.new(8000, 400, 0) -- far from the lobby and every arena
+local SCENE_ORIGIN = CFrame.new(0, -6000, 0) -- deep under the lobby, below every arena
 local FADE = 0.45
 local MAX_START_AGE = 12 -- seconds into a run after which we don't start the cutscene
 

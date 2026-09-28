@@ -36,6 +36,12 @@ local PARTY = Config.Party
 local MAX_PLAYERS = PARTY.MaxPlayers
 local LABEL_INTERVAL = 0.25 -- how often pad billboards are rewritten (the countdown text)
 local RETRY_DELAY = 10 -- seconds added to the countdown when every dishwasher is busy
+
+-- Seconds from Create to launch: a solo party (max 1) clearly just wants to play; a bigger one waits
+-- long enough for people to wander over and join.
+local function countdownFor(maxPlayers: number): number
+	return if maxPlayers <= 1 then PARTY.SoloCountdown else PARTY.Countdown
+end
 local PICK_SECONDS = 60 -- a host who hasn't pressed Create by then is walked out of the pad
 local ACTIONS_PER_SECOND = 5 -- PartyAction rate limit per player
 local FRIEND_CACHE_TTL = 300 -- seconds a friends answer is trusted
@@ -930,7 +936,7 @@ local function onPartyAction(player: Player, action: any, value: any)
 		party.MaxPlayers = max
 		party.Privacy = privacy
 		party.Status = "Waiting"
-		party.EndsAt = Util.Now() + PARTY.Countdown
+		party.EndsAt = Util.Now() + countdownFor(max)
 		markDirty(party)
 		refreshPad(party.Pad, true)
 		playPadSound(party.Pad, "Pop")
@@ -945,7 +951,12 @@ local function onPartyAction(player: Player, action: any, value: any)
 			notify(player, "There are already " .. #party.Members .. " players in the party.", "Bad")
 			return
 		end
+		local was = party.MaxPlayers
 		party.MaxPlayers = value
+		if party.Status == "Waiting" and value ~= was and (value == 1 or was == 1) then
+			-- a party of one goes almost straight away; opening it up gives others time to join
+			party.EndsAt = Util.Now() + countdownFor(value)
+		end
 	elseif action == "SetPrivacy" then
 		if value ~= "Public" and value ~= "Friends" then
 			return

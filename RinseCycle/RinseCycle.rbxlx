@@ -1,5 +1,5 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
-<Item class="Workspace" referent="RBX00000001"><Properties><string name="Name">Workspace</string><bool name="StreamingEnabled">false</bool></Properties></Item>
+<Item class="Workspace" referent="RBX00000001"><Properties><string name="Name">Workspace</string><bool name="StreamingEnabled">false</bool><float name="FallenPartsDestroyHeight">-20000</float></Properties></Item>
 <Item class="ReplicatedStorage" referent="RBX00000002"><Properties><string name="Name">ReplicatedStorage</string></Properties>
 <Item class="Folder" referent="RBX00000003"><Properties><string name="Name">Shared</string></Properties>
 <Item class="ModuleScript" referent="RBX00000004"><Properties><string name="Name">Config</string><ProtectedString name="Source">-- Rinse Cycle - every tunable number in the game lives here.
@@ -15,16 +15,18 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.0.0"
+Config.Version = "1.1.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
 ----------------------------------------------------------------------------------------------------
 Config.World = {
 	LobbyOrigin = Vector3.new(0, 0, 0),
-	-- Arena slot k is built at ArenaRowStart + (k - 1) * ArenaSpacing. Kept within ~5,000 studs of the
-	-- origin (float precision) and far enough apart that parties never see each other.
-	ArenaRowStart = Vector3.new(-3500, 0, 3000),
+	-- Arena slot k is built at ArenaRowStart + (k - 1) * ArenaSpacing: a row deep under the lobby, so
+	-- nobody in the lobby can see other parties' dishwashers (each room is a closed box). Kept within
+	-- ~5,000 studs of the origin (float precision) and far enough apart that parties never see each
+	-- other. The place's FallenPartsDestroyHeight is set well below this (see _tools/build.py).
+	ArenaRowStart = Vector3.new(-3500, -2500, 0),
 	ArenaSpacing = Vector3.new(1000, 0, 0),
 	MaxArenas = 8,
 	LobbyWalkSpeed = 22, -- the lobby is small; this keeps walking between pads and shops snappy
@@ -36,7 +38,8 @@ Config.World = {
 Config.Party = {
 	PadCount = 6,
 	MaxPlayers = 8,
-	Countdown = 15, -- seconds from when the host presses Create until the party teleports
+	Countdown = 30, -- seconds from Create until the party teleports (time for others to join)
+	SoloCountdown = 3, -- the same for a party of one (they just want to start)
 	LockSeconds = 1.5, -- joins and leaves are refused this close to launch
 	RejoinCooldown = 0, -- (unused: a pad just left is ignored only until you've stepped out of it)
 	PollInterval = 0.1, -- how often pads look for players stepping in
@@ -154,6 +157,7 @@ Config.Levels = {
 		Name = "Family Dinner",
 		Subtitle = "Crumbs, ketchup and a whole lot of gravy.",
 		Icon = "🍝",
+		Emblem = "Pasta", -- the drawn icon (IconArt) on level cards
 		Place = "Family Kitchen",
 		Toughness = 5.5, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 1,
@@ -182,6 +186,7 @@ Config.Levels = {
 		Name = "Pizza Party",
 		Subtitle = "Greasy pizza trays, sauce everywhere and burnt crust.",
 		Icon = "🍕",
+		Emblem = "Pizza", -- the drawn icon (IconArt) on level cards
 		Place = "Pizzeria",
 		Toughness = 6.0, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 4,
@@ -216,6 +221,7 @@ Config.Levels = {
 		Name = "Royal Banquet",
 		Subtitle = "Golden platters, fancy food and ancient gravy.",
 		Icon = "👑",
+		Emblem = "Crown", -- the drawn icon (IconArt) on level cards
 		Place = "Castle Hall",
 		Toughness = 8.5, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 16,
@@ -5148,7 +5154,30 @@ end)
 -- the two was active so the fresh character starts from a normal,
 -- interactable state instead of an inconsistent one.
 local function watchAdminRespawnForSpectateAndControl(adminPlayer)
-	adminPlayer.CharacterAdded:Connect(function()
+	adminPlayer.CharacterAdded:Connect(function(newCharacter)
+		-- Invisibility the admin chose carries over to the new body (going into a run or back to
+		-- the lobby respawns you), so the next toggle really does bring you - and your name tag -
+		-- back. Invisibility that only spectate/control applied ends with them.
+		local userId = adminPlayer.UserId
+		local wasInvisible = invisibleUserIds[userId] ~= nil
+		local spectate = spectatingState[userId]
+		local control = controllingAdminPreState[userId]
+		local chosen = wasInvisible and ((spectate == nil and control == nil)
+			or (spectate ~= nil and spectate.PreInvis) or (control ~= nil and control.PreInvis))
+		invisibleUserIds[userId] = nil
+		if chosen then
+			task.spawn(function()
+				newCharacter:WaitForChild("Head", 10)
+				task.wait(0.5) -- after the name tag, accessories and body parts arrive
+				if adminPlayer.Character == newCharacter and not invisibleUserIds[userId] then
+					setInvisible(adminPlayer, true)
+				end
+			end)
+		elseif wasInvisible then
+			for _, plr in ipairs(Players:GetPlayers()) do
+				AdminInvisStatus:FireClient(plr, adminPlayer, false)
+			end
+		end
 		if spectatingState[adminPlayer.UserId] then
 			spectatingState[adminPlayer.UserId] = nil
 			AdminSpectate:FireClient(adminPlayer, nil)
@@ -8291,6 +8320,7 @@ function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeSc
 	end
 
 	model:SetAttribute("Level", levelIndex)
+	model:SetAttribute("Origin", origin.Position) -- where the room is (LevelNPCs puts the giants in it)
 	model:SetAttribute("Total", totalGrime)
 	model:SetAttribute("Cleaned", 0)
 
@@ -13286,8 +13316,9 @@ function MarketService.Start()
 end
 
 return MarketService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000018"><Properties><string name="Name">NameTags</string><ProtectedString name="Source">-- NameTags: the overhead tag every player wears: their name (with a ✨N badge once they've
--- rebirthed) and their rank underneath in its rarity colour ("🧽 Trainee" until they roll one).
+<Item class="ModuleScript" referent="RBX00000018"><Properties><string name="Name">NameTags</string><ProtectedString name="Source">-- NameTags: the overhead tag every player wears: their name (with an "R N" badge once they've
+-- rebirthed) and their rank underneath in its rarity colour. No rank yet: just the name. VIPs get
+-- a gold name (and a gold name in chat: the VIP attribute is read by the client's chat hook).
 --
 -- Sizing is what makes or breaks overhead GUIs, so the rules are:
 --   * the BillboardGui is sized in STUDS (UDim2 scale), so it behaves like a real object: it
@@ -13315,7 +13346,8 @@ local HEIGHT_ABOVE_HEAD = 2.1
 local MAX_DISTANCE = 90
 local NAME_MAX_TEXT = 30
 local RANK_MAX_TEXT = 24
-local DEFAULT_RANK = { Icon = "🧽", Name = "Trainee", Color = Color3.fromRGB(200, 205, 215) }
+local DEFAULT_COLOR = Color3.fromRGB(200, 205, 215)
+local GOLD = Color3.fromRGB(255, 210, 74)
 
 local function makeLabel(name: string, parent: Instance, y: number, h: number, maxText: number): TextLabel
 	local label = Instance.new("TextLabel")
@@ -13340,6 +13372,11 @@ local function makeLabel(name: string, parent: Instance, y: number, h: number, m
 	return label
 end
 
+local function isVip(player: Player): boolean
+	local ok, passes = pcall(DataService.GetPasses, player)
+	return ok and type(passes) == "table" and passes.VIP == true
+end
+
 local function textFor(player: Player): (string, string, Color3)
 	local profile = DataService.Get(player)
 	local rebirths = (profile and tonumber(profile.Rebirths)) or 0
@@ -13350,9 +13387,9 @@ local function textFor(player: Player): (string, string, Color3)
 	local rank = profile and Config.GetRank(profile.Rank)
 	if rank then
 		local rarity = Config.RankRarities[rank.Rarity]
-		return name, rank.Icon .. " " .. rank.Name, if rarity then rarity.Color else DEFAULT_RANK.Color
+		return name, rank.Icon .. " " .. rank.Name, if rarity then rarity.Color else DEFAULT_COLOR
 	end
-	return name, DEFAULT_RANK.Icon .. " " .. DEFAULT_RANK.Name, DEFAULT_RANK.Color
+	return name, "", DEFAULT_COLOR
 end
 
 -- The player list shows everyone's rebirths (leaderstats).
@@ -13382,14 +13419,21 @@ local function refresh(player: Player)
 		return
 	end
 	local nameText, rankText, rankColor = textFor(player)
+	local vip = isVip(player)
+	player:SetAttribute("VIP", vip)
 	local nameLabel = tag:FindFirstChild("PlayerName", true)
 	local rankLabel = tag:FindFirstChild("Rank", true)
+	local hasRank = rankText ~= ""
 	if nameLabel and nameLabel:IsA("TextLabel") then
 		nameLabel.Text = nameText
+		nameLabel.TextColor3 = if vip then GOLD else Color3.new(1, 1, 1)
+		-- without a rank line the name sits in the middle of the tag
+		nameLabel.Position = UDim2.fromScale(0, if hasRank then 0 else 0.3)
 	end
 	if rankLabel and rankLabel:IsA("TextLabel") then
 		rankLabel.Text = rankText
 		rankLabel.TextColor3 = rankColor
+		rankLabel.Visible = hasRank
 	end
 end
 
@@ -13442,6 +13486,24 @@ function NameTags.Init()
 	for _, player in Players:GetPlayers() do
 		watch(player)
 	end
+	-- Belt and braces: anyone whose character is missing its tag (a respawn that raced us, a
+	-- character swapped by another script) gets one, and Roblox's own name stays off.
+	task.spawn(function()
+		while true do
+			task.wait(2)
+			for _, player in Players:GetPlayers() do
+				local character = player.Character
+				local head = character and character:FindFirstChild("Head")
+				if head and character.Parent and not head:FindFirstChild("NameTag") then
+					task.spawn(attach, player, character)
+				end
+				local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+				if humanoid and humanoid.DisplayDistanceType ~= Enum.HumanoidDisplayDistanceType.None then
+					humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+				end
+			end
+		end
+	end)
 end
 
 return NameTags</ProtectedString></Properties></Item>
@@ -13483,6 +13545,12 @@ local PARTY = Config.Party
 local MAX_PLAYERS = PARTY.MaxPlayers
 local LABEL_INTERVAL = 0.25 -- how often pad billboards are rewritten (the countdown text)
 local RETRY_DELAY = 10 -- seconds added to the countdown when every dishwasher is busy
+
+-- Seconds from Create to launch: a solo party (max 1) clearly just wants to play; a bigger one waits
+-- long enough for people to wander over and join.
+local function countdownFor(maxPlayers: number): number
+	return if maxPlayers &lt;= 1 then PARTY.SoloCountdown else PARTY.Countdown
+end
 local PICK_SECONDS = 60 -- a host who hasn't pressed Create by then is walked out of the pad
 local ACTIONS_PER_SECOND = 5 -- PartyAction rate limit per player
 local FRIEND_CACHE_TTL = 300 -- seconds a friends answer is trusted
@@ -13792,7 +13860,7 @@ local function refreshPad(pad: Pad, pulse: boolean?)
 		if party then
 			local level = Config.GetLevel(party.Level)
 			setText(gui.Count, #party.Members .. "/" .. party.MaxPlayers)
-			setText(gui.Title, level.Icon .. " " .. level.Name)
+			setText(gui.Title, level.Name)
 			setText(gui.Privacy, PRIVACY_TEXT[party.Privacy])
 		else
 			setText(gui.Count, "0/" .. MAX_PLAYERS)
@@ -14377,7 +14445,7 @@ local function onPartyAction(player: Player, action: any, value: any)
 		party.MaxPlayers = max
 		party.Privacy = privacy
 		party.Status = "Waiting"
-		party.EndsAt = Util.Now() + PARTY.Countdown
+		party.EndsAt = Util.Now() + countdownFor(max)
 		markDirty(party)
 		refreshPad(party.Pad, true)
 		playPadSound(party.Pad, "Pop")
@@ -14392,7 +14460,12 @@ local function onPartyAction(player: Player, action: any, value: any)
 			notify(player, "There are already " .. #party.Members .. " players in the party.", "Bad")
 			return
 		end
+		local was = party.MaxPlayers
 		party.MaxPlayers = value
+		if party.Status == "Waiting" and value ~= was and (value == 1 or was == 1) then
+			-- a party of one goes almost straight away; opening it up gives others time to join
+			party.EndsAt = Util.Now() + countdownFor(value)
+		end
 	elseif action == "SetPrivacy" then
 		if value ~= "Public" and value ~= "Friends" then
 			return
@@ -15242,7 +15315,7 @@ local function hatch(player: Player, eggId: any, count: any): Types.RequestResul
 	local unlocked = tonumber(profile.Unlocked) or 1
 	if unlocked &lt; egg.RequiredLevel then
 		local level = Config.Levels[egg.RequiredLevel]
-		local where = if level then level.Icon .. " " .. level.Name else "the next dishwasher"
+		local where = if level then level.Name else "the next dishwasher"
 		return fail(string.format("Unlock %s to hatch the %s!", where, egg.Name))
 	end
 	local room = RULES.MaxInventory - #profile.Pets
@@ -17981,6 +18054,13 @@ StarterPlayer.CameraMaxZoomDistance = 60
 StarterPlayer.CameraMinZoomDistance = 0.5 -- scroll all the way in for first person
 StarterPlayer.CharacterWalkSpeed = Config.World.LobbyWalkSpeed
 
+-- The dishwashers are built deep under the lobby; make sure the kill plane is below them even if the
+-- place file didn't set it (scripts may not be allowed to, hence the pcall).
+pcall(function()
+	if workspace.FallenPartsDestroyHeight &gt; -10000 then
+		workspace.FallenPartsDestroyHeight = -20000
+	end
+end)
 step("Remotes", Remotes.Setup)
 step("Characters", Characters.Setup)
 step("DataService.Init", DataService.Init)
@@ -18040,7 +18120,7 @@ end
 print(string.format("[%s] v%s server ready", Config.GameName, Config.Version))</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="StarterPlayer" referent="RBX0000001F"><Properties><string name="Name">StarterPlayer</string></Properties>
+<Item class="StarterPlayer" referent="RBX0000001F"><Properties><string name="Name">StarterPlayer</string><float name="NameDisplayDistance">0</float><float name="HealthDisplayDistance">0</float></Properties>
 <Item class="StarterPlayerScripts" referent="RBX00000020"><Properties><string name="Name">StarterPlayerScripts</string></Properties>
 <Item class="Folder" referent="RBX00000021"><Properties><string name="Name">Client</string></Properties>
 <Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">BubbleJets</string><ProtectedString name="Source">-- BubbleJets: inside a run, hold jump while in the air to fly up on a jet of soap bubbles.
@@ -18379,7 +18459,40 @@ function Bubbles.Init()
 end
 
 return Bubbles</ProtectedString></Properties></Item>
-<Item class="LocalScript" referent="RBX00000024"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
+<Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">ChatNames</string><ProtectedString name="Source">--[[
+	ChatNames - VIPs get a gold name in the chat (their overhead name is gold too; see NameTags).
+
+	The server sets Player.VIP (attribute) from the VIP game pass; this client colours the name
+	prefix of every message from a VIP. TextChatService.OnIncomingMessage is a single callback, so
+	this is the only place that sets it.
+]]
+
+local Players = game:GetService("Players")
+local TextChatService = game:GetService("TextChatService")
+
+local ChatNames = {}
+
+local GOLD_HEX = "#FFD24A"
+local initialized = false
+
+function ChatNames.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+	TextChatService.OnIncomingMessage = function(message: TextChatMessage)
+		local props = Instance.new("TextChatMessageProperties")
+		local source = message.TextSource
+		local player = source and Players:GetPlayerByUserId(source.UserId)
+		if player and player:GetAttribute("VIP") == true and message.PrefixText ~= "" then
+			props.PrefixText = string.format('&lt;font color="%s"&gt;%s&lt;/font&gt;', GOLD_HEX, message.PrefixText)
+		end
+		return props
+	end
+end
+
+return ChatNames</ProtectedString></Properties></Item>
+<Item class="LocalScript" referent="RBX00000025"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
 -- Each module exposes Init(); anything that fails is reported without stopping the others.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18406,6 +18519,8 @@ local BubbleJets = require(Client:WaitForChild("BubbleJets"))
 local Bubbles = require(Client:WaitForChild("Bubbles"))
 local HoldPose = require(Client:WaitForChild("HoldPose"))
 local WaterFX = require(Client:WaitForChild("WaterFX"))
+local LevelNPCs = require(Client:WaitForChild("LevelNPCs"))
+local ChatNames = require(Client:WaitForChild("ChatNames"))
 
 local function step(name: string, fn: () -&gt; ())
 	local ok, err = xpcall(fn, debug.traceback)
@@ -18437,8 +18552,10 @@ step("Bubbles", Bubbles.Init)
 step("Effects", Effects.Init)
 step("BubbleJets", BubbleJets.Init)
 step("HoldPose", HoldPose.Init)
-step("WaterFX", WaterFX.Init)</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
+step("WaterFX", WaterFX.Init)
+step("LevelNPCs", LevelNPCs.Init)
+step("ChatNames", ChatNames.Init)</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
 -- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
 -- Changed instead of each hooking the remotes themselves.
 
@@ -18560,7 +18677,7 @@ function ClientState.LocalPlayer(): Player
 end
 
 return ClientState</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">Cutscene</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">Cutscene</string><ProtectedString name="Source">--[[
 	Cutscene - plays the run-start cutscene (CutsceneScene) when your party's dishwasher starts.
 
 	  * Fades to black, builds the scene far from everything (client-only parts, so each player sees
@@ -18590,7 +18707,7 @@ local Bubbles = require(Client:WaitForChild("Bubbles"))
 local Cutscene = {}
 
 local LocalPlayer = Players.LocalPlayer
-local SCENE_ORIGIN = CFrame.new(8000, 400, 0) -- far from the lobby and every arena
+local SCENE_ORIGIN = CFrame.new(0, -6000, 0) -- deep under the lobby, below every arena
 local FADE = 0.45
 local MAX_START_AGE = 12 -- seconds into a run after which we don't start the cutscene
 
@@ -18890,7 +19007,7 @@ function Cutscene.Init()
 		end
 		local party = ClientState.Party :: Types.PartyState?
 		if party and party.Status == "Launching" and not ClientState.Run then
-			task.spawn(Cutscene.Cover, "Filling the dishwasher...", 20)
+			task.spawn(Cutscene.Cover, nil, 20)
 		elseif not party and covered and not playing then
 			task.delay(2, function()
 				if covered and not playing and not ClientState.Run then
@@ -18929,7 +19046,7 @@ function Cutscene.Init()
 end
 
 return Cutscene</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">CutsceneScene</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">CutsceneScene</string><ProtectedString name="Source">--[[
 	CutsceneScene - the set, actors and timeline for the run-start cutscene (played by Cutscene).
 
 	The story (no words, just implied): a family finishes a meal, Mum stacks the dirty plates,
@@ -19635,7 +19752,7 @@ function Scene:Destroy()
 end
 
 return Scene</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">DailyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">DailyUI</string><ProtectedString name="Source">--[[
 	DailyUI - the daily reward calendar (🎁 Daily button on the left; it also pops up by itself once
 	per session when a reward is waiting).
 
@@ -19854,7 +19971,7 @@ function DailyUI.Init()
 end
 
 return DailyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
+<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
 -- numbers, dish/sale celebrations), CollectionService-driven decoration (spinning arms, lift
 -- pads), the drain guide beam, remaining-dirt sparkle markers, prompt routing (windows and the
 -- in-arena tool shop), and a little lobby ambience.
@@ -20815,7 +20932,7 @@ function Effects.Init()
 end
 
 return Effects</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">HoldPose</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">HoldPose</string><ProtectedString name="Source">--[[
 	HoldPose - how a held cleaning tool looks, for every player on this client.
 
 	  * Anyone holding a tool (character attribute HeldToolIndex &gt; 1) holds it out in front, the
@@ -20876,16 +20993,25 @@ end
 local function keepVisible()
 	local character = LocalPlayer.Character
 	local camera = Workspace.CurrentCamera
-	if not character or not camera then
+	if not camera then
 		return
 	end
-	local head = character:FindFirstChild("Head")
+	local head = character and character:FindFirstChild("Head")
 	local firstPerson = head ~= nil and head:IsA("BasePart") and (camera.CFrame.Position - head.Position).Magnitude &lt;= 1.5
-	local tag = head and head:FindFirstChild("NameTag")
-	if tag and tag:IsA("BillboardGui") then
-		tag.Enabled = not firstPerson and character:GetAttribute("AdminHidden") ~= true
+	-- Everyone's name tag follows the admin invisibility flag, so it comes straight back when
+	-- they turn visible again (and after a respawn); yours also hides in first person.
+	for _, player in Players:GetPlayers() do
+		local other = player.Character
+		local otherHead = other and other:FindFirstChild("Head")
+		local tag = otherHead and otherHead:FindFirstChild("NameTag")
+		if other and tag and tag:IsA("BillboardGui") then
+			local show = other:GetAttribute("AdminHidden") ~= true and not (player == LocalPlayer and firstPerson)
+			if tag.Enabled ~= show then
+				tag.Enabled = show
+			end
+		end
 	end
-	if not holding(character) then
+	if not character or not holding(character) then
 		return
 	end
 	local held = character:FindFirstChild("HeldTool")
@@ -20916,7 +21042,7 @@ function HoldPose.Init()
 end
 
 return HoldPose</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
+<Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
 --   * top centre: the Bubbles pill with a green "+" (opens the Shop)
 --   * right side: big square buttons (Shop/Pets in the lobby, Upgrades/Pets/Leave in a run) with
 --     key hints for keyboard (Tab/G/P) or gamepad (Y/LB)
@@ -21134,7 +21260,7 @@ function HUD.Init()
 	local petsButton = sideButton("🐾", "Pets", Colors.Warning, "P", "LB", function()
 		UIKit.ToggleWindow("Pets")
 	end)
-	local ranksButton = sideButton("💎", "Ranks", Colors.Accent, "R", "RB", function()
+	local ranksButton = sideButton("@Medal", "Ranks", Colors.Accent, "R", "RB", function()
 		UIKit.ToggleWindow("Ranks")
 	end)
 	local leaveButton = sideButton("🚪", "Leave", Colors.PanelLight, "", "", function()
@@ -21168,16 +21294,16 @@ function HUD.Init()
 			end,
 		})
 	end
-	local dailyButton = leftButton(1, "🎁", "Daily", Colors.Bubble, "Daily")
-	local codesButton = leftButton(2, "🎟️", "Codes", Colors.Primary, "Codes")
-	local freeButton = leftButton(3, "🎉", "Free", Colors.Good, "Free")
+	local dailyButton = leftButton(1, "@Gift", "Daily", Colors.Bubble, "Daily")
+	local codesButton = leftButton(2, "@Ticket", "Codes", Colors.Primary, "Codes")
+	local freeButton = leftButton(3, "@Star", "Free", Colors.Good, "Free")
 	local function makeAdminButton()
 		if adminButton or not adminClick then
 			return
 		end
 		adminButton = UIKit.IconButton({
 			Name = "AdminButton",
-			Icon = "🛡️",
+			Icon = "@Shield",
 			Label = "Admin",
 			Color = Colors.PanelLight,
 			Size = UDim2.fromOffset(80, 80),
@@ -21500,12 +21626,15 @@ function HUD.Init()
 		if touch then
 			leftY = math.min(leftY, canvas.Y - 300 - leftH / 2)
 		end
-		leftY = math.max(leftY, inset + 80 + leftH / 2)
-		leftColumn.Position = UDim2.new(0, 16 + safe.Left, 0, math.floor(leftY))
-
 		-- Money block: bottom-left on desktop/console; above the thumbstick on touch.
 		local bottom = if touch then canvas.Y - 330 else canvas.Y - 16 - safe.Bottom
 		moneyBlock.Position = UDim2.new(0, 20 + safe.Left, 0, math.floor(bottom))
+		-- In a run the column (the owner's Admin button) stays clear above the money block.
+		if moneyBlock.Visible then
+			leftY = math.min(leftY, bottom - moneyBlock.Size.Y.Offset - 16 - leftH / 2)
+		end
+		leftY = math.max(leftY, inset + 80 + leftH / 2)
+		leftColumn.Position = UDim2.new(0, 16 + safe.Left, 0, math.floor(leftY))
 
 		-- Timer: bottom-right on desktop/console; top-right under the topbar on touch.
 		if touch then
@@ -21521,6 +21650,7 @@ function HUD.Init()
 	end
 	rightColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 	leftColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
+	moneyBlock:GetPropertyChangedSignal("Visible"):Connect(relayoutHud)
 
 	local function relayoutTopBar()
 		relayoutHud()
@@ -22001,7 +22131,7 @@ function HUD.Init()
 
 		if playing and run then
 			local level = Config.GetLevel(run.Level)
-			levelLabel.Text = string.format("%s %s", tostring(level.Icon), tostring(level.Name))
+			levelLabel.Text = tostring(level.Name)
 			local full = run.Tank &gt;= run.TankMax and run.TankMax &gt; 0
 			setTankFull(full)
 			tankBar.Set(
@@ -22154,7 +22284,2877 @@ function HUD.Init()
 end
 
 return HUD</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002D"><Properties><string name="Name">IconArt</string><ProtectedString name="Source">--[[
+	IconArt - the game's own drawn icons (no emoji, no uploaded images), built from plain Frames so
+	they stay crisp at any size.
+
+	Every icon is a list of shapes on a 1 x 1 canvas (y down). Shapes marked `o = true` are part of
+	the silhouette: they are first drawn a little bigger in dark ink (the outline pass), then every
+	shape is drawn on top in colour (the fill pass). Overlapping shapes therefore share one clean
+	outline instead of each getting its own ring.
+
+	Shapes
+	  disc     centre + diameter
+	  rect     centre + size, optional corner radius (fraction of the short side) and rotation
+	  diamond  a square turned 45 degrees (centre + half-diagonal), optionally clipped to a box:
+	           clipped diamonds give the triangles and trapezoids (gem facets, roof points, crown
+	           spikes, the drop's tip)
+	  line     a rounded bar from one point to another
+	  glyph    a text character (the star), outlined with a text stroke
+
+	Fills are a Color3, or { top, bottom } for a gradient down the shape, or { a, b, rot = deg }.
+
+	IconArt.Draw(kind, px) returns the icon's root Frame (px by px, transparent).
+]]
+
+local IconArt = {}
+
+local INK = Color3.fromRGB(5, 16, 36)
+local WHITE = Color3.new(1, 1, 1)
+local SQRT2 = math.sqrt(2)
+
+local function rgb(r: number, g: number, b: number): Color3
+	return Color3.fromRGB(r, g, b)
+end
+
+type Shape = { [any]: any }
+
+local function gradient(parent: Instance, fill: any, shapeRotation: number)
+	if typeof(fill) == "Color3" then
+		return
+	end
+	local g = Instance.new("UIGradient")
+	if typeof(fill[1]) == "Color3" and typeof(fill[2]) == "Color3" and fill[3] == nil then
+		g.Color = ColorSequence.new(fill[1], fill[2])
+	else
+		local keys = {}
+		local n = 0
+		for _, c in fill do
+			if typeof(c) == "Color3" then
+				n += 1
+			end
+		end
+		local i = 0
+		for _, c in fill do
+			if typeof(c) == "Color3" then
+				table.insert(keys, ColorSequenceKeypoint.new(if n &gt; 1 then i / (n - 1) else 0, c))
+				i += 1
+			end
+		end
+		g.Color = ColorSequence.new(keys)
+	end
+	-- Gradients run down the screen whatever the shape's own rotation.
+	g.Rotation = (fill.rot or 90) - shapeRotation
+	g.Parent = parent
+end
+
+local function baseColor(fill: any): Color3
+	return if typeof(fill) == "Color3" then fill else WHITE
+end
+
+local function corner(f: GuiObject, scale: number)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(scale, 0)
+	c.Parent = f
+end
+
+local function frame(parent: Instance, cx: number, cy: number, w: number, h: number, rot: number, color: Color3, transparency: number): Frame
+	local f = Instance.new("Frame")
+	f.BorderSizePixel = 0
+	f.AnchorPoint = Vector2.new(0.5, 0.5)
+	f.Position = UDim2.fromOffset(cx, cy)
+	f.Size = UDim2.fromOffset(w, h)
+	f.Rotation = rot
+	f.BackgroundColor3 = color
+	f.BackgroundTransparency = transparency
+	f.Parent = parent
+	return f
+end
+
+-- Draws one shape. `grow` &gt; 0 draws the ink outline version (every edge pushed out by `grow` px).
+local function draw(parent: Instance, s: Shape, px: number, grow: number)
+	local fill = if grow &gt; 0 then INK else s.fill
+	local transparency = if grow &gt; 0 then 0 else (s.t or 0)
+	local color = baseColor(fill)
+	local kind = s[1]
+	if kind == "disc" then
+		local d = s.d * px + grow * 2
+		local f = frame(parent, s.x * px, s.y * px, d, d, 0, color, transparency)
+		corner(f, 0.5)
+		if grow == 0 then
+			gradient(f, fill, 0)
+		end
+	elseif kind == "rect" then
+		local rot = s.rot or 0
+		local w, h = s.w * px + grow * 2, s.h * px + grow * 2
+		local f = frame(parent, s.x * px, s.y * px, w, h, rot, color, transparency)
+		if s.r then
+			local c = Instance.new("UICorner")
+			c.CornerRadius = UDim.new(0, s.r * math.min(s.w, s.h) * px + grow)
+			c.Parent = f
+		end
+		if grow == 0 then
+			gradient(f, fill, rot)
+		end
+	elseif kind == "diamond" then
+		local hd = s.hd * px + grow * SQRT2
+		local side = hd * SQRT2
+		local holder: Instance = parent
+		local ox, oy = 0, 0
+		if s.clip then
+			local c = s.clip
+			local x0, y0, x1, y1 = c[1] * px - grow, c[2] * px - grow, c[3] * px + grow, c[4] * px + grow
+			local clip = Instance.new("Frame")
+			clip.Name = "Clip"
+			clip.BackgroundTransparency = 1
+			clip.BorderSizePixel = 0
+			clip.ClipsDescendants = true
+			clip.Position = UDim2.fromOffset(x0, y0)
+			clip.Size = UDim2.fromOffset(x1 - x0, y1 - y0)
+			clip.Parent = parent
+			holder = clip
+			ox, oy = x0, y0
+		end
+		local f = frame(holder, s.x * px - ox, s.y * px - oy, side, side, 45, color, transparency)
+		if s.r and grow == 0 then
+			corner(f, s.r)
+		elseif s.r then
+			corner(f, s.r)
+		end
+		if grow == 0 then
+			gradient(f, fill, 45)
+		end
+	elseif kind == "line" then
+		local dx, dy = (s.x2 - s.x1) * px, (s.y2 - s.y1) * px
+		local len = math.sqrt(dx * dx + dy * dy)
+		local w = s.w * px + grow * 2
+		local f = frame(parent, (s.x1 + s.x2) / 2 * px, (s.y1 + s.y2) / 2 * px, len + w, w, math.deg(math.atan2(dy, dx)), color, transparency)
+		corner(f, 0.5)
+		if grow == 0 then
+			gradient(f, fill, math.deg(math.atan2(dy, dx)))
+		end
+	elseif kind == "glyph" then
+		if grow &gt; 0 then
+			return
+		end
+		local size = s.size * px
+		local label = Instance.new("TextLabel")
+		label.BackgroundTransparency = 1
+		label.AnchorPoint = Vector2.new(0.5, 0.5)
+		label.Position = UDim2.fromOffset(s.x * px, s.y * px)
+		label.Size = UDim2.fromOffset(size * 1.3, size * 1.3)
+		label.Text = s.text
+		label.Font = s.font or Enum.Font.GothamBlack
+		label.TextSize = size
+		label.TextColor3 = color
+		label.TextTransparency = transparency
+		label.Parent = parent
+		if s.stroke ~= false then
+			local st = Instance.new("UIStroke")
+			st.Color = s.strokeColor or INK
+			st.Thickness = math.max(1, (s.stroke or 0.05) * px)
+			st.LineJoinMode = Enum.LineJoinMode.Round
+			st.Parent = label
+		end
+		gradient(label, fill, 0)
+	end
+end
+
+----------------------------------------------------------------------------------------------------
+-- The icons
+----------------------------------------------------------------------------------------------------
+local ART: { [string]: { any } } = {}
+
+-- Gold coin standing slightly tilted: a darker edge under the face, a stamped inner disc and a star.
+ART.Coin = {
+	{ "disc", x = 0.5, y = 0.56, d = 0.86, fill = { rgb(222, 136, 26), rgb(160, 84, 10) }, o = true },
+	{ "disc", x = 0.5, y = 0.47, d = 0.86, fill = { rgb(255, 240, 150), rgb(248, 180, 40) }, o = true },
+	{ "disc", x = 0.5, y = 0.47, d = 0.66, fill = rgb(214, 136, 24) },
+	{ "disc", x = 0.5, y = 0.485, d = 0.6, fill = { rgb(240, 166, 34), rgb(255, 226, 112) } },
+	{ "glyph", x = 0.5, y = 0.49, size = 0.46, text = "★", fill = { rgb(255, 250, 214), rgb(255, 214, 90) }, strokeColor = rgb(176, 100, 12), stroke = 0.045 },
+	{ "rect", x = 0.3, y = 0.24, w = 0.22, h = 0.09, r = 0.5, rot = -38, fill = WHITE, t = 0.25 },
+	{ "disc", x = 0.19, y = 0.38, d = 0.06, fill = WHITE, t = 0.35 },
+}
+
+-- Soap bubbles: one big, two small, pale in the middle with a coloured rim and a bright glint.
+local BUBBLE_FILL = { rgb(190, 246, 255), rgb(206, 196, 255), rgb(255, 150, 214), rot = 45 }
+ART.Bubble = {
+	{ "disc", x = 0.43, y = 0.44, d = 0.76, fill = BUBBLE_FILL, o = true },
+	{ "disc", x = 0.41, y = 0.42, d = 0.58, fill = WHITE, t = 0.55 },
+	{ "rect", x = 0.28, y = 0.26, w = 0.26, h = 0.1, r = 0.5, rot = -42, fill = WHITE, t = 0.05 },
+	{ "disc", x = 0.19, y = 0.43, d = 0.07, fill = WHITE, t = 0.1 },
+	{ "line", x1 = 0.56, y1 = 0.7, x2 = 0.66, y2 = 0.6, w = 0.045, fill = WHITE, t = 0.45 },
+	"|",
+	{ "disc", x = 0.8, y = 0.77, d = 0.32, fill = BUBBLE_FILL, o = true },
+	{ "disc", x = 0.79, y = 0.76, d = 0.22, fill = WHITE, t = 0.55 },
+	{ "disc", x = 0.74, y = 0.7, d = 0.06, fill = WHITE, t = 0.1 },
+	"|",
+	{ "disc", x = 0.18, y = 0.86, d = 0.2, fill = BUBBLE_FILL, o = true },
+	{ "disc", x = 0.155, y = 0.83, d = 0.05, fill = WHITE, t = 0.15 },
+}
+
+-- A cut gem seen from the side: table on top, crown facets, pavilion down to the point.
+do
+	local cy, top = 0.47, 0.25 -- girdle line and the flat top
+	local hd = 0.42
+	ART.Gem = {
+		{ "diamond", x = 0.5, y = cy, hd = hd, clip = { 0, top, 1, 1 }, fill = rgb(128, 196, 255), o = true },
+		{ "diamond", x = 0.5, y = cy, hd = hd, clip = { 0, top, 0.5, cy }, fill = rgb(176, 236, 255) },
+		{ "diamond", x = 0.5, y = cy, hd = hd, clip = { 0.5, top, 1, cy }, fill = rgb(118, 168, 252) },
+		{ "diamond", x = 0.5, y = cy, hd = hd, clip = { 0.5, cy, 1, 1 }, fill = rgb(108, 88, 232) },
+		{ "diamond", x = 0.5, y = top, hd = 0.2, clip = { 0, top, 1, 1 }, fill = rgb(230, 250, 255) },
+		{ "line", x1 = 0.1, y1 = cy, x2 = 0.9, y2 = cy, w = 0.03, fill = WHITE, t = 0.35 },
+		{ "line", x1 = 0.3, y1 = cy, x2 = 0.5, y2 = cy + hd - 0.02, w = 0.025, fill = WHITE, t = 0.55 },
+		{ "line", x1 = 0.7, y1 = cy, x2 = 0.5, y2 = cy + hd - 0.02, w = 0.025, fill = WHITE, t = 0.7 },
+		"|",
+		{ "diamond", x = 0.14, y = 0.16, hd = 0.08, fill = WHITE, o = true },
+	}
+end
+
+-- A water drop: round bottom, pointed top (a diamond whose sides touch the circle).
+do
+	local r = 0.31
+	local cx, cy = 0.5, 0.58
+	local tipY = cy - r / SQRT2
+	local hd = r / SQRT2
+	ART.Drop = {
+		{ "diamond", x = cx, y = tipY, hd = hd, fill = { rgb(200, 242, 255), rgb(92, 178, 250) }, o = true },
+		{ "disc", x = cx, y = cy, d = r * 2, fill = { rgb(168, 230, 255), rgb(38, 128, 234) }, o = true },
+		{ "rect", x = 0.37, y = 0.6, w = 0.08, h = 0.22, r = 0.5, rot = 18, fill = WHITE, t = 0.2 },
+		{ "disc", x = 0.43, y = 0.43, d = 0.06, fill = WHITE, t = 0.3 },
+		{ "line", x1 = 0.62, y1 = 0.8, x2 = 0.7, y2 = 0.7, w = 0.05, fill = WHITE, t = 0.55 },
+	}
+end
+
+-- A present: box, lid, ribbon and a two-loop bow.
+ART.Gift = {
+	{ "rect", x = 0.36, y = 0.19, w = 0.28, h = 0.17, r = 0.5, rot = 28, fill = { rgb(255, 232, 110), rgb(242, 170, 36) }, o = true },
+	{ "rect", x = 0.64, y = 0.19, w = 0.28, h = 0.17, r = 0.5, rot = -28, fill = { rgb(255, 232, 110), rgb(242, 170, 36) }, o = true },
+	{ "rect", x = 0.36, y = 0.19, w = 0.13, h = 0.06, r = 0.5, rot = 28, fill = rgb(196, 118, 14), t = 0.35 },
+	{ "rect", x = 0.64, y = 0.19, w = 0.13, h = 0.06, r = 0.5, rot = -28, fill = rgb(196, 118, 14), t = 0.35 },
+	"|",
+	{ "rect", x = 0.5, y = 0.67, w = 0.72, h = 0.46, r = 0.1, fill = { rgb(255, 104, 146), rgb(206, 44, 98) }, o = true },
+	{ "rect", x = 0.5, y = 0.67, w = 0.16, h = 0.46, fill = { rgb(255, 232, 110), rgb(236, 160, 30) } },
+	"|",
+	{ "rect", x = 0.5, y = 0.4, w = 0.86, h = 0.2, r = 0.2, fill = { rgb(255, 150, 180), rgb(240, 84, 128) }, o = true },
+	{ "rect", x = 0.5, y = 0.4, w = 0.16, h = 0.2, fill = { rgb(255, 240, 150), rgb(246, 186, 50) } },
+	{ "rect", x = 0.24, y = 0.36, w = 0.14, h = 0.05, r = 0.5, fill = WHITE, t = 0.35 },
+	"|",
+	{ "disc", x = 0.5, y = 0.26, d = 0.14, fill = { rgb(255, 232, 110), rgb(242, 170, 36) }, o = true },
+}
+
+-- A ticket with a torn-off stub, tipped at an angle.
+ART.Ticket = {
+	{ "rect", x = 0.5, y = 0.5, w = 0.9, h = 0.54, r = 0.16, rot = -16, fill = { rgb(255, 226, 104), rgb(246, 158, 34) }, o = true },
+	{ "disc", x = 0.5 + 0.43 * math.cos(math.rad(-16)), y = 0.5 + 0.43 * math.sin(math.rad(-16)), d = 0.16, fill = INK, t = 0 },
+	{ "disc", x = 0.5 - 0.43 * math.cos(math.rad(-16)), y = 0.5 - 0.43 * math.sin(math.rad(-16)), d = 0.16, fill = INK, t = 0 },
+	{ "rect", x = 0.44, y = 0.52, w = 0.5, h = 0.34, r = 0.14, rot = -16, fill = { rgb(255, 244, 196), rgb(255, 214, 110) } },
+	{ "glyph", x = 0.44, y = 0.52, size = 0.3, text = "★", fill = rgb(242, 120, 60), strokeColor = rgb(170, 70, 20), stroke = 0.03 },
+	{ "line", x1 = 0.75, y1 = 0.3, x2 = 0.745, y2 = 0.32, w = 0.05, fill = rgb(176, 96, 10), t = 0.1 },
+	{ "line", x1 = 0.77, y1 = 0.41, x2 = 0.765, y2 = 0.43, w = 0.05, fill = rgb(176, 96, 10), t = 0.1 },
+	{ "line", x1 = 0.79, y1 = 0.52, x2 = 0.785, y2 = 0.54, w = 0.05, fill = rgb(176, 96, 10), t = 0.1 },
+	{ "line", x1 = 0.81, y1 = 0.63, x2 = 0.805, y2 = 0.65, w = 0.05, fill = rgb(176, 96, 10), t = 0.1 },
+}
+
+-- A big outlined star with two sparkles (free rewards).
+ART.Star = {
+	{ "glyph", x = 0.5, y = 0.54, size = 0.98, text = "★", fill = { rgb(255, 246, 170), rgb(255, 196, 40), rgb(246, 142, 20) }, stroke = 0.07 },
+	"|",
+	{ "diamond", x = 0.87, y = 0.16, hd = 0.1, fill = WHITE, o = true },
+	{ "diamond", x = 0.12, y = 0.8, hd = 0.07, fill = WHITE, o = true },
+}
+
+-- A medal on a ribbon (ranks).
+ART.Medal = {
+	{ "rect", x = 0.37, y = 0.22, w = 0.2, h = 0.44, r = 0.1, rot = -22, fill = { rgb(120, 170, 255), rgb(70, 110, 240) }, o = true },
+	{ "rect", x = 0.63, y = 0.22, w = 0.2, h = 0.44, r = 0.1, rot = 22, fill = { rgb(255, 120, 140), rgb(220, 60, 90) }, o = true },
+	"|",
+	{ "disc", x = 0.5, y = 0.63, d = 0.62, fill = { rgb(255, 240, 150), rgb(236, 160, 30) }, o = true },
+	{ "disc", x = 0.5, y = 0.63, d = 0.46, fill = rgb(206, 128, 20) },
+	{ "disc", x = 0.5, y = 0.64, d = 0.42, fill = { rgb(240, 170, 40), rgb(255, 226, 120) } },
+	{ "glyph", x = 0.5, y = 0.645, size = 0.34, text = "★", fill = { rgb(255, 252, 220), rgb(255, 220, 100) }, strokeColor = rgb(176, 100, 12), stroke = 0.035 },
+	{ "rect", x = 0.33, y = 0.47, w = 0.14, h = 0.06, r = 0.5, rot = -40, fill = WHITE, t = 0.3 },
+}
+
+-- A shield with a star (admin).
+do
+	local top, mid = 0.1, 0.5
+	ART.Shield = {
+		{ "rect", x = 0.5, y = (top + mid) / 2 + 0.02, w = 0.76, h = mid - top + 0.04, r = 0.16, fill = { rgb(236, 244, 255), rgb(170, 190, 220) }, o = true },
+		{ "diamond", x = 0.5, y = mid - 0.02, hd = 0.38 * SQRT2 / SQRT2 * 1.0, clip = { 0.12, mid - 0.02, 0.88, 1 }, r = 0.12, fill = { rgb(190, 206, 232), rgb(140, 160, 196) }, o = true },
+		{ "rect", x = 0.5, y = (top + mid) / 2 + 0.06, w = 0.56, h = mid - top - 0.04, r = 0.12, fill = { rgb(94, 150, 255), rgb(56, 100, 230) } },
+		{ "diamond", x = 0.5, y = mid + 0.02, hd = 0.28, clip = { 0.22, mid + 0.02, 0.78, 1 }, r = 0.12, fill = { rgb(60, 106, 236), rgb(40, 76, 200) } },
+		{ "glyph", x = 0.5, y = 0.47, size = 0.4, text = "★", fill = { rgb(255, 250, 220), rgb(255, 214, 90) }, stroke = 0.04 },
+		{ "rect", x = 0.3, y = 0.24, w = 0.06, h = 0.16, r = 0.5, fill = WHITE, t = 0.4 },
+	}
+end
+
+----------------------------------------------------------------------------------------------------
+-- Level emblems (level select and the run banner)
+----------------------------------------------------------------------------------------------------
+
+-- Spaghetti and meatballs on a plate, seen from above.
+do
+	local shapes: { any } = {
+		{ "disc", x = 0.5, y = 0.52, d = 0.94, fill = { rgb(255, 255, 255), rgb(200, 212, 232) }, o = true },
+		{ "disc", x = 0.5, y = 0.52, d = 0.72, fill = rgb(214, 224, 240) },
+		{ "rect", x = 0.26, y = 0.22, w = 0.2, h = 0.06, r = 0.5, rot = -40, fill = WHITE, t = 0.2 },
+		"|",
+		{ "disc", x = 0.5, y = 0.5, d = 0.62, fill = rgb(236, 186, 80), o = true },
+	}
+	-- a nest of noodles: short strokes at many angles, light over dark
+	local strands = {
+		{ 0.3, 0.4, 0.55, 0.28 }, { 0.26, 0.55, 0.5, 0.36 }, { 0.3, 0.68, 0.62, 0.42 }, { 0.44, 0.76, 0.74, 0.5 },
+		{ 0.58, 0.28, 0.76, 0.46 }, { 0.36, 0.3, 0.72, 0.7 }, { 0.24, 0.48, 0.46, 0.74 }, { 0.54, 0.24, 0.3, 0.5 },
+		{ 0.66, 0.74, 0.76, 0.56 }, { 0.4, 0.26, 0.66, 0.3 },
+	}
+	for i, st in strands do
+		table.insert(shapes, { "line", x1 = st[1], y1 = st[2], x2 = st[3], y2 = st[4], w = 0.035, fill = if i % 2 == 0 then rgb(255, 234, 150) else rgb(250, 214, 110) })
+	end
+	table.insert(shapes, { "disc", x = 0.52, y = 0.5, d = 0.3, fill = { rgb(234, 70, 46), rgb(190, 34, 26) }, t = 0.05 })
+	table.insert(shapes, { "disc", x = 0.43, y = 0.44, d = 0.12, fill = rgb(234, 70, 46) })
+	table.insert(shapes, "|")
+	for _, m in { { 0.44, 0.52 }, { 0.6, 0.55 }, { 0.53, 0.4 } } do
+		table.insert(shapes, { "disc", x = m[1], y = m[2], d = 0.15, fill = { rgb(170, 96, 62), rgb(104, 50, 30) }, o = true })
+		table.insert(shapes, { "disc", x = m[1] - 0.025, y = m[2] - 0.03, d = 0.045, fill = WHITE, t = 0.45 })
+	end
+	table.insert(shapes, { "rect", x = 0.66, y = 0.34, w = 0.09, h = 0.045, r = 0.5, rot = 30, fill = rgb(70, 170, 70) })
+	table.insert(shapes, { "rect", x = 0.36, y = 0.64, w = 0.09, h = 0.045, r = 0.5, rot = -20, fill = rgb(70, 170, 70) })
+	ART.Pasta = shapes
+end
+
+-- A whole pizza from above: crust, cheese, pepperoni, basil and the slice cuts.
+do
+	local pep = { rgb(214, 74, 52), rgb(166, 40, 30) }
+	local shapes: { any } = {
+		{ "disc", x = 0.5, y = 0.5, d = 0.94, fill = { rgb(246, 186, 104), rgb(196, 116, 46) }, o = true },
+		{ "disc", x = 0.5, y = 0.5, d = 0.76, fill = rgb(214, 70, 40) },
+		{ "disc", x = 0.5, y = 0.49, d = 0.72, fill = { rgb(255, 230, 120), rgb(250, 190, 70) } },
+	}
+	for i = 0, 2 do
+		local a = math.rad(i * 60 + 15)
+		table.insert(shapes, { "line", x1 = 0.5 - math.cos(a) * 0.37, y1 = 0.5 - math.sin(a) * 0.37, x2 = 0.5 + math.cos(a) * 0.37, y2 = 0.5 + math.sin(a) * 0.37, w = 0.022, fill = rgb(196, 120, 40), t = 0.25 })
+	end
+	table.insert(shapes, "|")
+	for _, p in { { 0.34, 0.34 }, { 0.62, 0.3 }, { 0.72, 0.56 }, { 0.5, 0.52 }, { 0.3, 0.6 }, { 0.54, 0.74 } } do
+		table.insert(shapes, { "disc", x = p[1], y = p[2], d = 0.14, fill = rgb(140, 30, 24) })
+		table.insert(shapes, { "disc", x = p[1], y = p[2] - 0.005, d = 0.12, fill = pep })
+		table.insert(shapes, { "disc", x = p[1] - 0.025, y = p[2] - 0.028, d = 0.035, fill = WHITE, t = 0.5 })
+	end
+	for _, b in { { 0.46, 0.24, 20 }, { 0.2, 0.46, -40 }, { 0.8, 0.42, 60 }, { 0.4, 0.44, 70 }, { 0.66, 0.7, -10 }, { 0.38, 0.78, 30 } } do
+		table.insert(shapes, { "rect", x = b[1], y = b[2], w = 0.1, h = 0.05, r = 0.5, rot = b[3], fill = rgb(66, 158, 70) })
+	end
+	table.insert(shapes, { "rect", x = 0.24, y = 0.2, w = 0.18, h = 0.05, r = 0.5, rot = -45, fill = WHITE, t = 0.45 })
+	ART.Pizza = shapes
+end
+
+-- A royal crown: band, three points with balls, and jewels.
+do
+	local band = 0.66
+	ART.Crown = {
+		{ "diamond", x = 0.2, y = band - 0.02, hd = 0.3, clip = { 0.08, 0.2, 0.42, band }, fill = { rgb(255, 238, 140), rgb(246, 176, 38) }, o = true },
+		{ "diamond", x = 0.8, y = band - 0.02, hd = 0.3, clip = { 0.58, 0.2, 0.92, band }, fill = { rgb(255, 238, 140), rgb(246, 176, 38) }, o = true },
+		{ "diamond", x = 0.5, y = band - 0.02, hd = 0.4, clip = { 0.22, 0.1, 0.78, band }, fill = { rgb(255, 242, 150), rgb(246, 176, 38) }, o = true },
+		{ "disc", x = 0.12, y = 0.34, d = 0.13, fill = { rgb(255, 246, 180), rgb(246, 176, 38) }, o = true },
+		{ "disc", x = 0.88, y = 0.34, d = 0.13, fill = { rgb(255, 246, 180), rgb(246, 176, 38) }, o = true },
+		{ "disc", x = 0.5, y = 0.12, d = 0.15, fill = { rgb(255, 246, 180), rgb(246, 176, 38) }, o = true },
+		"|",
+		{ "rect", x = 0.5, y = band + 0.08, w = 0.84, h = 0.22, r = 0.2, fill = { rgb(255, 222, 100), rgb(214, 136, 20) }, o = true },
+		{ "disc", x = 0.5, y = band + 0.08, d = 0.14, fill = { rgb(255, 110, 130), rgb(200, 30, 70) }, o = true },
+		{ "disc", x = 0.26, y = band + 0.08, d = 0.1, fill = { rgb(120, 200, 255), rgb(50, 110, 230) }, o = true },
+		{ "disc", x = 0.74, y = band + 0.08, d = 0.1, fill = { rgb(120, 200, 255), rgb(50, 110, 230) }, o = true },
+		{ "disc", x = 0.49, y = band + 0.06, d = 0.045, fill = WHITE, t = 0.3 },
+		{ "rect", x = 0.5, y = band - 0.01, w = 0.8, h = 0.03, r = 0.5, fill = WHITE, t = 0.55 },
+		{ "disc", x = 0.48, y = 0.1, d = 0.05, fill = WHITE, t = 0.3 },
+	}
+end
+
+-- A padlock (locked levels).
+ART.Lock = {
+	{ "rect", x = 0.5, y = 0.3, w = 0.5, h = 0.5, r = 0.5, fill = { rgb(210, 222, 240), rgb(140, 156, 186) }, o = true },
+	{ "rect", x = 0.5, y = 0.34, w = 0.28, h = 0.4, r = 0.5, fill = INK },
+	"|",
+	{ "rect", x = 0.5, y = 0.66, w = 0.74, h = 0.52, r = 0.18, fill = { rgb(255, 222, 100), rgb(222, 146, 24) }, o = true },
+	{ "disc", x = 0.5, y = 0.62, d = 0.14, fill = INK },
+	{ "rect", x = 0.5, y = 0.71, w = 0.06, h = 0.14, r = 0.5, fill = INK },
+	{ "rect", x = 0.25, y = 0.52, w = 0.12, h = 0.05, r = 0.5, fill = WHITE, t = 0.35 },
+}
+
+-- Puts the whole icon on one ZIndex (for ScreenGuis that use Global ZIndex ordering).
+function IconArt.SetZIndex(root: GuiObject, z: number)
+	root.ZIndex = z
+	for _, d in root:GetDescendants() do
+		if d:IsA("GuiObject") then
+			d.ZIndex = z
+		end
+	end
+end
+
+function IconArt.Has(kind: string): boolean
+	return ART[kind] ~= nil
+end
+
+function IconArt.Draw(kind: string, px: number): Frame
+	local root = Instance.new("Frame")
+	root.Name = kind .. "Icon"
+	root.BackgroundTransparency = 1
+	root.BorderSizePixel = 0
+	root.Size = UDim2.fromOffset(px, px)
+	local shapes = ART[kind] or ART.Coin
+	local grow = math.max(1.5, px * 0.055)
+	-- Each layer (split by "|") gets its outline pass and then its fill pass, so a layer drawn later
+	-- sits on top of the earlier ones with its own outline.
+	local layer: { Shape } = {}
+	local function flush()
+		for _, s in layer do
+			if s.o then
+				draw(root, s, px, grow)
+			end
+		end
+		for _, s in layer do
+			draw(root, s, px, 0)
+		end
+		table.clear(layer)
+	end
+	for _, s in shapes do
+		if s == "|" then
+			flush()
+		else
+			table.insert(layer, s)
+		end
+	end
+	flush()
+	return root
+end
+
+return IconArt</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX0000002E"><Properties><string name="Name">LevelNPCs</string><ProtectedString name="Source">--[[
+	LevelNPCs - the people from the cutscenes, living in the room around the dishwasher during a run.
+
+	They're giants (you're dish-sized): classic R6 blocky figures at 50x scale, the same scale the
+	room's furniture was built at, so a chair seat, a table top and a counter are exactly where their
+	legs, hands and elbows expect them. Each level has its own cast and routines:
+
+	  1 Family Dinner - Dad, Mum, the kid and Grandpa at the family table. Mum clears the plates,
+	    washes them at the sink next to you and brings them back; the kid fetches a juice from the
+	    fridge; Grandpa reads the paper, sips tea and nods off.
+	  2 Pizza Party   - the chef slides a pizza into the brick oven, pulls it out and serves it; the
+	    guests grab slices as he puts it down; the waiter sweeps, takes orders and brings drinks.
+	  3 Royal Banquet - the king on his throne, the queen and nobles feasting and toasting, a
+	    servant carrying the roast from the fire, a juggling jester who does cartwheels and guards
+	    on duty.
+
+	Everything is a pure function of time: the routines loop (every level has one loop length and
+	every character's plan fills it exactly), and the loop clock is the server's clock, so everyone
+	in a party sees the same thing at the same moment. Parts are client-only, anchored and
+	non-colliding, and moved with one BulkMoveTo per frame.
+
+	The rig: arms and legs are split at the elbow and knee (with a hidden joint block), so standing
+	they look like one R6 limb, but they can sit on a chair with their feet down and lift a fork to
+	their mouth. Arms can be posed directly (pitch / roll / elbow) or by where the hand should be
+	(simple two-bone IK).
+
+	Scene.Build(levelIndex, roomOrigin, parent) -&gt; scene; scene:Update(t); scene:Destroy().
+	LevelNPCs.Init() runs them for the local player's run.
+]]
+
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local LevelNPCs = {}
+
+local S = 50 -- studs per rig unit (a 5-unit person is 250 studs tall)
+local FLOOR = -24 -- the kitchen floor, in room space (matches ArenaBuilder)
+local PI = math.pi
+
+local SKIN = Color3.fromRGB(245, 205, 150)
+local WHITE = Color3.fromRGB(250, 250, 248)
+local INK = Color3.fromRGB(34, 34, 40)
+
+local function rgb(r: number, g: number, b: number): Color3
+	return Color3.fromRGB(r, g, b)
+end
+
+local function smooth(x: number): number
+	x = math.clamp(x, 0, 1)
+	return x * x * (3 - 2 * x)
+end
+
+local function lerp(a: number, b: number, k: number): number
+	return a + (b - a) * k
+end
+
+local function angleDiff(a: number, b: number): number
+	local d = (b - a) % (2 * PI)
+	if d &gt; PI then
+		d -= 2 * PI
+	end
+	return d
+end
+
+-- Room space (ArenaBuilder's): +X right, +Z into the dishwasher, which is the arena's LookVector
+-- (world -Z). W(x, y, z) is a room point as an arena-local CFrame; rootCF is a character standing at
+-- room (x, z) facing phi (0 faces room +Z, i.e. towards the dishwasher; pi/2 faces +X).
+local function W(x: number, y: number, z: number): CFrame
+	return CFrame.new(x, y, -z)
+end
+
+local function rootCF(x: number, z: number, phi: number): CFrame
+	return CFrame.new(x, FLOOR, -z) * CFrame.Angles(0, -phi, 0)
+end
+
+local function phiOf(dx: number, dz: number): number
+	return math.atan2(dx, dz)
+end
+
+----------------------------------------------------------------------------------------------------
+-- Parts
+----------------------------------------------------------------------------------------------------
+
+type Piece = { Part: BasePart, Bone: string, Offset: CFrame, Base: Vector3, Look: number }
+
+local function newPart(name: string, size: Vector3, color: Color3, material: Enum.Material?, shape: string?): BasePart
+	local p: BasePart
+	if shape == "Wedge" then
+		p = Instance.new("WedgePart")
+	else
+		local part = Instance.new("Part")
+		if shape == "Ball" then
+			part.Shape = Enum.PartType.Ball
+		elseif shape == "Cylinder" then
+			part.Shape = Enum.PartType.Cylinder
+		end
+		p = part
+	end
+	p.Name = name
+	p.Size = size
+	p.Color = color
+	p.Material = material or Enum.Material.SmoothPlastic
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	if shape == "Sphere" or shape == "Head" then
+		local mesh = Instance.new("SpecialMesh")
+		mesh.MeshType = if shape == "Head" then Enum.MeshType.Head else Enum.MeshType.Sphere
+		if shape == "Head" then
+			mesh.Scale = Vector3.new(1.25, 1.25, 1.25)
+		end
+		mesh.Parent = p
+	end
+	return p
+end
+
+----------------------------------------------------------------------------------------------------
+-- Actors
+----------------------------------------------------------------------------------------------------
+
+type Look = { [string]: any }
+type Pose = { [string]: any }
+
+local Actor = {}
+Actor.__index = Actor
+
+-- piece(bone, size (rig units), offset (rig units, bone space), colour, material?, shape?)
+function Actor:piece(bone: string, size: Vector3, offset: CFrame, color: Color3, material: Enum.Material?, shape: string?): BasePart
+	local s = self.S
+	local p = newPart(self.Name .. bone, size * s, color, material, shape)
+	p.Parent = self.Folder
+	table.insert(self.Pieces, { Part = p, Bone = bone, Offset = CFrame.new(offset.Position * s) * offset.Rotation })
+	return p
+end
+
+local function buildActor(name: string, look: Look, folder: Instance): any
+	local self = setmetatable({}, Actor)
+	self.Name = name
+	self.S = S * (look.Scale or 1)
+	self.Pieces = {} :: { any }
+	self.Folder = folder
+	self.Look = look
+	local skin = look.Skin or SKIN
+	local shirt = look.Shirt
+	local sleeve = look.Sleeve or shirt
+	local fore = if look.Sleeves == "short" then skin else sleeve
+	local pants = look.Pants
+	local shoes = look.Shoes or rgb(40, 34, 30)
+	local I = CFrame.identity
+
+	self:piece("Torso", Vector3.new(2, 2, 1), I, shirt, look.ShirtMat)
+	local head = self:piece("Head", Vector3.new(2, 1, 1), I, skin, nil, "Head")
+	local face = Instance.new("Decal")
+	face.Name = "face"
+	face.Face = Enum.NormalId.Front
+	face.Texture = "rbxasset://textures/face.png"
+	face.Parent = head
+	for _, side in { "L", "R" } do
+		self:piece("Arm" .. side, Vector3.new(1, 1, 1), I, sleeve, look.ShirtMat)
+		self:piece("Fore" .. side, Vector3.new(0.98, 0.96, 0.98), CFrame.new(0, -0.42, 0), fore, if fore == skin then nil else look.ShirtMat)
+		self:piece("Fore" .. side, Vector3.new(0.94, 0.94, 0.94), I, sleeve, look.ShirtMat) -- elbow joint block
+		self:piece("Fore" .. side, Vector3.new(1, 0.14, 1), CFrame.new(0, -0.93, 0), skin)
+		self:piece("Thigh" .. side, Vector3.new(0.96, 1, 0.96), CFrame.new(0, -0.5, 0), pants, look.PantsMat)
+		self:piece("Shin" .. side, Vector3.new(0.94, 0.94, 0.94), I, pants, look.PantsMat) -- knee joint block
+		self:piece("Shin" .. side, Vector3.new(0.96, 0.78, 0.96), CFrame.new(0, -0.37, 0), pants, look.PantsMat)
+		self:piece("Shin" .. side, Vector3.new(1, 0.24, 1.18), CFrame.new(0, -0.88, -0.09), shoes)
+	end
+	if look.Build then
+		look.Build(self)
+	end
+	return self
+end
+
+-- Two-bone arm: shoulder pivot -&gt; elbow (0.5) -&gt; grip (1.0). Returns upper and forearm frames.
+local UPPER, LOWER = 0.5, 1.0
+
+local function armFK(pivot: CFrame, s: number, side: number, a: any): (CFrame, CFrame)
+	local upper = pivot * CFrame.Angles(a.p or 0, (a.y or 0) * side, (a.r or 0) * side)
+	local elbow = upper * CFrame.new(0, -UPPER * s, 0) * CFrame.Angles(a.e or 0, 0, 0)
+	return upper, elbow
+end
+
+-- The hand's grip point goes to `target` (world); the elbow bends away from `pole`.
+local function armIK(pivot: CFrame, s: number, target: Vector3, pole: Vector3): (CFrame, CFrame)
+	local origin = pivot.Position
+	local v = target - origin
+	local a, b = UPPER * s, LOWER * s
+	local d = math.clamp(v.Magnitude, math.abs(b - a) + 0.01 * s, (a + b) - 0.001 * s)
+	local u = if v.Magnitude &gt; 1e-6 then v.Unit else -pivot.UpVector
+	local w = pole - u * pole:Dot(u)
+	if w.Magnitude &lt; 1e-4 then
+		w = pivot.LookVector - u * pivot.LookVector:Dot(u)
+	end
+	w = w.Unit
+	local cosA = math.clamp((a * a + d * d - b * b) / (2 * a * d), -1, 1)
+	local sinA = math.sqrt(1 - cosA * cosA)
+	local elbowPos = origin + (u * cosA + w * sinA) * a
+	local grip = origin + u * d
+	local du = (elbowPos - origin).Unit
+	local df = (grip - elbowPos).Unit
+	local n = u:Cross(w)
+	if n.Magnitude &lt; 1e-4 then
+		n = pivot.RightVector
+	end
+	n = n.Unit
+	-- Limb cross-sections stay square to the body (no roll about the bone), like a normal R6 limb.
+	local function frame(pos: Vector3, dir: Vector3): CFrame
+		local y = -dir
+		local r = pivot.RightVector
+		local x = (r - y * r:Dot(y))
+		if x.Magnitude &lt; 0.2 then
+			x = (n - y * n:Dot(y))
+		end
+		x = x.Unit
+		return CFrame.fromMatrix(pos, x, y)
+	end
+	return frame(origin, du), frame(elbowPos, df)
+end
+
+-- Poses the rig. root: feet on the floor, facing. Returns bone frames (world).
+--   sit (0..1), seat (seat top above the floor, studs), lean, twist, bob (units), body (extra CFrame
+--   at the hips, e.g. a cartwheel), head = { yaw, pitch, roll }, walk = phase, stride (0..1),
+--   armL / armR = { p, r, y, e } (forward, out, twist, elbow) or { at = world point, pole = vector },
+--   legs = { hipL, hipR, kneeL, kneeR } overrides.
+function Actor:Pose(root: CFrame, pose: Pose): { [string]: CFrame }
+	local s = self.S
+	local sit = pose.sit or 0
+	local seatUnits = (pose.seat or 0) / s
+	local pelvisY = lerp(2, seatUnits + 0.37, sit) + (pose.bob or 0)
+	local pelvis = root * CFrame.new(0, pelvisY * s, 0)
+	if pose.body then
+		pelvis = pelvis * pose.body
+	end
+	local hips = pelvis
+	pelvis = pelvis * CFrame.Angles(-(pose.lean or 0), pose.twist or 0, pose.tilt or 0)
+	local torso = pelvis * CFrame.new(0, s, 0)
+	local bones: { [string]: CFrame } = { Torso = torso, Root = root, Pelvis = pelvis }
+	local h = pose.head or {}
+	local neck = torso * CFrame.new(0, s, 0) * CFrame.Angles(0, h.yaw or 0, 0) * CFrame.Angles(h.pitch or 0, 0, h.roll or 0)
+	bones.Head = neck * CFrame.new(0, 0.5 * s, 0)
+
+	-- Legs
+	local walk = pose.walk
+	local stride = pose.stride or 1
+	local legs = pose.legs or {}
+	for side, name in { [-1] = "L", [1] = "R" } do
+		local swing, knee = 0, 0
+		if walk then
+			local ph = walk + (if side &gt; 0 then PI else 0)
+			swing = math.sin(ph) * 0.5 * stride
+			knee = -math.max(0, math.cos(ph)) * 0.75 * stride
+		end
+		local hipA = lerp(swing, PI / 2, sit)
+		local kneeA = lerp(knee, self.Look.SitKnee or (-PI / 2 + 0.2), sit)
+		hipA = legs["hip" .. name] or hipA
+		kneeA = legs["knee" .. name] or kneeA
+		local out = legs["out" .. name] or ((self.Look.SitOut or 0) * sit)
+		local hip = hips * CFrame.new(side * 0.5 * s, 0, 0) * CFrame.Angles(hipA, 0, out * side)
+		bones["Thigh" .. name] = hip
+		bones["Shin" .. name] = hip * CFrame.new(0, -s, 0) * CFrame.Angles(kneeA, 0, 0)
+	end
+
+	-- Arms
+	for side, name in { [-1] = "L", [1] = "R" } do
+		local pivot = torso * CFrame.new(side * 1.5 * s, 0.5 * s, 0)
+		local a = pose["arm" .. name]
+		local upper, elbow
+		if a and a.at then
+			local pole = a.pole or (pivot.RightVector * side * 0.25 - pivot.UpVector * 0.3 - pivot.LookVector * 0.8)
+			local target = if type(a.at) == "function" then a.at(bones) else a.at
+			upper, elbow = armIK(pivot, s, target, pole)
+		else
+			a = a or {}
+			if walk and a.p == nil then
+				local swing = -math.sin(walk + (if side &gt; 0 then PI else 0)) * 0.45 * stride
+				a = { p = swing, r = a.r or 0.04, e = a.e or (0.25 + math.max(0, swing) * 0.5) }
+			elseif a.p == nil and a.e == nil and a.r == nil then
+				a = { p = 0.02, r = 0.05, e = 0.12 }
+			end
+			upper, elbow = armFK(pivot, s, side, a)
+		end
+		bones["Arm" .. name] = upper
+		bones["Fore" .. name] = elbow
+		bones["Grip" .. name] = elbow * CFrame.new(0, -LOWER * s, 0)
+	end
+	self.Bones = bones
+	return bones
+end
+
+-- Writes every piece's CFrame into the batch lists.
+function Actor:Emit(parts: { BasePart }, cframes: { CFrame })
+	local bones = self.Bones
+	for _, pc in self.Pieces do
+		local b = bones[pc.Bone]
+		if b then
+			table.insert(parts, pc.Part)
+			table.insert(cframes, b * pc.Offset)
+		end
+	end
+end
+
+----------------------------------------------------------------------------------------------------
+-- Looks: hair, hats and outfits (all built with Actor:piece on the head / torso bones)
+----------------------------------------------------------------------------------------------------
+
+local function hairShort(color: Color3)
+	return function(a: any)
+		a:piece("Head", Vector3.new(1.36, 0.78, 1.34), CFrame.new(0, 0.4, 0.06), color, nil, "Sphere")
+		a:piece("Head", Vector3.new(1.3, 0.8, 0.4), CFrame.new(0, 0.12, 0.46), color, nil, "Sphere")
+	end
+end
+
+local function hairLong(color: Color3)
+	return function(a: any)
+		a:piece("Head", Vector3.new(1.4, 0.8, 1.38), CFrame.new(0, 0.4, 0.04), color, nil, "Sphere")
+		a:piece("Head", Vector3.new(1.34, 1.3, 0.36), CFrame.new(0, -0.18, 0.52), color)
+		a:piece("Head", Vector3.new(0.24, 0.9, 0.7), CFrame.new(-0.6, -0.05, 0.18), color)
+		a:piece("Head", Vector3.new(0.24, 0.9, 0.7), CFrame.new(0.6, -0.05, 0.18), color)
+	end
+end
+
+local function partyHat(a: any, c1: Color3, c2: Color3)
+	for i = 0, 3 do
+		local r = 0.5 - i * 0.12
+		a:piece("Head", Vector3.new(0.26, r * 2, r * 2), CFrame.new(0, 0.72 + i * 0.24, 0) * CFrame.Angles(0, 0, PI / 2), if i % 2 == 0 then c1 else c2, nil, "Cylinder")
+	end
+	a:piece("Head", Vector3.new(0.22, 0.22, 0.22), CFrame.new(0, 1.66, 0), rgb(255, 230, 90), nil, "Ball")
+end
+
+local function crown(a: any, gem: Color3, small: boolean?)
+	local k = if small then 0.8 else 1
+	local gold = rgb(240, 196, 70)
+	a:piece("Head", Vector3.new(0.32, 1.36 * k, 1.36 * k), CFrame.new(0, 0.74, 0) * CFrame.Angles(0, 0, PI / 2), gold, Enum.Material.Metal, "Cylinder")
+	for i = 0, 5 do
+		local ang = i / 6 * PI * 2
+		a:piece("Head", Vector3.new(0.22, 0.36, 0.22) * k, CFrame.new(math.cos(ang) * 0.58 * k, 1.02, math.sin(ang) * 0.58 * k) * CFrame.Angles(0, -ang, 0), gold, Enum.Material.Metal)
+		a:piece("Head", Vector3.new(0.16, 0.16, 0.16) * k, CFrame.new(math.cos(ang) * 0.58 * k, 1.24, math.sin(ang) * 0.58 * k), gold, Enum.Material.Metal, "Ball")
+	end
+	a:piece("Head", Vector3.new(0.24, 0.24, 0.1), CFrame.new(0, 0.76, -0.69 * k), gem, Enum.Material.Neon)
+end
+
+local function glasses(a: any)
+	for _, x in { -0.25, 0.25 } do
+		a:piece("Head", Vector3.new(0.34, 0.24, 0.05), CFrame.new(x, 0.1, -0.64), INK)
+		a:piece("Head", Vector3.new(0.26, 0.16, 0.02), CFrame.new(x, 0.1, -0.665), rgb(200, 230, 245), Enum.Material.Glass)
+	end
+	a:piece("Head", Vector3.new(0.18, 0.05, 0.05), CFrame.new(0, 0.14, -0.64), INK)
+end
+
+local function beard(a: any, color: Color3)
+	a:piece("Head", Vector3.new(1.0, 0.62, 0.34), CFrame.new(0, -0.44, -0.46), color, nil, "Sphere")
+	a:piece("Head", Vector3.new(0.6, 0.14, 0.14), CFrame.new(0, -0.14, -0.62), color)
+end
+
+local function apron(a: any, color: Color3, strap: Color3?)
+	a:piece("Torso", Vector3.new(1.7, 1.45, 0.06), CFrame.new(0, -0.3, -0.53), color, Enum.Material.Fabric)
+	a:piece("Torso", Vector3.new(0.9, 0.5, 0.06), CFrame.new(0, 0.62, -0.53), color, Enum.Material.Fabric)
+	a:piece("Torso", Vector3.new(2.04, 0.12, 1.04), CFrame.new(0, -0.32, 0), strap or color, Enum.Material.Fabric)
+	-- the skirt of the apron, over the thighs
+	a:piece("ThighL", Vector3.new(1.0, 0.7, 0.06), CFrame.new(0.4, -0.36, -0.52), color, Enum.Material.Fabric)
+	a:piece("ThighR", Vector3.new(1.0, 0.7, 0.06), CFrame.new(-0.4, -0.36, -0.52), color, Enum.Material.Fabric)
+end
+
+local function belt(a: any, color: Color3, buckle: Color3?)
+	a:piece("Torso", Vector3.new(2.04, 0.2, 1.04), CFrame.new(0, -0.86, 0), color)
+	if buckle then
+		a:piece("Torso", Vector3.new(0.34, 0.26, 0.06), CFrame.new(0, -0.86, -0.54), buckle, Enum.Material.Metal)
+	end
+end
+
+local function collar(a: any, color: Color3)
+	a:piece("Torso", Vector3.new(0.5, 0.3, 0.06), CFrame.new(-0.22, 0.86, -0.53) * CFrame.Angles(0, 0, -0.5), color)
+	a:piece("Torso", Vector3.new(0.5, 0.3, 0.06), CFrame.new(0.22, 0.86, -0.53) * CFrame.Angles(0, 0, 0.5), color)
+end
+
+local LOOKS: { [string]: Look } = {}
+
+LOOKS.Dad = {
+	Shirt = rgb(70, 110, 190), Pants = rgb(60, 60, 80),
+	Build = function(a)
+		hairShort(rgb(92, 60, 36))(a)
+		collar(a, rgb(90, 132, 210))
+		belt(a, rgb(60, 40, 30), rgb(200, 200, 210))
+	end,
+}
+LOOKS.Mum = {
+	Shirt = rgb(220, 90, 110), Pants = rgb(70, 70, 90), Sleeves = "short",
+	Build = function(a)
+		hairLong(rgb(150, 86, 40))(a)
+		apron(a, rgb(250, 240, 220), rgb(236, 220, 196))
+	end,
+}
+LOOKS.Kid = {
+	Shirt = rgb(110, 190, 110), Pants = rgb(90, 70, 60), Sleeves = "short", Scale = 0.72, Shoes = rgb(220, 60, 60), SitKnee = -0.25, SitOut = -0.12,
+	Build = function(a)
+		hairShort(rgb(240, 200, 90))(a)
+		a:piece("Torso", Vector3.new(2.02, 0.3, 1.02), CFrame.new(0, 0.2, 0), rgb(250, 250, 250))
+	end,
+}
+LOOKS.Grandpa = {
+	Shirt = rgb(150, 110, 80), Sleeve = rgb(150, 110, 80), Pants = rgb(200, 190, 160), ShirtMat = Enum.Material.Fabric,
+	Build = function(a)
+		a:piece("Head", Vector3.new(1.36, 0.5, 1.32), CFrame.new(0, 0.2, 0.12), rgb(225, 225, 225), nil, "Sphere")
+		glasses(a)
+		a:piece("Head", Vector3.new(0.56, 0.14, 0.14), CFrame.new(0, -0.14, -0.62), rgb(225, 225, 225))
+		a:piece("Torso", Vector3.new(0.7, 1.8, 0.04), CFrame.new(0, 0, -0.51), rgb(236, 230, 214))
+		for i = 0, 3 do
+			a:piece("Torso", Vector3.new(0.1, 0.1, 0.04), CFrame.new(0.42, 0.6 - i * 0.4, -0.52), rgb(90, 60, 40), nil, "Ball")
+		end
+	end,
+}
+LOOKS.Chef = {
+	Shirt = rgb(246, 246, 244), Pants = rgb(40, 40, 46), ShirtMat = Enum.Material.Fabric,
+	Build = function(a)
+		hairShort(rgb(60, 40, 30))(a)
+		-- moustache
+		a:piece("Head", Vector3.new(0.7, 0.16, 0.16), CFrame.new(0, -0.16, -0.62), rgb(60, 40, 30), nil, "Sphere")
+		-- toque
+		a:piece("Head", Vector3.new(0.9, 1.3, 1.3), CFrame.new(0, 0.95, 0) * CFrame.Angles(0, 0, PI / 2), WHITE, Enum.Material.Fabric, "Cylinder")
+		a:piece("Head", Vector3.new(1.6, 0.8, 1.6), CFrame.new(0, 1.45, 0), WHITE, Enum.Material.Fabric, "Sphere")
+		a:piece("Head", Vector3.new(0.2, 1.34, 1.34), CFrame.new(0, 0.42, 0) * CFrame.Angles(0, 0, PI / 2), rgb(230, 230, 228), Enum.Material.Fabric, "Cylinder")
+		-- red neckerchief and double-breasted buttons
+		a:piece("Torso", Vector3.new(0.9, 0.3, 0.08), CFrame.new(0, 0.84, -0.53), rgb(210, 40, 40), Enum.Material.Fabric)
+		a:piece("Torso", Vector3.new(0.34, 0.34, 0.08), CFrame.new(0, 0.62, -0.53) * CFrame.Angles(0, 0, PI / 4), rgb(210, 40, 40), Enum.Material.Fabric)
+		for _, x in { -0.35, 0.35 } do
+			for i = 0, 2 do
+				a:piece("Torso", Vector3.new(0.13, 0.13, 0.05), CFrame.new(x, 0.3 - i * 0.36, -0.52), rgb(60, 60, 64), nil, "Ball")
+			end
+		end
+		apron(a, rgb(236, 236, 232), rgb(220, 220, 216))
+	end,
+}
+LOOKS.Waiter = {
+	Shirt = rgb(200, 45, 45), Pants = rgb(30, 30, 36), Sleeves = "short",
+	Build = function(a)
+		hairShort(rgb(30, 24, 20))(a)
+		a:piece("Head", Vector3.new(1.4, 0.6, 1.38), CFrame.new(0, 0.44, 0.02), rgb(30, 30, 36), nil, "Sphere")
+		a:piece("Head", Vector3.new(0.9, 0.08, 0.6), CFrame.new(0, 0.3, -0.8), rgb(30, 30, 36))
+		collar(a, rgb(240, 240, 240))
+		a:piece("Torso", Vector3.new(1.7, 1.1, 0.06), CFrame.new(0, -0.45, -0.53), rgb(30, 30, 36), Enum.Material.Fabric)
+		a:piece("ThighL", Vector3.new(1.0, 0.6, 0.06), CFrame.new(0.4, -0.3, -0.52), rgb(30, 30, 36), Enum.Material.Fabric)
+		a:piece("ThighR", Vector3.new(1.0, 0.6, 0.06), CFrame.new(-0.4, -0.3, -0.52), rgb(30, 30, 36), Enum.Material.Fabric)
+	end,
+}
+local function guest(shirt: Color3, pants: Color3, hair: Color3, long: boolean, hat1: Color3, hat2: Color3, scale: number?): Look
+	return {
+		Shirt = shirt, Pants = pants, Sleeves = "short", Scale = scale,
+		Build = function(a)
+			if long then
+				hairLong(hair)(a)
+			else
+				hairShort(hair)(a)
+			end
+			partyHat(a, hat1, hat2)
+		end,
+	}
+end
+LOOKS.Guest1 = guest(rgb(255, 160, 40), rgb(50, 60, 90), rgb(40, 30, 24), false, rgb(255, 90, 160), rgb(90, 200, 255))
+LOOKS.Guest2 = guest(rgb(120, 90, 220), rgb(60, 60, 60), rgb(200, 120, 60), true, rgb(90, 220, 140), rgb(255, 220, 80))
+LOOKS.Guest3 = guest(rgb(40, 180, 200), rgb(80, 60, 100), rgb(240, 200, 90), false, rgb(255, 120, 60), rgb(160, 110, 255), 0.72)
+LOOKS.King = {
+	Shirt = rgb(150, 26, 40), Pants = rgb(230, 190, 90), ShirtMat = Enum.Material.Fabric,
+	Build = function(a)
+		hairShort(rgb(235, 235, 235))(a)
+		beard(a, rgb(240, 240, 240))
+		crown(a, rgb(220, 40, 60))
+		belt(a, rgb(230, 190, 90), rgb(255, 230, 120))
+		-- cape with an ermine collar
+		a:piece("Torso", Vector3.new(2.2, 2.6, 0.14), CFrame.new(0, -0.35, 0.58), rgb(170, 30, 44), Enum.Material.Fabric)
+		a:piece("Torso", Vector3.new(2.3, 0.36, 1.2), CFrame.new(0, 0.92, 0.04), rgb(248, 248, 244), Enum.Material.Fabric)
+		for i = 0, 3 do
+			a:piece("Torso", Vector3.new(0.1, 0.16, 0.04), CFrame.new(-0.9 + i * 0.6, 0.9, -0.57), INK)
+		end
+		a:piece("Torso", Vector3.new(0.12, 1.7, 0.06), CFrame.new(0, -0.05, -0.53), rgb(230, 190, 90), Enum.Material.Metal)
+	end,
+}
+LOOKS.Queen = {
+	Shirt = rgb(110, 50, 160), Pants = rgb(110, 50, 160), ShirtMat = Enum.Material.Fabric, PantsMat = Enum.Material.Fabric,
+	Build = function(a)
+		hairLong(rgb(90, 50, 30))(a)
+		crown(a, rgb(60, 140, 255), true)
+		a:piece("Torso", Vector3.new(2.04, 0.3, 1.04), CFrame.new(0, 0.2, 0), rgb(230, 190, 90), Enum.Material.Metal)
+		a:piece("Torso", Vector3.new(0.6, 0.22, 0.06), CFrame.new(0, 0.7, -0.53), rgb(250, 250, 250), Enum.Material.Fabric)
+		-- the skirt of the gown over the thighs
+		a:piece("ThighL", Vector3.new(1.08, 1.06, 1.08), CFrame.new(0, -0.5, 0), rgb(96, 40, 144), Enum.Material.Fabric)
+		a:piece("ThighR", Vector3.new(1.08, 1.06, 1.08), CFrame.new(0, -0.5, 0), rgb(96, 40, 144), Enum.Material.Fabric)
+	end,
+}
+local function noble(shirt: Color3, pants: Color3, hair: Color3, long: boolean, trim: Color3): Look
+	return {
+		Shirt = shirt, Pants = pants, ShirtMat = Enum.Material.Fabric,
+		Build = function(a)
+			if long then
+				hairLong(hair)(a)
+			else
+				hairShort(hair)(a)
+			end
+			belt(a, trim, trim)
+			a:piece("Torso", Vector3.new(2.06, 0.18, 1.06), CFrame.new(0, 0.9, 0), trim, Enum.Material.Metal)
+			a:piece("Torso", Vector3.new(0.14, 1.6, 0.05), CFrame.new(0, 0, -0.53), trim, Enum.Material.Metal)
+		end,
+	}
+end
+LOOKS.Noble1 = noble(rgb(30, 100, 70), rgb(40, 30, 60), rgb(60, 40, 30), false, rgb(230, 190, 90))
+LOOKS.Noble2 = noble(rgb(70, 40, 140), rgb(50, 40, 30), rgb(230, 190, 120), true, rgb(210, 210, 220))
+LOOKS.Servant = {
+	Shirt = rgb(60, 110, 60), Pants = rgb(90, 70, 50), ShirtMat = Enum.Material.Fabric, Sleeves = "short",
+	Build = function(a)
+		hairShort(rgb(110, 70, 40))(a)
+		belt(a, rgb(90, 60, 30))
+		a:piece("Torso", Vector3.new(1.5, 1.3, 0.06), CFrame.new(0, -0.35, -0.53), rgb(236, 228, 208), Enum.Material.Fabric)
+	end,
+}
+LOOKS.Guard = {
+	Shirt = rgb(150, 26, 40), Pants = rgb(60, 60, 70), ShirtMat = Enum.Material.Fabric, Sleeve = rgb(170, 175, 185),
+	Build = function(a)
+		local steel = rgb(185, 190, 200)
+		a:piece("Head", Vector3.new(1.46, 1.0, 1.46), CFrame.new(0, 0.3, 0.02), steel, Enum.Material.Metal, "Sphere")
+		a:piece("Head", Vector3.new(1.46, 0.14, 1.46), CFrame.new(0, 0.14, 0) * CFrame.Angles(0, 0, PI / 2), steel, Enum.Material.Metal, "Cylinder")
+		a:piece("Head", Vector3.new(0.12, 0.5, 0.12), CFrame.new(0, 0.05, -0.72), steel, Enum.Material.Metal)
+		a:piece("Head", Vector3.new(0.2, 0.6, 0.9), CFrame.new(0, 0.95, 0.1), rgb(200, 30, 40), Enum.Material.Fabric, "Sphere")
+		a:piece("Torso", Vector3.new(2.06, 1.5, 1.08), CFrame.new(0, 0.26, 0), steel, Enum.Material.Metal)
+		a:piece("Torso", Vector3.new(1.0, 1.0, 0.06), CFrame.new(0, 0.2, -0.56), rgb(230, 190, 90), Enum.Material.Metal)
+		for _, x in { -1.25, 1.25 } do
+			a:piece("Torso", Vector3.new(0.9, 0.4, 1.12), CFrame.new(x, 0.9, 0), steel, Enum.Material.Metal)
+		end
+		belt(a, rgb(60, 40, 30), rgb(230, 190, 90))
+	end,
+}
+LOOKS.Jester = {
+	Shirt = rgb(220, 40, 60), Pants = rgb(250, 200, 40), Sleeve = rgb(250, 200, 40), ShirtMat = Enum.Material.Fabric,
+	Build = function(a)
+		a:piece("Torso", Vector3.new(1.02, 2.02, 1.02), CFrame.new(0.5, 0, 0), rgb(250, 200, 40), Enum.Material.Fabric)
+		a:piece("ThighR", Vector3.new(1.0, 1.02, 1.0), CFrame.new(0, -0.5, 0), rgb(220, 40, 60), Enum.Material.Fabric)
+		a:piece("ArmL", Vector3.new(1.02, 1.02, 1.02), CFrame.identity, rgb(220, 40, 60), Enum.Material.Fabric)
+		-- zig-zag collar
+		for i = -2, 2 do
+			a:piece("Torso", Vector3.new(0.36, 0.36, 1.1), CFrame.new(i * 0.4, 0.95, 0) * CFrame.Angles(0, 0, PI / 4), if i % 2 == 0 then rgb(250, 200, 40) else rgb(220, 40, 60), Enum.Material.Fabric)
+		end
+		-- the hat: a cap with two floppy points and bells
+		a:piece("Head", Vector3.new(1.4, 0.6, 1.36), CFrame.new(0, 0.4, 0.02), rgb(220, 40, 60), Enum.Material.Fabric, "Sphere")
+		for _, sd in { -1, 1 } do
+			a:piece("Head", Vector3.new(0.32, 1.2, 0.32), CFrame.new(sd * 0.72, 0.8, 0.05) * CFrame.Angles(0, 0, -sd * 0.9), if sd &lt; 0 then rgb(250, 200, 40) else rgb(220, 40, 60), Enum.Material.Fabric)
+			a:piece("Head", Vector3.new(0.3, 0.3, 0.3), CFrame.new(sd * 1.22, 1.1, 0.05), rgb(250, 220, 90), Enum.Material.Metal, "Ball")
+		end
+	end,
+}
+
+----------------------------------------------------------------------------------------------------
+-- Props: small part groups that are held, placed or hidden
+----------------------------------------------------------------------------------------------------
+
+type PropDef = { [number]: any }
+
+local Prop = {}
+Prop.__index = Prop
+
+local function buildProp(name: string, defs: { any }, folder: Instance): any
+	local self = setmetatable({}, Prop)
+	self.Name = name
+	self.Pieces = {} :: { any }
+	for _, d in defs do
+		-- { size, offset, colour, material?, shape?, transparency? }
+		local p = newPart(name, d[1], d[3], d[4], d[5])
+		local look = d[6] or 0
+		p.Transparency = 1
+		p.Parent = folder
+		table.insert(self.Pieces, { Part = p, Offset = d[2], Base = d[1], Look = look })
+	end
+	self.Visible = false
+	self.Scale = 1
+	return self
+end
+
+function Prop:SetVisible(v: boolean)
+	if self.Visible == v then
+		return
+	end
+	self.Visible = v
+	for _, pc in self.Pieces do
+		pc.Part.Transparency = if v then pc.Look else 1
+	end
+end
+
+function Prop:SetScale(k: number)
+	if math.abs(self.Scale - k) &lt; 0.01 then
+		return
+	end
+	self.Scale = k
+	for _, pc in self.Pieces do
+		pc.Part.Size = Vector3.new(pc.Base.X, pc.Base.Y, math.max(0.2, pc.Base.Z * k))
+	end
+end
+
+function Prop:Emit(cf: CFrame, parts: { BasePart }, cframes: { CFrame })
+	local k = self.Scale
+	for _, pc in self.Pieces do
+		table.insert(parts, pc.Part)
+		local o = pc.Offset
+		if k ~= 1 then
+			o = CFrame.new(o.X, o.Y, o.Z * k) * o.Rotation
+		end
+		table.insert(cframes, cf * o)
+	end
+end
+
+local V = Vector3.new
+local C = CFrame.new
+local ROT90Z = CFrame.Angles(0, 0, PI / 2)
+
+-- Upright cylinder (axis Y) helper for prop defs.
+local function disc(d: number, h: number, y: number, color: Color3, material: Enum.Material?, x: number?, z: number?): any
+	return { V(h, d, d), C(x or 0, y, z or 0) * ROT90Z, color, material, "Cylinder" }
+end
+
+local PROPS: { [string]: () -&gt; { any } } = {}
+
+-- Furniture for the NPCs (placed at a character's root: forward is -Z, the back is +Z).
+local function chairDefs(color: Color3, top: number, cushion: Color3?, tall: boolean?): { any }
+	local t = {
+		{ V(80, 8, 70), C(0, top - 4, 0), color, Enum.Material.Wood },
+		{ V(80, if tall then 150 else 102, 6), C(0, top + (if tall then 75 else 51), 33), color, Enum.Material.Wood },
+	}
+	for _, x in { -34, 34 } do
+		for _, z in { -29, 29 } do
+			table.insert(t, { V(8, top - 8, 8), C(x, (top - 8) / 2, z), color, Enum.Material.Wood })
+		end
+	end
+	if cushion then
+		table.insert(t, { V(72, 6, 62), C(0, top + 3, -2), cushion, Enum.Material.Fabric })
+		table.insert(t, { V(70, 80, 5), C(0, top + 60, 29), cushion, Enum.Material.Fabric })
+	end
+	return t
+end
+PROPS.FurnChair = function()
+	return chairDefs(rgb(122, 82, 52), 98)
+end
+PROPS.FurnKidChair = function()
+	local t = chairDefs(rgb(122, 82, 52), 98)
+	table.insert(t, { V(70, 10, 60), C(0, 103, 0), rgb(230, 80, 80), Enum.Material.Fabric })
+	return t
+end
+PROPS.FurnHighChair = function()
+	return chairDefs(rgb(90, 58, 36), 92, rgb(70, 120, 90), true)
+end
+PROPS.FurnThrone = function()
+	local gold = rgb(230, 190, 90)
+	local t = chairDefs(rgb(110, 70, 40), 98, rgb(160, 26, 40), true)
+	-- a gold frame and crown points on the tall back
+	table.insert(t, { V(90, 8, 10), C(0, 98 + 150, 33), gold, Enum.Material.Metal })
+	for _, x in { -36, 0, 36 } do
+		table.insert(t, { V(12, 12, 8), C(x, 98 + 160, 33) * CFrame.Angles(0, 0, PI / 4), gold, Enum.Material.Metal })
+	end
+	for _, x in { -44, 44 } do
+		table.insert(t, { V(8, 150, 10), C(x, 98 + 75, 33), gold, Enum.Material.Metal })
+	end
+	return t
+end
+PROPS.FurnSideTable = function()
+	return {
+		disc(56, 4, 126, rgb(110, 72, 44), Enum.Material.Wood),
+		disc(10, 120, 64, rgb(90, 58, 36), Enum.Material.Wood),
+		disc(40, 6, 3, rgb(90, 58, 36), Enum.Material.Wood),
+	}
+end
+
+PROPS.FurnStool = function()
+	return {
+		disc(46, 8, 90, rgb(205, 45, 40)),
+		disc(8, 84, 44, rgb(40, 40, 44), Enum.Material.Metal),
+		disc(50, 4, 2, rgb(40, 40, 44), Enum.Material.Metal),
+	}
+end
+
+PROPS.Plate = function()
+	return {
+		disc(46, 2, 1, WHITE),
+		disc(36, 2.2, 1.2, rgb(235, 238, 242)),
+	}
+end
+PROPS.Spaghetti = function()
+	local t = PROPS.Plate()
+	table.insert(t, { V(28, 9, 24), C(0, 5, 0), rgb(246, 214, 120), nil, "Sphere" })
+	table.insert(t, { V(16, 5, 14), C(0, 9, 0), rgb(200, 50, 36), nil, "Sphere" })
+	for i = 0, 2 do
+		local a = i / 3 * PI * 2
+		table.insert(t, { V(7, 7, 7), C(math.cos(a) * 6, 10, math.sin(a) * 6), rgb(120, 66, 40), nil, "Ball" })
+	end
+	return t
+end
+PROPS.PlateStack = function()
+	local t = {}
+	for i = 0, 3 do
+		table.insert(t, disc(46, 2, 1 + i * 3.2, WHITE))
+		table.insert(t, { V(10, 1, 8), C(-6 + i * 3, 2.3 + i * 3.2, 4 - i * 2), rgb(200, 60, 40), nil, "Sphere" })
+	end
+	return t
+end
+PROPS.CleanStack = function()
+	local t = {}
+	for i = 0, 3 do
+		table.insert(t, disc(46, 2, 1 + i * 3.2, WHITE))
+		table.insert(t, disc(40, 2.2, 1.2 + i * 3.2, rgb(160, 200, 240)))
+	end
+	return t
+end
+PROPS.WashPlate = function()
+	return { { V(2, 44, 44), C(0, 0, 0) * ROT90Z, WHITE, nil, "Cylinder" } }
+end
+PROPS.Fork = function()
+	return {
+		{ V(2, 2, 22), C(0, 0, -6), rgb(200, 204, 210), Enum.Material.Metal },
+		{ V(5, 1.4, 6), C(0, 0, -19), rgb(200, 204, 210), Enum.Material.Metal },
+	}
+end
+PROPS.Glass = function()
+	return {
+		{ V(14, 20, 14), C(0, 8, 0), rgb(210, 235, 250), Enum.Material.Glass, "Cylinder", 0.35 },
+		{ V(12, 12, 12), C(0, 5, 0), rgb(240, 150, 60), nil, "Cylinder" },
+	}
+end
+PROPS.Juice = function()
+	return {
+		{ V(12, 18, 8), C(0, 7, 0), rgb(255, 170, 40) },
+		{ V(12.2, 5, 8.2), C(0, 9, 0), rgb(80, 180, 80) },
+		{ V(1.2, 7, 1.2), C(3, 19, 0) * CFrame.Angles(0, 0, 0.3), WHITE },
+	}
+end
+PROPS.Newspaper = function()
+	return {
+		{ V(64, 44, 1.2), C(0, 0, 0), rgb(236, 234, 226) },
+		{ V(50, 5, 0.4), C(0, 14, -0.8), rgb(40, 40, 44) },
+		{ V(22, 16, 0.4), C(-12, -2, -0.8), rgb(150, 150, 156) },
+		{ V(22, 3, 0.4), C(14, 0, -0.8), rgb(120, 120, 126) },
+		{ V(22, 3, 0.4), C(14, -6, -0.8), rgb(120, 120, 126) },
+		{ V(22, 3, 0.4), C(14, -12, -0.8), rgb(120, 120, 126) },
+	}
+end
+PROPS.FlatPaper = function()
+	return {
+		{ V(44, 1.2, 32), C(0, 0.6, 0), rgb(236, 234, 226) },
+		{ V(34, 1.3, 4), C(0, 0.7, -10), rgb(40, 40, 44) },
+	}
+end
+PROPS.TeaCup = function()
+	return {
+		disc(16, 1.2, 0.6, WHITE),
+		disc(10, 9, 5, WHITE),
+		disc(8.6, 1, 9.2, rgb(150, 90, 50)),
+		{ V(2, 6, 4), C(6, 5, 0), WHITE },
+	}
+end
+-- A pizza served on a round tray, drawn as six slices that can be taken one by one.
+PROPS.Tray = function()
+	return { disc(76, 2, 1, rgb(190, 195, 200), Enum.Material.Metal) }
+end
+PROPS.Slice = function()
+	-- The crust is at the origin and the tip points along +Z (34 long, 34 wide at the crust), so it
+	-- can be held by the crust and shrink from the tip as it's eaten.
+	local cheese = rgb(250, 206, 96)
+	return {
+		{ V(30, 2.4, 11), C(0, 1.2, 6), cheese },
+		{ V(20, 2.4, 11), C(0, 1.2, 17), cheese },
+		{ V(10, 2.4, 11), C(0, 1.2, 28), cheese },
+		{ V(34, 5, 5), C(0, 2.5, 0), rgb(214, 150, 70) },
+		{ V(8, 1, 8), C(-5, 2.9, 10), rgb(170, 36, 30), nil, "Cylinder" },
+		{ V(7, 1, 7), C(4, 2.9, 20), rgb(170, 36, 30), nil, "Cylinder" },
+	}
+end
+PROPS.Peel = function()
+	-- Held by the handle; the blade points forward (-Z).
+	return {
+		{ V(5, 5, 120), C(0, 0, -30), rgb(170, 120, 70), Enum.Material.Wood },
+		{ V(60, 2, 56), C(0, 0, -110), rgb(200, 150, 90), Enum.Material.Wood },
+	}
+end
+PROPS.RawPizza = function()
+	return {
+		disc(52, 2, 2, rgb(240, 220, 170)),
+		disc(44, 2.2, 2.3, rgb(210, 60, 40)),
+	}
+end
+PROPS.HotPizza = function()
+	local t = {
+		disc(52, 2.4, 2, rgb(214, 150, 70)),
+		disc(44, 2.6, 2.4, rgb(250, 206, 96)),
+	}
+	for i = 0, 5 do
+		local a = i / 6 * PI * 2
+		table.insert(t, disc(8, 1, 3.4, rgb(170, 36, 30), nil, math.cos(a) * 13, math.sin(a) * 13))
+	end
+	return t
+end
+PROPS.Broom = function()
+	return {
+		{ V(4, 170, 4), C(0, -40, 0), rgb(160, 110, 60), Enum.Material.Wood },
+		{ V(46, 10, 12), C(0, -128, 0), rgb(60, 60, 64) },
+		{ V(46, 16, 10), C(0, -140, 0), rgb(220, 180, 90), Enum.Material.Fabric },
+	}
+end
+PROPS.Notepad = function()
+	return {
+		{ V(20, 28, 2), C(0, 0, 0), rgb(250, 250, 240) },
+		{ V(20, 4, 2.4), C(0, 13, 0), rgb(200, 45, 45) },
+	}
+end
+PROPS.Pencil = function()
+	return { { V(2, 2, 18), C(0, 0, -5), rgb(250, 200, 40) } }
+end
+PROPS.DrinkTray = function()
+	local t = { disc(60, 2, 0, rgb(60, 60, 66), Enum.Material.Metal) }
+	for _, x in { -12, 12 } do
+		table.insert(t, { V(14, 22, 14), C(x, 12, 0), rgb(220, 60, 50), nil, "Cylinder" })
+		table.insert(t, { V(2, 12, 2), C(x + 3, 26, 0), WHITE })
+	end
+	for i, e in t do
+		if e[5] == "Cylinder" and e[1].Y == 22 then
+			t[i] = { V(22, 14, 14), C(e[2].X, 12, 0) * ROT90Z, rgb(220, 60, 50), nil, "Cylinder" }
+		end
+	end
+	return t
+end
+PROPS.Soda = function()
+	return {
+		{ V(22, 14, 14), C(0, 11, 0) * ROT90Z, rgb(220, 60, 50), nil, "Cylinder" },
+		{ V(2, 12, 2), C(3, 25, 0), WHITE },
+	}
+end
+PROPS.Goblet = function()
+	return {
+		disc(12, 1.4, 0.7, rgb(230, 190, 90), Enum.Material.Metal),
+		disc(3, 10, 6, rgb(230, 190, 90), Enum.Material.Metal),
+		disc(11, 10, 15, rgb(230, 190, 90), Enum.Material.Metal),
+		disc(9.4, 1, 19.6, rgb(120, 20, 40)),
+	}
+end
+PROPS.TurkeyLeg = function()
+	return {
+		{ V(16, 12, 20), C(0, 0, -12), rgb(176, 100, 44), nil, "Sphere" },
+		{ V(4, 4, 14), C(0, 0, 2), rgb(246, 238, 222), nil, "Cylinder" },
+	}
+end
+PROPS.Roast = function()
+	local t = {
+		disc(70, 2.4, 1.2, rgb(215, 220, 228), Enum.Material.Metal),
+		{ V(46, 28, 36), C(0, 15, 0), rgb(176, 104, 48), nil, "Sphere" },
+	}
+	for _, sd in { -1, 1 } do
+		table.insert(t, { V(20, 13, 13), C(sd * 20, 11, -8) * CFrame.Angles(0, sd * 0.5, 0), rgb(166, 96, 44), nil, "Sphere" })
+		table.insert(t, { V(11, 4, 4), C(sd * 29, 14, -13) * CFrame.Angles(0, sd * 0.5, 0), rgb(246, 238, 222), nil, "Cylinder" })
+	end
+	for i = 0, 5 do
+		table.insert(t, { V(6, 6, 6), C(-24 + (i % 3) * 5, 5 + (i // 3) * 4, 18 + (i % 2) * 3), rgb(110, 40, 120), nil, "Ball" })
+	end
+	return t
+end
+PROPS.Spear = function()
+	-- Held a third of the way up; points up (+Y).
+	return {
+		{ V(4.5, 300, 4.5), C(0, 60, 0), rgb(110, 76, 44), Enum.Material.Wood },
+		{ V(10, 30, 3), C(0, 222, 0), rgb(200, 205, 214), Enum.Material.Metal },
+		{ V(7, 7, 7), C(0, 238, 0) * CFrame.Angles(0, 0, PI / 4), rgb(200, 205, 214), Enum.Material.Metal },
+		{ V(20, 3, 3), C(0, 205, 0), rgb(230, 190, 90), Enum.Material.Metal },
+	}
+end
+PROPS.Scepter = function()
+	return {
+		{ V(3.5, 70, 3.5), C(0, 10, 0), rgb(230, 190, 90), Enum.Material.Metal },
+		{ V(12, 12, 12), C(0, 48, 0), rgb(230, 190, 90), Enum.Material.Metal, "Ball" },
+		{ V(6, 6, 6), C(0, 56, 0), rgb(220, 40, 60), Enum.Material.Neon, "Ball" },
+	}
+end
+PROPS.Ball = function()
+	return { { V(16, 16, 16), C(0, 0, 0), rgb(255, 255, 255), nil, "Ball" } }
+end
+
+----------------------------------------------------------------------------------------------------
+-- Plans: each character's loop, as steps that each say where they are and how they're posed
+----------------------------------------------------------------------------------------------------
+
+type Step = { T0: number, Dur: number, Root: (number) -&gt; (number, number, number), Pose: (number, any) -&gt; Pose, Hold: { [string]: any }? }
+
+local Plan = {}
+Plan.__index = Plan
+
+local WALK_SPEED = 115 -- studs a second
+local TURN_SPEED = 3.2 -- radians a second
+
+local function newPlan(actor: any, x: number, z: number, phi: number): any
+	local self = setmetatable({}, Plan)
+	self.Actor = actor
+	self.X, self.Z, self.Phi = x, z, phi
+	self.T = 0
+	self.Steps = {} :: { Step }
+	self.Sit = nil :: any -- the seat while sitting
+	return self
+end
+
+function Plan:add(dur: number, root: (number) -&gt; (number, number, number), pose: (number, any) -&gt; Pose, hold: { [string]: any }?)
+	table.insert(self.Steps, { T0 = self.T, Dur = dur, Root = root, Pose = pose, Hold = hold })
+	self.T += dur
+end
+
+-- Stand (or sit, if seated) where we are for dur seconds.
+function Plan:still(dur: number, pose: (number, any) -&gt; Pose, hold: { [string]: any }?)
+	local x, z, phi = self.X, self.Z, self.Phi
+	local seat = self.Sit
+	self:add(dur, function()
+		return x, z, phi
+	end, function(u, ctx)
+		local p = pose(u, ctx)
+		if seat then
+			p.sit = p.sit or 1
+			p.seat = seat.Top
+		end
+		return p
+	end, hold)
+	self.Steps[#self.Steps].Seated = seat ~= nil
+end
+
+-- Splits a step at `at` seconds; the second half carries `hold`.
+function Plan:split(step: any, at: number, hold: { [string]: any }?)
+	for i, st in self.Steps do
+		if st == step then
+			local root, pose = st.Root, st.Pose
+			local rest = { T0 = st.T0 + at, Dur = st.Dur - at, Hold = hold, Seated = st.Seated, Offset = (st.Offset or 0) + at }
+			rest.Root = function(u)
+				return root(u + at)
+			end
+			rest.Pose = function(u, ctx)
+				return pose(u + at, ctx)
+			end
+			st.Dur = at
+			table.insert(self.Steps, i + 1, rest)
+			return rest
+		end
+	end
+	return nil
+end
+
+-- A still step whose held props change halfway (picking something up / putting it down).
+function Plan:swap(dur: number, pose: (number, any) -&gt; Pose, before: { [string]: any }?, after: { [string]: any }?)
+	self:still(dur, pose, before)
+	self:split(self.Steps[#self.Steps], dur / 2, after)
+end
+
+-- Turn on the spot to face phi (little steps while turning).
+function Plan:turn(phi: number, hold: { [string]: any }?, carry: ((number, any) -&gt; Pose)?)
+	local from = self.Phi
+	local d = angleDiff(from, phi)
+	if math.abs(d) &lt; 0.05 then
+		self.Phi = phi
+		return
+	end
+	local dur = math.max(0.3, math.abs(d) / TURN_SPEED)
+	local x, z = self.X, self.Z
+	self:add(dur, function(u)
+		return x, z, from + d * smooth(u / dur)
+	end, function(u, ctx)
+		local p = if carry then carry(u, ctx) else {}
+		p.walk = u / dur * PI * 2
+		p.stride = 0.25
+		return p
+	end, hold)
+	self.Phi = phi
+end
+
+-- Walk through points (room x, z), turning first to face the way.
+function Plan:walk(points: { Vector2 }, hold: { [string]: any }?, carry: ((number, any) -&gt; Pose)?, speed: number?, backwards: boolean?)
+	local pts = { Vector2.new(self.X, self.Z) }
+	for _, p in points do
+		table.insert(pts, p)
+	end
+	local lens = {}
+	local total = 0
+	for i = 2, #pts do
+		lens[i] = (pts[i] - pts[i - 1]).Magnitude
+		total += lens[i]
+	end
+	if total &lt; 1 then
+		return
+	end
+	local first = pts[2] - pts[1]
+	if not backwards then
+		self:turn(phiOf(first.X, first.Y), hold, carry)
+	end
+	local v = speed or (if backwards then WALK_SPEED * 0.45 else WALK_SPEED)
+	local dur = total / v
+	local function at(d: number): Vector2
+		d = math.clamp(d, 0, total)
+		for i = 2, #pts do
+			if d &lt;= lens[i] or i == #pts then
+				local k = if lens[i] &gt; 0 then math.clamp(d / lens[i], 0, 1) else 1
+				return pts[i - 1]:Lerp(pts[i], k)
+			end
+			d -= lens[i]
+		end
+		return pts[#pts]
+	end
+	local startPhi = self.Phi
+	local stride = self.Actor.S * 0.95
+	self:add(dur, function(u)
+		local d = u * v
+		local p = at(d)
+		local ahead = at(d + 45) - at(d - 45)
+		local phi = if ahead.Magnitude &gt; 1 and not backwards then phiOf(ahead.X, ahead.Y) else startPhi
+		return p.X, p.Y, phi
+	end, function(u, ctx)
+		local p = if carry then carry(u, ctx) else {}
+		p.stride = math.clamp(math.min(u / 0.3, (dur - u) / 0.45), 0.15, 1) * (p.stride or 1)
+		p.walk = (if backwards then -1 else 1) * u * v / stride * PI
+		p.bob = math.abs(math.sin(u * v / stride * PI)) * 0.04
+		return p
+	end, hold)
+	local last = pts[#pts]
+	local lastDir = pts[#pts] - pts[#pts - 1]
+	self.X, self.Z = last.X, last.Y
+	if not backwards then
+		self.Phi = phiOf(lastDir.X, lastDir.Y)
+	end
+end
+
+-- While sitting down / standing up with something in both hands, keep it at chest height.
+local function carryArms(p: any, ctx: any, hold: { [string]: any }?): any
+	if not hold then
+		return p
+	end
+	local both = false
+	for _, h in hold do
+		if type(h) == "table" and h[1] == "both" then
+			both = true
+		end
+	end
+	if not both then
+		return p
+	end
+	local s = ctx.Actor.S
+	local pelvis = lerp(2 * s, (p.seat or 0) + 0.37 * s, p.sit or 0)
+	local h = pelvis + 1.65 * s
+	local toWorld = ctx.Origin * rootCF(ctx.X, ctx.Z, ctx.Phi)
+	p.armL = { at = (toWorld * CFrame.new(-0.42 * s, h, -0.85 * s)).Position }
+	p.armR = { at = (toWorld * CFrame.new(0.42 * s, h, -0.85 * s)).Position }
+	return p
+end
+
+-- From beside a seat: turn to the seat's facing and slide into it while sitting down.
+function Plan:sitDown(seat: any, hold: { [string]: any }?, slide: boolean?)
+	self:turn(seat.Phi, hold)
+	local x0, z0 = self.X, self.Z
+	local phi = seat.Phi
+	local dur = 1.1
+	-- step in front of the seat first, then sit (or, `slide`, sit while sliding on sideways)
+	self:add(dur, function(u)
+		if slide then
+			local k = smooth(u / dur)
+			return lerp(x0, seat.X, k), lerp(z0, seat.Z, k), phi
+		end
+		local k = smooth(u / (dur * 0.55))
+		return lerp(x0, seat.X, k), lerp(z0, seat.Z, k), phi
+	end, function(u, ctx)
+		local p
+		if slide then
+			p = { sit = smooth(u / dur * 1.4), seat = seat.Top, legs = { kneeL = -PI / 2, kneeR = -PI / 2 }, armL = { p = 0.25, r = 0.08, e = 0.55 }, armR = { p = 0.25, r = 0.08, e = 0.55 } }
+		else
+			p = { sit = smooth((u / dur - 0.5) / 0.5), seat = seat.Top, walk = if u &lt; dur * 0.55 then u / dur * 9 else nil, stride = 0.3, armL = { p = 0.25, r = 0.08, e = 0.55 }, armR = { p = 0.25, r = 0.08, e = 0.55 } }
+		end
+		return carryArms(p, ctx, hold)
+	end, hold)
+	self.X, self.Z, self.Phi = seat.X, seat.Z, phi
+	self.Sit = seat
+end
+
+-- Stand up and slide out to the side point.
+function Plan:standUp(to: Vector2, hold: { [string]: any }?, slide: boolean?)
+	local seat = self.Sit
+	local x1, z1 = to.X, to.Y
+	local phi = self.Phi
+	local dur = 1.1
+	-- stand up in place first, then step out to the side (or, `slide`, slide off sideways)
+	self:add(dur, function(u)
+		if slide then
+			local k = smooth(u / dur)
+			return lerp(seat.X, x1, k), lerp(seat.Z, z1, k), phi
+		end
+		local k = smooth((u / dur - 0.45) / 0.55)
+		return lerp(seat.X, x1, k), lerp(seat.Z, z1, k), phi
+	end, function(u, ctx)
+		local p
+		if slide then
+			p = { sit = 1 - smooth((u / dur - 0.3) / 0.7), seat = seat.Top, legs = { kneeL = -PI / 2 * (1 - smooth((u / dur - 0.3) / 0.7)), kneeR = -PI / 2 * (1 - smooth((u / dur - 0.3) / 0.7)) }, armL = { p = 0.25, r = 0.08, e = 0.55 }, armR = { p = 0.25, r = 0.08, e = 0.55 } }
+		else
+			p = { sit = 1 - smooth(u / dur / 0.5), seat = seat.Top, walk = if u &gt; dur * 0.45 then u / dur * 9 else nil, stride = 0.3, armL = { p = 0.25, r = 0.08, e = 0.55 }, armR = { p = 0.25, r = 0.08, e = 0.55 } }
+		end
+		return carryArms(p, ctx, hold)
+	end, hold)
+	self.X, self.Z = x1, z1
+	self.Sit = nil
+end
+
+-- Pads the plan with `fill` until it's exactly `period` long.
+function Plan:finish(period: number, fill: (number, any) -&gt; Pose)
+	local left = period - self.T
+	assert(left &gt; -1e-6, "NPC plan for " .. self.Actor.Name .. " is " .. string.format("%.2f", self.T) .. "s, longer than the loop (" .. period .. "s)")
+	if left &gt; 1e-3 then
+		self:still(left, fill)
+	end
+end
+
+function Plan:eval(t: number, origin: CFrame?): (CFrame, Pose, { [string]: any }?, number, Step)
+	local steps = self.Steps
+	local lo, hi = 1, #steps
+	while lo &lt; hi do
+		local mid = (lo + hi + 1) // 2
+		if steps[mid].T0 &lt;= t then
+			lo = mid
+		else
+			hi = mid - 1
+		end
+	end
+	local st = steps[lo]
+	local u = math.clamp(t - st.T0, 0, st.Dur)
+	local x, z, phi = st.Root(u)
+	local ctx = { T = t, U = u, Dur = st.Dur, X = x, Z = z, Phi = phi, Actor = self.Actor, Seated = st.Seated, Origin = origin or CFrame.identity }
+	local pose = st.Pose(u, ctx)
+	return rootCF(x, z, phi), pose, st.Hold, u, st
+end
+
+----------------------------------------------------------------------------------------------------
+-- Pose helpers (u = seconds into the step; world points are built from ctx)
+----------------------------------------------------------------------------------------------------
+
+-- A point in front of the character: right (+x), up (y studs above the floor), forward.
+local function local3(ctx: any, right: number, up: number, fwd: number): Vector3
+	return (ctx.Origin * rootCF(ctx.X, ctx.Z, ctx.Phi) * CFrame.new(right, up, -fwd)).Position
+end
+
+local function breathe(u: number): number
+	return math.sin(u * 1.7) * 0.012
+end
+
+local function lookAround(u: number, amp: number?): any
+	local a = amp or 0.35
+	return { yaw = math.sin(u * 0.45) * a + math.sin(u * 1.13) * a * 0.3, pitch = math.sin(u * 0.31) * 0.06 }
+end
+
+local P = {}
+
+function P.idle(u: number, _ctx: any?): Pose
+	return { bob = breathe(u), head = lookAround(u), armL = { p = 0.03, r = 0.06, e = 0.12 }, armR = { p = 0.03, r = 0.06, e = 0.12 } }
+end
+
+-- Seated at a table: hands resting on it.
+function P.rest(u: number, ctx: any): Pose
+	local s = ctx.Actor.S
+	return {
+		bob = breathe(u),
+		head = lookAround(u, 0.3),
+		armL = { at = local3(ctx, -0.55 * s, 150 + 28, 1.25 * s) },
+		armR = { at = local3(ctx, 0.55 * s, 150 + 28, 1.25 * s) },
+	}
+end
+
+-- Eating with a fork: plate -&gt; mouth, about every 3.4 s.
+function P.eat(u: number, ctx: any): Pose
+	local s = ctx.Actor.S
+	local cyc = (u % 3.4) / 3.4
+	local up = if cyc &lt; 0.35 then 0 elseif cyc &lt; 0.5 then smooth((cyc - 0.35) / 0.15) elseif cyc &lt; 0.72 then 1 else 1 - smooth((cyc - 0.72) / 0.14)
+	local plate = local3(ctx, 0.3 * s, 150 + 26, 1.5 * s)
+	local chew = if cyc &gt; 0.55 and cyc &lt; 0.95 then math.sin(u * 14) * 0.03 else 0
+	return {
+		bob = breathe(u),
+		lean = 0.08 + up * 0.08,
+		head = { yaw = 0, pitch = -0.12 + up * 0.1 + chew, roll = 0 },
+		armL = { at = local3(ctx, -0.6 * s, 150 + 28, 1.2 * s) },
+		armR = {
+			at = function(b)
+				local mouth = (b.Head * CFrame.new(0.3 * s, -0.25 * s, -0.75 * s)).Position
+				return plate:Lerp(mouth, up)
+			end,
+			pole = Vector3.new(0, -1, 0),
+		},
+	}
+end
+
+
+-- Seated / standing activities. Every function takes (u, ctx) and returns a pose.
+local TABLE = 150 -- table top, studs above the floor
+
+
+-- Eating something held in the right hand (a pizza slice, a turkey leg): hand to mouth every 3 s.
+function P.bite(u: number, ctx: any): Pose
+	local s = ctx.Actor.S
+	local cyc = (u % 3) / 3
+	local up = if cyc &lt; 0.2 then smooth(cyc / 0.2) elseif cyc &lt; 0.55 then 1 else 1 - smooth((cyc - 0.55) / 0.3)
+	local chew = if cyc &gt; 0.25 and cyc &lt; 0.6 then math.sin(u * 16) * 0.035 else 0
+	local low = local3(ctx, 0.5 * s, TABLE + 30, 1.1 * s)
+	return {
+		bob = breathe(u),
+		lean = 0.05,
+		head = { pitch = -0.05 + chew, yaw = math.sin(u * 0.4) * 0.15 },
+		armL = { at = local3(ctx, -0.6 * s, TABLE + 24, 1.2 * s) },
+		armR = {
+			at = function(b)
+				return low:Lerp((b.Head * CFrame.new(0.25 * s, -0.25 * s, -0.8 * s)).Position, up)
+			end,
+			pole = Vector3.new(0, -1, 0),
+		},
+	}
+end
+
+-- Drinking from a cup held in the right hand: a few sips.
+function P.drink(u: number, ctx: any): Pose
+	local s = ctx.Actor.S
+	local cyc = (u % 4) / 4
+	local up = if cyc &lt; 0.25 then smooth(cyc / 0.25) elseif cyc &lt; 0.7 then 1 else 1 - smooth((cyc - 0.7) / 0.25)
+	local low = local3(ctx, 0.45 * s, TABLE + 30, 1.25 * s)
+	return {
+		bob = breathe(u),
+		head = { pitch = up * 0.3 },
+		armL = { at = local3(ctx, -0.6 * s, TABLE + 24, 1.2 * s) },
+		armR = {
+			at = function(b)
+				return low:Lerp((b.Head * CFrame.new(0.15 * s, -0.3 * s, -0.85 * s)).Position, up)
+			end,
+			pole = Vector3.new(0, -1, 0),
+		},
+	}
+end
+
+-- Chatting: nodding, hands moving, turned towards `yaw`.
+function P.talkTo(yaw: number): (number, any) -&gt; Pose
+	return function(u: number, ctx: any): Pose
+		local s = ctx.Actor.S
+		local g = math.sin(u * 2.3)
+		return {
+			bob = breathe(u),
+			twist = yaw * 0.12,
+			head = { yaw = yaw * 0.75 + math.sin(u * 0.9) * 0.08, pitch = math.sin(u * 3.1) * 0.06 },
+			armL = { at = local3(ctx, -0.6 * s, TABLE + 24, 1.2 * s) },
+			armR = { at = local3(ctx, 0.45 * s + math.sin(u * 1.7) * 8, (if ctx.Seated then 118 else 100) + 1.9 * s + g * 8, 0.95 * s) },
+		}
+	end
+end
+
+function P.laugh(u: number, ctx: any): Pose
+	local s = ctx.Actor.S
+	local shake = math.sin(u * 18) * 0.02
+	return {
+		bob = shake,
+		lean = (if ctx.Seated then -0.04 else -0.12) + math.sin(u * 9) * 0.03,
+		head = { pitch = 0.3 + shake },
+		armL = { at = local3(ctx, -0.35 * s, (ctx.Seated and 120 or 100) + 1.8 * s, 0.6 * s) },
+		armR = { at = local3(ctx, 0.35 * s, (ctx.Seated and 120 or 100) + 1.8 * s, 0.6 * s) },
+	}
+end
+
+-- Waving at the players (they're in the dishwasher, at the origin).
+function P.wave(u: number, ctx: any): Pose
+	local s = ctx.Actor.S
+	local dx, dz = -ctx.X, -60 - ctx.Z
+	local yaw = angleDiff(ctx.Phi, phiOf(dx, dz))
+	return {
+		bob = breathe(u),
+		head = { yaw = math.clamp(yaw, -1, 1), pitch = 0.1 },
+		armL = if ctx.Seated then { at = local3(ctx, -0.6 * s, TABLE + 24, 1.2 * s) } else nil,
+		armR = { p = 2.5, r = 0.12 + math.sin(u * 9) * 0.14, e = 0.55 + math.sin(u * 9) * 0.3 },
+	}
+end
+
+-- The same wave with the left hand (for people whose right side is against a wall).
+function P.waveLeft(u: number, ctx: any): Pose
+	local p = P.wave(u, ctx)
+	local s = ctx.Actor.S
+	p.armL = p.armR
+	p.armR = if ctx.Seated then { at = local3(ctx, 0.6 * s, TABLE + 32, 1.2 * s) } else nil
+	return p
+end
+
+function P.clap(u: number, ctx: any): Pose
+	local s = ctx.Actor.S
+	local k = math.abs(math.sin(u * 7))
+	local base = (ctx.Seated and 120 or 100) + 2.3 * s
+	return {
+		bob = breathe(u),
+		head = { pitch = 0.1 },
+		armL = { at = local3(ctx, -0.12 * s - k * 0.35 * s, base, 1.1 * s) },
+		armR = { at = local3(ctx, 0.12 * s + k * 0.35 * s, base, 1.1 * s) },
+	}
+end
+
+function P.stretch(u: number, ctx: any): Pose
+	local s = ctx.Actor.S
+	local k = smooth(math.min(u, 4 - u) / 1.2)
+	local base = if ctx.Seated then 118 else 100
+	return {
+		lean = -0.03 * k,
+		head = { pitch = 0.25 * k },
+		armL = { at = local3(ctx, -0.6 * s, TABLE + 32, 1.2 * s):Lerp(local3(ctx, -0.55 * s, base + 5.2 * s, 0.25 * s), k) },
+		armR = { at = local3(ctx, 0.6 * s, TABLE + 32, 1.2 * s):Lerp(local3(ctx, 0.55 * s, base + 5.2 * s, 0.25 * s), k) },
+	}
+end
+
+-- Holding a newspaper open in front of the face.
+function P.read(u: number, ctx: any): Pose
+	local s = ctx.Actor.S
+	local turn = math.sin(u * 0.5) * 0.08
+	return {
+		bob = breathe(u),
+		lean = 0.05,
+		head = { yaw = turn, pitch = -0.08 },
+		armL = { at = local3(ctx, -0.7 * s, 120 + 2.6 * s, 1.1 * s) },
+		armR = { at = local3(ctx, 0.7 * s, 120 + 2.6 * s, 1.1 * s) },
+	}
+end
+
+-- Dozing off at the table, then a start.
+function P.doze(u: number, ctx: any): Pose
+	local s = ctx.Actor.S
+	local k = smooth(u / 2)
+	return {
+		bob = math.sin(u * 1.1) * 0.02,
+		lean = 0.08 * k,
+		head = { pitch = -0.55 * k + math.sin(u * 1.1) * 0.05, roll = 0.15 * k },
+		armL = { at = local3(ctx, -0.55 * s, TABLE + 24, 1.15 * s) },
+		armR = { at = local3(ctx, 0.55 * s, TABLE + 24, 1.15 * s) },
+	}
+end
+
+function P.startle(u: number, ctx: any): Pose
+	local k = 1 - smooth(u / 1.5)
+	return {
+		bob = math.sin(u * 20) * 0.02 * k,
+		lean = (if ctx.Seated then -0.02 else -0.1) * k,
+		head = { pitch = 0.2 * k, yaw = math.sin(u * 8) * 0.3 * k },
+		armL = { p = 1.2 * k, r = 0.8 * k, e = 0.8 },
+		armR = { p = 1.2 * k, r = 0.8 * k, e = 0.8 },
+	}
+end
+
+-- Both hands reaching to (right, up, forward) points and back: pick up / put down over `dur`.
+function P.reach(lr: number, lu: number, lf: number, rr: number, ru: number, rf: number, dur: number, lean: number?): (number, any) -&gt; Pose
+	return function(u: number, ctx: any): Pose
+		local k = math.sin(math.clamp(u / dur, 0, 1) * PI)
+		local s = ctx.Actor.S
+		local restL = local3(ctx, -0.45 * s, 100 + 1.4 * s, 0.75 * s)
+		local restR = local3(ctx, 0.45 * s, 100 + 1.4 * s, 0.75 * s)
+		return {
+			lean = (lean or 0.25) * k,
+			head = { pitch = -0.35 * k },
+			armL = { at = restL:Lerp(local3(ctx, lr, lu, lf), k) },
+			armR = { at = restR:Lerp(local3(ctx, rr, ru, rf), k) },
+		}
+	end
+end
+
+-- Carrying something in both hands in front of the chest (used while walking too).
+function P.carry(u: number, ctx: any): Pose
+	local s = ctx.Actor.S
+	local h = (if ctx.Seated then 118 else 100) + 1.65 * s
+	return {
+		head = { pitch = -0.08 },
+		armL = { at = local3(ctx, -0.42 * s, h, 0.85 * s) },
+		armR = { at = local3(ctx, 0.42 * s, h, 0.85 * s) },
+	}
+end
+
+-- One hand reaching forward (to a fridge, a shelf, the fire).
+function P.reachOne(fwd: number, up: number, dur: number): (number, any) -&gt; Pose
+	return function(u: number, ctx: any): Pose
+		local s = ctx.Actor.S
+		local k = math.sin(math.clamp(u / dur, 0, 1) * PI)
+		return {
+			lean = 0.15 * k,
+			head = { pitch = -0.1 * k },
+			armR = { at = local3(ctx, 0.5 * s, 100 + 1.2 * s, 0.4 * s):Lerp(local3(ctx, 0.3 * s, up, fwd), k) },
+		}
+	end
+end
+
+function P.point(target: Vector3): (number, any) -&gt; Pose
+	return function(u: number, ctx: any): Pose
+		local s = ctx.Actor.S
+		local dx, dz = target.X - ctx.X, target.Z - ctx.Z
+		local yaw = angleDiff(ctx.Phi, phiOf(dx, dz))
+		local k = smooth(math.min(u, 3 - u) / 0.5)
+		return {
+			bob = breathe(u),
+			head = { yaw = math.clamp(yaw, -1, 1) * k, pitch = 0.1 * k },
+			armL = if ctx.Seated then { at = local3(ctx, -0.6 * s, TABLE + 24, 1.2 * s) } else nil,
+			armR = { p = 1.4 * k, y = -yaw * 0.6 * k, r = 0.1, e = 0.05 },
+		}
+	end
+end
+
+
+----------------------------------------------------------------------------------------------------
+-- Scene
+----------------------------------------------------------------------------------------------------
+
+local Scene = {}
+Scene.__index = Scene
+
+local function newScene(origin: CFrame, parent: Instance): any
+	local self = setmetatable({}, Scene)
+	local folder = Instance.new("Folder")
+	folder.Name = "LevelNPCs"
+	folder.Parent = parent
+	self.Folder = folder
+	self.Origin = origin
+	self.Actors = {} :: { any }
+	self.Plans = {} :: { any }
+	self.Props = {} :: { [string]: any }
+	self.Placements = {} :: { [string]: { any } }
+	self.Period = 60
+	return self
+end
+
+function Scene:actor(name: string, lookName: string): any
+	local a = buildActor(name, LOOKS[lookName], self.Folder)
+	table.insert(self.Actors, a)
+	return a
+end
+
+function Scene:prop(name: string, kind: string): any
+	local p = buildProp(name, PROPS[kind](), self.Folder)
+	self.Props[name] = p
+	self.Placements[name] = {}
+	return p
+end
+
+-- The prop sits at `cf` (room space) from loop time t0 to t1 (wrapping round the loop).
+function Scene:place(name: string, t0: number, t1: number, cf: CFrame)
+	table.insert(self.Placements[name], { t0 % self.Period, t1 % self.Period, cf, t1 - t0 &gt;= self.Period })
+end
+
+local function inRange(t: number, a: number, b: number, all: boolean): boolean
+	if all then
+		return true
+	end
+	if a &lt;= b then
+		return t &gt;= a and t &lt; b
+	end
+	return t &gt;= a or t &lt; b
+end
+
+
+function Scene:Update(clock: number)
+	local t = clock % self.Period
+	local parts, cframes = {}, {}
+	local origin = self.Origin
+	local held: { [string]: boolean } = {}
+	for _, plan in self.Plans do
+		local root, pose, hold, u, step = plan:eval(t, origin)
+		u += step.Offset or 0
+		local a = plan.Actor
+		a:Pose(origin * root, pose)
+		a:Emit(parts, cframes)
+		if hold then
+			for name, how in hold do
+				local prop = self.Props[name]
+				if prop then
+					held[name] = true
+					local spec = if type(how) == "table" then how else { how }
+					local where = spec[1]
+					local b = a.Bones
+					local base
+					if where == "R" or where == "L" then
+						local g = b["Grip" .. where]
+						base = CFrame.new(g.Position) * (origin * root).Rotation
+					elseif where == "both" then
+						base = CFrame.new(b.GripL.Position:Lerp(b.GripR.Position, 0.5)) * (origin * root).Rotation
+					elseif where == "Rhand" or where == "Lhand" then
+						base = b["Grip" .. string.sub(where, 1, 1)]
+					else
+						base = origin * root
+					end
+					local off = spec.off or CFrame.identity
+					if type(off) == "function" then
+						off = off(u)
+					end
+					prop:SetScale(if spec.scale then spec.scale(u) else 1)
+					prop:SetVisible(true)
+					prop:Emit(base * off, parts, cframes)
+				end
+			end
+		end
+	end
+	for name, prop in self.Props do
+		if held[name] then
+			continue
+		end
+		local shown = false
+		for _, pl in self.Placements[name] do
+			if inRange(t, pl[1], pl[2], pl[4]) then
+				prop:SetScale(1)
+				prop:SetVisible(true)
+				prop:Emit(origin * pl[3], parts, cframes)
+				shown = true
+				break
+			end
+		end
+		if not shown then
+			prop:SetVisible(false)
+		end
+	end
+	local ok = pcall(function()
+		Workspace:BulkMoveTo(parts, cframes, Enum.BulkMoveMode.FireCFrameChanged)
+	end)
+	if not ok then
+		for i, p in parts do
+			p.CFrame = cframes[i]
+		end
+	end
+end
+
+function Scene:Destroy()
+	self.Folder:Destroy()
+end
+
+
+----------------------------------------------------------------------------------------------------
+-- The casts
+----------------------------------------------------------------------------------------------------
+
+local V2 = Vector2.new
+local FORK_HOLD = { "Rhand", off = CFrame.Angles(PI / 2, 0, 0) }
+local TOP = FLOOR + 150 -- table top (room y)
+
+local function seat(x: number, z: number, phi: number, top: number): any
+	return { X = x, Z = z, Phi = phi, Top = top }
+end
+
+local function seated(plan: any, st: any)
+	plan.X, plan.Z, plan.Phi = st.X, st.Z, st.Phi
+	plan.Sit = st
+end
+
+
+-- Level 1: Family Dinner ---------------------------------------------------------------------------
+-- The room's four dining chairs are too close together for grown-ups this size, so the client hides
+-- them and seats the family on its own chairs: Dad and the kid on the far side, Mum on the near
+-- side (nearest the sink) and Grandpa in a tall chair at the end of the table.
+local function buildFamily(scene: any)
+	scene.Period = 60
+	scene.Hide = { "TablePlate", "ChairSeat", "ChairBack", "ChairLeg" }
+	-- Seats sit 5 studs in front of each chair's centre (people perch forward a little).
+	local function place(name: string, kind: string, x: number, z: number, phi: number)
+		scene:prop(name, kind)
+		scene:place(name, 0, 60, rootCF(x, z, phi))
+	end
+	place("FurnChairDad", "FurnChair", -80, -455, 0)
+	place("FurnChairKid", "FurnKidChair", 100, -468, 0)
+	place("FurnChairMum", "FurnChair", 0, -205, PI)
+	place("FurnChairGrandpa", "FurnHighChair", -340, -380, PI / 2)
+	local dadSeat = seat(-80, -452, 0, 98)
+	local kidSeat = seat(100, -463, 0, 108)
+	local mumSeat = seat(0, -210, PI, 98)
+	local gpSeat = seat(-328, -380, PI / 2, 98)
+
+	-- Everyone's dinner, and what's on the table (placed from each seat: right, forward).
+	local function atSeat(st: any, right: number, fwd: number, up: number?): CFrame
+		local cf = rootCF(st.X, st.Z, st.Phi) * CFrame.new(right, 0, -fwd)
+		return CFrame.new(cf.X, TOP + (up or 0), cf.Z) * cf.Rotation
+	end
+	for i, st in { dadSeat, kidSeat, mumSeat } do
+		scene:prop("Meal" .. i, "Spaghetti")
+		scene:place("Meal" .. i, 0, 60, atSeat(st, -4, 76))
+		scene:prop("Fork" .. i, "Fork")
+		scene:place("Fork" .. i, 0, 60, atSeat(st, 34, 72, 1) * CFrame.Angles(0, 0.2, 0))
+	end
+
+	-- Dad: stays at the table and enjoys it.
+	local dad = scene:actor("Dad", "Dad")
+	local pd = newPlan(dad, 0, 0, 0)
+	seated(pd, dadSeat)
+	scene:prop("DadGlass", "Glass")
+	scene:place("DadGlass", 0, 60, atSeat(dadSeat, 30, 64))
+	pd:still(9, P.eat, { Fork1 = FORK_HOLD })
+	pd:still(6, P.talkTo(-0.9))
+	pd:still(5, P.drink, { DadGlass = { "R", off = CFrame.new(0, -9, 0) } })
+	pd:still(8, P.eat, { Fork1 = FORK_HOLD })
+	pd:still(4, P.wave)
+	pd:still(4, P.laugh)
+	pd:still(9, P.eat, { Fork1 = FORK_HOLD })
+	pd:still(4, P.stretch)
+	pd:still(5, P.talkTo(0.8))
+	pd:finish(60, P.rest)
+	table.insert(scene.Plans, pd)
+
+	-- Grandpa: in his armchair in the corner with the paper, a cup of tea and forty winks.
+	local gp = scene:actor("Grandpa", "Grandpa")
+	local pg = newPlan(gp, 0, 0, 0)
+	seated(pg, gpSeat)
+	scene:prop("FurnSideTable", "FurnSideTable")
+	local side = rootCF(gpSeat.X, gpSeat.Z, gpSeat.Phi) * CFrame.new(108, 0, -42)
+	scene:place("FurnSideTable", 0, 60, side)
+	scene:prop("Paper", "Newspaper")
+	scene:prop("Tea", "TeaCup")
+	scene:place("Tea", 0, 60, side * CFrame.new(-10, 128, 0))
+	local paperHold = { "both", off = CFrame.new(0, 12, -6) }
+	-- hands resting on the lap
+	local function lap(u: number, ctx: any): Pose
+		local s = ctx.Actor.S
+		return {
+			bob = breathe(u),
+			head = lookAround(u, 0.3),
+			armL = { at = local3(ctx, -0.45 * s, 150, 0.9 * s) },
+			armR = { at = local3(ctx, 0.45 * s, 150, 0.9 * s) },
+		}
+	end
+	local function sip(u: number, ctx: any): Pose
+		local s = ctx.Actor.S
+		local cyc = (u % 4) / 4
+		local up = if cyc &lt; 0.25 then smooth(cyc / 0.25) elseif cyc &lt; 0.7 then 1 else 1 - smooth((cyc - 0.7) / 0.25)
+		local low = (ctx.Origin * side * CFrame.new(-10, 140, 0)).Position
+		return {
+			bob = breathe(u),
+			head = { pitch = up * 0.3, yaw = 0.2 * (1 - up) },
+			armL = { at = local3(ctx, -0.45 * s, 150, 0.9 * s) },
+			armR = {
+				at = function(b)
+					return low:Lerp((b.Head * CFrame.new(0.15 * s, -0.3 * s, -0.85 * s)).Position, up)
+				end,
+			},
+		}
+	end
+	local function doze(u: number, ctx: any): Pose
+		local p = lap(u, ctx)
+		local k = smooth(u / 2)
+		p.lean = 0.06 * k
+		p.head = { pitch = -0.55 * k + math.sin(u * 1.1) * 0.05, roll = 0.15 * k }
+		p.bob = math.sin(u * 1.1) * 0.02
+		return p
+	end
+	pg:still(16, P.read, { Paper = paperHold })
+	pg:still(1, lap, { Paper = { "both", off = CFrame.new(0, -2, -10) * CFrame.Angles(-PI / 2, 0, 0) } })
+	pg:still(6, sip, { Tea = { "R", off = CFrame.new(0, -5, 0) } })
+	pg:still(4, P.wave)
+	pg:still(14, doze)
+	pg:still(2, P.startle)
+	pg:still(3, P.laugh)
+	pg:finish(60, P.read)
+	pg.Steps[#pg.Steps].Hold = { Paper = paperHold }
+	for _, st in pg.Steps do
+		if st.Hold == nil and st.T0 &gt; 16 and st.T0 &lt; 45 then
+			st.Hold = { Paper = { "both", off = CFrame.new(0, -2, -10) * CFrame.Angles(-PI / 2, 0, 0) } }
+		end
+	end
+	table.insert(scene.Plans, pg)
+
+	-- The kid: eats, then fetches a juice from the fridge.
+	local kid = scene:actor("Kid", "Kid")
+	local pk = newPlan(kid, 0, 0, 0)
+	seated(pk, kidSeat)
+	scene:prop("Juice", "Juice")
+	local juiceHold = { "R", off = CFrame.new(0, -8, 0) }
+	local juiceSpot = atSeat(kidSeat, 20, 64)
+	local grab = P.reachOne(64, TABLE + 30, 1)
+	pk:still(10, P.eat, { Fork2 = FORK_HOLD })
+	pk:still(5, P.talkTo(0.9))
+	local pickT = pk.T
+	pk:swap(1, grab, nil, { Juice = juiceHold })
+	pk:standUp(V2(185, -447), { Juice = juiceHold }, true)
+	pk:walk({ V2(222, -435), V2(222, -290), V2(220, -205) }, { Juice = juiceHold })
+	pk:turn(PI / 2, { Juice = juiceHold })
+	pk:still(2, P.reachOne(1.6 * kid.S, 120, 2), { Juice = juiceHold })
+	pk:walk({ V2(222, -290), V2(222, -435), V2(185, -447) }, { Juice = juiceHold })
+	pk:sitDown(kidSeat, { Juice = juiceHold }, true)
+	pk:still(7, P.drink, { Juice = juiceHold })
+	local putT = pk.T
+	pk:swap(1, grab, { Juice = juiceHold }, nil)
+	pk:still(4, P.wave)
+	pk:finish(60, P.eat)
+	pk.Steps[#pk.Steps].Hold = { Fork2 = FORK_HOLD }
+	scene:place("Juice", putT + 0.5, pickT + 0.5 + 60, juiceSpot)
+	table.insert(scene.Plans, pk)
+
+	-- Mum: gathers up the spare plates, washes them at the sink right beside the dishwasher, brings
+	-- them back and sits down to eat.
+	local mum = scene:actor("Mum", "Mum")
+	local pm = newPlan(mum, 0, 0, 0)
+	seated(pm, mumSeat)
+	scene:prop("Stack", "CleanStack")
+	scene:prop("WashPlate", "WashPlate")
+	local tableSpot = atSeat(mumSeat, 0, 92)
+	local counterSpot = W(-222, 112, -32)
+	local carry = { Stack = { "both", off = CFrame.new(0, -8, -4) } }
+	local toTable = P.reach(-0.3 * S, TABLE + 38, 1.85 * S, 0.3 * S, TABLE + 38, 1.85 * S, 1.2, 0.12)
+	local toCounter = P.reach(-1.6 * S, 172, 1.3 * S, -1.2 * S, 172, 1.3 * S, 1.2, 0.2)
+	pm:still(7, P.eat, { Fork3 = FORK_HOLD })
+	local t1 = pm.T
+	pm:swap(1.2, toTable, nil, carry)
+	pm:standUp(V2(-190, -205), carry)
+	pm:walk({ V2(-200, -165), V2(-150, -165), V2(-150, -102) }, carry, P.carry)
+	local t2 = pm.T
+	pm:swap(1.2, toCounter, carry, nil)
+	-- washing: leaning over the sink, one plate in the suds
+	pm:still(9, function(u, ctx)
+		local s = ctx.Actor.S
+		local c = math.sin(u * 5)
+		local d = math.cos(u * 5)
+		local out = (rootCF(ctx.X, ctx.Z, ctx.Phi)).RightVector
+		return {
+			lean = 0.3,
+			head = { pitch = -0.4, yaw = math.sin(u * 0.6) * 0.1 },
+			armL = { at = local3(ctx, -0.05 * s + c * 6, 176, 1.7 * s), pole = (ctx.Origin.Rotation * -out) + Vector3.new(0, -0.3, 0) },
+			armR = { at = local3(ctx, 0.35 * s + c * 12, 178 + d * 5, 1.65 * s + d * 8), pole = (ctx.Origin.Rotation * out) + Vector3.new(0, -0.3, 0) },
+		}
+	end, { WashPlate = { "Lhand", off = CFrame.new(0, -4, -6) * CFrame.Angles(0, 0, PI / 2) } })
+	local t3 = pm.T
+	pm:swap(1.2, toCounter, nil, carry)
+	pm:walk({ V2(-150, -165) }, carry, P.carry, nil, true)
+	pm:walk({ V2(-200, -165), V2(-190, -205) }, carry, P.carry)
+	pm:sitDown(mumSeat, carry)
+	local t4 = pm.T
+	pm:swap(1.2, toTable, carry, nil)
+	pm:still(6, P.eat, { Fork3 = FORK_HOLD })
+	pm:still(5, P.talkTo(0.8))
+	pm:finish(60, P.eat)
+	pm.Steps[#pm.Steps].Hold = { Fork3 = FORK_HOLD }
+	-- the plates: on the table, in her hands, on the counter, in her hands, on the table
+	scene:place("Stack", t4 + 0.6, t1 + 0.6 + 60, tableSpot)
+	scene:place("Stack", t2 + 0.6, t3 + 0.6, counterSpot)
+	table.insert(scene.Plans, pm)
+end
+
+-- Level 2: Pizza Party -----------------------------------------------------------------------------
+-- The chef works the brick oven from the open floor east of the right-hand table and serves that
+-- table from its end with the peel; two guests at that table take the slices as they come. A kid at
+-- the other table has their own pizza, and the waiter brings drinks from the fridges on the left.
+local function buildPizzeria(scene: any)
+	scene.Period = 48
+	scene.Hide = { "Pizza", "PizzaSauce", "Pepperoni", "StoolSeat", "StoolPost" }
+	scene.HideWhere = function(name: string, pos: Vector3): boolean
+		-- the stools everywhere; the pizza only on the right-hand table (the chef serves that one)
+		return name == "StoolSeat" or name == "StoolPost" or pos.X &gt; 0
+	end
+	local tray = W(150, TOP + 0.4, -400)
+	scene:prop("Tray", "Tray")
+	scene:place("Tray", 0, 48, tray)
+	local function stool(name: string, st: any)
+		scene:prop(name, "FurnStool")
+		scene:place(name, 0, 48, rootCF(st.X, st.Z, st.Phi) * CFrame.new(0, 0, 6))
+	end
+	local function atSeat(st: any, right: number, fwd: number, up: number?): CFrame
+		local cf = rootCF(st.X, st.Z, st.Phi) * CFrame.new(right, 0, -fwd)
+		return CFrame.new(cf.X, TOP + (up or 0.4), cf.Z) * cf.Rotation
+	end
+
+	-- The chef ---------------------------------------------------------------------------------
+	local chef = scene:actor("Chef", "Chef")
+	scene:prop("Peel", "Peel")
+	scene:prop("Raw", "RawPizza")
+	scene:prop("Hot", "HotPizza")
+	local mouth = V2(250, -250)
+	local home = V2(316, -425)
+	local dir = (mouth - home).Unit
+	local facing = phiOf(dir.X, dir.Y)
+	local pushed = home + dir * 40
+	local serveAt = V2(300, -384)
+	local pc = newPlan(chef, home.X, home.Y, facing)
+	local function peelPose(fwd: number, up: number)
+		return function(u, ctx)
+			local s = ctx.Actor.S
+			return {
+				bob = breathe(u),
+				lean = 0.08,
+				head = { pitch = -0.1 },
+				armL = { at = local3(ctx, -0.22 * s, up, fwd - 0.4 * s) },
+				armR = { at = local3(ctx, 0.22 * s, up, fwd) },
+			}
+		end
+	end
+	local peelOff = CFrame.new(0, 0, 0.2 * S) * CFrame.Angles(-0.06, 0, 0)
+	local peelHold = { "both", off = peelOff }
+	local onPeel = { "both", off = peelOff * CFrame.new(0, 3, -110) }
+	local function slide(from: Vector2, to: Vector2, dur: number, fwdA: number, fwdB: number, hold: any)
+		pc:add(dur, function(u)
+			local p = from:Lerp(to, smooth(u / dur))
+			return p.X, p.Y, facing
+		end, function(u, ctx)
+			local k = smooth(u / dur)
+			local p = peelPose(lerp(fwdA, fwdB, k), 150)(u, ctx)
+			p.walk = u / dur * PI * 2
+			p.stride = 0.3
+			return p
+		end, hold)
+		pc.X, pc.Z = to.X, to.Y
+	end
+	local pizzaIn = W(250, FLOOR + 113, -190)
+	-- 1. slide the raw pizza in
+	pc:still(1.5, peelPose(0.6 * S, 150), { Peel = peelHold, Raw = onPeel })
+	slide(home, pushed, 1.6, 0.6 * S, 1.2 * S, { Peel = peelHold, Raw = onPeel })
+	local tIn = pc.T
+	slide(pushed, home, 1.4, 1.2 * S, 0.6 * S, { Peel = peelHold })
+	-- 2. wait for it: wipe the brow, check on the guests, tap a foot
+	pc:still(6.5, function(u, ctx)
+		local s = ctx.Actor.S
+		local wipe = if u &gt; 2 and u &lt; 3.6 then math.sin((u - 2) / 1.6 * PI) else 0
+		return {
+			bob = breathe(u),
+			head = { yaw = if u &gt; 4 then 0.9 else 0.1, pitch = 0.05 },
+			armL = { at = local3(ctx, -0.3 * s, 100 + 1.3 * s, 0.8 * s) },
+			armR = if wipe &gt; 0 then { at = local3(ctx, 0.2 * s, 100 + 3.1 * s, 0.45 * s):Lerp(local3(ctx, -0.1 * s, 100 + 3.3 * s, 0.4 * s), (math.sin(u * 8) + 1) / 2) } else { at = local3(ctx, 0.3 * s, 100 + 1.3 * s, 0.8 * s) },
+			legs = { kneeR = if u &gt; 4.5 then -math.abs(math.sin(u * 7)) * 0.3 else nil },
+		}
+	end, { Peel = { "L", off = CFrame.Angles(-1.35, 0, 0) } })
+	-- 3. pull it out, cooked
+	slide(home, pushed, 1.4, 0.6 * S, 1.2 * S, { Peel = peelHold })
+	local tOut = pc.T
+	slide(pushed, home, 1.6, 1.2 * S, 0.6 * S, { Peel = peelHold, Hot = onPeel })
+	scene:place("Raw", tIn, tOut, pizzaIn)
+	-- 4. turn round and slide it onto the table
+	local carrying = { Peel = peelHold, Hot = onPeel }
+	pc:walk({ serveAt }, carrying, peelPose(0.6 * S, 150), 60)
+	pc:turn(-PI / 2, carrying, peelPose(0.6 * S, 150))
+	pc:swap(1.6, function(u, ctx)
+		local k = math.sin(math.clamp(u / 1.6, 0, 1) * PI)
+		return peelPose(lerp(0.6, 1.3, k) * S, lerp(150, 146, k))(u, ctx)
+	end, carrying, { Peel = peelHold })
+	local tServe = pc.T - 0.8
+	pc:still(2.5, function(u, ctx)
+		local p = peelPose(0.6 * S, 150)(u, ctx)
+		p.head = { yaw = 0.3, pitch = -0.15 }
+		return p
+	end, { Peel = peelHold })
+	pc:still(2.5, P.point(Vector3.new(0, 0, -40)), { Peel = { "L", off = CFrame.Angles(-1.35, 0, 0) } })
+	pc:walk({ home }, { Peel = peelHold }, peelPose(0.6 * S, 150), 60)
+	pc:turn(facing, { Peel = peelHold }, peelPose(0.6 * S, 150))
+	-- 5. a breather, then dip the peel for the next pizza
+	pc:still(4, P.laugh, { Peel = { "L", off = CFrame.Angles(-1.35, 0, 0) } })
+	pc:still(4, P.idle, { Peel = { "L", off = CFrame.Angles(-1.35, 0, 0) } })
+	pc:swap(2, peelPose(0.6 * S, 132), { Peel = peelHold }, { Peel = peelHold, Raw = onPeel })
+	pc:finish(48, peelPose(0.6 * S, 150))
+	pc.Steps[#pc.Steps].Hold = { Peel = peelHold, Raw = onPeel }
+	table.insert(scene.Plans, pc)
+
+	-- The guests at the right-hand table take the slices in turns --------------------------------
+	local g1 = scene:actor("Guest1", "Guest1")
+	local nearSeat = seat(122, -300, PI, 94)
+		stool("FurnStool1", nearSeat)
+	local slices = {}
+	for i = 1, 6 do
+		local name = "Slice" .. i
+		scene:prop(name, "Slice")
+		slices[i] = name
+	end
+	-- slice i: crust out at angle a, tip at the centre
+	local function sliceSpot(i: number): CFrame
+		local a = (i - 1) / 6 * PI * 2
+		return tray * CFrame.new(0, 1.2, 0) * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, -34) * CFrame.Angles(0, PI, 0)
+	end
+	local takes = { 2.0, 6.6, 11.2, 15.8, 20.4, 25.0 } -- after serving
+	local eatDur = 3.4
+	for gi, guest in { { a = g1, st = nearSeat, first = 1 } } do
+		local pl = newPlan(guest.a, 0, 0, 0)
+		seated(pl, guest.st)
+		local sodaName = "Soda" .. gi
+		scene:prop(sodaName, "Soda")
+		scene:place(sodaName, 0, 48, atSeat(guest.st, 30, 64))
+		local sodaHold = { "R", off = CFrame.new(0, -11, 0) }
+		local before = tServe - 0.5
+		local chunks = {
+			{ 5, P.talkTo(if gi == 1 then 0.3 else -0.3) },
+			{ 4, P.drink, { [sodaName] = sodaHold } },
+			{ 3, P.laugh },
+			{ 3, P.wave },
+		}
+		local t = 0
+		local idx = gi
+		while t &lt; before - 0.01 do
+			local c = chunks[(idx - 1) % #chunks + 1]
+			local d = math.min(c[1], before - t)
+			pl:still(d, c[2], c[3])
+			t += d
+			idx += 1
+		end
+		pl:still(1.5, P.clap)
+		for k = guest.first, 6 do
+			local takeAt = math.max(tServe + takes[k], pl.T)
+			if takeAt - pl.T &gt; 1e-3 then
+				pl:still(takeAt - pl.T, P.rest)
+			end
+			local sliceName = slices[k]
+			local off = CFrame.new(0, 0, 6) * CFrame.Angles(0.5, 0, 0)
+			local s = guest.a.S
+			pl:swap(1.2, function(u, ctx)
+				local p = P.rest(u, ctx)
+				local kk = math.sin(math.clamp(u / 1.2, 0, 1) * PI)
+				local spot = (scene.Origin * sliceSpot(k) * CFrame.new(0, 26, 4)).Position
+				p.armR = { at = local3(ctx, 0.5 * s, TABLE + 34, 1.1 * s):Lerp(spot, kk) }
+				p.lean = 0.12 * kk
+				return p
+			end, nil, { [sliceName] = { "R", off = off } })
+			pl:still(eatDur, P.bite, {
+				[sliceName] = {
+					"R",
+					off = off,
+					scale = function(u)
+						return math.max(0.25, 1 - u / eatDur * 0.85)
+					end,
+				},
+			})
+			scene:place(sliceName, tServe, takeAt + 0.6, sliceSpot(k))
+		end
+		local rest = 48 - pl.T
+		if rest &gt; 0 then
+			pl:still(math.min(3, rest), function(u, ctx)
+				local s = ctx.Actor.S
+				return {
+					lean = -0.03,
+					head = { pitch = 0.15 },
+					armL = { at = local3(ctx, -0.25 * s, 118 + 1.3 * s, 0.62 * s + math.sin(u * 6) * 3) },
+					armR = { at = local3(ctx, 0.25 * s, 118 + 1.3 * s, 0.62 * s) },
+				}
+			end)
+		end
+		pl:finish(48, P.talkTo(if gi == 1 then 0.3 else -0.3))
+		table.insert(scene.Plans, pl)
+	end
+
+	-- A kid at the other table with their own pizza, and the waiter --------------------------------
+	local g3 = scene:actor("Guest3", "Guest3")
+	local kidSeat = seat(-250, -400, PI / 2, 94)
+	stool("FurnStool3", kidSeat)
+	local p3 = newPlan(g3, 0, 0, 0)
+	seated(p3, kidSeat)
+	scene:prop("KidSlice", "Slice")
+	local kidSlice = {
+		"R",
+		off = CFrame.new(0, 0, 5) * CFrame.Angles(0.5, 0, 0),
+		scale = function(u)
+			return math.max(0.25, 1 - u / 9 * 0.8)
+		end,
+	}
+	p3:still(9, P.bite, { KidSlice = kidSlice })
+	p3:still(3, P.wave)
+	p3:still(4, P.talkTo(-0.8))
+	p3:still(9, P.bite, { KidSlice = kidSlice })
+	p3:still(3, P.clap)
+	p3:still(4, P.laugh)
+	p3:still(9, P.bite, { KidSlice = kidSlice })
+	p3:finish(48, P.rest)
+	table.insert(scene.Plans, p3)
+
+	local g2 = scene:actor("Guest2", "Guest2")
+	local eastSeat = seat(-50, -400, -PI / 2, 94)
+	stool("FurnStool2", eastSeat)
+	local p2 = newPlan(g2, 0, 0, 0)
+	seated(p2, eastSeat)
+	scene:prop("G2Slice", "Slice")
+	scene:prop("G2Soda", "Soda")
+	scene:place("G2Soda", 0, 48, atSeat(eastSeat, 30, 64))
+	local g2Slice = {
+		"R",
+		off = CFrame.new(0, 0, 5) * CFrame.Angles(0.5, 0, 0),
+		scale = function(u)
+			return math.max(0.25, 1 - u / 9 * 0.8)
+		end,
+	}
+	p2:still(5, P.talkTo(0.4))
+	p2:still(9, P.bite, { G2Slice = g2Slice })
+	p2:still(4, P.drink, { G2Soda = { "R", off = CFrame.new(0, -11, 0) } })
+	p2:still(3, P.laugh)
+	p2:still(9, P.bite, { G2Slice = g2Slice })
+	p2:still(3, P.wave)
+	p2:still(4, P.clap)
+	p2:finish(48, P.rest)
+	table.insert(scene.Plans, p2)
+
+	local waiter = scene:actor("Waiter", "Waiter")
+	local fridge = V2(-148, -118)
+	local serve = V2(-178, -268)
+	local pw = newPlan(waiter, fridge.X, fridge.Y, 0)
+	scene:prop("DrinkTray", "Tray")
+	scene:prop("Pad", "Notepad")
+	scene:prop("Pencil", "Pencil")
+	scene:prop("SodaA", "Soda")
+	scene:prop("SodaB", "Soda")
+	local trayHold = { "both", off = CFrame.new(0, -3, -6) }
+	local full = { DrinkTray = trayHold, SodaA = { "both", off = CFrame.new(-14, -2, -6) }, SodaB = { "both", off = CFrame.new(14, -2, -6) } }
+	local empty = { DrinkTray = trayHold }
+	local tucked = { DrinkTray = { "L", off = CFrame.new(0, 40, 14) * CFrame.Angles(PI / 2, 0, 0) } }
+	local putDown = P.reach(-0.3 * S, TABLE + 34, 1.75 * S, 0.3 * S, TABLE + 34, 1.75 * S, 1.4, 0.2)
+	-- fetch drinks from the fridge, step back from the counter and bring them over
+	pw:swap(1.4, P.reachOne(1.25 * S, 160, 1.4), nil, full)
+	pw:walk({ V2(-148, -165) }, full, P.carry, nil, true)
+	pw:walk({ serve }, full, P.carry)
+	pw:turn(PI, full, P.carry)
+	local tPut = pw.T
+	pw:swap(1.4, putDown, full, empty)
+	-- take an order from the kid
+	pw:still(5, function(u, ctx)
+		local s = ctx.Actor.S
+		local w = math.sin(u * 9) * 4
+		return {
+			bob = breathe(u),
+			head = { yaw = -0.7, pitch = -0.15 + (if u % 2 &lt; 1 then 0.2 else 0) },
+			armL = { at = local3(ctx, -0.1 * s, 100 + 2 * s, 0.8 * s) },
+			armR = { at = local3(ctx, 0.15 * s + w, 100 + 2.05 * s, 0.7 * s) },
+		}
+	end, { Pad = { "L", off = CFrame.new(4, 6, -4) * CFrame.Angles(-1.1, 0, 0) }, Pencil = { "R", off = CFrame.Angles(0.6, 0.4, 0) }, DrinkTray = tucked.DrinkTray })
+	-- say hello to the tiny people in the dishwasher
+	pw:walk({ V2(-178, -190) }, tucked, nil, nil, true)
+	pw:turn(0.35, tucked)
+	pw:still(3, P.wave, tucked)
+	pw:still(3, P.laugh, tucked)
+	-- clear the empties from the table
+	pw:turn(PI, tucked)
+	pw:walk({ serve }, empty, P.carry)
+	local tClear = pw.T
+	pw:swap(1.4, putDown, empty, full)
+	pw:walk({ V2(-148, -165) }, full, P.carry, nil, true)
+	pw:turn(0, full, P.carry)
+	pw:walk({ fridge }, full, P.carry)
+	pw:swap(1.4, P.reachOne(1.25 * S, 160, 1.4), full, nil)
+	pw:finish(48, P.idle)
+	scene:place("SodaA", tPut + 0.7, tClear + 0.7, W(-192, TOP + 0.4, -358))
+	scene:place("SodaB", tPut + 0.7, tClear + 0.7, W(-150, TOP + 0.4, -358))
+	table.insert(scene.Plans, pw)
+end
+
+-- Level 3: Royal Banquet ---------------------------------------------------------------------------
+local function buildCastle(scene: any)
+	scene.Period = 60
+
+	-- The room's throne stands too close to the end of the table for a king this size, so on this
+	-- client it's swapped for a throne at the head of the table on the right (in place of that chair).
+	local kingSeat = seat(100, -414, -PI / 2, 98)
+	scene.Hide = { "ThroneSeat", "ThroneBack", "ThroneSpike", "ChairSeat", "ChairBack", "ChairCrest", "ChairLeg", "PlatterOnTable", "GobletStem", "GobletCup", "CandelabraBase", "CandelabraStem", "CandelabraArm", "Candle", "Flame" }
+	scene.HideWhere = function(name: string, pos: Vector3): boolean
+		if string.sub(name, 1, 6) == "Throne" then
+			return true
+		end
+		-- the chair the throne replaces, and the two places nobody uses at the near end (the
+		-- servant's way to the table)
+		if string.sub(name, 1, 5) == "Chair" or name == "PlatterOnTable" or string.sub(name, 1, 6) == "Goblet" then
+			return true -- a feast for two: the other chairs and places are cleared away
+		end
+		if string.sub(name, 1, 6) == "Candel" or name == "Candle" or name == "Flame" then
+			return pos.Z &gt; -300 -- the candelabra at the near end (where the roast goes)
+		end
+		return false
+	end
+	scene:prop("FurnQueenChair", "FurnHighChair")
+	scene:place("FurnQueenChair", 0, 60, rootCF(-116, -414, PI / 2))
+	scene:prop("FurnThrone", "FurnThrone")
+	scene:place("FurnThrone", 0, 60, rootCF(116, -414, -PI / 2))
+	local function atKing(right: number, fwd: number, up: number?): CFrame
+		local cf = rootCF(kingSeat.X, kingSeat.Z, kingSeat.Phi) * CFrame.new(right, 0, -fwd)
+		return CFrame.new(cf.X, TOP + (up or 0), cf.Z) * cf.Rotation
+	end
+
+	-- The king on his throne.
+	local king = scene:actor("King", "King")
+	local pkg = newPlan(king, 0, 0, 0)
+	seated(pkg, kingSeat)
+	scene:prop("KingLeg", "TurkeyLeg")
+	scene:prop("KingCup", "Goblet")
+	scene:prop("Scepter", "Scepter")
+	scene:place("KingCup", 0, 60, atKing(24, 60))
+	local legHold = { "R", off = CFrame.new(0, 0, 4) * CFrame.Angles(0.9, 0, 0) }
+	local cupHold = { "R", off = CFrame.new(0, -12, 0) }
+	local scepterHold = { "L", off = CFrame.Angles(-0.25, 0, 0) }
+	pkg:still(8, P.bite, { KingLeg = legHold, Scepter = scepterHold })
+	pkg:still(5, P.drink, { KingCup = cupHold, Scepter = scepterHold })
+	pkg:still(4, P.laugh)
+	pkg:still(3, P.point(Vector3.new(0, 0, -40)), { Scepter = scepterHold })
+	pkg:still(8, P.bite, { KingLeg = legHold, Scepter = scepterHold })
+	pkg:still(4, P.clap)
+	pkg:still(5, P.talkTo(-0.7), { Scepter = scepterHold })
+	pkg:still(4, function(u, ctx) -- a royal toast
+		local s = ctx.Actor.S
+		local k = smooth(math.min(u, 4 - u) / 0.8)
+		return { head = { pitch = 0.2 * k }, armR = { p = 2.6 * k, r = 0.3, e = 0.3 }, armL = { at = local3(ctx, -0.6 * s, TABLE + 24, 1.2 * s) } }
+	end, { KingCup = cupHold, Scepter = scepterHold })
+	pkg:still(8, P.bite, { KingLeg = legHold, Scepter = scepterHold })
+	pkg:finish(60, P.rest)
+	pkg.Steps[#pkg.Steps].Hold = { Scepter = scepterHold }
+	scene:place("KingLeg", 0, 60, atKing(-6, 70, 5) * CFrame.Angles(0, 0.4, 0))
+	table.insert(scene.Plans, pkg)
+
+	-- The queen and two nobles along the sides.
+	local diners = {
+		{ "Queen", "Queen", seat(-100, -414, PI / 2, 98), 1 },
+	}
+	for _, d in diners do
+		local a = scene:actor(d[1], d[2])
+		local pl = newPlan(a, 0, 0, 0)
+		local st = d[3]
+		seated(pl, st)
+		local cup = d[1] .. "Cup"
+		scene:prop(cup, "Goblet")
+		local function atSeat(right: number, fwd: number, up: number?): CFrame
+			local cf = rootCF(st.X, st.Z, st.Phi) * CFrame.new(right, 0, -fwd)
+			return CFrame.new(cf.X, TOP + (up or 0), cf.Z) * cf.Rotation
+		end
+		scene:place(cup, 0, 60, atSeat(24, 60))
+		local hold = { [cup] = { "R", off = CFrame.new(0, -12, 0) } }
+		local fork = d[1] .. "Fork"
+		scene:prop(fork, "Fork")
+		scene:place(fork, 0, 60, atSeat(40, 50, 1))
+		local fh = { [fork] = FORK_HOLD }
+		local order = {
+			{ { 7, P.eat, fh }, { 4, P.drink, hold }, { 5, P.talkTo(0.7) }, { 4, P.laugh }, { 8, P.eat, fh }, { 4, P.clap }, { 6, P.talkTo(-0.5) } },
+			{ { 5, P.talkTo(-0.6) }, { 8, P.eat, fh }, { 4, P.clap }, { 5, P.drink, hold }, { 4, P.laugh }, { 8, P.eat, fh }, { 4, P.wave } },
+			{ { 8, P.eat, fh }, { 4, P.laugh }, { 5, P.drink, hold }, { 4, P.clap }, { 6, P.talkTo(0.8) }, { 8, P.eat, fh } },
+			{ { 4, P.drink, hold }, { 8, P.eat, fh }, { 5, P.talkTo(0.7) }, { 4, P.clap }, { 4, P.wave }, { 8, P.eat, fh } },
+		}
+		for _, c in order[d[4]] do
+			if pl.T + c[1] &lt;= 60 then
+				pl:still(c[1], c[2], c[3])
+			end
+		end
+		pl:finish(60, P.rest)
+		table.insert(scene.Plans, pl)
+	end
+
+	-- A servant carries the roast from the mantel over the fire to the end of the table, fetches it
+	-- back later and puts it back to keep warm.
+	local servant = scene:actor("Servant", "Servant")
+	scene:prop("Roast", "Roast")
+	local mantelSpot = W(378, FLOOR + 212, -240) * CFrame.Angles(0, PI / 2, 0)
+	local tableEnd = W(0, TOP + 0.4, -266)
+	scene:prop("ServTray", "Tray")
+	local trayOnly = { ServTray = { "both", off = CFrame.new(0, -4, -12) } }
+	local roast = { ServTray = trayOnly.ServTray, Roast = { "both", off = CFrame.new(0, -2, -12) } }
+	local atMantel = P.reach(-0.3 * S, 222, 1.4 * S, 0.3 * S, 222, 1.4 * S, 1.6, 0)
+	local atTable = P.reach(-0.3 * S, TABLE + 34, 1.55 * S, 0.3 * S, TABLE + 34, 1.55 * S, 1.4, 0.2)
+	local back = V2(255, -240)
+	local up = V2(290, -240)
+	local toTable = { V2(250, -182), V2(12, -182), V2(0, -184) }
+	local toFire = { V2(40, -182), V2(250, -182), back }
+	local ps = newPlan(servant, back.X, back.Y, PI / 2)
+	ps:still(2, P.carry, trayOnly)
+	ps:walk({ up }, trayOnly, P.carry, 60)
+	local tFire = ps.T
+	ps:swap(1.6, atMantel, trayOnly, roast)
+	ps:walk({ back }, roast, P.carry, nil, true)
+	ps:walk(toTable, roast, P.carry, 95)
+	ps:turn(PI, roast, P.carry)
+	local tServe = ps.T
+	ps:swap(1.4, atTable, roast, trayOnly)
+	ps:still(1.2, function(u, ctx)
+		local p = P.carry(u, ctx)
+		p.lean = 0.3 * math.sin(math.clamp(u / 1.2, 0, 1) * PI) -- a bow
+		return p
+	end, trayOnly)
+	ps:walk(toFire, trayOnly, P.carry, 95)
+	ps:turn(PI / 2, trayOnly, P.carry)
+	ps:still(6, function(u, ctx) -- a moment by the fire
+		local p = P.carry(u, ctx)
+		p.head = { yaw = math.sin(u * 0.5) * 0.5 }
+		p.bob = breathe(u)
+		return p
+	end, trayOnly)
+	ps:walk(toTable, trayOnly, P.carry, 95)
+	ps:turn(PI, trayOnly, P.carry)
+	local tTake = ps.T
+	ps:swap(1.4, atTable, trayOnly, roast)
+	ps:walk(toFire, roast, P.carry, 95)
+	ps:turn(PI / 2, roast, P.carry)
+	ps:walk({ up }, roast, P.carry, 60)
+	local tBack = ps.T
+	ps:swap(1.6, atMantel, roast, trayOnly)
+	ps:walk({ back }, trayOnly, P.carry, nil, true)
+	ps:finish(60, P.carry)
+	ps.Steps[#ps.Steps].Hold = trayOnly
+	table.insert(scene.Plans, ps)
+	scene:place("Roast", tServe + 0.7, tTake + 0.7, tableEnd)
+	scene:place("Roast", tBack + 0.8, tFire + 0.8 + 60, mantelSpot)
+
+	-- The jester juggles for the king, bows, and cartwheels.
+	local jester = scene:actor("Jester", "Jester")
+	local pj = newPlan(jester, -262, -160, 0)
+	local balls = { "BallA", "BallB", "BallC" }
+	local ballColors = { rgb(255, 80, 80), rgb(80, 180, 255), rgb(255, 220, 60) }
+	for i, n in balls do
+		local b = scene:prop(n, "Ball")
+		for _, pc in b.Pieces do
+			pc.Part.Color = ballColors[i]
+		end
+	end
+	local function juggleHolds(): any
+		local h = {}
+		for i, n in balls do
+			h[n] = {
+				"root",
+				off = function(u)
+					local s = S
+					local ph = (u * 1.4 + (i - 1) / 3) % 1
+					local fromX = if ph &lt; 0.5 then -0.45 else 0.45
+					local x = lerp(fromX, -fromX, ph % 0.5 * 2) * s
+					local y = 100 + 1.7 * s + math.sin((ph % 0.5) * 2 * PI) * 1.6 * s
+					return CFrame.new(x, y, -0.9 * s)
+				end,
+			}
+		end
+		return h
+	end
+	local function juggle(u: number, ctx: any): Pose
+		local s = ctx.Actor.S
+		local l = math.sin(u * 1.4 * PI * 2)
+		return {
+			bob = math.abs(math.sin(u * 4)) * 0.03,
+			head = { pitch = 0.3 + math.sin(u * 2.8 * PI) * 0.1 },
+			armL = { at = local3(ctx, -0.45 * s, 100 + (1.7 + l * 0.15) * s, 0.85 * s) },
+			armR = { at = local3(ctx, 0.45 * s, 100 + (1.7 - l * 0.15) * s, 0.85 * s) },
+		}
+	end
+	local function bow(u: number, ctx: any): Pose
+		local k = math.sin(math.clamp(u / 2.2, 0, 1) * PI)
+		return { lean = 0.45 * k, head = { pitch = -0.3 * k }, armL = { p = -0.3 * k, r = 0.35 * k, e = 0.2 }, armR = { p = 0.5 * k, r = -0.1, e = 1.8 * k } }
+	end
+	local function cartwheel(fromX: number, toX: number, dur: number)
+		local z = pj.Z
+		pj:add(dur, function(u)
+			return lerp(fromX, toX, smooth(u / dur)), z, 0
+		end, function(u, ctx)
+			local s = ctx.Actor.S
+			local k = math.clamp(u / dur, 0, 1)
+			local th = smooth(k) * PI * 2 * (if toX &gt; fromX then -1 else 1)
+			local lift = math.sin(k * PI) * 0.7
+			return {
+				body = CFrame.new(0, (1.1 + lift) * s, 0) * CFrame.Angles(0, 0, th) * CFrame.new(0, -1.1 * s, 0),
+				armL = { p = 0, r = 2.9, e = 0 },
+				armR = { p = 0, r = 2.9, e = 0 },
+				legs = { outL = 0.5 * math.sin(k * PI), outR = 0.5 * math.sin(k * PI) },
+			}
+		end)
+		pj.X = toX
+	end
+	pj:still(9, juggle, juggleHolds())
+	pj:still(2.2, bow)
+	cartwheel(-262, -248, 1.1)
+	pj:still(1.2, function(u, ctx)
+		local p = P.idle(u, ctx)
+		p.armL = { p = 0.2, r = 2.6, e = 0.2 }
+		p.armR = { p = 0.2, r = 2.6, e = 0.2 }
+		return p
+	end)
+	cartwheel(-248, -230, 1.1)
+	pj:still(1.2, P.laugh)
+	pj:walk({ V2(-262, -160) }, nil, nil, 70)
+	pj:turn(0)
+	pj:still(9, juggle, juggleHolds())
+	pj:still(2.2, bow)
+	pj:still(4, P.wave)
+	pj:finish(60, juggle)
+	pj.Steps[#pj.Steps].Hold = juggleHolds()
+	-- between juggling the balls are tucked away
+	table.insert(scene.Plans, pj)
+
+	-- Guards: one on duty by the right-hand pillars, one marching along the left side.
+	local g1 = scene:actor("Guard1", "Guard")
+	local g2 = scene:actor("Guard2", "Guard")
+	scene:prop("Spear1", "Spear")
+	scene:prop("Spear2", "Spear")
+	local spear = function(name: string)
+		return { [name] = { "R", off = CFrame.new(0, 0, 0) } }
+	end
+	local function attention(u: number, ctx: any): Pose
+		return {
+			bob = breathe(u) * 0.5,
+			head = { yaw = math.sin(u * 0.25) * 0.25 },
+			armR = { p = 0.35, r = 0.12, e = 1.2 },
+			armL = { p = 0, r = 0.02, e = 0.05 },
+		}
+	end
+	-- both stand their posts (a patrol would swing their arms into the armour and pillars)
+	local function stomp(u: number, ctx: any): Pose
+		local p = attention(u, ctx)
+		p.walk = u * PI * 2
+		p.stride = 0.25
+		return p
+	end
+	local pa = newPlan(g1, 285, -400, 0)
+	pa:still(18, attention, spear("Spear1"))
+	pa:still(3, P.point(Vector3.new(0, 0, -40)), spear("Spear1"))
+	pa:still(3, stomp, spear("Spear1"))
+	pa:still(20, attention, spear("Spear1"))
+	pa:still(3, stomp, spear("Spear1"))
+	pa:finish(60, attention)
+	pa.Steps[#pa.Steps].Hold = spear("Spear1")
+	table.insert(scene.Plans, pa)
+
+	local pb = newPlan(g2, -270, -400, 0)
+	pb:still(9, attention, spear("Spear2"))
+	pb:still(3, stomp, spear("Spear2"))
+	pb:still(14, attention, spear("Spear2"))
+	pb:still(3, P.laugh, spear("Spear2"))
+	pb:still(12, attention, spear("Spear2"))
+	pb:still(3, stomp, spear("Spear2"))
+	pb:finish(60, attention)
+	pb.Steps[#pb.Steps].Hold = spear("Spear2")
+	table.insert(scene.Plans, pb)
+end
+
+local BUILDERS = { buildFamily, buildPizzeria, buildCastle }
+
+function LevelNPCs.Build(levelIndex: number, origin: CFrame, parent: Instance): any
+	local self = newScene(origin, parent)
+	local build = BUILDERS[levelIndex] or BUILDERS[1]
+	build(self)
+	return self
+end
+
+-- A test lineup of every look in a few poses (for screenshots).
+function LevelNPCs.Lineup(origin: CFrame, parent: Instance): any
+	local self = newScene(origin, parent)
+	local names = { "Dad", "Mum", "Kid", "Grandpa", "Chef", "Waiter", "Guest1", "Guest2", "King", "Queen", "Noble1", "Servant", "Guard", "Jester" }
+	for i, n in names do
+		local a = self:actor(n, n)
+		local x = (i - 7.5) * 150
+		local plan = newPlan(a, x, 0, 0)
+		plan:still(10, P.idle)
+		plan:finish(10, P.idle)
+		table.insert(self.Plans, plan)
+	end
+	self.Period = 10
+	return self
+end
+
+----------------------------------------------------------------------------------------------------
+-- Runtime: the people for the dishwasher you're playing in
+----------------------------------------------------------------------------------------------------
+
+local initialized = false
+
+function LevelNPCs.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+	local ClientState = require(script.Parent:WaitForChild("ClientState")) :: any
+	local current: any = nil
+	local currentArena: Instance? = nil
+	local hidden: { [BasePart]: boolean } = {}
+	local added: RBXScriptConnection? = nil
+	local failed = false
+
+	-- Furniture the NPCs replace (and the right table's pizza in the pizzeria) is hidden on this
+	-- client only; it can't be reached from the dishwasher anyway.
+	local function hidePart(scene: any, part: Instance)
+		if not part:IsA("BasePart") or not scene.HideSet[part.Name] then
+			return
+		end
+		if scene.HideWhere then
+			local p = scene.Origin:PointToObjectSpace(part.Position)
+			if not scene.HideWhere(part.Name, Vector3.new(p.X, p.Y, -p.Z)) then
+				return
+			end
+		end
+		part.LocalTransparencyModifier = 1
+		hidden[part] = true
+	end
+
+	local function teardown()
+		if added then
+			added:Disconnect()
+			added = nil
+		end
+		if current then
+			pcall(function()
+				current:Destroy()
+			end)
+			current = nil
+		end
+		for part in hidden do
+			if part.Parent then
+				part.LocalTransparencyModifier = 0
+			end
+		end
+		table.clear(hidden)
+		currentArena = nil
+	end
+
+	RunService.Heartbeat:Connect(function()
+		local arena = ClientState.GetArena()
+		if arena ~= currentArena then
+			teardown()
+			local originPos = arena and arena:GetAttribute("Origin")
+			if arena and typeof(originPos) == "Vector3" then
+				currentArena = arena
+				local level = tonumber(arena:GetAttribute("Level")) or 1
+				local ok, scene = pcall(LevelNPCs.Build, level, CFrame.new(originPos), Workspace)
+				if ok then
+					current = scene
+					scene.HideSet = {}
+					for _, n in scene.Hide or {} do
+						scene.HideSet[n] = true
+					end
+					for _, d in arena:GetDescendants() do
+						hidePart(scene, d)
+					end
+					added = arena.DescendantAdded:Connect(function(d)
+						hidePart(scene, d)
+					end)
+				elseif not failed then
+					failed = true
+					warn("[LevelNPCs] couldn't build the level's people: " .. tostring(scene))
+				end
+			end
+		end
+		if current then
+			local okNow, now = pcall(function()
+				return Workspace:GetServerTimeNow()
+			end)
+			local ok, err = pcall(current.Update, current, if okNow and type(now) == "number" then now else os.clock())
+			if not ok and not failed then
+				failed = true
+				warn("[LevelNPCs] " .. tostring(err))
+			end
+		end
+	end)
+end
+
+LevelNPCs.P = P
+LevelNPCs.newPlan = newPlan
+LevelNPCs.newScene = newScene
+LevelNPCs.rootCF = rootCF
+
+return LevelNPCs</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX0000002F"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
 	PartyUI - everything shown while ClientState.Party ~= nil (standing in a lobby pad).
 
 	Two screens, Search-for-the-Needle style:
@@ -22264,7 +25264,7 @@ end
 
 -- "Map thumbnail" art for a dishwasher: a gradient in its theme colours, a big food icon, and a few
 -- bubbles. Built from UI only (no uploaded images).
-local function levelArt(parent: Instance, levelIndex: number, size: UDim2, iconSize: number, locked: boolean): Frame
+local function levelArt(parent: Instance, levelIndex: number, size: UDim2, iconSize: number, locked: boolean, emblemAt: UDim2?): Frame
 	local level = Config.GetLevel(levelIndex)
 	local art = Instance.new("Frame")
 	art.Name = "Art"
@@ -22284,13 +25284,21 @@ local function levelArt(parent: Instance, levelIndex: number, size: UDim2, iconS
 		UIKit.Corner(b, 999)
 		b.Parent = art
 	end
-	UIKit.Label({
-		Text = if locked then "🔒" else level.Icon,
-		TextSize = iconSize,
+	-- A soft glow behind the level's emblem (a padlock while it's locked).
+	local emblemSize = math.floor(iconSize * 1.35)
+	local at = emblemAt or UDim2.fromScale(0.5, 0.52)
+	local glow = Instance.new("Frame")
+	glow.AnchorPoint = Vector2.new(0.5, 0.5)
+	glow.Position = at
+	glow.Size = UDim2.fromOffset(emblemSize * 1.25, emblemSize * 1.25)
+	glow.BackgroundColor3 = Color3.new(1, 1, 1)
+	glow.BackgroundTransparency = 0.72
+	glow.BorderSizePixel = 0
+	UIKit.Corner(glow, 999)
+	glow.Parent = art
+	UIKit.Icon(if locked then "Lock" else (level.Emblem or "Coin"), emblemSize, {
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromScale(1, 1),
-		Stroke = false,
+		Position = at,
 		Parent = art,
 	})
 	if locked then
@@ -22350,7 +25358,7 @@ local function renderLevelList()
 		card.BackgroundTransparency = 1
 		card.SelectionImageObject = nil
 		card.Parent = levelList
-		local art = levelArt(card, i, UDim2.fromScale(1, 1), 54, locked)
+		local art = levelArt(card, i, UDim2.fromScale(1, 1), 54, locked, UDim2.new(0, 60, 0.5, 0))
 		local stroke = UIKit.Stroke(art, if selected then Color3.new(1, 1, 1) else Colors.Ink, if selected then 4 else 2)
 		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 		UIKit.Label({
@@ -22358,7 +25366,7 @@ local function renderLevelList()
 			TextSize = 24,
 			AnchorPoint = Vector2.new(1, 1),
 			Position = UDim2.new(1, -10, 1, -6),
-			Size = UDim2.new(1, -20, 0, 30),
+			Size = UDim2.new(1, -130, 0, 30),
 			TextXAlignment = Enum.TextXAlignment.Right,
 			TextScaled = true,
 			Parent = art,
@@ -22367,9 +25375,11 @@ local function renderLevelList()
 		UIKit.Label({
 			Text = if locked then string.format("Clear %s to unlock", Config.GetLevel(i - 1).Name) elseif best then "Best " .. UIKit.Time(best) else "Not cleared yet",
 			TextSize = 15,
-			Position = UDim2.fromOffset(10, 6),
-			Size = UDim2.new(1, -20, 0, 20),
-			TextXAlignment = Enum.TextXAlignment.Left,
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -10, 0, 6),
+			Size = UDim2.new(1, -130, 0, 20),
+			TextXAlignment = Enum.TextXAlignment.Right,
+			TextScaled = true,
 			TextColor3 = Color3.fromRGB(235, 240, 250),
 			Parent = art,
 		})
@@ -22788,7 +25798,7 @@ function PartyUI.Init()
 end
 
 return PartyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002D"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
+<Item class="ModuleScript" referent="RBX00000030"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
 -- state (EquippedPets/&lt;slot&gt; StringValue = pet id, its Target ObjectValue = the grime part being
 -- cleaned); this module is the only thing that actually builds and moves pet models. See
 -- DESIGN.md section 6 ("PetRenderer") and section 4 ("Equipped pets for rendering").
@@ -23291,7 +26301,7 @@ function PetRenderer.Init()
 end
 
 return PetRenderer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002E"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
+<Item class="ModuleScript" referent="RBX00000031"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
 -- reveal animation. Everything here is built with UIKit; see DESIGN.md section 6 ("PetsUI") for
 -- the contract. Both windows rebuild their contents from ClientState.Meta whenever it changes and
 -- the relevant window is open, so a purchase/hatch/equip anywhere refreshes what's on screen.
@@ -24107,7 +27117,7 @@ function PetsUI._refreshEggButtons()
 	eggLockedLabel.Visible = locked
 	if locked then
 		local level = Config.Levels[egg.RequiredLevel]
-		local where = if level then (level.Icon or "") .. " " .. level.Name else ("Level " .. egg.RequiredLevel)
+		local where = if level then level.Name else ("Level " .. egg.RequiredLevel)
 		eggLockedLabel.Text = "Unlock " .. where .. " to hatch this egg!"
 	end
 
@@ -24626,7 +27636,7 @@ function PetsUI.Init()
 end
 
 return PetsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002F"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000032"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
 	RanksUI - the "Ranks" window (Rank Shrine in the lobby, the HUD's Ranks button, R / gamepad RB).
 
 	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
@@ -24971,7 +27981,7 @@ function RanksUI.Init()
 end
 
 return RanksUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000030"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000033"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
 	RebirthUI - the "Rebirth" window (the Rebirth Fountain in the lobby).
 
 	The endgame loop: once you've cleaned the last dishwasher, trade your Bubbles, unlocked
@@ -25124,7 +28134,7 @@ function RebirthUI.Init()
 end
 
 return RebirthUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000031"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000034"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
 	RewardsUI - two small windows opened from the buttons on the left of the lobby HUD.
 
 	  * "Codes" (🎟️): type a code (Config.Codes) and redeem it. "Look out for codes in the game's
@@ -25449,7 +28459,7 @@ function RewardsUI.Init()
 end
 
 return RewardsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000032"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000035"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
 	ShopUI - the lobby "Shop" window: Perks (bought with Bubbles, permanent) and Robux (game passes).
 	Opened from the Soap Shop ProximityPrompt (routed by Effects via OpenWindow="Shop"), the HUD [🛒 Shop]
 	button, or the G key - all outside our scope, they just call UIKit.OpenWindow("Shop").
@@ -26011,7 +29021,7 @@ function ShopUI.Init()
 end
 
 return ShopUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000033"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
+<Item class="ModuleScript" referent="RBX00000036"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
 -- Aim comes from the mouse on PC, or the screen centre (with a crosshair) on touch/gamepad, cast
@@ -26935,7 +29945,7 @@ function SprayController.Init()
 end
 
 return SprayController</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000034"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000037"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -26993,6 +30003,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Format = require(Shared:WaitForChild("Format"))
 local Util = require(Shared:WaitForChild("Util"))
+local IconArt = require(script.Parent:WaitForChild("IconArt"))
 
 local UIKit = {}
 
@@ -27595,92 +30606,17 @@ end
 
 -- A rounded inset card for rows and tiles inside a window (lighter navy with a soft rim).
 -- props: any Frame property plus Color, CornerRadius, StrokeColor.
---[[
-	Drawn icons (no emoji): UIKit.Icon(kind, size, props?) -&gt; Frame
-	kind: "Coin" | "Bubble" | "Gem" | "Drop". Built from rounded frames, gradients and outlines so
-	they match the chunky UI. props: any Frame property (Position, AnchorPoint, LayoutOrder, ZIndex,
-	Parent...).
-]]
-local function round(frame: GuiObject)
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(1, 0)
-	c.Parent = frame
-end
-local function iconPart(parent: Instance, size: UDim2, pos: UDim2, color: Color3, transparency: number?): Frame
-	local f = Instance.new("Frame")
-	f.BorderSizePixel = 0
-	f.AnchorPoint = Vector2.new(0.5, 0.5)
-	f.Size = size
-	f.Position = pos
-	f.BackgroundColor3 = color
-	f.BackgroundTransparency = transparency or 0
-	f.Parent = parent
-	return f
-end
+-- One of the game's drawn icons (see IconArt): Coin, Bubble, Gem, Drop, Gift, Ticket, Star, Medal,
+-- Shield, Lock, and the level emblems Pasta, Pizza, Crown.
 function UIKit.Icon(kind: string, size: number?, props: { [string]: any }?): Frame
-	local px = size or 32
-	local root = Instance.new("Frame")
-	root.Name = kind .. "Icon"
-	root.BackgroundTransparency = 1
-	root.BorderSizePixel = 0
-	root.Size = UDim2.fromOffset(px, px)
-	local ink = Colors.Ink
-	local thick = math.max(1.5, px / 14)
-	local function outline(f: GuiObject, color: Color3?)
-		local st = Instance.new("UIStroke")
-		st.Color = color or ink
-		st.Thickness = thick
-		st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-		st.Parent = f
-	end
-	if kind == "Coin" then
-		local body = iconPart(root, UDim2.fromScale(0.9, 0.9), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1))
-		round(body)
-		outline(body)
-		addGradient(body, Color3.fromRGB(255, 226, 110), Color3.fromRGB(240, 170, 30))
-		local ring = iconPart(body, UDim2.fromScale(0.64, 0.64), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1), 1)
-		round(ring)
-		outline(ring, Color3.fromRGB(196, 128, 18))
-		local shine = iconPart(body, UDim2.fromScale(0.3, 0.16), UDim2.fromScale(0.34, 0.26), Color3.new(1, 1, 1), 0.35)
-		shine.Rotation = -35
-		round(shine)
-	elseif kind == "Gem" then
-		local body = iconPart(root, UDim2.fromScale(0.64, 0.64), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1))
-		body.Rotation = 45
-		local c = Instance.new("UICorner")
-		c.CornerRadius = UDim.new(0.18, 0)
-		c.Parent = body
-		outline(body)
-		addGradient(body, Color3.fromRGB(150, 235, 255), Color3.fromRGB(120, 90, 240))
-		local facet = iconPart(body, UDim2.fromScale(0.42, 0.42), UDim2.fromScale(0.36, 0.36), Color3.new(1, 1, 1), 0.55)
-		local fc = Instance.new("UICorner")
-		fc.CornerRadius = UDim.new(0.2, 0)
-		fc.Parent = facet
-	elseif kind == "Drop" then
-		local tip = iconPart(root, UDim2.fromScale(0.5, 0.5), UDim2.fromScale(0.5, 0.42), Color3.new(1, 1, 1))
-		tip.Rotation = 45
-		outline(tip)
-		addGradient(tip, Color3.fromRGB(150, 220, 255), Color3.fromRGB(56, 160, 240))
-		local body = iconPart(root, UDim2.fromScale(0.7, 0.7), UDim2.fromScale(0.5, 0.6), Color3.new(1, 1, 1))
-		round(body)
-		outline(body)
-		addGradient(body, Color3.fromRGB(150, 220, 255), Color3.fromRGB(40, 140, 230))
-		local shine = iconPart(body, UDim2.fromScale(0.2, 0.3), UDim2.fromScale(0.32, 0.4), Color3.new(1, 1, 1), 0.35)
-		round(shine)
-	else -- "Bubble": a soap bubble
-		local body = iconPart(root, UDim2.fromScale(0.9, 0.9), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1))
-		round(body)
-		outline(body)
-		addGradient(body, Color3.fromRGB(255, 196, 226), Color3.fromRGB(236, 92, 160))
-		local shine = iconPart(body, UDim2.fromScale(0.34, 0.22), UDim2.fromScale(0.36, 0.28), Color3.new(1, 1, 1), 0.2)
-		shine.Rotation = -35
-		round(shine)
-		local dot = iconPart(body, UDim2.fromScale(0.12, 0.12), UDim2.fromScale(0.7, 0.72), Color3.new(1, 1, 1), 0.3)
-		round(dot)
-	end
+	local root = IconArt.Draw(kind, size or 32)
 	if props then
 		for k, v in props do
-			(root :: any)[k] = v
+			if k == "ZIndex" then
+				IconArt.SetZIndex(root, v)
+			else
+				(root :: any)[k] = v
+			end
 		end
 	end
 	return root
@@ -28193,13 +31129,36 @@ function UIKit.IconButton(props: { [string]: any }?): TextButton
 	addTextStroke(caption, captionSize)
 	caption.Parent = parts.Face
 
-	-- The emoji sits higher when there is a caption under it.
+	-- The icon sits higher when there is a caption under it. "@Kind" draws one of the IconArt
+	-- icons instead of an emoji.
+	local art: Frame? = nil
+	local artKey = ""
 	local function layoutContent()
 		local text = button.Text
 		local hasCaption = text ~= ""
 		caption.Text = text
 		caption.Visible = hasCaption
-		icon.Text = tostring(button:GetAttribute("Icon") or "")
+		local value = tostring(button:GetAttribute("Icon") or "")
+		local kind = string.match(value, "^@(%a+)$")
+		local artSize = math.floor(height * (if hasCaption then 0.56 else 0.7))
+		local key = if kind then kind .. artSize .. tostring(hasCaption) else ""
+		if key ~= artKey then
+			artKey = key
+			if art then
+				art:Destroy()
+				art = nil
+			end
+			if kind then
+				local drawn = IconArt.Draw(kind, artSize)
+				drawn.Name = "Art"
+				drawn.AnchorPoint = Vector2.new(0.5, 0.5)
+				drawn.Position = UDim2.fromScale(0.5, if hasCaption then 0.4 else 0.5)
+				IconArt.SetZIndex(drawn, 2)
+				drawn.Parent = parts.Face
+				art = drawn
+			end
+		end
+		icon.Text = if kind then "" else value
 		icon.Position = UDim2.fromScale(0.5, if hasCaption then 0.4 else 0.5)
 		icon.Size = UDim2.fromScale(1, if hasCaption then 0.62 else 0.9)
 		icon.TextSize = math.floor(height * (if hasCaption then 0.42 else 0.52))
@@ -29498,7 +32457,7 @@ function UIKit.Init()
 end
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000035"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000038"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button
@@ -29974,7 +32933,7 @@ function UpgradesUI.Init()
 end
 
 return UpgradesUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000036"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000039"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
 	WaterFX - the water coming out of your own hose and pressure washer, built from real parts so
 	it looks solid from every angle (a camera-facing Beam flattens to nothing when you look straight
 	down it, which is exactly the first-person view).
@@ -30214,7 +33173,7 @@ end
 
 return WaterFX</ProtectedString></Properties></Item>
 </Item>
-<Item class="LocalScript" referent="RBX00000037"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
+<Item class="LocalScript" referent="RBX0000003A"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
 	AdminClient - Rinse Cycle's admin panel and the admin effects every player can see.
 
 	Everyone:
@@ -31782,5 +34741,5 @@ task.spawn(function()
 end)</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="TextChatService" referent="RBX00000038"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
+<Item class="TextChatService" referent="RBX0000003B"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
 </roblox>
