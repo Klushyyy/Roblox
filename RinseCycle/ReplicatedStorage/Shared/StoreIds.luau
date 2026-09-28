@@ -24,6 +24,7 @@ return {
 		DoubleBubbles = 0, -- 2x Bubbles (179 R$)
 		VIP = 0,           -- VIP (199 R$)
 		DoubleLuck = 0,    -- x2 Luck (149 R$)
+		InstaRoll = 0,     -- Insta Roll (39 R$)
 		ToolNozzle = 0,    -- Spray Nozzle (49 R$)
 		ToolWasher = 0,    -- Pressure Washer (99 R$)
 		ToolCannon = 0,    -- Foam Cannon (199 R$)

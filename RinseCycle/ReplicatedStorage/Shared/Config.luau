@@ -356,6 +356,7 @@ Config.GamePasses = {
 	{ Key = "DoubleBubbles", Id = 0, Price = 179, Name = "2x Bubbles", Icon = "🧼", Desc = "Earn double Bubbles from every finished wash." },
 	{ Key = "VIP", Id = 0, Price = 199, Name = "VIP", Icon = "👑", Desc = "+25% coins and +25% Bubbles on every wash." },
 	{ Key = "DoubleLuck", Id = 0, Price = 149, Name = "x2 Luck", Icon = "🍀", Desc = "Doubles your chance of rolling Rare, Epic, Legendary and Mythic ranks." },
+	{ Key = "InstaRoll", Id = 0, Price = 39, Name = "Insta Roll", Icon = "⚡", Desc = "Skip the rank roll spin: see your new rank instantly." },
 	-- Tool passes: start every run already owning that tool (you still upgrade it with coins). They
 	-- pop up when you try to buy the tool without enough coins.
 	{ Key = "ToolNozzle", Id = 0, Price = 49, Name = "Spray Nozzle", Icon = "🚿", Desc = "Start every wash with the Spray Nozzle already unlocked." },

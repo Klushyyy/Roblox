@@ -659,7 +659,7 @@ end
 
 -- A rounded inset card for rows and tiles inside a window (lighter navy with a soft rim).
 -- props: any Frame property plus Color, CornerRadius, StrokeColor.
--- One of the game's drawn icons (see IconArt): Coin, Bubble, Gem, Drop, Gift, Ticket, Star, Medal,
+-- One of the game's drawn icons (see IconArt): Coin, Bubble, Gem, Drop, Gift, Ticket, Heart, Star, Medal,
 -- Shield, Lock, and the level emblems Pasta, Pizza, Crown.
 function UIKit.Icon(kind: string, size: number?, props: { [string]: any }?): Frame
 	local root = IconArt.Draw(kind, size or 32)
@@ -1193,7 +1193,7 @@ function UIKit.IconButton(props: { [string]: any }?): TextButton
 		caption.Visible = hasCaption
 		local value = tostring(button:GetAttribute("Icon") or "")
 		local kind = string.match(value, "^@(%a+)$")
-		local artSize = math.floor(height * (if hasCaption then 0.56 else 0.7))
+		local artSize = 2 * math.floor(height * (if hasCaption then 0.28 else 0.35)) -- even: stays centred
 		local key = if kind then kind .. artSize .. tostring(hasCaption) else ""
 		if key ~= artKey then
 			artKey = key

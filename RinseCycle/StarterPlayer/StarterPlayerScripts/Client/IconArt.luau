@@ -14,7 +14,11 @@
 	           clipped diamonds give the triangles and trapezoids (gem facets, roof points, crown
 	           spikes, the drop's tip)
 	  line     a rounded bar from one point to another
-	  glyph    a text character (the star), outlined with a text stroke
+
+	Any shape can take `clip = { x0, y0, x1, y1 }` (canvas units): it is drawn inside that box only.
+	Every position and size is snapped to whole pixels, keeping centred shapes exactly centred, so
+	the icons stay crisp and symmetric at small sizes. There are no text glyphs (font stars render
+	differently on every device); every symbol is built from the shapes above.
 
 	Fills are a Color3, or { top, bottom } for a gradient down the shape, or { a, b, rot = deg }.
 
@@ -72,12 +76,26 @@ local function corner(f: GuiObject, scale: number)
 	c.Parent = f
 end
 
+-- Snaps a span (centre, length in px) to the pixel grid: whole-pixel length, and edges on whole
+-- pixels. The centre moves at most half a pixel, and a shape centred on the icon stays exactly
+-- centred (so left and right halves come out as mirror images at every size).
+local function snap(c: number, len: number): (number, number)
+	local l = math.max(1, math.floor(len + 0.5))
+	local c2 = math.floor(c * 2 + 0.5)
+	if (c2 - l) % 2 ~= 0 then
+		l += 1
+	end
+	return c2 / 2, l
+end
+
 local function frame(parent: Instance, cx: number, cy: number, w: number, h: number, rot: number, color: Color3, transparency: number): Frame
+	local x, sw = snap(cx, w)
+	local y, sh = snap(cy, h)
 	local f = Instance.new("Frame")
 	f.BorderSizePixel = 0
 	f.AnchorPoint = Vector2.new(0.5, 0.5)
-	f.Position = UDim2.fromOffset(cx, cy)
-	f.Size = UDim2.fromOffset(w, h)
+	f.Position = UDim2.fromOffset(x, y)
+	f.Size = UDim2.fromOffset(sw, sh)
 	f.Rotation = rot
 	f.BackgroundColor3 = color
 	f.BackgroundTransparency = transparency
@@ -85,15 +103,37 @@ local function frame(parent: Instance, cx: number, cy: number, w: number, h: num
 	return f
 end
 
+-- Optional clip box { x0, y0, x1, y1 } (canvas units) around a shape: returns the holder to draw
+-- into and its offset. The box grows with the outline so outlines are clipped by the same edge.
+local function clipHolder(parent: Instance, clip: { number }?, px: number, grow: number): (Instance, number, number)
+	if not clip then
+		return parent, 0, 0
+	end
+	local x0 = math.floor(clip[1] * px - grow + 0.5)
+	local y0 = math.floor(clip[2] * px - grow + 0.5)
+	local x1 = math.floor(clip[3] * px + grow + 0.5)
+	local y1 = math.floor(clip[4] * px + grow + 0.5)
+	local holder = Instance.new("Frame")
+	holder.Name = "Clip"
+	holder.BackgroundTransparency = 1
+	holder.BorderSizePixel = 0
+	holder.ClipsDescendants = true
+	holder.Position = UDim2.fromOffset(x0, y0)
+	holder.Size = UDim2.fromOffset(x1 - x0, y1 - y0)
+	holder.Parent = parent
+	return holder, x0, y0
+end
+
 -- Draws one shape. `grow` > 0 draws the ink outline version (every edge pushed out by `grow` px).
 local function draw(parent: Instance, s: Shape, px: number, grow: number)
-	local fill = if grow > 0 then INK else s.fill
+	local fill = if grow > 0 then (s.ink or INK) else s.fill
 	local transparency = if grow > 0 then 0 else (s.t or 0)
 	local color = baseColor(fill)
 	local kind = s[1]
+	local holder, ox, oy = clipHolder(parent, s.clip, px, grow)
 	if kind == "disc" then
 		local d = s.d * px + grow * 2
-		local f = frame(parent, s.x * px, s.y * px, d, d, 0, color, transparency)
+		local f = frame(holder, s.x * px - ox, s.y * px - oy, d, d, 0, color, transparency)
 		corner(f, 0.5)
 		if grow == 0 then
 			gradient(f, fill, 0)
@@ -101,38 +141,20 @@ local function draw(parent: Instance, s: Shape, px: number, grow: number)
 	elseif kind == "rect" then
 		local rot = s.rot or 0
 		local w, h = s.w * px + grow * 2, s.h * px + grow * 2
-		local f = frame(parent, s.x * px, s.y * px, w, h, rot, color, transparency)
+		local f = frame(holder, s.x * px - ox, s.y * px - oy, w, h, rot, color, transparency)
 		if s.r then
 			local c = Instance.new("UICorner")
-			c.CornerRadius = UDim.new(0, s.r * math.min(s.w, s.h) * px + grow)
+			c.CornerRadius = UDim.new(0, math.floor(s.r * math.min(s.w, s.h) * px + grow + 0.5))
 			c.Parent = f
 		end
 		if grow == 0 then
 			gradient(f, fill, rot)
 		end
 	elseif kind == "diamond" then
-		local hd = s.hd * px + grow * SQRT2
-		local side = hd * SQRT2
-		local holder: Instance = parent
-		local ox, oy = 0, 0
-		if s.clip then
-			local c = s.clip
-			local x0, y0, x1, y1 = c[1] * px - grow, c[2] * px - grow, c[3] * px + grow, c[4] * px + grow
-			local clip = Instance.new("Frame")
-			clip.Name = "Clip"
-			clip.BackgroundTransparency = 1
-			clip.BorderSizePixel = 0
-			clip.ClipsDescendants = true
-			clip.Position = UDim2.fromOffset(x0, y0)
-			clip.Size = UDim2.fromOffset(x1 - x0, y1 - y0)
-			clip.Parent = parent
-			holder = clip
-			ox, oy = x0, y0
-		end
+		-- A square turned 45 degrees; pushing each edge out by `grow` adds 2 * grow to the side.
+		local side = s.hd * px * SQRT2 + grow * 2
 		local f = frame(holder, s.x * px - ox, s.y * px - oy, side, side, 45, color, transparency)
-		if s.r and grow == 0 then
-			corner(f, s.r)
-		elseif s.r then
+		if s.r then
 			corner(f, s.r)
 		end
 		if grow == 0 then
@@ -142,35 +164,12 @@ local function draw(parent: Instance, s: Shape, px: number, grow: number)
 		local dx, dy = (s.x2 - s.x1) * px, (s.y2 - s.y1) * px
 		local len = math.sqrt(dx * dx + dy * dy)
 		local w = s.w * px + grow * 2
-		local f = frame(parent, (s.x1 + s.x2) / 2 * px, (s.y1 + s.y2) / 2 * px, len + w, w, math.deg(math.atan2(dy, dx)), color, transparency)
+		local rot = math.deg(math.atan2(dy, dx))
+		local f = frame(holder, (s.x1 + s.x2) / 2 * px - ox, (s.y1 + s.y2) / 2 * px - oy, len + w, w, rot, color, transparency)
 		corner(f, 0.5)
 		if grow == 0 then
-			gradient(f, fill, math.deg(math.atan2(dy, dx)))
+			gradient(f, fill, rot)
 		end
-	elseif kind == "glyph" then
-		if grow > 0 then
-			return
-		end
-		local size = s.size * px
-		local label = Instance.new("TextLabel")
-		label.BackgroundTransparency = 1
-		label.AnchorPoint = Vector2.new(0.5, 0.5)
-		label.Position = UDim2.fromOffset(s.x * px, s.y * px)
-		label.Size = UDim2.fromOffset(size * 1.3, size * 1.3)
-		label.Text = s.text
-		label.Font = s.font or Enum.Font.GothamBlack
-		label.TextSize = size
-		label.TextColor3 = color
-		label.TextTransparency = transparency
-		label.Parent = parent
-		if s.stroke ~= false then
-			local st = Instance.new("UIStroke")
-			st.Color = s.strokeColor or INK
-			st.Thickness = math.max(1, (s.stroke or 0.05) * px)
-			st.LineJoinMode = Enum.LineJoinMode.Round
-			st.Parent = label
-		end
-		gradient(label, fill, 0)
 	end
 end
 
@@ -179,16 +178,34 @@ end
 ----------------------------------------------------------------------------------------------------
 local ART: { [string]: { any } } = {}
 
--- Gold coin standing slightly tilted: a darker edge under the face, a stamped inner disc and a star.
-ART.Coin = {
-	{ "disc", x = 0.5, y = 0.56, d = 0.86, fill = { rgb(222, 136, 26), rgb(160, 84, 10) }, o = true },
-	{ "disc", x = 0.5, y = 0.47, d = 0.86, fill = { rgb(255, 240, 150), rgb(248, 180, 40) }, o = true },
-	{ "disc", x = 0.5, y = 0.47, d = 0.66, fill = rgb(214, 136, 24) },
-	{ "disc", x = 0.5, y = 0.485, d = 0.6, fill = { rgb(240, 166, 34), rgb(255, 226, 112) } },
-	{ "glyph", x = 0.5, y = 0.49, size = 0.46, text = "★", fill = { rgb(255, 250, 214), rgb(255, 214, 90) }, strokeColor = rgb(176, 100, 12), stroke = 0.045 },
-	{ "rect", x = 0.3, y = 0.24, w = 0.22, h = 0.09, r = 0.5, rot = -38, fill = WHITE, t = 0.25 },
-	{ "disc", x = 0.19, y = 0.38, d = 0.06, fill = WHITE, t = 0.35 },
-}
+-- An embossed emblem: a gem-cut diamond (light upper facets, darker lower ones) with a thin dark
+-- rim, drawn centred at (x, y). Used where a star would go (coin, medal, ticket, shield).
+local function emblem(x: number, y: number, hd: number, light: Color3, mid: Color3, dark: Color3, rim: Color3): { any }
+	return {
+		{ "diamond", x = x, y = y, hd = hd + 0.035, fill = rim },
+		{ "diamond", x = x, y = y, hd = hd, fill = mid },
+		{ "diamond", x = x, y = y, hd = hd, clip = { x - hd, y - hd, x, y }, fill = light },
+		{ "diamond", x = x, y = y, hd = hd, clip = { x, y, x + hd, y + hd }, fill = dark },
+	}
+end
+
+local function append(list: { any }, more: { any }): { any }
+	for _, v in more do
+		table.insert(list, v)
+	end
+	return list
+end
+
+-- Gold coin standing slightly tilted: a darker edge under the face, a stamped rim and a raised
+-- diamond in the middle.
+ART.Coin = append({
+	{ "disc", x = 0.5, y = 0.56, d = 0.86, fill = rgb(196, 112, 16), o = true },
+	{ "disc", x = 0.5, y = 0.47, d = 0.86, fill = { rgb(255, 238, 140), rgb(248, 176, 36) }, o = true },
+	{ "disc", x = 0.5, y = 0.47, d = 0.64, fill = rgb(212, 132, 22) },
+	{ "disc", x = 0.5, y = 0.475, d = 0.58, fill = { rgb(246, 176, 40), rgb(255, 222, 110) } },
+}, append(emblem(0.5, 0.475, 0.15, rgb(255, 250, 214), rgb(255, 224, 110), rgb(236, 158, 30), rgb(178, 98, 12)), {
+	{ "rect", x = 0.3, y = 0.24, w = 0.2, h = 0.08, r = 0.5, rot = -40, fill = WHITE, t = 0.25 },
+}))
 
 -- Soap bubbles: one big, two small, pale in the middle with a coloured rim and a bright glint.
 local BUBBLE_FILL = { rgb(190, 246, 255), rgb(206, 196, 255), rgb(255, 150, 214), rot = 45 }
@@ -257,51 +274,111 @@ ART.Gift = {
 	{ "disc", x = 0.5, y = 0.26, d = 0.14, fill = { rgb(255, 232, 110), rgb(242, 170, 36) }, o = true },
 }
 
--- A ticket with a torn-off stub, tipped at an angle.
-ART.Ticket = {
-	{ "rect", x = 0.5, y = 0.5, w = 0.9, h = 0.54, r = 0.16, rot = -16, fill = { rgb(255, 226, 104), rgb(246, 158, 34) }, o = true },
-	{ "disc", x = 0.5 + 0.43 * math.cos(math.rad(-16)), y = 0.5 + 0.43 * math.sin(math.rad(-16)), d = 0.16, fill = INK, t = 0 },
-	{ "disc", x = 0.5 - 0.43 * math.cos(math.rad(-16)), y = 0.5 - 0.43 * math.sin(math.rad(-16)), d = 0.16, fill = INK, t = 0 },
-	{ "rect", x = 0.44, y = 0.52, w = 0.5, h = 0.34, r = 0.14, rot = -16, fill = { rgb(255, 244, 196), rgb(255, 214, 110) } },
-	{ "glyph", x = 0.44, y = 0.52, size = 0.3, text = "★", fill = rgb(242, 120, 60), strokeColor = rgb(170, 70, 20), stroke = 0.03 },
-	{ "line", x1 = 0.75, y1 = 0.3, x2 = 0.745, y2 = 0.32, w = 0.05, fill = rgb(176, 96, 10), t = 0.1 },
-	{ "line", x1 = 0.77, y1 = 0.41, x2 = 0.765, y2 = 0.43, w = 0.05, fill = rgb(176, 96, 10), t = 0.1 },
-	{ "line", x1 = 0.79, y1 = 0.52, x2 = 0.785, y2 = 0.54, w = 0.05, fill = rgb(176, 96, 10), t = 0.1 },
-	{ "line", x1 = 0.81, y1 = 0.63, x2 = 0.805, y2 = 0.65, w = 0.05, fill = rgb(176, 96, 10), t = 0.1 },
-}
+-- A ticket, level: a stub on the right behind a dashed tear line, and a stamped diamond.
+do
+	local shapes: { any } = {
+		{ "rect", x = 0.5, y = 0.5, w = 0.92, h = 0.56, r = 0.18, fill = { rgb(255, 226, 104), rgb(246, 158, 34) }, o = true },
+		{ "rect", x = 0.38, y = 0.5, w = 0.52, h = 0.38, r = 0.16, fill = rgb(255, 244, 190), t = 0.15 },
+		{ "rect", x = 0.26, y = 0.3, w = 0.2, h = 0.05, r = 0.5, fill = WHITE, t = 0.3 },
+	}
+	for i = 0, 3 do
+		table.insert(shapes, { "rect", x = 0.75, y = 0.29 + i * 0.14, w = 0.045, h = 0.08, fill = rgb(184, 102, 12) })
+	end
+	append(shapes, emblem(0.38, 0.5, 0.12, rgb(255, 196, 150), rgb(250, 128, 64), rgb(214, 80, 36), rgb(150, 56, 18)))
+	table.insert(shapes, { "disc", x = 0.865, y = 0.5, d = 0.1, fill = rgb(214, 128, 20) })
+	ART.Ticket = shapes
+end
 
--- A big outlined star with two sparkles (free rewards).
+-- A heart (free rewards: like, follow, join): a square turned 45 degrees with a disc on each of
+-- its two upper edges, so both lobes are exact mirror images.
+do
+	local h = 0.34 -- half diagonal of the square
+	local cy = 0.53 -- centre of the square
+	local d = h * SQRT2 -- lobe diameter = the square's side
+	local red = rgb(255, 78, 116)
+	ART.Heart = {
+		{ "diamond", x = 0.5, y = cy, hd = h, r = 0.08, fill = red, o = true },
+		{ "disc", x = 0.5 - h / 2, y = cy - h / 2, d = d, fill = red, o = true },
+		{ "disc", x = 0.5 + h / 2, y = cy - h / 2, d = d, fill = red, o = true },
+		-- a glossy highlight on the left lobe
+		{ "rect", x = 0.27, y = 0.3, w = 0.16, h = 0.08, r = 0.5, rot = -45, fill = WHITE, t = 0.15 },
+		{ "disc", x = 0.2, y = 0.42, d = 0.06, fill = WHITE, t = 0.3 },
+	}
+end
+
+-- A four-point sparkle with a small twin (bonuses, "new").
 ART.Star = {
-	{ "glyph", x = 0.5, y = 0.54, size = 0.98, text = "★", fill = { rgb(255, 246, 170), rgb(255, 196, 40), rgb(246, 142, 20) }, stroke = 0.07 },
+	{ "line", x1 = 0.44, y1 = 0.12, x2 = 0.44, y2 = 0.84, w = 0.12, fill = rgb(255, 214, 70), o = true },
+	{ "line", x1 = 0.08, y1 = 0.48, x2 = 0.8, y2 = 0.48, w = 0.12, fill = rgb(255, 214, 70), o = true },
+	{ "diamond", x = 0.44, y = 0.48, hd = 0.2, fill = rgb(255, 214, 70), o = true },
+	{ "diamond", x = 0.44, y = 0.48, hd = 0.1, fill = rgb(255, 250, 214) },
 	"|",
-	{ "diamond", x = 0.87, y = 0.16, hd = 0.1, fill = WHITE, o = true },
-	{ "diamond", x = 0.12, y = 0.8, hd = 0.07, fill = WHITE, o = true },
+	{ "line", x1 = 0.82, y1 = 0.66, x2 = 0.82, y2 = 0.92, w = 0.07, fill = WHITE, o = true },
+	{ "line", x1 = 0.69, y1 = 0.79, x2 = 0.95, y2 = 0.79, w = 0.07, fill = WHITE, o = true },
 }
 
 -- A medal on a ribbon (ranks).
-ART.Medal = {
-	{ "rect", x = 0.37, y = 0.22, w = 0.2, h = 0.44, r = 0.1, rot = -22, fill = { rgb(120, 170, 255), rgb(70, 110, 240) }, o = true },
-	{ "rect", x = 0.63, y = 0.22, w = 0.2, h = 0.44, r = 0.1, rot = 22, fill = { rgb(255, 120, 140), rgb(220, 60, 90) }, o = true },
+ART.Medal = append({
+	{ "rect", x = 0.37, y = 0.22, w = 0.2, h = 0.44, r = 0.1, rot = -22, fill = rgb(86, 132, 248), o = true },
+	{ "rect", x = 0.63, y = 0.22, w = 0.2, h = 0.44, r = 0.1, rot = 22, fill = rgb(240, 84, 112), o = true },
 	"|",
-	{ "disc", x = 0.5, y = 0.63, d = 0.62, fill = { rgb(255, 240, 150), rgb(236, 160, 30) }, o = true },
+	{ "disc", x = 0.5, y = 0.63, d = 0.62, fill = { rgb(255, 238, 140), rgb(236, 160, 30) }, o = true },
 	{ "disc", x = 0.5, y = 0.63, d = 0.46, fill = rgb(206, 128, 20) },
-	{ "disc", x = 0.5, y = 0.64, d = 0.42, fill = { rgb(240, 170, 40), rgb(255, 226, 120) } },
-	{ "glyph", x = 0.5, y = 0.645, size = 0.34, text = "★", fill = { rgb(255, 252, 220), rgb(255, 220, 100) }, strokeColor = rgb(176, 100, 12), stroke = 0.035 },
-	{ "rect", x = 0.33, y = 0.47, w = 0.14, h = 0.06, r = 0.5, rot = -40, fill = WHITE, t = 0.3 },
+	{ "disc", x = 0.5, y = 0.635, d = 0.41, fill = { rgb(240, 170, 40), rgb(255, 224, 116) } },
+}, append(emblem(0.5, 0.635, 0.12, rgb(255, 252, 220), rgb(255, 224, 110), rgb(236, 158, 30), rgb(170, 94, 12)), {
+	{ "rect", x = 0.33, y = 0.47, w = 0.13, h = 0.055, r = 0.5, rot = -40, fill = WHITE, t = 0.3 },
+}))
+
+-- A heraldic shield (admin): straight top with rounded corners, straight sides, and a point at the
+-- bottom made from a square turned 45 degrees whose side corners meet the sides exactly. Silver
+-- rim, split blue face (lit left half), and a gold diamond in the middle.
+do
+	local top, waist, hw = 0.08, 0.52, 0.37 -- top edge, where the point starts, half width
+	local inset = 0.075
+	local function outline(t: number, fill: any, o: boolean?, clip: { number }?): { any }
+		local w = hw - t
+		return {
+			{ "rect", x = 0.5, y = (top + t + waist) / 2, w = w * 2, h = waist - top - t, r = 0.22, fill = fill, o = o, clip = clip },
+			{ "rect", x = 0.5, y = (top + t + waist) / 2 + (waist - top - t) / 4, w = w * 2, h = (waist - top - t) / 2, fill = fill, o = o, clip = clip },
+			{ "diamond", x = 0.5, y = waist, hd = w, r = 0.1, clip = if clip then { clip[1], math.max(waist, clip[2]), clip[3], clip[4] } else { 0, waist, 1, 1 }, fill = fill, o = o },
+		}
+	end
+	local shapes = outline(0, rgb(222, 232, 248), true)
+	append(shapes, outline(inset, rgb(52, 98, 226)))
+	append(shapes, outline(inset, rgb(92, 146, 255), nil, { 0, 0, 0.5, 1 }))
+	append(shapes, { "|" })
+	append(shapes, emblem(0.5, 0.45, 0.15, rgb(255, 250, 214), rgb(255, 216, 90), rgb(232, 150, 26), rgb(120, 60, 8)))
+	append(shapes, {
+		{ "rect", x = 0.5, y = top + 0.035, w = (hw - 0.1) * 2, h = 0.03, r = 0.5, fill = WHITE, t = 0.35 },
+	})
+	ART.Shield = shapes
+end
+
+-- A paw print (pets): a big pad and four toes, mirror-symmetric.
+ART.Paw = {
+	{ "disc", x = 0.5, y = 0.66, d = 0.44, fill = { rgb(255, 196, 120), rgb(240, 140, 60) }, o = true },
+	{ "disc", x = 0.36, y = 0.72, d = 0.26, fill = { rgb(255, 196, 120), rgb(240, 140, 60) }, o = true },
+	{ "disc", x = 0.64, y = 0.72, d = 0.26, fill = { rgb(255, 196, 120), rgb(240, 140, 60) }, o = true },
+	{ "disc", x = 0.14, y = 0.42, d = 0.2, fill = rgb(255, 184, 104), o = true },
+	{ "disc", x = 0.86, y = 0.42, d = 0.2, fill = rgb(255, 184, 104), o = true },
+	{ "disc", x = 0.34, y = 0.22, d = 0.22, fill = rgb(255, 184, 104), o = true },
+	{ "disc", x = 0.66, y = 0.22, d = 0.22, fill = rgb(255, 184, 104), o = true },
+	{ "rect", x = 0.4, y = 0.56, w = 0.14, h = 0.06, r = 0.5, rot = -30, fill = WHITE, t = 0.35 },
 }
 
--- A shield with a star (admin).
-do
-	local top, mid = 0.1, 0.5
-	ART.Shield = {
-		{ "rect", x = 0.5, y = (top + mid) / 2 + 0.02, w = 0.76, h = mid - top + 0.04, r = 0.16, fill = { rgb(236, 244, 255), rgb(170, 190, 220) }, o = true },
-		{ "diamond", x = 0.5, y = mid - 0.02, hd = 0.38 * SQRT2 / SQRT2 * 1.0, clip = { 0.12, mid - 0.02, 0.88, 1 }, r = 0.12, fill = { rgb(190, 206, 232), rgb(140, 160, 196) }, o = true },
-		{ "rect", x = 0.5, y = (top + mid) / 2 + 0.06, w = 0.56, h = mid - top - 0.04, r = 0.12, fill = { rgb(94, 150, 255), rgb(56, 100, 230) } },
-		{ "diamond", x = 0.5, y = mid + 0.02, hd = 0.28, clip = { 0.22, mid + 0.02, 0.78, 1 }, r = 0.12, fill = { rgb(60, 106, 236), rgb(40, 76, 200) } },
-		{ "glyph", x = 0.5, y = 0.47, size = 0.4, text = "★", fill = { rgb(255, 250, 220), rgb(255, 214, 90) }, stroke = 0.04 },
-		{ "rect", x = 0.3, y = 0.24, w = 0.06, h = 0.16, r = 0.5, fill = WHITE, t = 0.4 },
-	}
-end
+-- A shopping cart (shop): basket, handle and two wheels.
+ART.Cart = {
+	{ "line", x1 = 0.06, y1 = 0.2, x2 = 0.2, y2 = 0.2, w = 0.08, fill = rgb(206, 216, 232), o = true },
+	{ "line", x1 = 0.2, y1 = 0.2, x2 = 0.3, y2 = 0.66, w = 0.08, fill = rgb(206, 216, 232), o = true },
+	{ "line", x1 = 0.3, y1 = 0.7, x2 = 0.82, y2 = 0.7, w = 0.08, fill = rgb(206, 216, 232), o = true },
+	{ "rect", x = 0.56, y = 0.44, w = 0.6, h = 0.34, r = 0.14, fill = { rgb(255, 128, 146), rgb(222, 60, 88) }, o = true },
+	{ "rect", x = 0.56, y = 0.44, w = 0.44, h = 0.04, fill = WHITE, t = 0.55 },
+	{ "rect", x = 0.44, y = 0.44, w = 0.04, h = 0.22, fill = rgb(170, 30, 60), t = 0.4 },
+	{ "rect", x = 0.68, y = 0.44, w = 0.04, h = 0.22, fill = rgb(170, 30, 60), t = 0.4 },
+	"|",
+	{ "disc", x = 0.36, y = 0.85, d = 0.16, fill = rgb(70, 84, 110), o = true },
+	{ "disc", x = 0.76, y = 0.85, d = 0.16, fill = rgb(70, 84, 110), o = true },
+}
 
 ----------------------------------------------------------------------------------------------------
 -- Level emblems (level select and the run banner)
@@ -415,7 +492,7 @@ function IconArt.Draw(kind: string, px: number): Frame
 	root.BorderSizePixel = 0
 	root.Size = UDim2.fromOffset(px, px)
 	local shapes = ART[kind] or ART.Coin
-	local grow = math.max(1.5, px * 0.055)
+	local grow = math.max(1, math.floor(px * 0.06 + 0.5))
 	-- Each layer (split by "|") gets its outline pass and then its fill pass, so a layer drawn later
 	-- sits on top of the earlier ones with its own outline.
 	local layer: { Shape } = {}

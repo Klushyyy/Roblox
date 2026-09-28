@@ -2,7 +2,9 @@
 	RanksUI - the "Ranks" window (Rank Shrine in the lobby, the HUD's Ranks button, R / gamepad RB).
 
 	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
-	Config.RankRoll.Cost gems, a slot-machine reel that spins while the server rolls, and your gems.
+	Config.RankRoll.Cost gems, and your gems. Rolling opens a full-screen popup: a slot reel of rank
+	cards spins while the server rolls, slows down and lands on your new rank (the Insta Roll pass
+	skips the spin).
 	Right: every rank with its exact odds (x2 Luck applied if you own the pass: gems can be bought with
 	Robux, so the odds are always shown before rolling), its perk, and Equip for the ones you own.
 
@@ -11,6 +13,8 @@
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
@@ -165,51 +169,454 @@ end
 -- Rolling
 ----------------------------------------------------------------------------------------------------
 
-local function roll()
+----------------------------------------------------------------------------------------------------
+-- Roll popup: a full-screen slot reel. Rank cards race past a gold marker, slow down and stop on
+-- the rank the server rolled, then the result is revealed (rarity banner, glow, confetti for Epic+).
+-- The Insta Roll pass skips the spin and shows the result straight away.
+----------------------------------------------------------------------------------------------------
+local CARD_W, CARD_GAP = 136, 12
+local PITCH = CARD_W + CARD_GAP
+local REEL_W, REEL_H = 780, 176
+local SPIN_SPEED = 1900 -- px/s while waiting for the server
+local CARD_COUNT = 90
+
+local roll: () -> ()
+local popupGui: ScreenGui? = nil
+local popup: {
+	Dim: TextButton,
+	Panel: Frame,
+	Title: TextLabel,
+	Strip: Frame,
+	Cards: { Frame },
+	Result: Frame,
+	Buttons: Frame,
+	Again: TextButton,
+	Insta: TextButton,
+}? = nil
+
+local function pickWeighted(weights: { any }, total: number): any
+	local x = math.random() * total
+	for _, e in weights do
+		x -= e.Weight
+		if x <= 0 then
+			return e.Rank
+		end
+	end
+	return weights[#weights].Rank
+end
+
+local function paintCard(card: Frame, rank: any)
+	local color = rarityColor(rank.Rarity)
+	card.BackgroundColor3 = UIKit.Darken(color, 0.55)
+	local stroke = card:FindFirstChildOfClass("UIStroke")
+	if stroke then
+		stroke.Color = color
+	end
+	local icon = card:FindFirstChild("Icon") :: TextLabel
+	local name = card:FindFirstChild("RankName") :: TextLabel
+	local bar = card:FindFirstChild("Bar") :: Frame
+	icon.Text = rank.Icon
+	name.Text = rank.Name
+	name.TextColor3 = UIKit.Lighten(color, 0.35)
+	bar.BackgroundColor3 = color
+end
+
+local function makeCard(parent: Instance, index: number): Frame
+	local card = Instance.new("Frame")
+	card.Name = "Card" .. index
+	card.Size = UDim2.fromOffset(CARD_W, REEL_H - 24)
+	card.Position = UDim2.fromOffset((index - 1) * PITCH, 12)
+	card.BorderSizePixel = 0
+	UIKit.Corner(card, 14)
+	UIKit.Stroke(card, Colors.Text, 3)
+	local grad = Instance.new("UIGradient")
+	grad.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(170, 170, 170))
+	grad.Rotation = 90
+	grad.Parent = card
+	UIKit.Label({ Name = "Icon", Text = "", TextSize = 56, Position = UDim2.fromOffset(0, 12), Size = UDim2.new(1, 0, 0, 70), Stroke = false, Parent = card })
+	UIKit.Label({ Name = "RankName", Text = "", TextSize = 20, Position = UDim2.fromOffset(8, 88), Size = UDim2.new(1, -16, 0, 30), TextScaled = true, Parent = card })
+	local bar = Instance.new("Frame")
+	bar.Name = "Bar"
+	bar.BorderSizePixel = 0
+	bar.AnchorPoint = Vector2.new(0.5, 1)
+	bar.Position = UDim2.new(0.5, 0, 1, -8)
+	bar.Size = UDim2.new(1, -24, 0, 6)
+	UIKit.Corner(bar, 3)
+	bar.Parent = card
+	card.Parent = parent
+	return card
+end
+
+local function ensurePopup()
+	if popup then
+		return popup
+	end
+	local gui, root = UIKit.CreateScreen("RankRollPopup", 40)
+	popupGui = gui
+	gui.Enabled = false
+
+	local dim = Instance.new("TextButton") -- a button so clicks don't fall through to the world
+	dim.Name = "Dim"
+	dim.Text = ""
+	dim.AutoButtonColor = false
+	dim.Size = UDim2.fromScale(1, 1)
+	dim.BackgroundColor3 = Color3.fromRGB(4, 10, 26)
+	dim.BackgroundTransparency = 0.3
+	dim.BorderSizePixel = 0
+	dim.Parent = root
+
+	local panel = Instance.new("Frame")
+	panel.Name = "Panel"
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
+	panel.Position = UDim2.fromScale(0.5, 0.5)
+	panel.Size = UDim2.fromOffset(REEL_W + 60, 460)
+	panel.BackgroundTransparency = 1
+	panel.Parent = root
+	local panelScale = Instance.new("UIScale")
+	panelScale.Name = "PopScale"
+	panelScale.Parent = panel
+
+	local title = UIKit.Label({ Name = "Title", Text = "ROLLING...", TextSize = 46, Position = UDim2.fromOffset(0, 0), Size = UDim2.new(1, 0, 0, 50), Parent = panel })
+
+	-- The reel window.
+	local reelFrame = Instance.new("Frame")
+	reelFrame.Name = "Reel"
+	reelFrame.AnchorPoint = Vector2.new(0.5, 0)
+	reelFrame.Position = UDim2.new(0.5, 0, 0, 64)
+	reelFrame.Size = UDim2.fromOffset(REEL_W, REEL_H)
+	reelFrame.BackgroundColor3 = Color3.fromRGB(14, 24, 48)
+	reelFrame.ClipsDescendants = true
+	reelFrame.BorderSizePixel = 0
+	UIKit.Corner(reelFrame, 18)
+	UIKit.Stroke(reelFrame, Colors.Ink, 4)
+	reelFrame.Parent = panel
+	local strip = Instance.new("Frame")
+	strip.Name = "Strip"
+	strip.BackgroundTransparency = 1
+	strip.Size = UDim2.fromOffset(CARD_COUNT * PITCH, REEL_H)
+	strip.Parent = reelFrame
+	local cards = {}
+	for i = 1, CARD_COUNT do
+		cards[i] = makeCard(strip, i)
+	end
+	-- Fade the edges so cards slide in and out of darkness.
+	for _, side in { 0, 1 } do
+		local fade = Instance.new("Frame")
+		fade.Name = "Fade"
+		fade.BorderSizePixel = 0
+		fade.BackgroundColor3 = Color3.fromRGB(14, 24, 48)
+		fade.AnchorPoint = Vector2.new(side, 0)
+		fade.Position = UDim2.fromScale(side, 0)
+		fade.Size = UDim2.new(0, 120, 1, 0)
+		fade.ZIndex = 3
+		local g = Instance.new("UIGradient")
+		g.Transparency = if side == 0 then NumberSequence.new(0, 1) else NumberSequence.new(1, 0)
+		g.Parent = fade
+		fade.Parent = reelFrame
+	end
+	-- Gold marker down the middle with a pointer at each end.
+	local marker = Instance.new("Frame")
+	marker.Name = "Marker"
+	marker.AnchorPoint = Vector2.new(0.5, 0.5)
+	marker.Position = UDim2.new(0.5, 0, 0, 64 + REEL_H / 2)
+	marker.Size = UDim2.fromOffset(4, REEL_H + 8)
+	marker.BackgroundTransparency = 1 -- just the two pointers: a line would cover the card's name
+	marker.BorderSizePixel = 0
+	marker.ZIndex = 4
+	marker.Parent = panel
+	for _, y in { 0, 1 } do
+		local tip = Instance.new("Frame")
+		tip.Name = "Pointer"
+		tip.AnchorPoint = Vector2.new(0.5, 0.5)
+		tip.Position = UDim2.fromScale(0.5, y)
+		tip.Size = UDim2.fromOffset(22, 22)
+		tip.Rotation = 45
+		tip.BackgroundColor3 = Color3.fromRGB(255, 214, 70)
+		tip.BorderSizePixel = 0
+		tip.ZIndex = 4
+		UIKit.Stroke(tip, Colors.Ink, 2)
+		tip.Parent = marker
+	end
+
+	-- Result text under the reel.
+	local result = Instance.new("Frame")
+	result.Name = "Result"
+	result.BackgroundTransparency = 1
+	result.Position = UDim2.fromOffset(0, 64 + REEL_H + 12)
+	result.Size = UDim2.new(1, 0, 0, 110)
+	result.Parent = panel
+	UIKit.Label({ Name = "Rarity", Text = "", TextSize = 38, Size = UDim2.new(1, 0, 0, 40), Parent = result })
+	UIKit.Label({ Name = "Perk", Text = "", TextSize = 21, Position = UDim2.fromOffset(20, 42), Size = UDim2.new(1, -40, 0, 26), TextWrapped = true, Parent = result })
+	UIKit.Label({ Name = "Replaced", Text = "", TextSize = 15, TextColor3 = Colors.TextDim, Position = UDim2.fromOffset(20, 72), Size = UDim2.new(1, -40, 0, 22), Parent = result })
+
+	local buttons = Instance.new("Frame")
+	buttons.Name = "Buttons"
+	buttons.BackgroundTransparency = 1
+	buttons.Position = UDim2.fromOffset(0, 64 + REEL_H + 128)
+	buttons.Size = UDim2.new(1, 0, 0, 60)
+	buttons.Parent = panel
+	local again = UIKit.Button({
+		Text = string.format("Roll again (%d Gems)", Config.RankRoll.Cost),
+		Size = UDim2.fromOffset(300, 56),
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(0.5, -8, 0, 0),
+		Color = Colors.Accent,
+		TextSize = 22,
+		Parent = buttons,
+		OnClick = function()
+			task.spawn(roll)
+		end,
+	})
+	UIKit.Button({
+		Text = "Close",
+		Size = UDim2.fromOffset(180, 56),
+		Position = UDim2.new(0.5, 8, 0, 0),
+		Color = Colors.PanelLight,
+		TextSize = 22,
+		Parent = buttons,
+		OnClick = function()
+			gui.Enabled = false
+		end,
+	})
+	-- Offered while the reel spins (the spin itself is the ad for it).
+	local insta = UIKit.Button({
+		Text = "Insta Roll pass: skip the spin",
+		Size = UDim2.fromOffset(320, 44),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 64 + REEL_H + 40),
+		Color = Color3.fromRGB(250, 190, 40),
+		TextSize = 18,
+		Parent = panel,
+		OnClick = function()
+			ShopUI.BuyPass("InstaRoll")
+		end,
+	})
+	local pass = Config.GetPass("InstaRoll")
+	if pass then
+		local label = insta:FindFirstChildWhichIsA("TextLabel", true)
+		ShopUI.WatchPrice(pass, true, function(price)
+			if label then
+				label.Text = string.format("Insta Roll pass: skip the spin  •  R$ %d", price)
+			end
+		end)
+	end
+
+	popup = { Dim = dim, Panel = panel, Title = title, Strip = strip, Cards = cards, Result = result, Buttons = buttons, Again = again, Insta = insta }
+	return popup
+end
+
+local function setResultText(rank: any?, previous: string?)
+	local pp = ensurePopup()
+	local rarity = pp.Result:FindFirstChild("Rarity") :: TextLabel
+	local perk = pp.Result:FindFirstChild("Perk") :: TextLabel
+	local replaced = pp.Result:FindFirstChild("Replaced") :: TextLabel
+	if not rank then
+		rarity.Text, perk.Text, replaced.Text = "", "", ""
+		return
+	end
+	rarity.Text = string.upper(rank.Rarity) .. "!  " .. rank.Name
+	rarity.TextColor3 = rarityColor(rank.Rarity)
+	perk.Text = rank.Desc
+	local before = previous and Config.GetRank(previous)
+	replaced.Text = if before and before.Id ~= rank.Id then string.format("(replaced %s %s)", before.Icon, before.Name) else ""
+end
+
+local function celebrate(rank: any, card: Frame?)
+	local pp = ensurePopup()
+	local order = Config.RankRarities[rank.Rarity].Order
+	pp.Title.Text = if order >= 5 then "INCREDIBLE!" elseif order >= 4 then "AMAZING!" elseif order >= 3 then "NICE!" else "YOU GOT"
+	pp.Title.TextColor3 = if order >= 3 then rarityColor(rank.Rarity) else Colors.Text
+	setResultText(rank, nil)
+	UIKit.Bounce(pp.Title)
+	if card then
+		UIKit.Bounce(card)
+		local glow = card:FindFirstChildOfClass("UIStroke")
+		if glow then
+			glow.Thickness = 6
+		end
+	end
+	UIKit.PlaySound("Hatch")
+	if order >= 4 then
+		UIKit.Confetti(if order >= 5 then 140 else 90)
+	elseif order >= 3 then
+		UIKit.PlaySound("Sparkle")
+	end
+end
+
+-- Spins the reel until `getResult()` returns a rank id (or false on failure), then lands on it.
+-- Returns once the reel has stopped.
+local function spinReel(getResult: () -> any, weights: { any }, total: number): boolean
+	local pp = ensurePopup()
+	local cards = pp.Cards
+	for _, card in cards do
+		paintCard(card, pickWeighted(weights, total))
+		local stroke = card:FindFirstChildOfClass("UIStroke")
+		if stroke then
+			stroke.Thickness = 3
+		end
+	end
+	local centre = REEL_W / 2 - CARD_W / 2 -- strip offset that puts card 1 under the marker
+	local offset = 0 -- how far the strip has scrolled left
+	pp.Strip.Position = UDim2.fromOffset(centre, 0)
+	local lastTick = 0
+	local function place(o: number)
+		offset = o
+		pp.Strip.Position = UDim2.fromOffset(math.floor(centre - o + 0.5), 0)
+		local passed = math.floor((o + CARD_W / 2) / PITCH)
+		if passed ~= lastTick then
+			lastTick = passed
+			UIKit.PlaySound("Click", 1.1 + (passed % 3) * 0.06)
+		end
+	end
+
+	-- Phase 1: full speed until the server answers (at least half a second, for the feel).
+	local started = os.clock()
+	local result = nil
+	while true do
+		local dt = RunService.RenderStepped:Wait()
+		place(offset + SPIN_SPEED * dt)
+		result = getResult()
+		if result ~= nil and os.clock() - started > 0.5 then
+			break
+		end
+		if offset > (CARD_COUNT - 30) * PITCH then
+			offset = 0 -- very slow server: loop the strip (the cards are random anyway)
+		end
+	end
+	if result == false then
+		return false
+	end
+	local rank = Config.GetRank(result)
+	if not rank then
+		return false
+	end
+
+	-- Phase 2: pick a landing card ~18 cards ahead, paint it with the result, and ease out onto it
+	-- (a cubic ease-out whose starting speed matches the spin, so there is no jolt).
+	local target = math.floor(offset / PITCH) + 18
+	paintCard(cards[target], rank)
+	local jitter = (math.random() - 0.5) * CARD_W * 0.6
+	local land = (target - 1) * PITCH + jitter
+	local distance = land - offset
+	local duration = 3 * distance / SPIN_SPEED
+	local from = offset
+	local t = 0
+	while t < duration do
+		t += RunService.RenderStepped:Wait()
+		local k = math.min(t / duration, 1)
+		place(from + distance * (1 - (1 - k) ^ 3))
+	end
+	-- Settle onto the middle of the card.
+	local settleFrom = offset
+	local settle = 0
+	while settle < 0.3 do
+		settle += RunService.RenderStepped:Wait()
+		local k = math.min(settle / 0.3, 1)
+		local e = k * k * (3 - 2 * k)
+		place(settleFrom + ((target - 1) * PITCH - settleFrom) * e)
+	end
+	celebrate(rank, cards[target])
+	return true
+end
+
+local function showPopup(instant: boolean)
+	local pp = ensurePopup()
+	if popupGui then
+		popupGui.Enabled = true
+	end
+	pp.Title.Text = if instant then "" else "ROLLING..."
+	pp.Title.TextColor3 = Colors.Text
+	setResultText(nil)
+	pp.Buttons.Visible = false
+	local meta = ClientState.Meta :: Types.MetaState?
+	pp.Insta.Visible = not instant and not (meta ~= nil and meta.Passes.InstaRoll == true)
+	local scale = pp.Panel:FindFirstChild("PopScale") :: UIScale
+	scale.Scale = 0.85
+	TweenService:Create(scale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+end
+
+local function finishPopup(ok: boolean)
+	local pp = ensurePopup()
+	pp.Insta.Visible = false
+	pp.Buttons.Visible = true
+	local meta = ClientState.Meta :: Types.MetaState?
+	local gems = if meta then meta.Gems or 0 else 0
+	UIKit.SetDisabled(pp.Again, gems < Config.RankRoll.Cost)
+	if not ok then
+		pp.Title.Text = "Couldn't roll"
+		pp.Title.TextColor3 = Colors.Bad
+	end
+end
+
+local function roll_()
 	if rolling then
 		return
 	end
 	rolling = true
 	renderGems()
-	-- Spin the reel while the server decides.
-	local spinning = true
+	local meta = ClientState.Meta :: Types.MetaState?
+	local luck = meta ~= nil and meta.Passes.DoubleLuck == true
+	local instant = meta ~= nil and meta.Passes.InstaRoll == true
+	local weights, total = Config.RankWeights(luck)
+	showPopup(instant)
+
+	-- Ask the server in the background; the reel spins until it answers.
+	local answer: any = nil
+	local response: any = nil
 	task.spawn(function()
-		local i = 0
-		while spinning do
-			i += 1
-			local r = Config.Ranks[(i % #Config.Ranks) + 1]
-			reel.Text = r.Icon .. " " .. r.Name
-			reel.TextColor3 = rarityColor(r.Rarity)
-			UIKit.PlaySound("Click", 1 + (i % 5) * 0.05)
-			task.wait(0.07)
-		end
+		local r = ClientState.MetaRequest("RollRank")
+		response = r
+		answer = if r and r.Ok and r.Rank then r.Rank else false
 	end)
-	local result = ClientState.MetaRequest("RollRank")
-	task.wait(1.2)
-	spinning = false
-	rolling = false
-	if not result.Ok or not result.Rank then
-		reel.Text = "Roll again!"
-		reel.TextColor3 = Colors.Text
-		UIKit.Toast(result.Error or "Couldn't roll right now.", "Bad")
-		renderGems()
-		return
-	end
-	local rank = Config.GetRank(result.Rank)
-	if rank then
-		reel.Text = rank.Icon .. " " .. rank.Name .. "!"
-		reel.TextColor3 = rarityColor(rank.Rarity)
-		UIKit.Bounce(reel)
-		UIKit.PlaySound("Hatch")
-		local order = Config.RankRarities[rank.Rarity].Order
-		if order >= 4 then
-			UIKit.Confetti(if order >= 5 then 140 else 90)
+
+	local ok
+	if instant then
+		while answer == nil do
+			RunService.RenderStepped:Wait()
 		end
-		local before = result.Previous and Config.GetRank(result.Previous)
-		local lost = if before and before.Id ~= rank.Id then string.format("  (replaced %s %s)", before.Icon, before.Name) else ""
-		UIKit.Toast(string.format("%s %s (%s)!%s", rank.Icon, rank.Name, rank.Rarity, lost), if order >= 3 then "Good" else "Info")
+		ok = answer ~= false
+		local rank = ok and Config.GetRank(answer)
+		if rank then
+			local pp = ensurePopup()
+			-- Just the one card, dead centre.
+			pp.Strip.Position = UDim2.fromOffset(REEL_W / 2 - CARD_W / 2, 0)
+			for i, card in pp.Cards do
+				card.Visible = i == 1
+			end
+			paintCard(pp.Cards[1], rank)
+			celebrate(rank, pp.Cards[1])
+		end
+	else
+		local pp = ensurePopup()
+		for _, card in pp.Cards do
+			card.Visible = true
+		end
+		ok = spinReel(function()
+			return answer
+		end, weights, total)
 	end
+	if ok and response then
+		local rank = Config.GetRank(response.Rank)
+		setResultText(rank, response.Previous)
+		if rank then
+			reel.Text = rank.Icon .. " " .. rank.Name
+			reel.TextColor3 = rarityColor(rank.Rarity)
+		end
+	elseif response and response.Error then
+		UIKit.Toast(response.Error, "Bad")
+	end
+	rolling = false
+	finishPopup(ok)
 	render()
+end
+
+roll = function()
+	local ok, err = pcall(roll_)
+	if not ok then
+		rolling = false
+		warn("[RanksUI] roll failed: " .. tostring(err))
+		finishPopup(false)
+	end
 end
 
 function RanksUI.Init()

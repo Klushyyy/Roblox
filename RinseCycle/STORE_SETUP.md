@@ -13,7 +13,7 @@ For each item below:
 StoreIds is the only script to edit; you don't need a new place file. Items left at `0` say
 "Coming soon!" in the live game and are free test items in Studio.
 
-### Game Passes (Monetization → Passes), 12 total
+### Game Passes (Monetization → Passes), 13 total
 
 These are the `GamePasses` list in StoreIds.
 
@@ -31,6 +31,7 @@ These are the `GamePasses` list in StoreIds.
 | 10 | `ToolNozzle` | Spray Nozzle | 49 | Start every run with the Spray Nozzle |
 | 11 | `ToolWasher` | Pressure Washer | 99 | Start every run with the Pressure Washer |
 | 12 | `ToolCannon` | Foam Cannon | 199 | Start every run with the Foam Cannon |
+| 13 | `InstaRoll` | Insta Roll | 39 | Skip the rank roll spin and see the result instantly (button in the Ranks window) |
 
 ### Developer Products (Monetization → Developer Products), 11 total
 
@@ -87,6 +88,7 @@ These are the `DevProducts` list in StoreIds. Players can buy them again and aga
 10. **Spray Nozzle Forever.** A bright blue spray nozzle / hose gun shooting a sparkling arc of water with droplets. Background: sky blue.
 11. **Pressure Washer Forever.** A sleek blue pressure-washer gun with a long chrome wand and yellow tip, blasting a powerful thin jet of water. Background: electric blue → navy.
 12. **Foam Cannon Forever.** A chunky white-and-lilac foam blaster with a see-through pink soap tank on top, firing a huge puffy blob of foam. Background: lilac → pink.
+13. **Insta Roll.** A slot-machine reel of rank badges frozen mid-spin by a bright yellow lightning bolt, with speed lines and sparkles. Background: electric yellow → orange.
 
 ### Developer products
 
