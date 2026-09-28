@@ -2029,7 +2029,7 @@ local function buildCastle(scene: any)
 
 	-- The room's throne stands too close to the end of the table for a king this size, so on this
 	-- client it's swapped for a throne at the head of the table on the right (in place of that chair).
-	local kingSeat = seat(100, -414, -PI / 2, 98)
+	local kingSeat = seat(94, -414, -PI / 2, 98)
 	scene.Hide = { "ThroneSeat", "ThroneBack", "ThroneSpike", "ChairSeat", "ChairBack", "ChairCrest", "ChairLeg", "PlatterOnTable", "GobletStem", "GobletCup", "CandelabraBase", "CandelabraStem", "CandelabraArm", "Candle", "Flame" }
 	scene.HideWhere = function(name: string, pos: Vector3): boolean
 		if string.sub(name, 1, 6) == "Throne" then
@@ -2085,7 +2085,7 @@ local function buildCastle(scene: any)
 
 	-- The queen and two nobles along the sides.
 	local diners = {
-		{ "Queen", "Queen", seat(-100, -414, PI / 2, 98), 1 },
+		{ "Queen", "Queen", seat(-94, -414, PI / 2, 98), 1 },
 	}
 	for _, d in diners do
 		local a = scene:actor(d[1], d[2])
@@ -2175,7 +2175,10 @@ local function buildCastle(scene: any)
 
 	-- The jester juggles for the king, bows, and cartwheels.
 	local jester = scene:actor("Jester", "Jester")
-	local pj = newPlan(jester, -262, -160, 0)
+	-- He plays to the players: always turned toward the dishwasher (the room origin).
+	local JX, JZ = -205, -200
+	local facePlayers = math.atan2(-JX, -JZ)
+	local pj = newPlan(jester, JX, JZ, facePlayers)
 	local balls = { "BallA", "BallB", "BallC" }
 	local ballColors = { rgb(255, 80, 80), rgb(80, 180, 255), rgb(255, 220, 60) }
 	for i, n in balls do
@@ -2215,10 +2218,11 @@ local function buildCastle(scene: any)
 		local k = math.sin(math.clamp(u / 2.2, 0, 1) * PI)
 		return { lean = 0.45 * k, head = { pitch = -0.3 * k }, armL = { p = -0.3 * k, r = 0.35 * k, e = 0.2 }, armR = { p = 0.5 * k, r = -0.1, e = 1.8 * k } }
 	end
+	-- Cartwheels run along the open lane parallel to the dishwasher wall (room X), squared up to the
+	-- players, so the spinning arms and legs clear the pillars, the guards and the table.
 	local function cartwheel(fromX: number, toX: number, dur: number)
-		local z = pj.Z
 		pj:add(dur, function(u)
-			return lerp(fromX, toX, smooth(u / dur)), z, 0
+			return lerp(fromX, toX, smooth(u / dur)), JZ, 0
 		end, function(u, ctx)
 			local s = ctx.Actor.S
 			local k = math.clamp(u / dur, 0, 1)
@@ -2231,21 +2235,22 @@ local function buildCastle(scene: any)
 				legs = { outL = 0.5 * math.sin(k * PI), outR = 0.5 * math.sin(k * PI) },
 			}
 		end)
-		pj.X = toX
+		pj.X, pj.Z, pj.Phi = toX, JZ, 0
 	end
 	pj:still(9, juggle, juggleHolds())
 	pj:still(2.2, bow)
-	cartwheel(-262, -248, 1.1)
+	pj:turn(0)
+	cartwheel(JX, JX + 16, 1.1)
 	pj:still(1.2, function(u, ctx)
 		local p = P.idle(u, ctx)
 		p.armL = { p = 0.2, r = 2.6, e = 0.2 }
 		p.armR = { p = 0.2, r = 2.6, e = 0.2 }
 		return p
 	end)
-	cartwheel(-248, -230, 1.1)
+	cartwheel(JX + 16, JX + 34, 1.1)
 	pj:still(1.2, P.laugh)
-	pj:walk({ V2(-262, -160) }, nil, nil, 70)
-	pj:turn(0)
+	cartwheel(JX + 34, JX, 1.6) -- and one big one back to his spot
+	pj:turn(facePlayers)
 	pj:still(9, juggle, juggleHolds())
 	pj:still(2.2, bow)
 	pj:still(4, P.wave)
