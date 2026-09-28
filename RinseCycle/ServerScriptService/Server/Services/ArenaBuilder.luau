@@ -1506,6 +1506,7 @@ function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeSc
 	end
 
 	model:SetAttribute("Level", levelIndex)
+	model:SetAttribute("Origin", origin.Position) -- where the room is (LevelNPCs puts the giants in it)
 	model:SetAttribute("Total", totalGrime)
 	model:SetAttribute("Cleaned", 0)
 

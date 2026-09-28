@@ -1095,6 +1095,41 @@ walls instead of clipping through. All gameplay queries use Include filters.
   silent; Main prints only failures and "server ready".
 - **Admin:** :give removed; Give Coins shows a coin icon.
 
+## 6k. The people in the room (v1.1)
+
+- **LevelNPCs (client):** the cutscene's people live in each level's room during a run: giant R6
+  figures at 50x scale (the same scale the furniture was built at). Client-only, anchored,
+  non-colliding, non-queryable; moved with one BulkMoveTo per frame. Everything is a function of
+  the loop time (`Workspace:GetServerTimeNow() % Period`), so a party sees the same moment.
+  - Rig: arms and legs split at elbow/knee with hidden joint blocks (standing they read as one R6
+    limb; they can sit with feet down and lift a fork). Arms are posed directly or by hand target
+    (two-bone IK, cross-sections kept square to the body).
+  - Plans: each character's loop is a list of steps (still / turn / walk / sitDown / standUp /
+    swap for pick-ups); every plan fills the level's loop exactly. Props are held (hand / both
+    hands / root) or placed on a timeline, so plates, pizzas and juice boxes are always somewhere.
+  - Level 1 (60 s): Dad and the kid on the far side, Mum on the near side, Grandpa in an armchair
+    in the corner (paper, tea, a nap). Mum carries the spare plates to the sink next to the
+    dishwasher, washes them and brings them back; the kid fetches a juice from the fridge.
+  - Level 2 (48 s): the chef slides a pizza into the brick oven, pulls it out and serves the right
+    table from its end; two guests take the six slices in turns (they shrink as they're eaten); a
+    kid has their own pizza at the other table; the waiter fetches sodas, takes an order, waves at
+    the dishwasher and clears up.
+  - Level 3 (60 s): the king on a throne at the head of the table (turkey leg, goblet, toasts,
+    pointing at you), the queen and two nobles, a servant carrying the roast between the fire and
+    the table, a juggling, cartwheeling jester, a guard on duty and a guard marching.
+  - Where the room's furniture doesn't fit people this size (the family chairs, the pizzeria
+    stools and one pizza, the castle throne and one chair) that client hides it
+    (LocalTransparencyModifier) and the scene brings its own. None of it is reachable from the tub.
+  - Offline checks: `_tools/tests/harness.luau npcscan<level>` dumps every NPC part every 0.25 s
+    and `npccheck.py` reports parts sinking into the room or into each other (sitting contacts
+    allowed). `npc<level>@<t>` + render.py photographs a moment.
+- **Icons:** IconArt draws the HUD and level icons from frames (outline pass + fill pass per
+  layer): Coin, Bubble, Gem, Drop, Gift (Daily), Ticket (Codes), Star (Free), Medal (Ranks),
+  Shield (Admin), Lock, and the level emblems Pasta, Pizza, Crown. IconButton takes `Icon = "@Gift"`.
+  `_tools/tests/guirender.py` renders a dumped GUI tree to a PNG for checking UI.
+- **Invisible admins:** name tags follow the AdminHidden attribute on every client, and admin-chosen
+  invisibility carries over a respawn, so toggling back always brings the tag back.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family
