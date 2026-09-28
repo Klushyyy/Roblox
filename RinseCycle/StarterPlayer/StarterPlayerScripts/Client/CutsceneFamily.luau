@@ -458,7 +458,6 @@ local function backyardBarbecue(origin: CFrame, parent: Instance): any
 	scene:prop("Paper", "Newspaper")
 	local faceCover = { Paper = { "Head", off = CFrame.new(0, 4, -36) * CFrame.Angles(-1.2, 0, 0) } }
 	local function snooze(u: number, c: any): any
-		local s = c.Actor.S
 		return {
 			lean = -0.62,
 			bob = math.sin(u * 1.2) * 0.015,
@@ -589,7 +588,6 @@ local function backyardBarbecue(origin: CFrame, parent: Instance): any
 	local pm = R.newPlan(mum, MX, MZ, PI)
 	scene:prop("MumLeaf", "Leaf")
 	local function toss(u: number, c: any): any
-		local s = c.Actor.S
 		local k = math.sin(u * 3)
 		return {
 			bob = R.breathe(u),

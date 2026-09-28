@@ -406,7 +406,7 @@ local function foodCritic(origin: CFrame, parent: Instance): any
 	end
 	-- the bar on the right with its glass washer
 	local ZF = 480
-	local top = Kit.counter(ctx, 180, 700, ZF, { Gaps = { { 265, 395 } }, Body = rgb(110, 70, 44), BodyMat = Enum.Material.Wood, Door = rgb(124, 80, 50), Top = rgb(40, 30, 26), TopMat = Enum.Material.Marble, Splash = rgb(90, 56, 36), SplashMat = Enum.Material.Wood })
+	Kit.counter(ctx, 180, 700, ZF, { Gaps = { { 265, 395 } }, Body = rgb(110, 70, 44), BodyMat = Enum.Material.Wood, Door = rgb(124, 80, 50), Top = rgb(40, 30, 26), TopMat = Enum.Material.Marble, Splash = rgb(90, 56, 36), SplashMat = Enum.Material.Wood })
 	local dw = Kit.dishwasher(ctx, 330, ZF, 0, { Mess = rgb(200, 50, 36) })
 	ctx:box("BarShelf", V(480, 8, 40), ctx:at(450, 420, ZW - 28), rgb(90, 56, 36), Enum.Material.Wood)
 	for i = 0, 9 do

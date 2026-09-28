@@ -672,6 +672,22 @@ elseif string.sub(what, 1, 7) == "cutscan" then
 	fs.writeFile(out, serde.encode("json", frames))
 	print("frames", #frames)
 	return
+elseif string.sub(what, 1, 4) == "chap" then
+	-- chap<level><chapter>@<t>: a story chapter at time t; prints the camera for render.py
+	local level, ch, tt = string.match(what, "^chap(%d)(%d)@([%d%.]+)$")
+	local Mod = loadModule(ROOT .. "/StarterPlayer/StarterPlayerScripts/Client/CutsceneChapters")
+	rootInst = Inst.new("Model")
+	local ctx = Mod.Build(tonumber(level), tonumber(ch), CFrame.new(), rootInst)
+	ctx:Update(tonumber(tt))
+	local cf, fov = ctx:Camera(tonumber(tt))
+	local p, l = cf.Position, cf.Position + cf.LookVector * 10
+	print(string.format("CAM %.2f %.2f %.2f %.2f %.2f %.2f %.1f", p.X, p.Y, p.Z, l.X, l.Y, l.Z, fov))
+	print("DUR", ctx.Duration, "BUBBLES", ctx.BubbleStart)
+	if require("@lune/process").env.SHOTS then
+		for _, sh in ctx.Shots do
+			print(string.format("SHOT %.2f %.2f", sh.T0, sh.T1))
+		end
+	end
 elseif string.sub(what, 1, 3) == "cut" then
 	-- cut<level>@<t>: the cutscene set at time t; prints the camera for render.py
 	local level, tt = string.match(what, "^cut(%d)@([%d%.]+)$")
@@ -770,6 +786,7 @@ for _, p in parts(rootInst) do
 		t = pr.Transparency or 0,
 		m = pr.Material and pr.Material.Name or "Plastic",
 		mesh = (p:FindFirstChildOfClass("SpecialMesh") ~= nil),
+		cc = pr.CanCollide,
 		mt = (function()
 			local m = p:FindFirstChildOfClass("SpecialMesh")
 			return m and m.MeshType and m.MeshType.Name or nil

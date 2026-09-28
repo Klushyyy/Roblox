@@ -1139,6 +1139,56 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - **Invisible admins:** name tags follow the AdminHidden attribute on every client, and admin-chosen
   invisibility carries over a respawn, so toggling back always brings the tag back.
 
+## 6l. Story chapters, lobby fun, rolls (v1.2)
+
+- **Run-start cutscenes are story chapters.** Each level tells its own story, one chapter per run,
+  in a completely different place each time, and the chapters build on each other (running gags
+  and props carry over). `CutsceneChapters` picks the chapter: the profile counts chapters seen
+  per level (`Profile.Episodes`, sent as `MetaState.Episodes`); the client asks the server
+  `MetaRequest "SawEpisode"` when a chapter starts (skipping counts), so the next run plays the
+  next chapter and the story loops after the last one. A chapter that fails to build falls back to
+  the classic `CutsceneScene`.
+  - Family: 1 Pancake Morning (kitchen: Dad's pancake flip lands on his head), 2 Backyard
+    Barbecue (garden: Dad nails the burger flip in a pancake apron, the kid's football lands in
+    the salad, Grandpa naps under the paper), 3 Birthday Surprise (living room at night: cake,
+    candles, confetti, and the frosting lands on Dad's party hat; Grandpa does the dishes).
+  - Pizzeria: 1 Dough Show (the dough comes down over the chef like a poncho), 2 The Food Critic
+    (the dining room at night; the chef, still in his poncho, frets through the door; 10/10),
+    3 Pizza in the Park (the new food truck with the critic's 10 framed on it; a cheese pull from
+    the truck all the way across the park; a rubber duck in the pond).
+  - Castle: 1 The Royal Feast (a juggling ball knocks the king's crown onto the jester), 2 The
+    Garden Tea Party (the crowned jester's teacup tower topples; the queen catches every cup),
+    3 The Midnight Snack (the king in his nightcap and the jester sneak in for cake by candlelight,
+    the queen turns the lights on, the crown goes back, the king does the washing up).
+- **CutsceneKit** is the toolbox: set builders (rooms, walls, windows, counters, sinks, stoves,
+  fridges, tables, chairs, grass, fences, trees, balloons, ceilings), a shot list with hard cuts
+  and eased moves (points or functions, `Kit.follow` tracks a bone), `Kit.flight` for thrown
+  things, a Lighting mood per chapter (applied while it plays, restored after), a title card
+  ("Chapter 2 / Backyard Barbecue"), and the shared ending: a fully animated dishwasher (door on a
+  hinge, sliding rack, dishes appearing in it, Start button and display lighting up, a hum and a
+  glow) that the loader fills one-handed, then steps aside while the camera pushes in through the
+  window into the bubbles. Chapters are built at the LevelNPCs scale (a person is 250 studs) with
+  the LevelNPCs rig, looks, props, plans and poses (`LevelNPCs.Kit`). The set is client-only, far
+  from the map (16000, -6000, 16000).
+- Offline: `harness.luau chap<level><chapter>@<t>` dumps a chapter at time t with its camera;
+  `chapsheet.sh` renders a contact sheet.
+- **Lobby fun (LobbyFun service):** poppable soap bubbles float over the plaza (touch or click:
+  +1 Bubble, golden ones +10; Config.LobbyBubbles, capped per minute), and six rubber ducks are
+  hidden around the lobby (Config.Ducks; +25 each, +500 Bubbles and 10 Gems for all six; saved in
+  Profile.Ducks, found ones hidden for that player via the DucksFound attribute).
+- **Solid lobby:** the dishwasher building's front has one invisible collider over all its detail,
+  and the display eggs, the soap shop's awning / bottle / pump, the doghouse roof and the table
+  props are solid.
+- **Rank roll popup:** rolling opens a full-screen reel of rank cards that spins while the server
+  rolls, slows down and lands on the result (rarity banner, glow, confetti for Epic+), with Roll
+  again / Close. The **Insta Roll** pass (39 R$) skips the spin.
+- **Icons:** every IconArt shape is snapped to whole pixels (centred shapes stay exactly centred),
+  outlines are whole pixels, and there are no font glyphs any more: new Shield (heraldic, drawn
+  from a rounded body and a 45-degree point), Heart (Free), Paw (Pets), Cart (Shop), and a raised
+  diamond where the stars were.
+- **NPCs:** the jester plays to the players (always turned toward the dishwasher) and cartwheels
+  along a clear lane; the king and queen sit clear of their thrones.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family
