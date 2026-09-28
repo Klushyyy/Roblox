@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "0.9.0"
+Config.Version = "1.0.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -34,8 +34,8 @@ Config.Party = {
 	MaxPlayers = 8,
 	Countdown = 15, -- seconds from when the host presses Create until the party teleports
 	LockSeconds = 1.5, -- joins and leaves are refused this close to launch
-	RejoinCooldown = 3, -- seconds before a player who left/was ejected can re-enter a pad
-	PollInterval = 0.2,
+	RejoinCooldown = 0, -- (unused: a pad just left is ignored only until you've stepped out of it)
+	PollInterval = 0.1, -- how often pads look for players stepping in
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -775,14 +775,14 @@ Config.Codes = {
 	BUBBLES = { Gems = 15 },
 } :: { [string]: { Bubbles: number?, Gems: number?, Expires: number? } }
 
--- "🧼 300 + 💎 10"
+-- "300 Bubbles + 10 Gems"
 function Config.RewardText(reward: { Bubbles: number?, Gems: number? }): string
 	local bits = {}
 	if reward.Bubbles and reward.Bubbles > 0 then
-		table.insert(bits, "🧼 " .. reward.Bubbles)
+		table.insert(bits, reward.Bubbles .. " Bubbles")
 	end
 	if reward.Gems and reward.Gems > 0 then
-		table.insert(bits, "💎 " .. reward.Gems)
+		table.insert(bits, reward.Gems .. (if reward.Gems == 1 then " Gem" else " Gems"))
 	end
 	return table.concat(bits, " + ")
 end
@@ -800,7 +800,7 @@ end
 --     set LikeReward to nil to hide the card.)
 ----------------------------------------------------------------------------------------------------
 Config.Social = {
-	GroupId = 0,
+	GroupId = 920260021, -- the Rinse Cycle community
 	CreatorUserId = 2297538363,
 	ProxyDomain = "roproxy.com",
 	GroupReward = { Bubbles = 500, Gems = 25 },
@@ -816,6 +816,33 @@ function Config.GetGroupId(): number
 		return if game.CreatorType == Enum.CreatorType.Group then game.CreatorId else 0
 	end)
 	return if ok and type(id) == "number" then id else 0
+end
+
+-- The IDs pasted into StoreIds (ReplicatedStorage > Shared > StoreIds), the one script to edit
+-- once the passes and products exist on Roblox. A number there replaces the matching Id here.
+do
+	local ok, ids = pcall(function()
+		return require(script.Parent:WaitForChild("StoreIds", 5) :: any)
+	end)
+	if ok and type(ids) == "table" then
+		local function apply(list: { any }, source: any)
+			if type(source) ~= "table" then
+				return
+			end
+			for _, item in list do
+				local id = tonumber(source[item.Key])
+				if id and id > 0 then
+					item.Id = math.floor(id)
+				end
+			end
+		end
+		apply(Config.GamePasses, ids.GamePasses)
+		apply(Config.DevProducts, ids.DevProducts)
+		local group = tonumber(ids.GroupId)
+		if group and group > 0 then
+			Config.Social.GroupId = math.floor(group)
+		end
+	end
 end
 
 return Config

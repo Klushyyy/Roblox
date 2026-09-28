@@ -37,24 +37,30 @@ local DataService = require(GameServices:WaitForChild("DataService"))
 local RoundService = require(GameServices:WaitForChild("RoundService"))
 local PetService = require(GameServices:WaitForChild("PetService"))
 
-print("[AdminServer] Script started")
-
--- Looked up this early (rather than down in the "Give" section where the
--- rest of :give's logic lives) because GetAdminInfo's response, just
--- below, needs the current item names for the client's :give
--- autocomplete - referencing it from there would be a forward reference
--- to a local that doesn't exist yet in Lua's lexical scoping. Create
--- this folder ONCE in Studio's EDIT mode (not while Play-testing) and
--- leave your giveable Tools in it there - anything only added during a
--- Play session doesn't get saved with the place and would need to be
--- re-added every single time the server restarts.
-local giveableItemsFolder = ServerStorage:FindFirstChild("AdminGiveableItems")
-if not giveableItemsFolder then
-	giveableItemsFolder = Instance.new("Folder")
-	giveableItemsFolder.Name = "AdminGiveableItems"
-	giveableItemsFolder.Parent = ServerStorage
-	print("[AdminServer] Created ServerStorage.AdminGiveableItems - empty until Tools are placed there (in EDIT mode, not Play mode) for :give to hand out")
+-- Quiet by default: the Output window only gets one "ready" line and real problems. Set VERBOSE
+-- to true to see every step and every command in the Output window again.
+local VERBOSE = false
+local function log(...)
+	if VERBOSE then
+		print(...)
+	end
 end
+-- True when DataStores can't be used at all (Studio without a published place / API access): every
+-- save and load then fails the same way, so those failures stay silent instead of filling Output.
+local storesOffline = false
+local function dsWarn(message)
+	local text = tostring(message)
+	if text:find("StudioAccessToApisNotAllowed", 1, true) or text:find("publish", 1, true) or text:find("API Services", 1, true) then
+		storesOffline = true
+	end
+	if not storesOffline then
+		warn(text)
+	end
+end
+
+-- :give (hand out Tools from a ServerStorage folder) isn't used in Rinse Cycle and was removed;
+-- this empty stand-in keeps the leftover inventory helpers below working.
+local giveableItemsFolder = Instance.new("Folder")
 
 -- The one account allowed to use the admin system in a live server: EnderBuilda (display name
 -- Klushy). Matched by UserId, with the username as a backup in case the id in Config changes.
@@ -76,7 +82,7 @@ local function getStore(name)
 	if ok and store then
 		return store
 	end
-	warn("[AdminServer] DataStore '" .. name .. "' unavailable (" .. tostring(store) .. ") - bans, warnings, mutes and logs won't save this session")
+	storesOffline = true
 	local function unavailable()
 		error("DataStore unavailable", 2)
 	end
@@ -96,7 +102,7 @@ local ALL_COMMANDS = {
 	"kill", "jail", "god", "respawn",
 	"spectate", "controlplayer", "invis",
 	"viewinv", "clearinv",
-	"fly", "give",
+	"fly",
 }
 
 -- =====================================================================
@@ -392,7 +398,7 @@ local function loadGamepassGrants(player)
 		return GamepassGrantStore:GetAsync(grantKey(player.UserId))
 	end)
 	if not ok then
-		warn("[AdminServer] Failed to load gamepass grants for " .. player.Name .. ": " .. tostring(value))
+		dsWarn("[AdminServer] Failed to load gamepass grants for " .. player.Name .. ": " .. tostring(value))
 		return
 	end
 	if type(value) ~= "table" then return end
@@ -421,7 +427,7 @@ local function saveGamepassGrants(player)
 			GamepassGrantStore:SetAsync(grantKey(player.UserId), granted)
 		end)
 		if not ok then
-			warn("[AdminServer] Failed to save gamepass grants for " .. player.Name .. ": " .. tostring(err))
+			dsWarn("[AdminServer] Failed to save gamepass grants for " .. player.Name .. ": " .. tostring(err))
 		end
 	end)
 end
@@ -470,7 +476,7 @@ GetAdminInfo.OnServerInvoke = function(player)
 	-- a missing Remove button can be diagnosed from the Output window
 	-- rather than guessed at - the usual cause is the test client not
 	-- being signed in under the owner's username at all.
-	print(string.format(
+	log(string.format(
 		"[AdminServer] GetAdminInfo for '%s' -> tier %s, canRemoveLogs %s",
 		player.Name, tostring(info.Tier), tostring(info.CanRemoveLogs)
 	))
@@ -704,7 +710,7 @@ for _, player in ipairs(Players:GetPlayers()) do
 end
 Players.PlayerAdded:Connect(watchOverride)
 
-print("[AdminServer] Remotes ready")
+log("[AdminServer] Remotes ready")
 
 -- =====================================================================
 -- Shared helpers
@@ -742,7 +748,7 @@ local function listAllKeys(store)
 		return store:ListKeysAsync()
 	end)
 	if not success then
-		warn("[AdminServer] ListKeysAsync failed: " .. tostring(pages))
+		dsWarn("[AdminServer] ListKeysAsync failed: " .. tostring(pages))
 		return keys
 	end
 	while true do
@@ -830,7 +836,7 @@ local function isBanned(userId)
 		banRecordsCache[userIdStr] = data or false
 		return data
 	end
-	warn("[AdminServer] Failed to check ban status for " .. userIdStr .. ": " .. tostring(data))
+	dsWarn("[AdminServer] Failed to check ban status for " .. userIdStr .. ": " .. tostring(data))
 	return nil
 end
 
@@ -876,7 +882,7 @@ local function banUser(userId, reason, bannedBy, durationSeconds, waitForPersist
 			BanStore:SetAsync(tostring(userId), data)
 		end)
 		if not success then
-			warn("[AdminServer] Failed to save ban for " .. tostring(userId) .. ": " .. tostring(err))
+			dsWarn("[AdminServer] Failed to save ban for " .. tostring(userId) .. ": " .. tostring(err))
 		end
 	end
 	if waitForPersist then
@@ -894,7 +900,7 @@ local function unbanUser(userId)
 			BanStore:RemoveAsync(tostring(userId))
 		end)
 		if not success then
-			warn("[AdminServer] Failed to remove ban for " .. tostring(userId) .. ": " .. tostring(err))
+			dsWarn("[AdminServer] Failed to remove ban for " .. tostring(userId) .. ": " .. tostring(err))
 		end
 	end)
 	return true
@@ -908,7 +914,7 @@ do
 		end)
 		banRecordsCache[userIdStr] = (success and data) or false
 	end
-	print("[AdminServer] Ban cache seeded: " .. #keys .. " record(s)")
+	log("[AdminServer] Ban cache seeded: " .. #keys .. " record(s)")
 end
 
 local function buildBanListEntries()
@@ -1013,7 +1019,7 @@ local function saveWarnings(userId, warnings)
 			WarningStore:SetAsync(tostring(userId), warnings)
 		end)
 		if not success then
-			warn("[AdminServer] Failed to save warnings for " .. tostring(userId) .. ": " .. tostring(err))
+			dsWarn("[AdminServer] Failed to save warnings for " .. tostring(userId) .. ": " .. tostring(err))
 		end
 	end)
 	return true
@@ -1027,7 +1033,7 @@ do
 		end)
 		warningRecordsCache[userIdStr] = (success and data) or {}
 	end
-	print("[AdminServer] Warning cache seeded: " .. #keys .. " record(s)")
+	log("[AdminServer] Warning cache seeded: " .. #keys .. " record(s)")
 end
 
 local function buildWarnListEntries()
@@ -1097,7 +1103,7 @@ local function saveMuteData(userId, data, waitForPersist)
 			MuteStore:SetAsync(tostring(userId), data)
 		end)
 		if not success then
-			warn("[AdminServer] Failed to save mute for " .. tostring(userId) .. ": " .. tostring(err))
+			dsWarn("[AdminServer] Failed to save mute for " .. tostring(userId) .. ": " .. tostring(err))
 		end
 	end
 	if waitForPersist then
@@ -1125,7 +1131,7 @@ do
 		end)
 		muteRecordsCache[userIdStr] = (success and data) or false
 	end
-	print("[AdminServer] Mute cache seeded: " .. #keys .. " record(s)")
+	log("[AdminServer] Mute cache seeded: " .. #keys .. " record(s)")
 end
 
 -- Dedups the "you are muted" reminder so a single blocked chat message
@@ -1193,7 +1199,7 @@ local function attachMuteFilter(channel)
 		if not ok then return true end
 		return not blocked
 	end
-	print("[AdminServer] Mute filter attached to " .. channel.Name)
+	log("[AdminServer] Mute filter attached to " .. channel.Name)
 end
 
 -- The real mute: Roblox's own TextSource.CanSend. Every player has one TextSource per chat
@@ -1251,10 +1257,16 @@ end)
 -- :mute never actually blocked anything even though the command itself
 -- reported success.
 task.spawn(function()
-	local textChannels = TextChatService:WaitForChild("TextChannels", 10)
-	if not textChannels then
-		warn("[AdminServer] TextChannels not found - :mute will have no effect")
-		return
+	-- Made by Roblox shortly after start (the place file turns on the modern chat). Waits quietly.
+	local textChannels = TextChatService:FindFirstChild("TextChannels")
+	local waited = 0
+	while not textChannels do
+		task.wait(1)
+		waited += 1
+		textChannels = TextChatService:FindFirstChild("TextChannels")
+		if waited == 60 and not textChannels then
+			warn("[AdminServer] Chat channels still missing after a minute: is Chat > ChatVersion set to TextChatService? :mute needs it")
+		end
 	end
 	local function watchChannel(channel)
 		attachMuteFilter(channel)
@@ -1778,7 +1790,7 @@ do
 		stripLight("CorridorLightB" .. i, CELL_X[i], CORR_MID_Z + 3.5, CELL_W * 0.5)
 	end
 
-	print("[AdminServer] Jail block built (3 cells)")
+	log("[AdminServer] Jail block built (3 cells)")
 end
 
 local jailedUserIds = {}
@@ -2653,7 +2665,7 @@ do
 				nextLogId += 1
 			end
 		end
-		print("[AdminServer] Loaded " .. #commandLog .. " persisted command log entries")
+		log("[AdminServer] Loaded " .. #commandLog .. " persisted command log entries")
 	elseif success then
 		-- [DEBUG] savedLog was nil, not a load failure - either nothing
 		-- has ever been saved under this key yet, or this build of the
@@ -2661,9 +2673,9 @@ do
 		-- before. Printed either way so it's obvious from the Output
 		-- whether persistence is even active, instead of silently
 		-- starting fresh with no visible signal.
-		print("[AdminServer] No persisted command log found (savedLog=" .. tostring(savedLog) .. ") - starting empty")
+		log("[AdminServer] No persisted command log found (savedLog=" .. tostring(savedLog) .. ") - starting empty")
 	else
-		warn("[AdminServer] Failed to load persisted command log: " .. tostring(savedLog))
+		dsWarn("[AdminServer] Failed to load persisted command log: " .. tostring(savedLog))
 	end
 end
 
@@ -2686,9 +2698,9 @@ local function saveCommandLog()
 			-- to tell "persistence is silently failing" apart from
 			-- "persistence is working but the paste in Studio is stale"
 			-- just from the Output log.
-			print("[AdminServer] Command log saved (" .. #commandLog .. " entries)")
+			log("[AdminServer] Command log saved (" .. #commandLog .. " entries)")
 		else
-			warn("[AdminServer] Failed to persist command log: " .. tostring(err))
+			dsWarn("[AdminServer] Failed to persist command log: " .. tostring(err))
 		end
 	end)
 end
@@ -2722,7 +2734,7 @@ do
 		return message
 	end
 	wipeLogs.Parent = ServerStorage
-	print("[AdminServer] Log wipe ready - run game.ServerStorage.WipeCommandLog:Invoke() in the Studio Command Bar (context: Server)")
+	log("[AdminServer] Log wipe ready - run game.ServerStorage.WipeCommandLog:Invoke() in the Studio Command Bar (context: Server)")
 end
 
 -- description is a full, grammatical sentence ("EnderBuilda muted
@@ -2754,7 +2766,7 @@ local function logEntry(adminName, adminTier, commandName, targetName, extra, de
 		table.remove(commandLog, 1)
 	end
 	saveCommandLog()
-	print(string.format(
+	log(string.format(
 		"[AdminServer][LOG] %s used :%s on %s%s",
 		adminName, commandName, targetName or "-",
 		(extra and extra ~= "") and (" (" .. extra .. ")") or ""
@@ -3007,7 +3019,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 			if string.lower(value) == wanted then
 				target:SetAttribute("AdminTierOverride", value)
 				sendFeedback(admin, target.Name .. " is now " .. value .. " (this session only)", false)
-				print("[AdminServer] " .. admin.Name .. " set " .. target.Name .. " to " .. value .. " (Studio, session only)")
+				log("[AdminServer] " .. admin.Name .. " set " .. target.Name .. " to " .. value .. " (Studio, session only)")
 				return
 			end
 		end
@@ -3025,7 +3037,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 		commandLog = {}
 		saveCommandLog()
 		sendFeedback(admin, "Wiped " .. wiped .. " log entries", false)
-		print("[AdminServer] Command log wiped by " .. admin.Name .. " (" .. wiped .. " entries)")
+		log("[AdminServer] Command log wiped by " .. admin.Name .. " (" .. wiped .. " entries)")
 		return
 	end
 
@@ -3293,7 +3305,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 		-- The recipient gets told, with the game's usual celebration toast - only on the way IN.
 		if giving then
 			pcall(function()
-				Remotes.Event("Notify"):FireClient(target, "🎁 You were gifted " .. pass.Icon .. " " .. pass.Name .. "!", "Good")
+				Remotes.Event("Notify"):FireClient(target, "You were gifted " .. pass.Name .. "!", "Good")
 			end)
 		end
 
@@ -3925,4 +3937,4 @@ AdminStopControlling.OnServerEvent:Connect(function(admin)
 	sendFeedback(admin, "Stopped controlling " .. target.Name, false)
 end)
 
-print("[AdminServer] Fully initialised")
+print("[AdminServer] ready" .. (if storesOffline then " (Studio: bans, mutes, warnings and logs are kept for this session only; they save once the place is published with API access on)" else ""))

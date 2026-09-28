@@ -183,7 +183,7 @@ local function upgradeCard(parent: Instance, def: any, run: Types.RunState, orde
 
 	local cost = Config.UpgradeCost(def.Id, level, run.Level, run.ToolIndex)
 	UIKit.Button({
-		Text = if cost then "💰 " .. UIKit.Short(cost) else "MAX",
+		Text = if cost then UIKit.Short(cost) .. " coins" else "MAX",
 		Size = UDim2.new(1, -20, 0, 42),
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -8),
@@ -221,11 +221,11 @@ local function renderLeft(run: Types.RunState)
 	local s = run.Stats
 	ink({
 		Text = string.format(
-			"💪 %s/s   %s   🎯 %s studs",
+			"Power %s/s   %s   Reach %s",
 			fmtNum(s.Power),
-			if s.Mode == "Line" then "📏 " .. fmtNum(s.LineLength or 0) .. " line"
-				elseif s.Mode == "Foam" then "💥 " .. fmtNum(s.Radius) .. " splat"
-				else "🖐️ " .. fmtNum(s.Radius),
+			if s.Mode == "Line" then "Line " .. fmtNum(s.LineLength or 0)
+				elseif s.Mode == "Foam" then "Splat " .. fmtNum(s.Radius)
+				else "Size " .. fmtNum(s.Radius),
 			fmtNum(s.Reach)
 		),
 		TextSize = 16,
@@ -289,7 +289,7 @@ local function toolCard(parent: Instance, index: number, run: Types.RunState): F
 
 	if inHand then
 		ink({
-			Text = "✅ In hand",
+			Text = "In hand",
 			TextSize = 16,
 			TextColor3 = Color3.fromRGB(40, 150, 80),
 			AnchorPoint = Vector2.new(0.5, 1),
@@ -312,7 +312,7 @@ local function toolCard(parent: Instance, index: number, run: Types.RunState): F
 	else
 		local cost = Config.ToolCost(index, run.Level) or 0
 		UIKit.Button({
-			Text = "💰 " .. UIKit.Short(cost),
+			Text = UIKit.Short(cost) .. " coins",
 			Size = UDim2.new(1, -14, 0, 40),
 			AnchorPoint = Vector2.new(0.5, 1),
 			Position = UDim2.new(0.5, 0, 1, -6),
@@ -361,7 +361,7 @@ local function renderRight(run: Types.RunState)
 		Parent = money,
 	})
 	UIKit.Label({
-		Text = "💰 " .. UIKit.Commas(run.Coins),
+		Text = UIKit.Commas(run.Coins) .. " coins",
 		TextSize = 30,
 		TextColor3 = Color3.fromRGB(90, 235, 110),
 		Position = UDim2.new(0.5, 10, 0, 0),

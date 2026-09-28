@@ -69,14 +69,7 @@ function HUD.Init()
 	UIKit.Stroke(topCurrency, Colors.Ink, 3)
 	topCurrency.Parent = root
 
-	UIKit.Label({
-		Text = "🧼",
-		TextSize = 38,
-		Position = UDim2.fromOffset(8, 0),
-		Size = UDim2.fromOffset(50, 58),
-		Stroke = false,
-		Parent = topCurrency,
-	})
+	UIKit.Icon("Bubble", 40, { Position = UDim2.fromOffset(10, 7), Parent = topCurrency })
 	local bubblesValue = UIKit.Label({
 		Name = "Value",
 		Text = "0",
@@ -137,7 +130,7 @@ function HUD.Init()
 	UIKit.Gradient(gemsPill, Color3.fromRGB(150, 100, 200), Color3.fromRGB(90, 55, 140))
 	UIKit.Stroke(gemsPill, Colors.Ink, 3)
 	gemsPill.Parent = root
-	UIKit.Label({ Text = "💎", TextSize = 28, Position = UDim2.fromOffset(6, 0), Size = UDim2.fromOffset(38, 44), Stroke = false, Parent = gemsPill })
+	UIKit.Icon("Gem", 34, { Position = UDim2.fromOffset(6, 5), Parent = gemsPill })
 	local gemsValue = UIKit.Label({
 		Text = "0",
 		TextSize = 28,
@@ -422,11 +415,13 @@ function HUD.Init()
 	moneyBlock.Visible = false
 	moneyBlock.Parent = root
 
+	UIKit.Icon("Coin", 50, { Position = UDim2.fromOffset(0, 6), Parent = moneyBlock })
 	local coinsLabel = UIKit.Label({
 		Name = "Coins",
-		Text = "💰 0",
+		Text = "0",
 		TextSize = 54,
-		Size = UDim2.new(1, 0, 0, 62),
+		Position = UDim2.fromOffset(58, 0),
+		Size = UDim2.new(1, -58, 0, 62),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextColor3 = Color3.fromRGB(90, 235, 110),
 		StrokeThickness = 3,
@@ -448,12 +443,12 @@ function HUD.Init()
 		end,
 	})
 	coinsLabel:GetPropertyChangedSignal("TextBounds"):Connect(function()
-		coinsPlus.Position = UDim2.fromOffset(math.floor(coinsLabel.TextBounds.X / UIKit.GetScale()) + 12, 31)
+		coinsPlus.Position = UDim2.fromOffset(math.floor(coinsLabel.TextBounds.X / UIKit.GetScale()) + 12 + 58, 31)
 	end)
 	local coinsNV = Instance.new("NumberValue")
 	coinsNV.Parent = moneyBlock
 	coinsNV:GetPropertyChangedSignal("Value"):Connect(function()
-		coinsLabel.Text = "💰 " .. UIKit.Commas(math.floor(coinsNV.Value + 0.5))
+		coinsLabel.Text = UIKit.Commas(math.floor(coinsNV.Value + 0.5))
 	end)
 	local coinsShown = -1
 	local function setCoins(value: number)
@@ -473,11 +468,12 @@ function HUD.Init()
 		end
 	end
 
+	UIKit.Icon("Drop", 40, { Position = UDim2.fromOffset(2, 72), Parent = moneyBlock })
 	local tankBar = UIKit.ProgressBar({
-		Size = UDim2.new(0, 280, 0, 44),
-		Position = UDim2.fromOffset(0, 70),
+		Size = UDim2.new(0, 240, 0, 44),
+		Position = UDim2.fromOffset(48, 70),
 		Color = Colors.Primary,
-		Text = "💧 0/0",
+		Text = "0/0",
 		TextSize = 24,
 		Parent = moneyBlock,
 	})
@@ -488,7 +484,7 @@ function HUD.Init()
 		Size = UDim2.new(0, 280, 0, 26),
 		Position = UDim2.fromOffset(0, 122),
 		Color = Color3.fromRGB(150, 215, 255),
-		Text = "🧼 Hold jump to fly",
+		Text = "Hold jump to fly",
 		TextSize = 16,
 		Value = 1,
 		Parent = moneyBlock,
@@ -499,7 +495,7 @@ function HUD.Init()
 		local f = tonumber(Players.LocalPlayer:GetAttribute("JetFuel")) or 1
 		if math.abs(f - lastJet) > 0.02 or (f >= 1 and lastJet < 1) then
 			lastJet = f
-			jetBar.Set(f, if f <= 0.01 then "🧼 Land to refill" else "🧼 Hold jump to fly")
+			jetBar.Set(f, if f <= 0.01 then "Land to refill" else "Hold jump to fly")
 		end
 	end)
 
@@ -625,7 +621,7 @@ function HUD.Init()
 	banner.Parent = root
 
 	local bannerTitle = UIKit.Label({
-		Text = "🧽 Clean every dish! 🧽",
+		Text = "Clean every dish!",
 		Size = UDim2.new(1, 0, 0, 52),
 		TextSize = 40,
 		TextXAlignment = Enum.TextXAlignment.Center,
@@ -693,7 +689,7 @@ function HUD.Init()
 	resultsScale.Parent = resultsFrame
 
 	local _titleLabel = UIKit.Label({
-		Text = "✨ SPARKLING CLEAN! ✨",
+		Text = "SPARKLING CLEAN!",
 		Size = UDim2.new(1, -40, 0, 56),
 		Position = UDim2.new(0, 20, 0, 18),
 		TextSize = 40,
@@ -710,7 +706,7 @@ function HUD.Init()
 		Parent = resultsFrame,
 	})
 	local bestLabel = UIKit.Label({
-		Text = "⭐ NEW BEST!",
+		Text = "NEW BEST!",
 		Size = UDim2.new(1, -40, 0, 26),
 		Position = UDim2.new(0, 20, 0, 108),
 		TextSize = 22,
@@ -731,7 +727,7 @@ function HUD.Init()
 	bubblesRowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 	bubblesRowLayout.Padding = UDim.new(0, 8)
 	bubblesRowLayout.Parent = bubblesRow
-	UIKit.Label({ Text = "🧼", TextSize = 34, Size = UDim2.fromOffset(40, 40), Parent = bubblesRow })
+	UIKit.Icon("Bubble", 38, { LayoutOrder = -1, Parent = bubblesRow })
 	local resultsBubblesLabel = UIKit.Label({
 		Text = "+0",
 		TextSize = 34,
@@ -824,8 +820,12 @@ function HUD.Init()
 		Color = Colors.Good,
 		Parent = resultsFrame,
 		OnClick = function()
+			-- Fade out first so the teleport home is never seen; the cover lifts in the lobby.
+			local Cutscene = require(script.Parent:WaitForChild("Cutscene")) :: any
+			Cutscene.Cover(nil, 6)
 			local result = ClientState.RunRequest("ReturnToLobby")
 			if not result.Ok then
+				Cutscene.Uncover()
 				UIKit.Toast(result.Error or "Couldn't return to the lobby.", "Bad")
 			end
 		end,
@@ -846,9 +846,9 @@ function HUD.Init()
 		if not results then
 			return
 		end
-		local underParText = if results.UnderPar then "  🔥 Under par!" else ""
+		local underParText = if results.UnderPar then "   Under par!" else ""
 		timeLabel.Text = string.format(
-			"⏱ %s   (Par %s)%s",
+			"%s   (Par %s)%s",
 			UIKit.Time(results.TimeSeconds),
 			UIKit.Time(results.ParTime),
 			underParText
@@ -864,7 +864,7 @@ function HUD.Init()
 		end
 		if results.UnlockedLevel then
 			local unlocked = Config.GetLevel(results.UnlockedLevel)
-			unlockedLabel.Text = string.format("🔓 %s unlocked!", tostring(unlocked.Name))
+			unlockedLabel.Text = string.format("%s unlocked!", tostring(unlocked.Name))
 			unlockedLabel.Visible = true
 		else
 			unlockedLabel.Visible = false
@@ -955,8 +955,11 @@ function HUD.Init()
 		Parent = leaveButtonsRow,
 		OnClick = function()
 			UIKit.CloseWindow("LeaveConfirm")
+			local Cutscene = require(script.Parent:WaitForChild("Cutscene")) :: any
+			Cutscene.Cover(nil, 6)
 			local result = ClientState.RunRequest("Leave")
 			if not result.Ok then
+				Cutscene.Uncover()
 				UIKit.Toast(result.Error or "Couldn't leave the run.", "Bad")
 			end
 		end,
@@ -1085,7 +1088,7 @@ function HUD.Init()
 			setTankFull(full)
 			tankBar.Set(
 				if run.TankMax > 0 then run.Tank / run.TankMax else 0,
-				if full then "💧 FULL! Sell at the drain" else string.format("💧 %s / %s", UIKit.Short(run.Tank), UIKit.Short(run.TankMax))
+				if full then "FULL! Sell at the drain" else string.format("%s / %s", UIKit.Short(run.Tank), UIKit.Short(run.TankMax))
 			)
 			updateProgress()
 		else
@@ -1157,6 +1160,7 @@ function HUD.Init()
 	end)
 
 	-- One slow loop drives the run timer and the results countdown; both are cheap 2Hz text updates.
+	local coveredForReturn: number? = nil
 	task.spawn(function()
 		while true do
 			local run = ClientState.Run :: Types.RunState?
@@ -1167,6 +1171,13 @@ function HUD.Init()
 				elseif run.Phase == "Complete" and run.Results then
 					local remaining = math.max(0, run.Results.ReturnAt - Util.Now())
 					countdownLabel.Text = string.format("Returning to lobby in %ds", math.ceil(remaining))
+					-- Fade out just before the server sends everyone home, so that teleport isn't seen
+					-- either (the cover lifts again once we're back in the lobby).
+					if remaining <= 0.9 and coveredForReturn ~= run.Results.ReturnAt then
+						coveredForReturn = run.Results.ReturnAt
+						local Cutscene = require(script.Parent:WaitForChild("Cutscene")) :: any
+						task.spawn(Cutscene.Cover, nil, 5)
+					end
 				end
 			end
 			task.wait(0.5)

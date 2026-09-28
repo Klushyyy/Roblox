@@ -57,7 +57,7 @@ local function textFor(player: Player): (string, string, Color3)
 	local rebirths = (profile and tonumber(profile.Rebirths)) or 0
 	local name = player.DisplayName
 	if rebirths > 0 then
-		name = string.format("✨%d  %s", rebirths, name)
+		name = string.format("R%d  %s", rebirths, name)
 	end
 	local rank = profile and Config.GetRank(profile.Rank)
 	if rank then
@@ -75,10 +75,10 @@ local function updateLeaderstats(player: Player)
 		stats.Name = "leaderstats"
 		stats.Parent = player
 	end
-	local value = stats:FindFirstChild("✨ Rebirths")
+	local value = stats:FindFirstChild("Rebirths")
 	if not value then
 		value = Instance.new("IntValue")
-		value.Name = "✨ Rebirths"
+		value.Name = "Rebirths"
 		value.Parent = stats
 	end
 	local profile = DataService.Get(player)

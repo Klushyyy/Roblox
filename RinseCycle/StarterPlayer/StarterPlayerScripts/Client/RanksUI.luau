@@ -90,7 +90,7 @@ local function renderGems()
 	local meta = ClientState.Meta :: Types.MetaState?
 	local gems = if meta then meta.Gems or 0 else 0
 	local luck = meta ~= nil and meta.Passes.DoubleLuck == true
-	gemsLabel.Text = string.format("You have 💎 %s%s", UIKit.Commas(gems), if luck then "   🍀 x2 Luck!" else "")
+	gemsLabel.Text = string.format("You have %s Gems%s", UIKit.Commas(gems), if luck then "   •   x2 Luck on" else "")
 	UIKit.SetDisabled(rollButton, rolling or gems < Config.RankRoll.Cost)
 	if luckButton then
 		local pass = Config.GetPass("DoubleLuck")
@@ -98,7 +98,7 @@ local function renderGems()
 		local label = luckButton:FindFirstChildWhichIsA("TextLabel", true)
 		if label and pass then
 			ShopUI.WatchPrice(pass, true, function(price)
-				label.Text = string.format("🍀 x2 Luck pass  •  R$ %d", price)
+				label.Text = string.format("x2 Luck pass  •  R$ %d", price)
 			end)
 		end
 	end
@@ -150,7 +150,7 @@ local function renderList()
 			Parent = row,
 		})
 		if equipped then
-			UIKit.Label({ Text = "✅ Yours", TextSize = 18, TextColor3 = Colors.Good, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(96, 36), Parent = row })
+			UIKit.Label({ Text = "Yours", TextSize = 18, TextColor3 = Colors.Good, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(96, 36), Parent = row })
 		end
 	end
 end
@@ -189,7 +189,7 @@ local function roll()
 	spinning = false
 	rolling = false
 	if not result.Ok or not result.Rank then
-		reel.Text = "🎲 Roll again!"
+		reel.Text = "Roll again!"
 		reel.TextColor3 = Colors.Text
 		UIKit.Toast(result.Error or "Couldn't roll right now.", "Bad")
 		renderGems()
@@ -244,7 +244,7 @@ function RanksUI.Init()
 
 	reel = UIKit.Label({
 		Name = "Reel",
-		Text = "🎲 Try your luck!",
+		Text = "Try your luck!",
 		TextSize = 26,
 		Position = UDim2.fromOffset(0, 202),
 		Size = UDim2.new(1, 0, 0, 40),
@@ -253,7 +253,7 @@ function RanksUI.Init()
 	})
 
 	rollButton = UIKit.Button({
-		Text = string.format("🎲 ROLL   💎 %d", Config.RankRoll.Cost),
+		Text = string.format("ROLL  (%d Gems)", Config.RankRoll.Cost),
 		Size = UDim2.new(1, 0, 0, 70),
 		Position = UDim2.fromOffset(0, 252),
 		Color = Colors.Accent,
@@ -273,7 +273,7 @@ function RanksUI.Init()
 	})
 
 	UIKit.Button({
-		Text = "💎 Get more Gems",
+		Text = "Get more Gems",
 		Size = UDim2.new(1, 0, 0, 48),
 		Position = UDim2.fromOffset(0, 364),
 		Color = Colors.Good,
@@ -284,7 +284,7 @@ function RanksUI.Init()
 		end,
 	})
 	luckButton = UIKit.Button({
-		Text = "🍀 x2 Luck pass",
+		Text = "x2 Luck pass",
 		Size = UDim2.new(1, 0, 0, 44),
 		Position = UDim2.fromOffset(0, 418),
 		Color = Color3.fromRGB(90, 190, 110),
@@ -295,7 +295,7 @@ function RanksUI.Init()
 		end,
 	})
 	UIKit.Label({
-		Text = "⚠️ A roll replaces your current rank! Rare+ ranks are twice as likely with x2 Luck.",
+		Text = "A roll replaces your current rank! Rare+ ranks are twice as likely with x2 Luck.",
 		TextSize = 14,
 		TextColor3 = Colors.Warning,
 		TextWrapped = true,

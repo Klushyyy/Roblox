@@ -209,7 +209,7 @@ local function renderLevelList()
 		})
 		local best = bestTime(i)
 		UIKit.Label({
-			Text = if locked then string.format("Clear %s to unlock", Config.GetLevel(i - 1).Name) elseif best then "⏱️ Best " .. UIKit.Time(best) else "Not cleared yet",
+			Text = if locked then string.format("Clear %s to unlock", Config.GetLevel(i - 1).Name) elseif best then "Best " .. UIKit.Time(best) else "Not cleared yet",
 			TextSize = 15,
 			Position = UDim2.fromOffset(10, 6),
 			Size = UDim2.new(1, -20, 0, 20),
@@ -220,7 +220,7 @@ local function renderLevelList()
 		card.Activated:Connect(function()
 			if locked then
 				UIKit.PlaySound("Error")
-				UIKit.Toast("🔒 Clear " .. Config.GetLevel(i - 1).Name .. " first!", "Bad")
+				UIKit.Toast("Clear " .. Config.GetLevel(i - 1).Name .. " first!", "Bad")
 				return
 			end
 			UIKit.PlaySound("Click")
@@ -273,7 +273,7 @@ function renderCreate()
 	privacyRow.Size = UDim2.new(1, -24, 0, 50)
 	privacyRow.Parent = leftCard
 	listLayout(privacyRow, Enum.FillDirection.Horizontal, 10)
-	for _, option in { { "Public", "🌐 PUBLIC", Colors.Primary }, { "Friends", "👥 FRIENDS", Colors.Accent } } do
+	for _, option in { { "Public", "PUBLIC", Colors.Primary }, { "Friends", "FRIENDS", Colors.Accent } } do
 		local key = option[1]
 		UIKit.Button({
 			Text = option[2],
@@ -456,7 +456,7 @@ local function renderWait(party: Types.PartyState)
 		Parent = waitContent,
 	})
 	local status = UIKit.Label({
-		Text = if launching then "Teleporting... 🧼" else "",
+		Text = if launching then "Teleporting..." else "",
 		TextSize = 24,
 		Size = UDim2.new(1, 0, 0, 30),
 		TextColor3 = if launching then Colors.Good else Colors.Text,

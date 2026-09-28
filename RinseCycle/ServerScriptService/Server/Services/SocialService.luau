@@ -32,7 +32,7 @@ local function follows(userId: number, targetId: number): boolean?
 			return HttpService:GetAsync(url)
 		end)
 		if not ok then
-			warn("[SocialService] follow check failed: " .. tostring(body))
+			-- HTTP off or the proxy is down: the caller treats "can't check" as a follow (on trust).
 			return nil
 		end
 		local okJson, data = pcall(function()
@@ -61,7 +61,7 @@ local function settle(player: Player)
 	end
 	if profile.LikePending and not profile.LikeReward and Config.Social.LikeReward then
 		if DataService.GrantSocialReward(player, "Like") then
-			DataService.Notice(player, "👍 Thanks for liking the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!", "Good")
+			DataService.Notice(player, "Thanks for liking the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!", "Good")
 		end
 	end
 	if profile.FollowPending and not profile.FollowReward then
@@ -73,7 +73,7 @@ local function settle(player: Player)
 		-- same trust a Like gets, rather than leave a real follower without their reward.
 		if result ~= false then
 			if DataService.GrantSocialReward(player, "Follow") then
-				DataService.Notice(player, "⭐ Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!", "Good")
+				DataService.Notice(player, "Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!", "Good")
 			end
 		else
 			DataService.SetSocialPending(player, "Follow", false)
@@ -95,20 +95,20 @@ function SocialService.CheckNow(player: Player, kind: string): (boolean, string)
 			return false, "That reward isn't available."
 		end
 		if profile.LikeReward then
-			return false, "You already got this reward. Thank you! 💙"
+			return false, "You already got this reward. Thank you!"
 		end
 		DataService.GrantSocialReward(player, "Like")
-		return true, "👍 Thanks for liking the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!"
+		return true, "Thanks for liking the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!"
 	elseif kind == "Follow" then
 		if profile.FollowReward then
-			return false, "You already got this reward. Thank you! 💙"
+			return false, "You already got this reward. Thank you!"
 		end
 		local result = follows(player.UserId, Config.Social.CreatorUserId)
 		-- Following, or the list can't be read at all (HTTP off, proxy down): pay it, the same trust a
 		-- Like gets, so a real follower is never stuck without their reward.
 		if result ~= false then
 			DataService.GrantSocialReward(player, "Follow")
-			return true, "⭐ Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!"
+			return true, "Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!"
 		end
 		-- Roblox can take a little while to show a new follow: keep it pending so the next join
 		-- checks again by itself.

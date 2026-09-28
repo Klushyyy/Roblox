@@ -571,7 +571,6 @@ local function opts(list: { string }): () -> { { Label: string, Value: string } 
 	end
 end
 
-local giveableItems: { string } = {}
 
 local REASON: Input = { Kind = "text", Placeholder = "Reason (optional)" }
 local DURATION: Input = { Kind = "duration" }
@@ -604,11 +603,8 @@ local COMMANDS: { Command } = ({
 	{ Name = "controlplayer", Icon = "🎮", Label = "Control", Desc = "Move their character with your controls.", Group = "Move", Target = "player" },
 	{ Name = "viewinv", Icon = "🎒", Label = "Inventory", Desc = "See (and remove) the tools they carry.", Group = "Move", Target = "player" },
 	{ Name = "clearinv", Icon = "🗑️", Label = "Clear inventory", Desc = "Removes every tool they carry.", Group = "Move", Target = "player" },
-	{ Name = "give", Icon = "🎁", Label = "Give item", Desc = "Gives a tool from ServerStorage.AdminGiveableItems.", Group = "Move", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = function()
-		return opts(giveableItems)()
-	end } } },
 	-- Game
-	{ Name = "givecoins", Icon = "🪙", Label = "Give coins", Desc = "Coins for their current run.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
+	{ Name = "givecoins", Icon = "💰", Label = "Give coins", Desc = "Coins for their current run.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
 	{ Name = "setbubbles", Icon = "🧼", Label = "Set bubbles", Desc = "Sets their Bubbles to an amount.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
 	{ Name = "setgems", Icon = "💎", Label = "Set gems", Desc = "Sets their Gems to an amount.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
 	{ Name = "givepet", Icon = "🐾", Label = "Give pet", Desc = "Adds a pet to their pets.", Group = "Game", Target = "player", Inputs = {
@@ -700,7 +696,6 @@ local function buildPanel(info: any)
 		allowed[string.lower(tostring(name))] = true
 	end
 	canRemoveLogs = info.CanRemoveLogs == true
-	giveableItems = info.GiveableItems or {}
 	if panelBuilt then
 		return -- already built; the refreshed allow-list is picked up next time a group is drawn
 	end
@@ -944,7 +939,7 @@ local function buildPanel(info: any)
 		end
 		values[index] = default or ""
 		if #choices == 0 then
-			UIKit.Label({ Text = "Nothing to pick (add Tools to ServerStorage.AdminGiveableItems).", TextSize = 15, TextColor3 = Colors.TextDim, Size = UDim2.new(1, 0, 1, 0), Parent = strip })
+			UIKit.Label({ Text = "Nothing to pick.", TextSize = 15, TextColor3 = Colors.TextDim, Size = UDim2.new(1, 0, 1, 0), Parent = strip })
 		end
 		for i, choice in choices do
 			local b = Instance.new("TextButton")
@@ -1431,7 +1426,7 @@ local function buildPanel(info: any)
 	HUD.AddAdminButton(function()
 		UIKit.ToggleWindow("Admin")
 	end)
-	print("[AdminClient] Admin panel ready")
+
 end
 
 ------------------------------------------------------------------ spectate / control bars (sent only to admins)

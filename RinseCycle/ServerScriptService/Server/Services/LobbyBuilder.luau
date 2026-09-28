@@ -467,7 +467,7 @@ local function buildSpawn(parent: Instance)
 		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromScale(0.8, 0.36),
 		BackgroundTransparency = 1,
-		Text = "🧼\n" .. string.upper(Config.GameName),
+		Text = string.upper(Config.GameName),
 		Font = Enum.Font.FredokaOne,
 		TextScaled = true,
 		TextColor3 = Color3.new(1, 1, 1),
@@ -809,7 +809,7 @@ local function buildDishwasherBuilding(parent: Instance)
 		Size = UDim2.fromScale(0.7, 0.9),
 		Position = UDim2.fromScale(0.03, 0.05),
 		BackgroundTransparency = 1,
-		Text = "🧼 " .. string.upper(Config.GameName),
+		Text = string.upper(Config.GameName),
 		Font = Enum.Font.FredokaOne,
 		TextScaled = true,
 		TextColor3 = Color3.fromRGB(120, 220, 255),
@@ -829,7 +829,7 @@ local function buildDishwasherBuilding(parent: Instance)
 	-- Roof sign.
 	local roofSign = mkPart("Part", { Name = "RoofSign", Size = Vector3.new(44, 9, 1), CFrame = at(0, h + 8.5, HATCHERY_Z - 4) * CFrame.Angles(0, math.pi, 0), Color = Color3.fromRGB(255, 120, 180), Material = Enum.Material.SmoothPlastic }, parent)
 	local signGui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(880, 180), LightInfluence = 0 }, roofSign)
-	local signText = mk("TextLabel", { Size = UDim2.fromScale(0.94, 0.86), Position = UDim2.fromScale(0.03, 0.07), BackgroundTransparency = 1, Text = "🐾 PETS & EGGS 🥚", Font = Enum.Font.FredokaOne, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, signGui)
+	local signText = mk("TextLabel", { Size = UDim2.fromScale(0.94, 0.86), Position = UDim2.fromScale(0.03, 0.07), BackgroundTransparency = 1, Text = "PETS & EGGS", Font = Enum.Font.FredokaOne, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, signGui)
 	mk("UIStroke", { Thickness = 5, Color = Color3.fromRGB(140, 40, 90) }, signText)
 	for _, x in { -18, 18 } do
 		mkPart("Part", { Name = "SignPost", Size = Vector3.new(0.8, 3, 0.8), CFrame = at(x, h + 3.5, HATCHERY_Z - 4), Color = Color3.fromRGB(200, 205, 212), Material = LOW }, parent)
@@ -871,7 +871,7 @@ local function buildSoapShop(parent: Instance)
 	mkPart("Part", decor({ Name = "BottleCap", Shape = Enum.PartType.Cylinder, Size = Vector3.new(3, 5, 5), CFrame = upright(x, 17.5, z - 8), Color = Color3.new(1, 1, 1) }), parent)
 	mkPart("Part", decor({ Name = "PumpNeck", Size = Vector3.new(1.2, 4, 1.2), CFrame = at(x, 20.5, z - 8), Color = Color3.fromRGB(220, 220, 225), Material = Enum.Material.Metal }), parent)
 	mkPart("Part", decor({ Name = "PumpHead", Size = Vector3.new(4.5, 1.2, 1.4), CFrame = at(x + 1.6, 22.8, z - 8), Color = Color3.new(1, 1, 1) }), parent)
-	worldSign(counter, "🧴 SOAP SHOP", 14, 3, 16.5, Color3.fromRGB(255, 235, 140))
+	worldSign(counter, "SOAP SHOP", 14, 3, 16.5, Color3.fromRGB(255, 235, 140))
 	worldSign(counter, "Perks", 8, 1.8, 14, Color3.fromRGB(220, 235, 255))
 
 	local prompt = mk("ProximityPrompt", {
@@ -958,9 +958,9 @@ local function buildEggHatchery(parent: Instance)
 
 		local label = worldSign(pedestal, egg.Name, 10, 2.2, 18.5)
 		label.Name = "EggName"
-		worldSign(pedestal, "🧼 " .. tostring(egg.Cost), 7, 1.8, 16.3, Color3.fromRGB(255, 210, 120))
+		worldSign(pedestal, tostring(egg.Cost) .. " Bubbles", 7, 1.8, 16.3, Color3.fromRGB(255, 210, 120))
 		if egg.RequiredLevel and egg.RequiredLevel > 1 then
-			worldSign(pedestal, "🔒 Level " .. tostring(egg.RequiredLevel), 7, 1.5, 14.4, Color3.fromRGB(255, 160, 160))
+			worldSign(pedestal, "Locked: level " .. tostring(egg.RequiredLevel), 7, 1.5, 14.4, Color3.fromRGB(255, 160, 160))
 		end
 
 		local prompt = mk("ProximityPrompt", {
@@ -984,7 +984,7 @@ local function buildPetStand(parent: Instance)
 		mkPart("Part", decor({ Name = "Roof", Size = Vector3.new(5.2, 0.6, 7), CFrame = at(x + side * 2.1, 10.2, z - 1) * CFrame.Angles(0, 0, math.rad(side * -40)), Color = Color3.fromRGB(120, 60, 50) }), parent)
 	end
 	mkPart("Part", decor({ Name = "DoghouseDoor", Size = Vector3.new(3, 3.6, 0.3), CFrame = at(x, 4.8, z + 2.05), Color = Color3.fromRGB(40, 30, 30) }), parent)
-	worldSign(base, "🐾 PETS", 10, 2.6, 13, Color3.fromRGB(255, 170, 210))
+	worldSign(base, "PETS", 10, 2.6, 13, Color3.fromRGB(255, 170, 210))
 	local prompt = mk("ProximityPrompt", {
 		ActionText = "My Pets",
 		ObjectText = "Pet Stand",
@@ -1160,7 +1160,7 @@ local function buildHowToPlay(parent: Instance, x: number, z: number, faceX: num
 		"Aim at dirt and hold to scrub it off.",
 		"Stand in the drain to sell your dirt for coins.",
 		"Buy better tools and upgrades.",
-		"Clean every dish, earn 🧼 and hatch pets!",
+		"Clean every dish, earn Bubbles and hatch pets!",
 	}
 	for i, text in steps do
 		mk("TextLabel", {
@@ -1304,7 +1304,7 @@ local function buildRebirthFountain(parent: Instance)
 	CollectionService:AddTag(star, "SpinY")
 	mk("PointLight", { Range = 16, Brightness = 0.8, Color = Color3.fromRGB(255, 220, 140) }, star)
 	local base = mkPart("Part", { Name = "FountainPrompt", Size = Vector3.new(1, 1, 1), CFrame = at(x, FLOOR_Y + 2, z), Transparency = 1, CanCollide = false, CastShadow = false }, parent)
-	worldSign(base, "✨ REBIRTH", 10, 2.6, 16, Color3.fromRGB(255, 225, 130))
+	worldSign(base, "REBIRTH", 10, 2.6, 16, Color3.fromRGB(255, 225, 130))
 	local prompt = mk("ProximityPrompt", {
 		ActionText = "Rebirth",
 		ObjectText = "Rebirth Fountain",
@@ -1341,8 +1341,8 @@ local function buildRankShrine(parent: Instance)
 		Speed = NumberRange.new(1, 3),
 		SpreadAngle = Vector2.new(180, 180),
 	}, crystal)
-	worldSign(base, "💎 RANKS", 10, 2.6, 15.5, Color3.fromRGB(230, 190, 255))
-	worldSign(base, string.format("Roll for %d 💎", Config.RankRoll.Cost), 8, 1.6, 13.4, Color3.fromRGB(255, 255, 255))
+	worldSign(base, "RANKS", 10, 2.6, 15.5, Color3.fromRGB(230, 190, 255))
+	worldSign(base, string.format("Roll for %d Gems", Config.RankRoll.Cost), 8, 1.6, 13.4, Color3.fromRGB(255, 255, 255))
 	local prompt = mk("ProximityPrompt", {
 		ActionText = "Roll Ranks",
 		ObjectText = "Rank Shrine",

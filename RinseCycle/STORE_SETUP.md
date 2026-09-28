@@ -7,16 +7,17 @@ Creator Dashboard → your experience → **Monetization**.
 For each item below:
 1. Create it with the **exact name and price** shown.
 2. Copy its ID (the number in its URL).
-3. Open `ReplicatedStorage/Shared/Config.luau`, find the line with the matching **Key**, and replace `Id = 0` with the ID.
-4. Republish the game.
+3. In Studio, open **ReplicatedStorage › Shared › StoreIds** and paste the ID over the `0` next to the matching name.
+4. File › Publish to Roblox.
 
-Items left at `Id = 0` only work as free test items in Studio. They never work in the live game.
+StoreIds is the only script to edit; you don't need a new place file. Items left at `0` say
+"Coming soon!" in the live game and are free test items in Studio.
 
 ### Game Passes (Monetization → Passes), 12 total
 
-These are in `Config.GamePasses`.
+These are the `GamePasses` list in StoreIds.
 
-| # | Key (in Config) | Name | Price (R$) | What it does |
+| # | Key (in StoreIds) | Name | Price (R$) | What it does |
 |---|---|---|---|---|
 | 1 | `DoubleCoins` | 2x Coins | 99 | Double coins from the drain in every run |
 | 2 | `SuperScrub` | Super Scrub | 129 | Scrub 50% faster in every run |
@@ -33,9 +34,9 @@ These are in `Config.GamePasses`.
 
 ### Developer Products (Monetization → Developer Products), 11 total
 
-These are in `Config.DevProducts`. Players can buy them again and again.
+These are the `DevProducts` list in StoreIds. Players can buy them again and again.
 
-| # | Key (in Config) | Name | Price (R$) | Gives |
+| # | Key (in StoreIds) | Name | Price (R$) | Gives |
 |---|---|---|---|---|
 | 1 | `Bubbles1` | Handful of Bubbles | 19 | 250 🧼 |
 | 2 | `Bubbles2` | Bucket of Bubbles | 49 | 800 🧼 |

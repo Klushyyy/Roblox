@@ -67,11 +67,11 @@ local initialized = false
 type Tab = "Perks" | "Passes" | "Bubbles" | "Gems" | "Coins"
 local activeTab: Tab = "Perks"
 local TABS: { { Key: Tab, Text: string, Color: Color3 } } = {
-	{ Key = "Perks", Text = "🧼 Perks", Color = Colors.Bubble },
-	{ Key = "Passes", Text = "👑 Passes", Color = Colors.Good },
-	{ Key = "Bubbles", Text = "🧼 Bubbles", Color = Colors.Primary },
-	{ Key = "Gems", Text = "💎 Gems", Color = Colors.Accent },
-	{ Key = "Coins", Text = "💰 Coins", Color = Colors.Coin },
+	{ Key = "Perks", Text = "Perks", Color = Colors.Bubble },
+	{ Key = "Passes", Text = "Passes", Color = Colors.Good },
+	{ Key = "Bubbles", Text = "Bubbles", Color = Colors.Primary },
+	{ Key = "Gems", Text = "Gems", Color = Colors.Accent },
+	{ Key = "Coins", Text = "Coins", Color = Colors.Coin },
 }
 local tabButtons: { [string]: TextButton } = {}
 
@@ -137,7 +137,7 @@ local function buildPerkRow(def: any): Frame
 		})
 	else
 		UIKit.Button({
-			Text = "🧼 " .. UIKit.Short(cost),
+			Text = UIKit.Short(cost) .. " Bubbles",
 			Size = UDim2.fromOffset(130, 46),
 			AnchorPoint = Vector2.new(1, 0.5),
 			Position = UDim2.new(1, -14, 0.5, 0),
@@ -205,7 +205,7 @@ local function buildPassRow(def: any): Frame
 
 	if owned then
 		UIKit.Label({
-			Text = "✅ Owned",
+			Text = "Owned",
 			TextSize = 18,
 			TextColor3 = Colors.Good,
 			AnchorPoint = Vector2.new(1, 0.5),
@@ -266,7 +266,7 @@ function ShopUI.BuyPass(key: string)
 	-- No Id pasted yet: in Studio this gives the pass free for the test (never in the live game).
 	local result = ClientState.MetaRequest("TestPass", def.Key)
 	if result.Ok then
-		UIKit.Toast(string.format("🧪 Studio test: the %s pass has no ID yet, so you got it free. In the live game this is the Robux prompt.", def.Name), "Info")
+		UIKit.Toast(string.format("Studio test: the %s pass has no ID yet, so you got it free. In the live game this is the Robux prompt.", def.Name), "Info")
 	else
 		UIKit.Toast(result.Error or "Coming soon!", "Info")
 	end
@@ -286,7 +286,7 @@ function ShopUI.GetTool(index: number): Types.RequestResult?
 	if run.Coins < cost and tool.PassKey then
 		local pass = Config.GetPass(tool.PassKey)
 		if pass and not (ClientState.Meta and ClientState.Meta.Passes[tool.PassKey]) then
-			UIKit.Toast(string.format("Need %s 💰 more for the %s - or get it forever!", UIKit.Commas(cost - run.Coins), tool.Name), "Info")
+			UIKit.Toast(string.format("Need %s more coins for the %s - or get it forever!", UIKit.Commas(cost - run.Coins), tool.Name), "Info")
 			ShopUI.BuyPass(tool.PassKey)
 			return nil
 		end
@@ -547,7 +547,7 @@ function ShopUI.Init()
 					if owned and not ownedBefore[key] then
 						local pass = Config.GetPass(key)
 						UIKit.Confetti()
-						UIKit.Toast(string.format("%s %s unlocked!", pass and pass.Icon or "🎉", pass and pass.Name or key), "Good")
+						UIKit.Toast(string.format("%s unlocked!", pass and pass.Name or key), "Good")
 					end
 				end
 			end

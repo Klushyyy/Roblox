@@ -42,6 +42,12 @@ local black: Frame
 local topBar: Frame
 local bottomBar: Frame
 local skipButton: TextButton
+local loadingLabel: TextLabel
+
+-- A plain fade to black that hides teleports: into a run (from the moment your party launches
+-- until the cutscene is ready) and back out to the lobby. Cleared by play() or Uncover().
+local covered = false
+local coverToken = 0
 
 -- Tells the server we're in: the run clock starts with the first player to get past the intro.
 local function reportLoaded()
@@ -97,13 +103,21 @@ local function play(levelIndex: number)
 	playing = true
 	skipRequested = false
 	local camera = Workspace.CurrentCamera
+	-- Usually already black from the party launch (so the teleport in is never seen).
+	local wasCovered = covered
+	covered = false
+	coverToken += 1
 
 	gui.Enabled = true
-	black.BackgroundTransparency = 1
 	topBar.Size = UDim2.new(1, 0, 0, 0)
 	bottomBar.Size = UDim2.new(1, 0, 0, 0)
 	skipButton.Visible = false
-	tweenBlack(0, 0.25)
+	if wasCovered then
+		black.BackgroundTransparency = 0
+	else
+		black.BackgroundTransparency = 1
+		tweenBlack(0, 0.25)
+	end
 
 	local restoreHud = hideHud()
 	setControls(false)
@@ -112,6 +126,7 @@ local function play(levelIndex: number)
 		scene = Scene.Build(levelIndex, SCENE_ORIGIN, Workspace)
 	end)
 	if not ok or not scene or not camera then
+		loadingLabel.Visible = false
 		reportLoaded()
 		restoreHud()
 		setControls(true)
@@ -120,6 +135,7 @@ local function play(levelIndex: number)
 		playing = false
 		return
 	end
+	loadingLabel.Visible = false
 	local oldType, oldFov = camera.CameraType, camera.FieldOfView
 	camera.CameraType = Enum.CameraType.Scriptable
 	scene:Update(0)
@@ -181,6 +197,49 @@ local function play(levelIndex: number)
 	playing = false
 end
 
+-- Fades to black (0.35 s) with an optional line of text, and lifts itself after `timeout` seconds
+-- if nothing else does. Returns once the screen is fully black.
+function Cutscene.Cover(text: string?, timeout: number?)
+	if playing or not gui then
+		return
+	end
+	coverToken += 1
+	local token = coverToken
+	local already = covered and black.BackgroundTransparency < 0.05
+	covered = true
+	gui.Enabled = true
+	loadingLabel.Text = text or ""
+	loadingLabel.Visible = text ~= nil
+	if not already then
+		tweenBlack(0, 0.35)
+	end
+	task.delay(timeout or 12, function()
+		if token == coverToken and covered and not playing then
+			Cutscene.Uncover()
+		end
+	end)
+end
+
+function Cutscene.Uncover()
+	if not covered or playing or not gui then
+		return
+	end
+	coverToken += 1
+	local token = coverToken
+	covered = false
+	loadingLabel.Visible = false
+	UIKit.Tween(black, { BackgroundTransparency = 1 }, 0.45)
+	task.delay(0.5, function()
+		if token == coverToken and not playing and not covered then
+			gui.Enabled = false
+		end
+	end)
+end
+
+function Cutscene.IsCovered(): boolean
+	return covered
+end
+
 function Cutscene.IsPlaying(): boolean
 	return playing
 end
@@ -235,6 +294,17 @@ function Cutscene.Init()
 		OnClick = Cutscene.Skip,
 	})
 	skipButton.ZIndex = 10
+	loadingLabel = UIKit.Label({
+		Name = "Loading",
+		Text = "",
+		TextSize = 34,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(700, 60),
+		Visible = false,
+		ZIndex = 21,
+		Parent = root,
+	})
 	UIKit.LayoutChanged:Connect(function()
 		local safe = UIKit.SafeInsets()
 		skipButton.Position = UDim2.new(1, -(24 + safe.Right), 1, -(24 + safe.Bottom))
@@ -250,6 +320,24 @@ function Cutscene.Init()
 		end
 	end)
 
+	-- Our party is launching: go black now, before the server teleports us into the dishwasher. If
+	-- no run follows (the start failed), the cover lifts again.
+	ClientState.Changed:Connect(function(kind)
+		if kind ~= "Party" then
+			return
+		end
+		local party = ClientState.Party :: Types.PartyState?
+		if party and party.Status == "Launching" and not ClientState.Run then
+			task.spawn(Cutscene.Cover, "Filling the dishwasher...", 20)
+		elseif not party and covered and not playing then
+			task.delay(2, function()
+				if covered and not playing and not ClientState.Run then
+					Cutscene.Uncover()
+				end
+			end)
+		end
+	end)
+
 	-- A new run we're starting from the top: play the cutscene for its level.
 	ClientState.Changed:Connect(function(kind)
 		if kind ~= "Run" then
@@ -258,6 +346,10 @@ function Cutscene.Init()
 		local run = ClientState.Run :: Types.RunState?
 		if not run then
 			lastRunKey = nil
+			-- Back in the lobby: lift the cover the Leave / Back to Lobby buttons put up.
+			if covered then
+				task.delay(0.35, Cutscene.Uncover)
+			end
 			return
 		end
 		local key = tostring(run.ArenaName) .. ":" .. tostring(run.StartedAt)

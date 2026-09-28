@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "0.9.0"
+Config.Version = "1.0.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -38,8 +38,8 @@ Config.Party = {
 	MaxPlayers = 8,
 	Countdown = 15, -- seconds from when the host presses Create until the party teleports
 	LockSeconds = 1.5, -- joins and leaves are refused this close to launch
-	RejoinCooldown = 3, -- seconds before a player who left/was ejected can re-enter a pad
-	PollInterval = 0.2,
+	RejoinCooldown = 0, -- (unused: a pad just left is ignored only until you've stepped out of it)
+	PollInterval = 0.1, -- how often pads look for players stepping in
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -779,14 +779,14 @@ Config.Codes = {
 	BUBBLES = { Gems = 15 },
 } :: { [string]: { Bubbles: number?, Gems: number?, Expires: number? } }
 
--- "🧼 300 + 💎 10"
+-- "300 Bubbles + 10 Gems"
 function Config.RewardText(reward: { Bubbles: number?, Gems: number? }): string
 	local bits = {}
 	if reward.Bubbles and reward.Bubbles &gt; 0 then
-		table.insert(bits, "🧼 " .. reward.Bubbles)
+		table.insert(bits, reward.Bubbles .. " Bubbles")
 	end
 	if reward.Gems and reward.Gems &gt; 0 then
-		table.insert(bits, "💎 " .. reward.Gems)
+		table.insert(bits, reward.Gems .. (if reward.Gems == 1 then " Gem" else " Gems"))
 	end
 	return table.concat(bits, " + ")
 end
@@ -804,7 +804,7 @@ end
 --     set LikeReward to nil to hide the card.)
 ----------------------------------------------------------------------------------------------------
 Config.Social = {
-	GroupId = 0,
+	GroupId = 920260021, -- the Rinse Cycle community
 	CreatorUserId = 2297538363,
 	ProxyDomain = "roproxy.com",
 	GroupReward = { Bubbles = 500, Gems = 25 },
@@ -820,6 +820,33 @@ function Config.GetGroupId(): number
 		return if game.CreatorType == Enum.CreatorType.Group then game.CreatorId else 0
 	end)
 	return if ok and type(id) == "number" then id else 0
+end
+
+-- The IDs pasted into StoreIds (ReplicatedStorage &gt; Shared &gt; StoreIds), the one script to edit
+-- once the passes and products exist on Roblox. A number there replaces the matching Id here.
+do
+	local ok, ids = pcall(function()
+		return require(script.Parent:WaitForChild("StoreIds", 5) :: any)
+	end)
+	if ok and type(ids) == "table" then
+		local function apply(list: { any }, source: any)
+			if type(source) ~= "table" then
+				return
+			end
+			for _, item in list do
+				local id = tonumber(source[item.Key])
+				if id and id &gt; 0 then
+					item.Id = math.floor(id)
+				end
+			end
+		end
+		apply(Config.GamePasses, ids.GamePasses)
+		apply(Config.DevProducts, ids.DevProducts)
+		local group = tonumber(ids.GroupId)
+		if group and group &gt; 0 then
+			Config.Social.GroupId = math.floor(group)
+		end
+	end
 end
 
 return Config</ProtectedString></Properties></Item>
@@ -2063,7 +2090,53 @@ function Remotes.Function(name: string): RemoteFunction
 end
 
 return Remotes</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000008"><Properties><string name="Name">ToolModels</string><ProtectedString name="Source">-- ToolModels: builds a model of each cleaning tool out of primitive parts. Used for the arena's tool
+<Item class="ModuleScript" referent="RBX00000008"><Properties><string name="Name">StoreIds</string><ProtectedString name="Source">--[[
+	STORE IDS - paste your Roblox IDs here. This is the only script you need to edit.
+
+	1. Creator Dashboard &gt; your experience &gt; Monetization &gt; Passes (or Developer Products).
+	2. Create each item below with the same name and price.
+	3. Open it, copy the number from its URL, and paste it over the 0 next to its name.
+	4. File &gt; Publish to Roblox. That's it: the game picks the IDs up on start.
+
+	An item left at 0 says "Coming soon!" in the live game (and is free to "buy" in Studio tests).
+]]
+
+return {
+	-- Your community (group). Players who join it can claim the community reward.
+	GroupId = 920260021,
+
+	-- Game passes (bought once, kept forever).
+	GamePasses = {
+		DoubleCoins = 0,   -- 2x Coins (99 R$)
+		SuperScrub = 0,    -- Super Scrub (129 R$)
+		MegaTank = 0,      -- Mega Tank (149 R$)
+		LuckyCharm = 0,    -- Lucky Charm (99 R$)
+		PetSlots = 0,      -- +2 Pet Slots (149 R$)
+		AutoDrain = 0,     -- Auto Drain (149 R$)
+		DoubleBubbles = 0, -- 2x Bubbles (179 R$)
+		VIP = 0,           -- VIP (199 R$)
+		DoubleLuck = 0,    -- x2 Luck (149 R$)
+		ToolNozzle = 0,    -- Spray Nozzle (49 R$)
+		ToolWasher = 0,    -- Pressure Washer (99 R$)
+		ToolCannon = 0,    -- Foam Cannon (199 R$)
+	},
+
+	-- Developer products (can be bought again and again).
+	DevProducts = {
+		Bubbles1 = 0,      -- Handful of Bubbles (19 R$)
+		Bubbles2 = 0,      -- Bucket of Bubbles (49 R$)
+		Bubbles3 = 0,      -- Tub of Bubbles (99 R$)
+		Bubbles4 = 0,      -- Bathtub Overflow (199 R$)
+		Coins1 = 0,        -- Coin Splash (15 R$)
+		Coins2 = 0,        -- Coin Wave (39 R$)
+		Coins3 = 0,        -- Coin Flood (89 R$)
+		Gems1 = 0,         -- Pouch of Gems (29 R$)
+		Gems2 = 0,         -- Sack of Gems (79 R$)
+		Gems3 = 0,         -- Chest of Gems (199 R$)
+		RestoreStreak = 0, -- Restore Streak (29 R$)
+	},
+}</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000009"><Properties><string name="Name">ToolModels</string><ProtectedString name="Source">-- ToolModels: builds a model of each cleaning tool out of primitive parts. Used for the arena's tool
 -- shelf (anchored, big) and for the tool in a player's hand (welded, small).
 --
 -- ToolModels.Build(toolIndex, scale) -&gt; Model
@@ -2438,7 +2511,7 @@ function ToolModels.HoldOffset(toolIndex: number): CFrame
 end
 
 return ToolModels</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000009"><Properties><string name="Name">Types</string><ProtectedString name="Source">-- Shapes of every table that crosses the network. Annotate with these on both sides, e.g.
+<Item class="ModuleScript" referent="RBX0000000A"><Properties><string name="Name">Types</string><ProtectedString name="Source">-- Shapes of every table that crosses the network. Annotate with these on both sides, e.g.
 --   local state: Types.RunState = { ... }            (server, when building a payload)
 --   local run = ClientState.Run :: Types.RunState?   (client, when reading one)
 -- so the type checker catches a misspelt field on either end.
@@ -2613,7 +2686,7 @@ export type FXSold = {
 }
 
 return {}</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000000A"><Properties><string name="Name">Util</string><ProtectedString name="Source">-- Small helpers shared by server and client.
+<Item class="ModuleScript" referent="RBX0000000B"><Properties><string name="Name">Util</string><ProtectedString name="Source">-- Small helpers shared by server and client.
 
 local Util = {}
 
@@ -2765,9 +2838,9 @@ end
 return Util</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="ServerScriptService" referent="RBX0000000B"><Properties><string name="Name">ServerScriptService</string></Properties>
-<Item class="Folder" referent="RBX0000000C"><Properties><string name="Name">Admin</string></Properties>
-<Item class="Script" referent="RBX0000000D"><Properties><string name="Name">AdminServer</string><bool name="Disabled">false</bool><token name="RunContext">1</token><ProtectedString name="Source">--!nocheck
+<Item class="ServerScriptService" referent="RBX0000000C"><Properties><string name="Name">ServerScriptService</string></Properties>
+<Item class="Folder" referent="RBX0000000D"><Properties><string name="Name">Admin</string></Properties>
+<Item class="Script" referent="RBX0000000E"><Properties><string name="Name">AdminServer</string><bool name="Disabled">false</bool><token name="RunContext">1</token><ProtectedString name="Source">--!nocheck
 -- AdminServer (Script, ServerScriptService.Admin) - Rinse Cycle's admin commands.
 --
 -- Ported from the owner's admin system for another game: the moderation commands (kick/mute/
@@ -2806,24 +2879,30 @@ local DataService = require(GameServices:WaitForChild("DataService"))
 local RoundService = require(GameServices:WaitForChild("RoundService"))
 local PetService = require(GameServices:WaitForChild("PetService"))
 
-print("[AdminServer] Script started")
-
--- Looked up this early (rather than down in the "Give" section where the
--- rest of :give's logic lives) because GetAdminInfo's response, just
--- below, needs the current item names for the client's :give
--- autocomplete - referencing it from there would be a forward reference
--- to a local that doesn't exist yet in Lua's lexical scoping. Create
--- this folder ONCE in Studio's EDIT mode (not while Play-testing) and
--- leave your giveable Tools in it there - anything only added during a
--- Play session doesn't get saved with the place and would need to be
--- re-added every single time the server restarts.
-local giveableItemsFolder = ServerStorage:FindFirstChild("AdminGiveableItems")
-if not giveableItemsFolder then
-	giveableItemsFolder = Instance.new("Folder")
-	giveableItemsFolder.Name = "AdminGiveableItems"
-	giveableItemsFolder.Parent = ServerStorage
-	print("[AdminServer] Created ServerStorage.AdminGiveableItems - empty until Tools are placed there (in EDIT mode, not Play mode) for :give to hand out")
+-- Quiet by default: the Output window only gets one "ready" line and real problems. Set VERBOSE
+-- to true to see every step and every command in the Output window again.
+local VERBOSE = false
+local function log(...)
+	if VERBOSE then
+		print(...)
+	end
 end
+-- True when DataStores can't be used at all (Studio without a published place / API access): every
+-- save and load then fails the same way, so those failures stay silent instead of filling Output.
+local storesOffline = false
+local function dsWarn(message)
+	local text = tostring(message)
+	if text:find("StudioAccessToApisNotAllowed", 1, true) or text:find("publish", 1, true) or text:find("API Services", 1, true) then
+		storesOffline = true
+	end
+	if not storesOffline then
+		warn(text)
+	end
+end
+
+-- :give (hand out Tools from a ServerStorage folder) isn't used in Rinse Cycle and was removed;
+-- this empty stand-in keeps the leftover inventory helpers below working.
+local giveableItemsFolder = Instance.new("Folder")
 
 -- The one account allowed to use the admin system in a live server: EnderBuilda (display name
 -- Klushy). Matched by UserId, with the username as a backup in case the id in Config changes.
@@ -2845,7 +2924,7 @@ local function getStore(name)
 	if ok and store then
 		return store
 	end
-	warn("[AdminServer] DataStore '" .. name .. "' unavailable (" .. tostring(store) .. ") - bans, warnings, mutes and logs won't save this session")
+	storesOffline = true
 	local function unavailable()
 		error("DataStore unavailable", 2)
 	end
@@ -2865,7 +2944,7 @@ local ALL_COMMANDS = {
 	"kill", "jail", "god", "respawn",
 	"spectate", "controlplayer", "invis",
 	"viewinv", "clearinv",
-	"fly", "give",
+	"fly",
 }
 
 -- =====================================================================
@@ -3161,7 +3240,7 @@ local function loadGamepassGrants(player)
 		return GamepassGrantStore:GetAsync(grantKey(player.UserId))
 	end)
 	if not ok then
-		warn("[AdminServer] Failed to load gamepass grants for " .. player.Name .. ": " .. tostring(value))
+		dsWarn("[AdminServer] Failed to load gamepass grants for " .. player.Name .. ": " .. tostring(value))
 		return
 	end
 	if type(value) ~= "table" then return end
@@ -3190,7 +3269,7 @@ local function saveGamepassGrants(player)
 			GamepassGrantStore:SetAsync(grantKey(player.UserId), granted)
 		end)
 		if not ok then
-			warn("[AdminServer] Failed to save gamepass grants for " .. player.Name .. ": " .. tostring(err))
+			dsWarn("[AdminServer] Failed to save gamepass grants for " .. player.Name .. ": " .. tostring(err))
 		end
 	end)
 end
@@ -3239,7 +3318,7 @@ GetAdminInfo.OnServerInvoke = function(player)
 	-- a missing Remove button can be diagnosed from the Output window
 	-- rather than guessed at - the usual cause is the test client not
 	-- being signed in under the owner's username at all.
-	print(string.format(
+	log(string.format(
 		"[AdminServer] GetAdminInfo for '%s' -&gt; tier %s, canRemoveLogs %s",
 		player.Name, tostring(info.Tier), tostring(info.CanRemoveLogs)
 	))
@@ -3473,7 +3552,7 @@ for _, player in ipairs(Players:GetPlayers()) do
 end
 Players.PlayerAdded:Connect(watchOverride)
 
-print("[AdminServer] Remotes ready")
+log("[AdminServer] Remotes ready")
 
 -- =====================================================================
 -- Shared helpers
@@ -3511,7 +3590,7 @@ local function listAllKeys(store)
 		return store:ListKeysAsync()
 	end)
 	if not success then
-		warn("[AdminServer] ListKeysAsync failed: " .. tostring(pages))
+		dsWarn("[AdminServer] ListKeysAsync failed: " .. tostring(pages))
 		return keys
 	end
 	while true do
@@ -3599,7 +3678,7 @@ local function isBanned(userId)
 		banRecordsCache[userIdStr] = data or false
 		return data
 	end
-	warn("[AdminServer] Failed to check ban status for " .. userIdStr .. ": " .. tostring(data))
+	dsWarn("[AdminServer] Failed to check ban status for " .. userIdStr .. ": " .. tostring(data))
 	return nil
 end
 
@@ -3645,7 +3724,7 @@ local function banUser(userId, reason, bannedBy, durationSeconds, waitForPersist
 			BanStore:SetAsync(tostring(userId), data)
 		end)
 		if not success then
-			warn("[AdminServer] Failed to save ban for " .. tostring(userId) .. ": " .. tostring(err))
+			dsWarn("[AdminServer] Failed to save ban for " .. tostring(userId) .. ": " .. tostring(err))
 		end
 	end
 	if waitForPersist then
@@ -3663,7 +3742,7 @@ local function unbanUser(userId)
 			BanStore:RemoveAsync(tostring(userId))
 		end)
 		if not success then
-			warn("[AdminServer] Failed to remove ban for " .. tostring(userId) .. ": " .. tostring(err))
+			dsWarn("[AdminServer] Failed to remove ban for " .. tostring(userId) .. ": " .. tostring(err))
 		end
 	end)
 	return true
@@ -3677,7 +3756,7 @@ do
 		end)
 		banRecordsCache[userIdStr] = (success and data) or false
 	end
-	print("[AdminServer] Ban cache seeded: " .. #keys .. " record(s)")
+	log("[AdminServer] Ban cache seeded: " .. #keys .. " record(s)")
 end
 
 local function buildBanListEntries()
@@ -3782,7 +3861,7 @@ local function saveWarnings(userId, warnings)
 			WarningStore:SetAsync(tostring(userId), warnings)
 		end)
 		if not success then
-			warn("[AdminServer] Failed to save warnings for " .. tostring(userId) .. ": " .. tostring(err))
+			dsWarn("[AdminServer] Failed to save warnings for " .. tostring(userId) .. ": " .. tostring(err))
 		end
 	end)
 	return true
@@ -3796,7 +3875,7 @@ do
 		end)
 		warningRecordsCache[userIdStr] = (success and data) or {}
 	end
-	print("[AdminServer] Warning cache seeded: " .. #keys .. " record(s)")
+	log("[AdminServer] Warning cache seeded: " .. #keys .. " record(s)")
 end
 
 local function buildWarnListEntries()
@@ -3866,7 +3945,7 @@ local function saveMuteData(userId, data, waitForPersist)
 			MuteStore:SetAsync(tostring(userId), data)
 		end)
 		if not success then
-			warn("[AdminServer] Failed to save mute for " .. tostring(userId) .. ": " .. tostring(err))
+			dsWarn("[AdminServer] Failed to save mute for " .. tostring(userId) .. ": " .. tostring(err))
 		end
 	end
 	if waitForPersist then
@@ -3894,7 +3973,7 @@ do
 		end)
 		muteRecordsCache[userIdStr] = (success and data) or false
 	end
-	print("[AdminServer] Mute cache seeded: " .. #keys .. " record(s)")
+	log("[AdminServer] Mute cache seeded: " .. #keys .. " record(s)")
 end
 
 -- Dedups the "you are muted" reminder so a single blocked chat message
@@ -3962,7 +4041,7 @@ local function attachMuteFilter(channel)
 		if not ok then return true end
 		return not blocked
 	end
-	print("[AdminServer] Mute filter attached to " .. channel.Name)
+	log("[AdminServer] Mute filter attached to " .. channel.Name)
 end
 
 -- The real mute: Roblox's own TextSource.CanSend. Every player has one TextSource per chat
@@ -4020,10 +4099,16 @@ end)
 -- :mute never actually blocked anything even though the command itself
 -- reported success.
 task.spawn(function()
-	local textChannels = TextChatService:WaitForChild("TextChannels", 10)
-	if not textChannels then
-		warn("[AdminServer] TextChannels not found - :mute will have no effect")
-		return
+	-- Made by Roblox shortly after start (the place file turns on the modern chat). Waits quietly.
+	local textChannels = TextChatService:FindFirstChild("TextChannels")
+	local waited = 0
+	while not textChannels do
+		task.wait(1)
+		waited += 1
+		textChannels = TextChatService:FindFirstChild("TextChannels")
+		if waited == 60 and not textChannels then
+			warn("[AdminServer] Chat channels still missing after a minute: is Chat &gt; ChatVersion set to TextChatService? :mute needs it")
+		end
 	end
 	local function watchChannel(channel)
 		attachMuteFilter(channel)
@@ -4547,7 +4632,7 @@ do
 		stripLight("CorridorLightB" .. i, CELL_X[i], CORR_MID_Z + 3.5, CELL_W * 0.5)
 	end
 
-	print("[AdminServer] Jail block built (3 cells)")
+	log("[AdminServer] Jail block built (3 cells)")
 end
 
 local jailedUserIds = {}
@@ -5422,7 +5507,7 @@ do
 				nextLogId += 1
 			end
 		end
-		print("[AdminServer] Loaded " .. #commandLog .. " persisted command log entries")
+		log("[AdminServer] Loaded " .. #commandLog .. " persisted command log entries")
 	elseif success then
 		-- [DEBUG] savedLog was nil, not a load failure - either nothing
 		-- has ever been saved under this key yet, or this build of the
@@ -5430,9 +5515,9 @@ do
 		-- before. Printed either way so it's obvious from the Output
 		-- whether persistence is even active, instead of silently
 		-- starting fresh with no visible signal.
-		print("[AdminServer] No persisted command log found (savedLog=" .. tostring(savedLog) .. ") - starting empty")
+		log("[AdminServer] No persisted command log found (savedLog=" .. tostring(savedLog) .. ") - starting empty")
 	else
-		warn("[AdminServer] Failed to load persisted command log: " .. tostring(savedLog))
+		dsWarn("[AdminServer] Failed to load persisted command log: " .. tostring(savedLog))
 	end
 end
 
@@ -5455,9 +5540,9 @@ local function saveCommandLog()
 			-- to tell "persistence is silently failing" apart from
 			-- "persistence is working but the paste in Studio is stale"
 			-- just from the Output log.
-			print("[AdminServer] Command log saved (" .. #commandLog .. " entries)")
+			log("[AdminServer] Command log saved (" .. #commandLog .. " entries)")
 		else
-			warn("[AdminServer] Failed to persist command log: " .. tostring(err))
+			dsWarn("[AdminServer] Failed to persist command log: " .. tostring(err))
 		end
 	end)
 end
@@ -5491,7 +5576,7 @@ do
 		return message
 	end
 	wipeLogs.Parent = ServerStorage
-	print("[AdminServer] Log wipe ready - run game.ServerStorage.WipeCommandLog:Invoke() in the Studio Command Bar (context: Server)")
+	log("[AdminServer] Log wipe ready - run game.ServerStorage.WipeCommandLog:Invoke() in the Studio Command Bar (context: Server)")
 end
 
 -- description is a full, grammatical sentence ("EnderBuilda muted
@@ -5523,7 +5608,7 @@ local function logEntry(adminName, adminTier, commandName, targetName, extra, de
 		table.remove(commandLog, 1)
 	end
 	saveCommandLog()
-	print(string.format(
+	log(string.format(
 		"[AdminServer][LOG] %s used :%s on %s%s",
 		adminName, commandName, targetName or "-",
 		(extra and extra ~= "") and (" (" .. extra .. ")") or ""
@@ -5776,7 +5861,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 			if string.lower(value) == wanted then
 				target:SetAttribute("AdminTierOverride", value)
 				sendFeedback(admin, target.Name .. " is now " .. value .. " (this session only)", false)
-				print("[AdminServer] " .. admin.Name .. " set " .. target.Name .. " to " .. value .. " (Studio, session only)")
+				log("[AdminServer] " .. admin.Name .. " set " .. target.Name .. " to " .. value .. " (Studio, session only)")
 				return
 			end
 		end
@@ -5794,7 +5879,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 		commandLog = {}
 		saveCommandLog()
 		sendFeedback(admin, "Wiped " .. wiped .. " log entries", false)
-		print("[AdminServer] Command log wiped by " .. admin.Name .. " (" .. wiped .. " entries)")
+		log("[AdminServer] Command log wiped by " .. admin.Name .. " (" .. wiped .. " entries)")
 		return
 	end
 
@@ -6062,7 +6147,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 		-- The recipient gets told, with the game's usual celebration toast - only on the way IN.
 		if giving then
 			pcall(function()
-				Remotes.Event("Notify"):FireClient(target, "🎁 You were gifted " .. pass.Icon .. " " .. pass.Name .. "!", "Good")
+				Remotes.Event("Notify"):FireClient(target, "You were gifted " .. pass.Name .. "!", "Good")
 			end)
 		end
 
@@ -6694,11 +6779,11 @@ AdminStopControlling.OnServerEvent:Connect(function(admin)
 	sendFeedback(admin, "Stopped controlling " .. target.Name, false)
 end)
 
-print("[AdminServer] Fully initialised")</ProtectedString></Properties></Item>
+print("[AdminServer] ready" .. (if storesOffline then " (Studio: bans, mutes, warnings and logs are kept for this session only; they save once the place is published with API access on)" else ""))</ProtectedString></Properties></Item>
 </Item>
-<Item class="Folder" referent="RBX0000000E"><Properties><string name="Name">Server</string></Properties>
-<Item class="Folder" referent="RBX0000000F"><Properties><string name="Name">Services</string></Properties>
-<Item class="ModuleScript" referent="RBX00000010"><Properties><string name="Name">ArenaBuilder</string><ProtectedString name="Source">-- ArenaBuilder: builds one dishwasher ("arena") for a run, sitting in a family kitchen, and lays out
+<Item class="Folder" referent="RBX0000000F"><Properties><string name="Name">Server</string></Properties>
+<Item class="Folder" referent="RBX00000010"><Properties><string name="Name">Services</string></Properties>
+<Item class="ModuleScript" referent="RBX00000011"><Properties><string name="Name">ArenaBuilder</string><ProtectedString name="Source">-- ArenaBuilder: builds one dishwasher ("arena") for a run, sitting in a family kitchen, and lays out
 -- the load of dirty dishes inside it. RoundService calls Build(slot, levelIndex, options) once per
 -- run and Destroy(arena) when the run ends; nothing else touches workspace.Arenas directly.
 --
@@ -6943,6 +7028,7 @@ local ROOM_STYLES: { RoomStyle } = {
 		Handle = K.Handle, HandleMat = Enum.Material.Metal,
 		Kick = K.Kick,
 		Lamp = Color3.fromRGB(255, 248, 225),
+		Bench = "Home",
 	},
 	-- 2: Pizzeria: brick walls, black and white floor, steel cabinets, butcher-block counter.
 	{
@@ -6950,23 +7036,25 @@ local ROOM_STYLES: { RoomStyle } = {
 		Wall = Color3.fromRGB(165, 78, 58), WallMat = Enum.Material.Brick,
 		Ceiling = Color3.fromRGB(60, 50, 46),
 		Cabinet = Color3.fromRGB(188, 193, 200), CabinetDoor = Color3.fromRGB(205, 210, 216), CabMat = Enum.Material.Metal,
-		Counter = Color3.fromRGB(176, 124, 78), CounterMat = Enum.Material.Wood,
+		Counter = Color3.fromRGB(200, 204, 210), CounterMat = Enum.Material.Metal,
 		Tile = Color3.fromRGB(245, 245, 240), TileMat = Enum.Material.CeramicTiles,
 		Handle = Color3.fromRGB(60, 60, 66), HandleMat = Enum.Material.Metal,
 		Kick = Color3.fromRGB(40, 40, 44),
 		Lamp = Color3.fromRGB(255, 214, 150),
+		Bench = "Steel",
 	},
 	-- 3: Castle banquet hall: stone, dark wood, gold, a red carpet.
 	{
 		Floor = Color3.fromRGB(128, 122, 116), FloorMat = Enum.Material.Slate,
 		Wall = Color3.fromRGB(150, 144, 136), WallMat = Enum.Material.Cobblestone,
 		Ceiling = Color3.fromRGB(70, 52, 40),
-		Cabinet = Color3.fromRGB(92, 58, 38), CabinetDoor = Color3.fromRGB(112, 72, 46), CabMat = Enum.Material.Wood,
-		Counter = Color3.fromRGB(238, 232, 222), CounterMat = Enum.Material.Marble,
+		Cabinet = Color3.fromRGB(150, 144, 136), CabinetDoor = Color3.fromRGB(112, 72, 46), CabMat = Enum.Material.Cobblestone,
+		Counter = Color3.fromRGB(104, 66, 40), CounterMat = Enum.Material.WoodPlanks,
 		Tile = Color3.fromRGB(120, 112, 104), TileMat = Enum.Material.Slate,
 		Handle = Color3.fromRGB(230, 190, 90), HandleMat = Enum.Material.Metal,
 		Kick = Color3.fromRGB(50, 34, 24),
 		Lamp = Color3.fromRGB(255, 205, 140),
+		Bench = "Stone",
 	},
 }
 
@@ -7026,8 +7114,10 @@ local function buildKitchen(b: Builder, k: RoomStyle)
 	end
 	span(b, "Ceiling", -ROOM_HALF_X, ROOM_HALF_X, fy + ROOM_HEIGHT, fy + ROOM_HEIGHT + 4, ROOM_Z_FRONT, ROOM_Z_BACK, k.Ceiling, nil, shadowless)
 
-	-- Base cabinets either side of the dishwasher, with doors, handles and a toe kick.
+	-- The bench either side of the dishwasher. Same solid body and counter height in every level
+	-- (players run along the top); what it's dressed as depends on the room.
 	local cabFront = -54
+	local bench = k.Bench or "Home"
 	for _, side in { -1, 1 } do
 		local x0, x1 = side * 62, side * ROOM_HALF_X
 		span(b, "Cabinets", x0, x1, fy + 12, COUNTER_TOP_Y - 6, cabFront, ROOM_Z_BACK, k.Cabinet, k.CabMat)
@@ -7037,27 +7127,124 @@ local function buildKitchen(b: Builder, k: RoomStyle)
 		local doorW = width / doors
 		for i = 0, doors - 1 do
 			local cx = side * (62 + doorW * (i + 0.5))
-			box(b, "Drawer", Vector3.new(doorW - 6, 26, 1.5), cx, COUNTER_TOP_Y - 24, cabFront - 0.75, k.CabinetDoor, k.CabMat)
-			box(b, "DrawerHandle", Vector3.new(24, 2.5, 2.5), cx, COUNTER_TOP_Y - 24, cabFront - 2.5, k.Handle, k.HandleMat, noCollide())
-			box(b, "Door", Vector3.new(doorW - 6, 66, 1.5), cx, fy + 12 + 38, cabFront - 0.75, k.CabinetDoor, k.CabMat)
-			box(b, "DoorHandle", Vector3.new(2.5, 20, 2.5), cx + side * -(doorW / 2 - 12), fy + 12 + 55, cabFront - 2.5, k.Handle, k.HandleMat, noCollide())
+			if bench == "Steel" then
+				-- A commercial line: reach-in fridges with glass fronts and long bar handles.
+				local steel = Color3.fromRGB(205, 210, 216)
+				local y0, y1 = fy + 18, COUNTER_TOP_Y - 12
+				box(b, "FridgeDoor", Vector3.new(doorW - 6, y1 - y0, 1.5), cx, (y0 + y1) / 2, cabFront - 0.75, steel, Enum.Material.Metal)
+				local gy0, gy1 = y0 + 30, y1 - 14
+				box(b, "FridgeInside", Vector3.new(doorW - 22, gy1 - gy0, 0.4), cx, (gy0 + gy1) / 2, cabFront - 1.6, Color3.fromRGB(40, 48, 58), nil, noCollide())
+				for shelf = 0, 1 do
+					local sy = gy0 + 6 + shelf * (gy1 - gy0) / 2
+					box(b, "FridgeShelf", Vector3.new(doorW - 24, 1, 0.6), cx, sy - 4, cabFront - 1.9, Color3.fromRGB(180, 190, 200), Enum.Material.Metal, noCollide())
+					local tubs = { Color3.fromRGB(210, 60, 45), Color3.fromRGB(250, 235, 200), Color3.fromRGB(90, 160, 80), Color3.fromRGB(245, 200, 80) }
+					for t = 0, 3 do
+						local tx = cx - (doorW - 30) / 2 + (doorW - 30) * (t + 0.5) / 4
+						box(b, "FridgeTub", Vector3.new(10, 12, 0.6), tx, sy + 3, cabFront - 1.9, tubs[(t + shelf + i) % #tubs + 1], nil, noCollide())
+					end
+				end
+				local glass = box(b, "FridgeGlass", Vector3.new(doorW - 20, gy1 - gy0, 0.4), cx, (gy0 + gy1) / 2, cabFront - 2.3, Color3.fromRGB(200, 230, 245), Enum.Material.Glass, noCollide())
+				glass.Transparency = 0.55
+				box(b, "BarHandle", Vector3.new(2.5, gy1 - gy0, 2.5), cx + side * -(doorW / 2 - 9), (gy0 + gy1) / 2, cabFront - 4, Color3.fromRGB(150, 155, 162), Enum.Material.Metal, noCollide())
+				box(b, "Vent", Vector3.new(doorW - 20, 8, 0.6), cx, y0 + 12, cabFront - 1.8, Color3.fromRGB(70, 74, 80), Enum.Material.DiamondPlate, noCollide())
+				cyl(b, "Foot", 12, 6, cx - doorW / 2 + 8, fy + 6, cabFront + 4, Color3.fromRGB(150, 155, 162), Enum.Material.Metal, noCollide())
+			elseif bench == "Stone" then
+				-- Carved stone arches with oak barrels resting in them.
+				local ay0, ay1 = fy + 18, COUNTER_TOP_Y - 30
+				local aw = doorW - 22
+				box(b, "Alcove", Vector3.new(aw, ay1 - ay0 - aw / 2, 1.2), cx, ay0 + (ay1 - ay0 - aw / 2) / 2, cabFront - 0.6, Color3.fromRGB(34, 28, 24), Enum.Material.Slate, noCollide())
+				local arch = cyl(b, "AlcoveArch", 1.2, aw, cx, ay1 - aw / 2, cabFront - 0.6, Color3.fromRGB(34, 28, 24), Enum.Material.Slate, noCollide())
+				arch.CFrame = footprint(b.origin, cx, ay1 - aw / 2, cabFront - 0.6) * CFrame.Angles(0, math.rad(90), 0)
+				-- A lighter stone ring just behind the dark alcove face (shows as a border round the arch).
+				local rim = cyl(b, "ArchRim", 1.6, aw + 8, cx, ay1 - aw / 2, cabFront - 0.1, Color3.fromRGB(122, 116, 108), Enum.Material.Slate, noCollide())
+				rim.CFrame = footprint(b.origin, cx, ay1 - aw / 2, cabFront - 0.1) * CFrame.Angles(0, math.rad(90), 0)
+				local barrelD = math.min(aw - 8, 52)
+				local by = ay0 + barrelD / 2
+				local barrel = cyl(b, "Barrel", 30, barrelD, cx, by, cabFront - 14, Color3.fromRGB(128, 84, 48), Enum.Material.Wood, noCollide())
+				barrel.CFrame = footprint(b.origin, cx, by, cabFront - 14) * CFrame.Angles(0, math.rad(90), 0)
+				for _, dz in { -9, 9 } do
+					local band = cyl(b, "BarrelBand", 3, barrelD + 1.2, cx, by, cabFront - 14 + dz, Color3.fromRGB(60, 56, 54), Enum.Material.Metal, noCollide())
+					band.CFrame = footprint(b.origin, cx, by, cabFront - 14 + dz) * CFrame.Angles(0, math.rad(90), 0)
+				end
+				local lid = cyl(b, "BarrelLid", 0.6, barrelD - 6, cx, by, cabFront - 29.4, Color3.fromRGB(150, 104, 62), Enum.Material.Wood, noCollide())
+				lid.CFrame = footprint(b.origin, cx, by, cabFront - 29.4) * CFrame.Angles(0, math.rad(90), 0)
+			else
+				box(b, "Drawer", Vector3.new(doorW - 6, 26, 1.5), cx, COUNTER_TOP_Y - 24, cabFront - 0.75, k.CabinetDoor, k.CabMat)
+				box(b, "DrawerHandle", Vector3.new(24, 2.5, 2.5), cx, COUNTER_TOP_Y - 24, cabFront - 2.5, k.Handle, k.HandleMat, noCollide())
+				box(b, "Door", Vector3.new(doorW - 6, 66, 1.5), cx, fy + 12 + 38, cabFront - 0.75, k.CabinetDoor, k.CabMat)
+				box(b, "DoorHandle", Vector3.new(2.5, 20, 2.5), cx + side * -(doorW / 2 - 12), fy + 12 + 55, cabFront - 2.5, k.Handle, k.HandleMat, noCollide())
+			end
 		end
 	end
 
 	-- Countertop across the whole run (including over the dishwasher) with a backsplash.
 	span(b, "Countertop", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, ROOM_Z_BACK, k.Counter, k.CounterMat, shadowless)
+	if bench == "Stone" then
+		-- A thick oak top: a dark front edge under the planks.
+		span(b, "CounterEdge", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y - 12, COUNTER_TOP_Y - 6, cabFront - 6, cabFront - 2, Color3.fromRGB(80, 50, 30), Enum.Material.Wood, noCollide())
+	elseif bench == "Steel" then
+		span(b, "CounterLip", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y - 10, COUNTER_TOP_Y - 6, cabFront - 6, cabFront - 4, Color3.fromRGB(170, 175, 182), Enum.Material.Metal, noCollide())
+	end
 	span(b, "Backsplash", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y, COUNTER_TOP_Y + 70, ROOM_Z_BACK - 1, ROOM_Z_BACK, k.Tile, k.TileMat, noCollide())
 
-	-- Upper cabinets, leaving a gap over the sink area for each room's centrepiece.
+	-- Up the wall, leaving a gap over the sink area for each room's centrepiece.
 	local upperY0, upperY1 = COUNTER_TOP_Y + 120, COUNTER_TOP_Y + 270
 	for _, seg in { { -ROOM_HALF_X, -220 }, { -40, ROOM_HALF_X } } do
-		span(b, "UpperCabinets", seg[1], seg[2], upperY0, upperY1, ROOM_Z_BACK - 40, ROOM_Z_BACK, k.Cabinet, k.CabMat, shadowless)
 		local w = seg[2] - seg[1]
-		local n = math.floor(w / 70)
-		for i = 0, n - 1 do
-			local cx = seg[1] + w / n * (i + 0.5)
-			box(b, "UpperDoor", Vector3.new(w / n - 5, upperY1 - upperY0 - 8, 1.2), cx, (upperY0 + upperY1) / 2, ROOM_Z_BACK - 40.6, k.CabinetDoor, k.CabMat, noCollide())
-			box(b, "UpperHandle", Vector3.new(2.5, 16, 2.5), cx + (w / n / 2 - 10), upperY0 + 16, ROOM_Z_BACK - 42, k.Handle, k.HandleMat, noCollide())
+		if bench == "Steel" then
+			-- Open steel shelving (pizza pans, tins, oil) under a stainless extractor hood.
+			local steel = Color3.fromRGB(196, 200, 206)
+			for level, y in { upperY0 + 10, upperY0 + 90 } do
+				span(b, "WallShelf", seg[1], seg[2], y - 3, y, ROOM_Z_BACK - 28, ROOM_Z_BACK, steel, Enum.Material.Metal, shadowless)
+				for x = seg[1] + 30, seg[2] - 30, 60 do
+					span(b, "ShelfBracket", x - 1.5, x + 1.5, y - 16, y - 3, ROOM_Z_BACK - 24, ROOM_Z_BACK, Color3.fromRGB(150, 155, 162), Enum.Material.Metal, noCollide())
+				end
+				local n = math.floor(w / 34)
+				for i = 0, n - 1 do
+					local x = seg[1] + w * (i + 0.5) / n
+					local kind = (i + level) % 4
+					if kind == 0 then
+						local pan = cyl(b, "PizzaPan", 2, 30, x, y + 15, ROOM_Z_BACK - 8, Color3.fromRGB(150, 155, 162), Enum.Material.Metal, noCollide())
+						pan.CFrame = footprint(b.origin, x, y + 15, ROOM_Z_BACK - 8) * CFrame.Angles(0, math.rad(90), 0)
+					elseif kind == 1 then
+						cyl(b, "TomatoTin", 18, 14, x, y + 9, ROOM_Z_BACK - 14, Color3.fromRGB(210, 50, 40), Enum.Material.Metal, noCollide())
+					elseif kind == 2 then
+						cyl(b, "OilBottle", 26, 9, x, y + 13, ROOM_Z_BACK - 14, Color3.fromRGB(215, 190, 70), Enum.Material.Glass, { CanCollide = false, CastShadow = false, Transparency = 0.2 })
+					else
+						cyl(b, "DoughTub", 14, 20, x, y + 7, ROOM_Z_BACK - 14, Color3.fromRGB(245, 245, 240), nil, noCollide())
+					end
+				end
+			end
+			span(b, "Hood", seg[1], seg[2], upperY1 - 20, upperY1 + 20, ROOM_Z_BACK - 70, ROOM_Z_BACK, steel, Enum.Material.Metal, shadowless)
+			span(b, "HoodLip", seg[1], seg[2], upperY1 - 26, upperY1 - 20, ROOM_Z_BACK - 70, ROOM_Z_BACK - 64, Color3.fromRGB(150, 155, 162), Enum.Material.Metal, noCollide())
+			span(b, "HoodDuct", seg[1] + w / 2 - 30, seg[1] + w / 2 + 30, upperY1 + 20, KITCHEN_FLOOR_Y + ROOM_HEIGHT, ROOM_Z_BACK - 50, ROOM_Z_BACK, steel, Enum.Material.Metal, shadowless)
+		elseif bench == "Stone" then
+			-- Oak plate racks holding pewter plates and tankards.
+			local oak = Color3.fromRGB(92, 58, 38)
+			span(b, "RackBack", seg[1] + 10, seg[2] - 10, upperY0, upperY1, ROOM_Z_BACK - 3, ROOM_Z_BACK, oak, Enum.Material.WoodPlanks, shadowless)
+			for level, y in { upperY0 + 8, upperY0 + 82 } do
+				span(b, "RackShelf", seg[1] + 11, seg[2] - 11, y - 5, y, ROOM_Z_BACK - 22, ROOM_Z_BACK, oak, Enum.Material.Wood, shadowless)
+				span(b, "RackRail", seg[1] + 11, seg[2] - 11, y + 20, y + 23, ROOM_Z_BACK - 22, ROOM_Z_BACK - 19, oak, Enum.Material.Wood, noCollide())
+				local n = math.floor(w / 36)
+				for i = 0, n - 1 do
+					local x = seg[1] + 20 + (w - 40) * (i + 0.5) / n
+					if (i + level) % 3 == 0 then
+						cyl(b, "Tankard", 20, 14, x, y + 10, ROOM_Z_BACK - 12, Color3.fromRGB(150, 152, 158), Enum.Material.Metal, noCollide())
+					else
+						local plate = cyl(b, "PewterPlate", 2, 30, x, y + 16, ROOM_Z_BACK - 8, Color3.fromRGB(165, 168, 174), Enum.Material.Metal, noCollide())
+						plate.CFrame = footprint(b.origin, x, y + 16, ROOM_Z_BACK - 8) * CFrame.Angles(math.rad(8), math.rad(90), 0)
+					end
+				end
+			end
+			span(b, "RackTop", seg[1] + 6, seg[2] - 6, upperY1, upperY1 + 8, ROOM_Z_BACK - 26, ROOM_Z_BACK, oak, Enum.Material.Wood, shadowless)
+		else
+			span(b, "UpperCabinets", seg[1], seg[2], upperY0, upperY1, ROOM_Z_BACK - 40, ROOM_Z_BACK, k.Cabinet, k.CabMat, shadowless)
+			local n = math.floor(w / 70)
+			for i = 0, n - 1 do
+				local cx = seg[1] + w / n * (i + 0.5)
+				box(b, "UpperDoor", Vector3.new(w / n - 5, upperY1 - upperY0 - 8, 1.2), cx, (upperY0 + upperY1) / 2, ROOM_Z_BACK - 40.6, k.CabinetDoor, k.CabMat, noCollide())
+				box(b, "UpperHandle", Vector3.new(2.5, 16, 2.5), cx + (w / n / 2 - 10), upperY0 + 16, ROOM_Z_BACK - 42, k.Handle, k.HandleMat, noCollide())
+			end
 		end
 	end
 end
@@ -7146,7 +7333,7 @@ local function pizzeriaProps(b: Builder, k: RoomStyle)
 
 	-- Neon sign in the gap over the counter.
 	span(b, "SignBack", -214, -46, COUNTER_TOP_Y + 110, COUNTER_TOP_Y + 240, ROOM_Z_BACK - 3, ROOM_Z_BACK, Color3.fromRGB(30, 26, 26), nil, noCollide())
-	roomSign(b, "🍕 PIZZA", Vector3.new(150, 70, 2), -130, COUNTER_TOP_Y + 175, ROOM_Z_BACK - 4, Color3.fromRGB(30, 26, 26), Color3.fromRGB(255, 120, 70), Enum.NormalId.Back)
+	roomSign(b, "PIZZA", Vector3.new(150, 70, 2), -130, COUNTER_TOP_Y + 175, ROOM_Z_BACK - 4, Color3.fromRGB(30, 26, 26), Color3.fromRGB(255, 120, 70), Enum.NormalId.Back)
 	for _, y in { COUNTER_TOP_Y + 132, COUNTER_TOP_Y + 218 } do
 		span(b, "NeonStrip", -200, -60, y - 1.5, y + 1.5, ROOM_Z_BACK - 6, ROOM_Z_BACK - 4, Color3.fromRGB(255, 90, 60), Enum.Material.Neon, noCollide())
 	end
@@ -7711,7 +7898,7 @@ local function buildLifts(b: Builder, theme)
 		sign(p, label, 12, 2.6, 7)
 	end
 	for _, lift in LIFTS do
-		pad("BubbleLift", lift.from, lift.to, "⬆️ Bubble Lift", TOP_RACK_Y)
+		pad("BubbleLift", lift.from, lift.to, "Bubble Lift", TOP_RACK_Y)
 	end
 end
 
@@ -7721,7 +7908,7 @@ local function buildDrain(b: Builder, theme): Vector3
 	ring:SetAttribute("SpinSpeed", 2.4)
 	CollectionService:AddTag(ring, "SpinY")
 	local post = box(b, "DrainSign", Vector3.new(0.6, 0.6, 0.6), DRAIN_POS.X, 1, DRAIN_POS.Z, Color3.new(1, 1, 1), nil, { Transparency = 1, CanCollide = false })
-	sign(post, "🌀 DRAIN\nstand here to sell", 16, 5, 8, Color3.fromRGB(150, 230, 255))
+	sign(post, "DRAIN\nstand here to sell", 16, 5, 8, Color3.fromRGB(150, 230, 255))
 	return worldPoint(b.origin, DRAIN_POS.X, 0, DRAIN_POS.Z)
 end
 
@@ -7805,7 +7992,7 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 
 	-- Sign across the top.
 	local _, headerGui = signBoard(b, "ShopSign", Vector3.new(z1 - z0 - 4, 4, 0.5), worldPoint(b.origin, x1 - 0.5, topY + 2.6, (z0 + z1) / 2), toPlayers, theme.Accent)
-	guiText(headerGui, "Title", "🧽 TOOL SHOP  •  any tool, any order", UDim2.fromScale(0.03, 0.1), UDim2.fromScale(0.94, 0.8), Color3.new(1, 1, 1))
+	guiText(headerGui, "Title", "TOOL SHOP  •  any tool, any order", UDim2.fromScale(0.03, 0.1), UDim2.fromScale(0.94, 0.8), Color3.new(1, 1, 1))
 
 	-- Every tool you can buy stands on the waist-high shelf (easy to reach and read from the door).
 	-- Spots run from the front of the unit to the back.
@@ -7862,11 +8049,11 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 		stroke.Color = tool.Color
 		stroke.Parent = bg
 		guiText(card, "Title", tool.Icon .. " " .. tool.Name, UDim2.fromScale(0.05, 0.06), UDim2.fromScale(0.9, 0.46), Color3.new(1, 1, 1))
-		guiText(card, "Price", "💰 " .. Format.Short(cost), UDim2.fromScale(0.05, 0.5), UDim2.fromScale(0.9, 0.44), Color3.fromRGB(255, 210, 60))
+		guiText(card, "Price", Format.Short(cost) .. " coins", UDim2.fromScale(0.05, 0.5), UDim2.fromScale(0.9, 0.44), Color3.fromRGB(255, 210, 60))
 
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = "Buy"
-		prompt.ObjectText = string.format("%s  💰%s", tool.Name, Format.Short(cost))
+		prompt.ObjectText = string.format("%s  (%s coins)", tool.Name, Format.Short(cost))
 		prompt.HoldDuration = 0
 		prompt.RequiresLineOfSight = false
 		prompt.MaxActivationDistance = 14
@@ -8008,7 +8195,16 @@ end
 function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeScale: number, GoldenChance: number, HpScale: number? }): any
 	assert(type(slot) == "number", "ArenaBuilder.Build: slot must be a number")
 	local level = Config.GetLevel(levelIndex)
-	local theme = level.Theme
+	-- The dishwasher is the same machine in every level (one steel tub, white racks, blue glow);
+	-- only the room around it changes. The level's own theme still colours the dishes.
+	local dishTheme = level.Theme
+	local theme = setmetatable({
+		Tub = Color3.fromRGB(172, 178, 187),
+		Rack = Color3.fromRGB(235, 240, 245),
+		Metal = Color3.fromRGB(190, 195, 200),
+		Accent = Color3.fromRGB(80, 170, 255),
+		Light = Color3.fromRGB(215, 235, 255),
+	}, { __index = dishTheme }) :: any
 	local origin = ArenaBuilder.SlotOrigin(slot)
 	local rng = Random.new()
 	local grimeScale = (options and options.GrimeScale) or 1
@@ -8075,7 +8271,7 @@ function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeSc
 			end
 			for i = 1, math.min(wantCount, #slots) do
 				local cf = dishFrame(origin, kind, slots[i], rng)
-				local dish = DishFactory.BuildDish(kind, cf, theme, rng)
+				local dish = DishFactory.BuildDish(kind, cf, dishTheme, rng)
 				dish.Parent = dishesFolder
 
 				nextId += 1
@@ -8130,7 +8326,7 @@ function ArenaBuilder.Destroy(arena: any)
 end
 
 return ArenaBuilder</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000011"><Properties><string name="Name">Characters</string><ProtectedString name="Source">-- Character helpers shared by every server service: collision groups, teleporting,
+<Item class="ModuleScript" referent="RBX00000012"><Properties><string name="Name">Characters</string><ProtectedString name="Source">-- Character helpers shared by every server service: collision groups, teleporting,
 -- walk speed that survives respawns, and "where should this player respawn".
 
 local Players = game:GetService("Players")
@@ -8316,7 +8512,7 @@ function Characters.AddRespawnResolver(resolver: (Player) -&gt; CFrame?)
 end
 
 return Characters</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000012"><Properties><string name="Name">DataService</string><ProtectedString name="Source">-- DataService: every player's permanent profile (Bubbles, perks, pets, unlocks, best times, stats).
+<Item class="ModuleScript" referent="RBX00000013"><Properties><string name="Name">DataService</string><ProtectedString name="Source">-- DataService: every player's permanent profile (Bubbles, perks, pets, unlocks, best times, stats).
 --
 -- Life of a profile:
 --   join     -&gt; a Session is created and loaded in the background. The load is one UpdateAsync that
@@ -8601,7 +8797,7 @@ end
 local function setOffline(value: boolean, reason: string?)
 	offline = value
 	if value then
-		warn("[DataService] Offline mode: progress will not be saved (" .. tostring(reason) .. ")")
+		print("[DataService] Studio test: progress isn't saved (" .. tostring(reason) .. ")")
 	end
 	openLatch(detection)
 end
@@ -9665,7 +9861,7 @@ function DataService.Rebirth(player: Player): (boolean, string?)
 	end
 	local cost = Config.RebirthCost(profile.Rebirths)
 	if profile.Bubbles &lt; cost then
-		return false, string.format("You need %s 🧼 to rebirth.", Format.Commas(cost))
+		return false, string.format("You need %s Bubbles to rebirth.", Format.Commas(cost))
 	end
 	profile.Rebirths += 1
 	profile.RebirthReady = false
@@ -9809,7 +10005,7 @@ function DataService.RecordClear(player: Player, levelIndex: number, seconds: nu
 	if levelIndex == #Config.Levels and not profile.RebirthReady then
 		profile.RebirthReady = true
 		-- A few seconds later, so it lands after the results screen.
-		task.delay(6, queueNotice, session, "✨ Every level is clean! Visit the Rebirth Fountain in the lobby to Rebirth.", "Good")
+		task.delay(6, queueNotice, session, "Every level is clean! Visit the Rebirth Fountain in the lobby to Rebirth.", "Good")
 	end
 
 	-- Unlocks and best times are the progress players care most about: write them soon.
@@ -9854,7 +10050,7 @@ function DataService.CanSave(player: Player): boolean
 end
 
 return DataService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000013"><Properties><string name="Name">DishFactory</string><ProtectedString name="Source">-- DishFactory: builds one dish (plate/bowl/cup/glass/fork/knife/spoon/pan/pot) and covers a built
+<Item class="ModuleScript" referent="RBX00000014"><Properties><string name="Name">DishFactory</string><ProtectedString name="Source">-- DishFactory: builds one dish (plate/bowl/cup/glass/fork/knife/spoon/pan/pot) and covers a built
 -- dish in dirt spots that sit on its real, raycast-checked surfaces.
 --
 -- Everything here works in the dish's own "anchor" frame: `cf` (a CFrame passed to BuildDish) whose
@@ -10899,7 +11095,7 @@ function DishFactory.Sparkle(dish: Model)
 end
 
 return DishFactory</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000014"><Properties><string name="Name">LeaderboardService</string><ProtectedString name="Source">-- Lobby leaderboards: "Fastest Clean" (one page per level; players flip pages with the arrows) and
+<Item class="ModuleScript" referent="RBX00000015"><Properties><string name="Name">LeaderboardService</string><ProtectedString name="Source">-- Lobby leaderboards: "Fastest Clean" (one page per level; players flip pages with the arrows) and
 -- "Most Dishes Cleaned".
 --
 --   * OrderedDataStores: RinseCycle_Fastest_L&lt;n&gt; holds best times in tenths of a second (ascending,
@@ -11095,7 +11291,7 @@ local function drawTimes()
 	for i, page in pages do
 		local level = Config.Levels[i]
 		if level then
-			page.Title.Text = string.format("⏱️ Fastest: %s %s", level.Icon, level.Name)
+			page.Title.Text = string.format("Fastest: %s", level.Name)
 			drawRows(page.List, timesTop[i] or {}, formatTenths, "No clears yet!")
 		end
 	end
@@ -11107,7 +11303,7 @@ local function drawDishes()
 		return
 	end
 	local board = lobby.Boards.Dishes
-	board.Title.Text = "🍽️ Most Dishes Cleaned"
+	board.Title.Text = "Most Dishes Cleaned"
 	drawRows(board.List, dishesTop, Format.Commas, "No dishes cleaned yet!")
 end
 
@@ -11264,7 +11460,7 @@ function LeaderboardService.Start()
 end
 
 return LeaderboardService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000015"><Properties><string name="Name">LobbyBuilder</string><ProtectedString name="Source">-- LobbyBuilder: builds the entire lobby world at boot. Nothing here is an uploaded asset: every part
+<Item class="ModuleScript" referent="RBX00000016"><Properties><string name="Name">LobbyBuilder</string><ProtectedString name="Source">-- LobbyBuilder: builds the entire lobby world at boot. Nothing here is an uploaded asset: every part
 -- is a primitive. The layout is deliberately compact (you can cross it in a few seconds):
 --
 --                         [ giant dishwasher building + title ]
@@ -11733,7 +11929,7 @@ local function buildSpawn(parent: Instance)
 		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromScale(0.8, 0.36),
 		BackgroundTransparency = 1,
-		Text = "🧼\n" .. string.upper(Config.GameName),
+		Text = string.upper(Config.GameName),
 		Font = Enum.Font.FredokaOne,
 		TextScaled = true,
 		TextColor3 = Color3.new(1, 1, 1),
@@ -12075,7 +12271,7 @@ local function buildDishwasherBuilding(parent: Instance)
 		Size = UDim2.fromScale(0.7, 0.9),
 		Position = UDim2.fromScale(0.03, 0.05),
 		BackgroundTransparency = 1,
-		Text = "🧼 " .. string.upper(Config.GameName),
+		Text = string.upper(Config.GameName),
 		Font = Enum.Font.FredokaOne,
 		TextScaled = true,
 		TextColor3 = Color3.fromRGB(120, 220, 255),
@@ -12095,7 +12291,7 @@ local function buildDishwasherBuilding(parent: Instance)
 	-- Roof sign.
 	local roofSign = mkPart("Part", { Name = "RoofSign", Size = Vector3.new(44, 9, 1), CFrame = at(0, h + 8.5, HATCHERY_Z - 4) * CFrame.Angles(0, math.pi, 0), Color = Color3.fromRGB(255, 120, 180), Material = Enum.Material.SmoothPlastic }, parent)
 	local signGui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(880, 180), LightInfluence = 0 }, roofSign)
-	local signText = mk("TextLabel", { Size = UDim2.fromScale(0.94, 0.86), Position = UDim2.fromScale(0.03, 0.07), BackgroundTransparency = 1, Text = "🐾 PETS &amp; EGGS 🥚", Font = Enum.Font.FredokaOne, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, signGui)
+	local signText = mk("TextLabel", { Size = UDim2.fromScale(0.94, 0.86), Position = UDim2.fromScale(0.03, 0.07), BackgroundTransparency = 1, Text = "PETS &amp; EGGS", Font = Enum.Font.FredokaOne, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, signGui)
 	mk("UIStroke", { Thickness = 5, Color = Color3.fromRGB(140, 40, 90) }, signText)
 	for _, x in { -18, 18 } do
 		mkPart("Part", { Name = "SignPost", Size = Vector3.new(0.8, 3, 0.8), CFrame = at(x, h + 3.5, HATCHERY_Z - 4), Color = Color3.fromRGB(200, 205, 212), Material = LOW }, parent)
@@ -12137,7 +12333,7 @@ local function buildSoapShop(parent: Instance)
 	mkPart("Part", decor({ Name = "BottleCap", Shape = Enum.PartType.Cylinder, Size = Vector3.new(3, 5, 5), CFrame = upright(x, 17.5, z - 8), Color = Color3.new(1, 1, 1) }), parent)
 	mkPart("Part", decor({ Name = "PumpNeck", Size = Vector3.new(1.2, 4, 1.2), CFrame = at(x, 20.5, z - 8), Color = Color3.fromRGB(220, 220, 225), Material = Enum.Material.Metal }), parent)
 	mkPart("Part", decor({ Name = "PumpHead", Size = Vector3.new(4.5, 1.2, 1.4), CFrame = at(x + 1.6, 22.8, z - 8), Color = Color3.new(1, 1, 1) }), parent)
-	worldSign(counter, "🧴 SOAP SHOP", 14, 3, 16.5, Color3.fromRGB(255, 235, 140))
+	worldSign(counter, "SOAP SHOP", 14, 3, 16.5, Color3.fromRGB(255, 235, 140))
 	worldSign(counter, "Perks", 8, 1.8, 14, Color3.fromRGB(220, 235, 255))
 
 	local prompt = mk("ProximityPrompt", {
@@ -12224,9 +12420,9 @@ local function buildEggHatchery(parent: Instance)
 
 		local label = worldSign(pedestal, egg.Name, 10, 2.2, 18.5)
 		label.Name = "EggName"
-		worldSign(pedestal, "🧼 " .. tostring(egg.Cost), 7, 1.8, 16.3, Color3.fromRGB(255, 210, 120))
+		worldSign(pedestal, tostring(egg.Cost) .. " Bubbles", 7, 1.8, 16.3, Color3.fromRGB(255, 210, 120))
 		if egg.RequiredLevel and egg.RequiredLevel &gt; 1 then
-			worldSign(pedestal, "🔒 Level " .. tostring(egg.RequiredLevel), 7, 1.5, 14.4, Color3.fromRGB(255, 160, 160))
+			worldSign(pedestal, "Locked: level " .. tostring(egg.RequiredLevel), 7, 1.5, 14.4, Color3.fromRGB(255, 160, 160))
 		end
 
 		local prompt = mk("ProximityPrompt", {
@@ -12250,7 +12446,7 @@ local function buildPetStand(parent: Instance)
 		mkPart("Part", decor({ Name = "Roof", Size = Vector3.new(5.2, 0.6, 7), CFrame = at(x + side * 2.1, 10.2, z - 1) * CFrame.Angles(0, 0, math.rad(side * -40)), Color = Color3.fromRGB(120, 60, 50) }), parent)
 	end
 	mkPart("Part", decor({ Name = "DoghouseDoor", Size = Vector3.new(3, 3.6, 0.3), CFrame = at(x, 4.8, z + 2.05), Color = Color3.fromRGB(40, 30, 30) }), parent)
-	worldSign(base, "🐾 PETS", 10, 2.6, 13, Color3.fromRGB(255, 170, 210))
+	worldSign(base, "PETS", 10, 2.6, 13, Color3.fromRGB(255, 170, 210))
 	local prompt = mk("ProximityPrompt", {
 		ActionText = "My Pets",
 		ObjectText = "Pet Stand",
@@ -12426,7 +12622,7 @@ local function buildHowToPlay(parent: Instance, x: number, z: number, faceX: num
 		"Aim at dirt and hold to scrub it off.",
 		"Stand in the drain to sell your dirt for coins.",
 		"Buy better tools and upgrades.",
-		"Clean every dish, earn 🧼 and hatch pets!",
+		"Clean every dish, earn Bubbles and hatch pets!",
 	}
 	for i, text in steps do
 		mk("TextLabel", {
@@ -12570,7 +12766,7 @@ local function buildRebirthFountain(parent: Instance)
 	CollectionService:AddTag(star, "SpinY")
 	mk("PointLight", { Range = 16, Brightness = 0.8, Color = Color3.fromRGB(255, 220, 140) }, star)
 	local base = mkPart("Part", { Name = "FountainPrompt", Size = Vector3.new(1, 1, 1), CFrame = at(x, FLOOR_Y + 2, z), Transparency = 1, CanCollide = false, CastShadow = false }, parent)
-	worldSign(base, "✨ REBIRTH", 10, 2.6, 16, Color3.fromRGB(255, 225, 130))
+	worldSign(base, "REBIRTH", 10, 2.6, 16, Color3.fromRGB(255, 225, 130))
 	local prompt = mk("ProximityPrompt", {
 		ActionText = "Rebirth",
 		ObjectText = "Rebirth Fountain",
@@ -12607,8 +12803,8 @@ local function buildRankShrine(parent: Instance)
 		Speed = NumberRange.new(1, 3),
 		SpreadAngle = Vector2.new(180, 180),
 	}, crystal)
-	worldSign(base, "💎 RANKS", 10, 2.6, 15.5, Color3.fromRGB(230, 190, 255))
-	worldSign(base, string.format("Roll for %d 💎", Config.RankRoll.Cost), 8, 1.6, 13.4, Color3.fromRGB(255, 255, 255))
+	worldSign(base, "RANKS", 10, 2.6, 15.5, Color3.fromRGB(230, 190, 255))
+	worldSign(base, string.format("Roll for %d Gems", Config.RankRoll.Cost), 8, 1.6, 13.4, Color3.fromRGB(255, 255, 255))
 	local prompt = mk("ProximityPrompt", {
 		ActionText = "Roll Ranks",
 		ObjectText = "Rank Shrine",
@@ -12755,7 +12951,7 @@ function LobbyBuilder.GetSpawnCFrame(): CFrame
 end
 
 return LobbyBuilder</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000016"><Properties><string name="Name">MarketService</string><ProtectedString name="Source">-- MarketService: Robux purchases.
+<Item class="ModuleScript" referent="RBX00000017"><Properties><string name="Name">MarketService</string><ProtectedString name="Source">-- MarketService: Robux purchases.
 --
 -- Game passes (Config.GamePasses, only entries with Id ~= 0):
 --   * When a profile loads, ownership is checked with UserOwnsGamePassAsync and recorded with
@@ -13090,7 +13286,7 @@ function MarketService.Start()
 end
 
 return MarketService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000017"><Properties><string name="Name">NameTags</string><ProtectedString name="Source">-- NameTags: the overhead tag every player wears: their name (with a ✨N badge once they've
+<Item class="ModuleScript" referent="RBX00000018"><Properties><string name="Name">NameTags</string><ProtectedString name="Source">-- NameTags: the overhead tag every player wears: their name (with a ✨N badge once they've
 -- rebirthed) and their rank underneath in its rarity colour ("🧽 Trainee" until they roll one).
 --
 -- Sizing is what makes or breaks overhead GUIs, so the rules are:
@@ -13149,7 +13345,7 @@ local function textFor(player: Player): (string, string, Color3)
 	local rebirths = (profile and tonumber(profile.Rebirths)) or 0
 	local name = player.DisplayName
 	if rebirths &gt; 0 then
-		name = string.format("✨%d  %s", rebirths, name)
+		name = string.format("R%d  %s", rebirths, name)
 	end
 	local rank = profile and Config.GetRank(profile.Rank)
 	if rank then
@@ -13167,10 +13363,10 @@ local function updateLeaderstats(player: Player)
 		stats.Name = "leaderstats"
 		stats.Parent = player
 	end
-	local value = stats:FindFirstChild("✨ Rebirths")
+	local value = stats:FindFirstChild("Rebirths")
 	if not value then
 		value = Instance.new("IntValue")
-		value.Name = "✨ Rebirths"
+		value.Name = "Rebirths"
 		value.Parent = stats
 	end
 	local profile = DataService.Get(player)
@@ -13249,7 +13445,7 @@ function NameTags.Init()
 end
 
 return NameTags</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000018"><Properties><string name="Name">PartyService</string><ProtectedString name="Source">-- Party pads: walk-in matchmaking in the lobby. One party per pad, fully server-authoritative.
+<Item class="ModuleScript" referent="RBX00000019"><Properties><string name="Name">PartyService</string><ProtectedString name="Source">-- Party pads: walk-in matchmaking in the lobby. One party per pad, fully server-authoritative.
 --
 --   * A poll loop (Config.Party.PollInterval) tests every free player's HumanoidRootPart against each
 --     pad's Zone box, in the Zone's own space so rotated pads work.
@@ -13305,8 +13501,8 @@ local FLOOR_COLORS = {
 	Full = Color3.fromRGB(255, 165, 60), -- orange: full, or launching
 }
 local PRIVACY_TEXT = {
-	Public = "🌐 Public",
-	Friends = "👥 Friends Only",
+	Public = "Public",
+	Friends = "Friends Only",
 }
 local IDLE_TITLE = "Party Pad"
 local IDLE_STATUS = "Touch to create a party"
@@ -13376,6 +13572,14 @@ local memberConns: { [Player]: { RBXScriptConnection } } = {}
 local pendingJoin: { [Player]: boolean } = {} -- friends check in flight: the poll skips them
 local launching: { [Player]: boolean } = {} -- handed to StartRound, which hasn't returned yet
 local cooldownUntil: { [Player]: number } = {} -- os.clock() before which they can't enter a pad
+-- Just sent out of a pad (Back, ejected, cancelled): that pad is ignored for them until the poll
+-- sees them outside it once. No timer, so walking straight back in starts a new party at once, but
+-- a character still reporting its old spot right after the teleport can't re-trigger it.
+local mustLeave: { [Player]: { Pad: any, Since: number } } = {}
+local MUST_LEAVE_MAX = 4 -- seconds: if the teleport out somehow never lands, stop waiting
+-- The character's own late position updates can put it back in the pad for a moment right after the
+-- teleport out, so "outside" only counts once this long has passed.
+local MUST_LEAVE_SETTLE = 0.6
 local lastPutBack: { [Player]: number } = {}
 local actionWindow: { [Player]: { Start: number, Count: number } } = {}
 -- friendCache[candidate][hostUserId] = the answer to candidate:IsFriendsWithAsync(hostUserId)
@@ -13689,7 +13893,7 @@ local function releaseMember(party: Party, player: Player, mode: ReleaseMode)
 	player:SetAttribute("InParty", false)
 	releaseGroup(player)
 	if mode == "Exit" then
-		cooldownUntil[player] = os.clock() + PARTY.RejoinCooldown
+		mustLeave[player] = { Pad = party.Pad, Since = os.clock() }
 		if not isInRun(player) then
 			teleport(player, party.Pad.Info.Exit)
 		end
@@ -13715,7 +13919,7 @@ local function promoteHost(party: Party)
 	end
 	party.Host = newHost
 	party.Level = math.clamp(party.Level, 1, unlockedOf(newHost))
-	notify(newHost, "👑 You're the party host now!", "Good")
+	notify(newHost, "You're the party host now!", "Good")
 end
 
 local function removeMember(player: Player, mode: ReleaseMode, message: string?)
@@ -13769,6 +13973,7 @@ local function joinParty(party: Party, player: Player)
 	local slot = freeSlot(party)
 	party.Slots[player] = slot
 	cooldownUntil[player] = nil
+	mustLeave[player] = nil
 	lastPutBack[player] = os.clock()
 
 	Characters.SetGroup(player, Characters.Groups.PartyMember)
@@ -13815,7 +14020,7 @@ end
 
 -- Pushes a free player out the front of a pad they may not join.
 local function eject(player: Player, pad: Pad, message: string)
-	cooldownUntil[player] = os.clock() + PARTY.RejoinCooldown
+	mustLeave[player] = { Pad = pad, Since = os.clock() }
 	teleport(player, pad.Info.Exit)
 	notify(player, message, "Bad")
 end
@@ -13906,7 +14111,7 @@ function admit(player: Player, pad: Pad)
 		return
 	end
 	if inLockWindow(party) then
-		eject(player, pad, "🚀 That party is launching! Try another pad.")
+		eject(player, pad, "That party is launching! Try another pad.")
 		return
 	end
 	if #party.Members &gt;= party.MaxPlayers then
@@ -13919,7 +14124,7 @@ function admit(player: Player, pad: Pad)
 			startFriendCheck(player, pad, party)
 			return
 		elseif not isFriend then
-			eject(player, pad, "👥 Friends only!")
+			eject(player, pad, "Friends only!")
 			return
 		end
 	end
@@ -13960,6 +14165,9 @@ local function launch(party: Party)
 
 	local level = party.Level
 	task.spawn(function()
+		-- Give every member's screen time to fade to black (Cutscene.Cover on "Launching") before
+		-- anyone is moved, so the teleport into the dishwasher is never seen.
+		task.wait(0.4)
 		-- StartRound yields while it builds the dishwasher. Pass a copy: it's RoundService's now.
 		local ok, started, err = pcall(RoundService.StartRound, table.clone(roster), level)
 		for _, member in roster do
@@ -14093,9 +14301,18 @@ local function tick()
 			local root = Characters.GetRoot(player)
 			if root then
 				local position = root.Position
+				local leaving = mustLeave[player]
+				if leaving then
+					local zone = leaving.Pad.Info.Zone
+					local settled = clock - leaving.Since &gt; MUST_LEAVE_SETTLE
+					if not zone.Parent or (settled and not isInsideZone(zone, position)) or clock - leaving.Since &gt; MUST_LEAVE_MAX then
+						mustLeave[player] = nil
+						leaving = nil
+					end
+				end
 				for _, pad in pads do
 					local zone = pad.Info.Zone
-					if zone.Parent and isInsideZone(zone, position) then
+					if zone.Parent and (not leaving or leaving.Pad ~= pad) and isInsideZone(zone, position) then
 						admit(player, pad)
 						break
 					end
@@ -14146,7 +14363,7 @@ local function onPartyAction(player: Player, action: any, value: any)
 			return
 		end
 		if level &gt; unlockedOf(player) then
-			notify(player, "🔒 That level is still locked!", "Bad")
+			notify(player, "That level is still locked!", "Bad")
 			return
 		end
 		if not isInteger(max) or max &lt; 1 or max &gt; MAX_PLAYERS then
@@ -14186,7 +14403,7 @@ local function onPartyAction(player: Player, action: any, value: any)
 			return
 		end
 		if value &gt; unlockedOf(player) then
-			notify(player, "🔒 That level is still locked!", "Bad")
+			notify(player, "That level is still locked!", "Bad")
 			return
 		end
 		party.Level = value
@@ -14213,6 +14430,7 @@ local function onPlayerRemoving(player: Player)
 	pendingJoin[player] = nil
 	launching[player] = nil
 	cooldownUntil[player] = nil
+	mustLeave[player] = nil
 	lastPutBack[player] = nil
 	actionWindow[player] = nil
 	friendCache[player] = nil
@@ -14308,7 +14526,7 @@ function PartyService.RemovePlayer(player: Player)
 end
 
 return PartyService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000019"><Properties><string name="Name">PetService</string><ProtectedString name="Source">-- PetService: pet inventory (Hatch / Equip / Unequip / EquipBest / Delete), the EquippedPets
+<Item class="ModuleScript" referent="RBX0000001A"><Properties><string name="Name">PetService</string><ProtectedString name="Source">-- PetService: pet inventory (Hatch / Equip / Unequip / EquipBest / Delete), the EquippedPets
 -- folders clients render from, and the pet auto-clean loop inside runs.
 --
 --   * Every inventory op validates everything first, then writes the profile with no yield in
@@ -15036,7 +15254,7 @@ local function hatch(player: Player, eggId: any, count: any): Types.RequestResul
 	end
 	local cost = egg.Cost * count
 	if (tonumber(profile.Bubbles) or 0) &lt; cost then
-		return fail(string.format("Not enough Bubbles! You need %s 🧼.", Format.Commas(cost)))
+		return fail(string.format("Not enough Bubbles! You need %s.", Format.Commas(cost)))
 	end
 
 	-- Roll first: after the payment below, nothing can fail.
@@ -15417,7 +15635,7 @@ function PetService.Start()
 end
 
 return PetService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001A"><Properties><string name="Name">RoundService</string><ProtectedString name="Source">-- RoundService: owns every run (one party inside one dishwasher).
+<Item class="ModuleScript" referent="RBX0000001B"><Properties><string name="Name">RoundService</string><ProtectedString name="Source">-- RoundService: owns every run (one party inside one dishwasher).
 --
 -- A run's life:
 --   StartRound  -&gt; claim an arena slot, ArenaBuilder.Build (yields), index the grime, create a
@@ -15977,14 +16195,14 @@ local function retireGrime(run: Run, part: BasePart, entry: GrimeEntry, cleaner:
 		local gems = if entry.Golden then Config.Gems.GoldenDrop elseif rng:NextNumber() &lt; Config.Gems.DropChance then 1 else 0
 		if gems &gt; 0 then
 			safe(DataService.AddGems, rewardPlayer, gems)
-			notify(rewardPlayer, string.format("💎 You found %d Gem%s!", gems, if gems == 1 then "" else "s"), "Good")
+			notify(rewardPlayer, string.format("You found %d Gem%s!", gems, if gems == 1 then "" else "s"), "Good")
 		end
 
 		if entry.Golden then
 			local range = R.GoldenBubbles
 			bubbles = rng:NextInteger(range[1], range[2]) * run.Level
 			safe(DataService.AddBubbles, rewardPlayer, bubbles, "GoldenGrime")
-			local text = if fromPet then "✨ Your pet found golden dirt! +%d 🧼" else "✨ Golden dirt! +%d 🧼"
+			local text = if fromPet then "Your pet found golden dirt! +%d Bubbles" else "Golden dirt! +%d Bubbles"
 			notify(rewardPlayer, string.format(text, bubbles), "Good")
 		end
 	end
@@ -16146,7 +16364,7 @@ local function popRemaining(run: Run)
 		table.insert(entries, entry)
 	end
 	for member in run.Players do
-		notify(member, "🧼 The last few spots washed away on their own!", "Info")
+		notify(member, "The last few spots washed away on their own!", "Info")
 	end
 	for i, entry in entries do
 		if not entry.Dead and run.Phase == "Playing" and not run.Ended then
@@ -17144,7 +17362,7 @@ function RoundService.Start()
 end
 
 return RoundService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001B"><Properties><string name="Name">ShopService</string><ProtectedString name="Source">-- ShopService: owns the MetaRequest RemoteFunction (permanent purchases and pet management).
+<Item class="ModuleScript" referent="RBX0000001C"><Properties><string name="Name">ShopService</string><ProtectedString name="Source">-- ShopService: owns the MetaRequest RemoteFunction (permanent purchases and pet management).
 --
 --   "BuyPerk"   (perkId)                     handled here: price from Config.PerkCost, pay with
 --                                            DataService.SpendBubbles, level up, push MetaState, and
@@ -17288,7 +17506,7 @@ local function buyPerk(player: Player, value: any): Types.RequestResult
 		return fail(perk.Name .. " is maxed out!")
 	end
 	if profile.Bubbles &lt; cost then
-		return fail("You need " .. Format.Short(cost - profile.Bubbles) .. " more 🧼")
+		return fail("You need " .. Format.Short(cost - profile.Bubbles) .. " more Bubbles")
 	end
 	if not DataService.SpendBubbles(player, cost) then
 		return fail("Not enough Bubbles!")
@@ -17383,7 +17601,7 @@ local function rollRank(player: Player, _value: any): Types.RequestResult
 		return fail(ERR_LOADING)
 	end
 	if profile.Gems &lt; cost then
-		return fail(string.format("You need %d 💎 to roll!", cost))
+		return fail(string.format("You need %d Gems to roll!", cost))
 	end
 	if not DataService.SpendGems(player, cost) then
 		return fail(ERR_GENERIC)
@@ -17420,7 +17638,7 @@ local function rebirth(player: Player, _value: any): Types.RequestResult
 	local notify = Remotes.Event("Notify")
 	for _, other in Players:GetPlayers() do
 		if other ~= player then
-			notify:FireClient(other, string.format("✨ %s just reached Rebirth %d!", player.DisplayName, count), "Good")
+			notify:FireClient(other, string.format("%s just reached Rebirth %d!", player.DisplayName, count), "Good")
 		end
 	end
 	return { Ok = true }
@@ -17479,7 +17697,7 @@ local function claimGroup(player: Player, _value: any): Types.RequestResult
 		return fail(ERR_LOADING)
 	end
 	if profile.GroupReward then
-		return fail("You already got this reward. Thanks for joining! 💙")
+		return fail("You already got this reward. Thanks for joining!")
 	end
 	if not inGroup(player, groupId) then
 		return fail("Join the community first, then claim!")
@@ -17583,7 +17801,7 @@ function ShopService.Start()
 end
 
 return ShopService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001C"><Properties><string name="Name">SocialService</string><ProtectedString name="Source">-- SocialService: settles the Follow / Like rewards (Config.Social) when a player joins.
+<Item class="ModuleScript" referent="RBX0000001D"><Properties><string name="Name">SocialService</string><ProtectedString name="Source">-- SocialService: settles the Follow / Like rewards (Config.Social) when a player joins.
 --
 -- The Free Rewards window's buttons check straight away (CheckNow). A follow Roblox can't show us
 -- yet stays pending and is checked again automatically on the next join:
@@ -17617,7 +17835,7 @@ local function follows(userId: number, targetId: number): boolean?
 			return HttpService:GetAsync(url)
 		end)
 		if not ok then
-			warn("[SocialService] follow check failed: " .. tostring(body))
+			-- HTTP off or the proxy is down: the caller treats "can't check" as a follow (on trust).
 			return nil
 		end
 		local okJson, data = pcall(function()
@@ -17646,7 +17864,7 @@ local function settle(player: Player)
 	end
 	if profile.LikePending and not profile.LikeReward and Config.Social.LikeReward then
 		if DataService.GrantSocialReward(player, "Like") then
-			DataService.Notice(player, "👍 Thanks for liking the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!", "Good")
+			DataService.Notice(player, "Thanks for liking the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!", "Good")
 		end
 	end
 	if profile.FollowPending and not profile.FollowReward then
@@ -17658,7 +17876,7 @@ local function settle(player: Player)
 		-- same trust a Like gets, rather than leave a real follower without their reward.
 		if result ~= false then
 			if DataService.GrantSocialReward(player, "Follow") then
-				DataService.Notice(player, "⭐ Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!", "Good")
+				DataService.Notice(player, "Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!", "Good")
 			end
 		else
 			DataService.SetSocialPending(player, "Follow", false)
@@ -17680,20 +17898,20 @@ function SocialService.CheckNow(player: Player, kind: string): (boolean, string)
 			return false, "That reward isn't available."
 		end
 		if profile.LikeReward then
-			return false, "You already got this reward. Thank you! 💙"
+			return false, "You already got this reward. Thank you!"
 		end
 		DataService.GrantSocialReward(player, "Like")
-		return true, "👍 Thanks for liking the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!"
+		return true, "Thanks for liking the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!"
 	elseif kind == "Follow" then
 		if profile.FollowReward then
-			return false, "You already got this reward. Thank you! 💙"
+			return false, "You already got this reward. Thank you!"
 		end
 		local result = follows(player.UserId, Config.Social.CreatorUserId)
 		-- Following, or the list can't be read at all (HTTP off, proxy down): pay it, the same trust a
 		-- Like gets, so a real follower is never stuck without their reward.
 		if result ~= false then
 			DataService.GrantSocialReward(player, "Follow")
-			return true, "⭐ Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!"
+			return true, "Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!"
 		end
 		-- Roblox can take a little while to show a new follow: keep it pending so the next join
 		-- checks again by itself.
@@ -17717,7 +17935,7 @@ function SocialService.Start() end
 
 return SocialService</ProtectedString></Properties></Item>
 </Item>
-<Item class="Script" referent="RBX0000001D"><Properties><string name="Name">Main</string><bool name="Disabled">false</bool><token name="RunContext">1</token><ProtectedString name="Source">-- Rinse Cycle server entry point. Builds the world, then starts every service in order.
+<Item class="Script" referent="RBX0000001E"><Properties><string name="Name">Main</string><bool name="Disabled">false</bool><token name="RunContext">1</token><ProtectedString name="Source">-- Rinse Cycle server entry point. Builds the world, then starts every service in order.
 -- Each service module exposes Init() (set up state and remote handlers, no long yields)
 -- and Start() (spawn loops). See DESIGN.md for what each one owns.
 
@@ -17753,8 +17971,8 @@ local function step(name: string, fn: () -&gt; ())
 	local ok, err = xpcall(fn, debug.traceback)
 	if not ok then
 		warn(string.format("[%s] %s FAILED:\n%s", Config.GameName, name, tostring(err)))
-	else
-		print(string.format("[%s] %s ok (%.2fs)", Config.GameName, name, os.clock() - started))
+	elseif os.clock() - started &gt; 5 then
+		print(string.format("[%s] %s took %.1fs", Config.GameName, name, os.clock() - started))
 	end
 end
 
@@ -17822,10 +18040,10 @@ end
 print(string.format("[%s] v%s server ready", Config.GameName, Config.Version))</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="StarterPlayer" referent="RBX0000001E"><Properties><string name="Name">StarterPlayer</string></Properties>
-<Item class="StarterPlayerScripts" referent="RBX0000001F"><Properties><string name="Name">StarterPlayerScripts</string></Properties>
-<Item class="Folder" referent="RBX00000020"><Properties><string name="Name">Client</string></Properties>
-<Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">BubbleJets</string><ProtectedString name="Source">-- BubbleJets: inside a run, hold jump while in the air to fly up on a jet of soap bubbles.
+<Item class="StarterPlayer" referent="RBX0000001F"><Properties><string name="Name">StarterPlayer</string></Properties>
+<Item class="StarterPlayerScripts" referent="RBX00000020"><Properties><string name="Name">StarterPlayerScripts</string></Properties>
+<Item class="Folder" referent="RBX00000021"><Properties><string name="Name">Client</string></Properties>
+<Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">BubbleJets</string><ProtectedString name="Source">-- BubbleJets: inside a run, hold jump while in the air to fly up on a jet of soap bubbles.
 -- Fuel (a few seconds) refills while you stand on something. The HUD shows the fuel bar from the
 -- LocalPlayer's "JetFuel" attribute (0..1), so this module owns no UI.
 --
@@ -17948,7 +18166,7 @@ function BubbleJets.Init()
 end
 
 return BubbleJets</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">Bubbles</string><ProtectedString name="Source">-- Bubbles: pooled, client-only 3D soap bubbles. Every bubble is an anchored ForceField sphere (the
+<Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">Bubbles</string><ProtectedString name="Source">-- Bubbles: pooled, client-only 3D soap bubbles. Every bubble is an anchored ForceField sphere (the
 -- shimmering, see-through film with a bright rim) plus a tiny glowing glint that always sits on
 -- the camera-facing, upper-left side, like a real reflection.
 --
@@ -18161,7 +18379,7 @@ function Bubbles.Init()
 end
 
 return Bubbles</ProtectedString></Properties></Item>
-<Item class="LocalScript" referent="RBX00000023"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
+<Item class="LocalScript" referent="RBX00000024"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
 -- Each module exposes Init(); anything that fails is reported without stopping the others.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18220,7 +18438,7 @@ step("Effects", Effects.Init)
 step("BubbleJets", BubbleJets.Init)
 step("HoldPose", HoldPose.Init)
 step("WaterFX", WaterFX.Init)</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
+<Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
 -- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
 -- Changed instead of each hooking the remotes themselves.
 
@@ -18342,7 +18560,7 @@ function ClientState.LocalPlayer(): Player
 end
 
 return ClientState</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">Cutscene</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">Cutscene</string><ProtectedString name="Source">--[[
 	Cutscene - plays the run-start cutscene (CutsceneScene) when your party's dishwasher starts.
 
 	  * Fades to black, builds the scene far from everything (client-only parts, so each player sees
@@ -18386,6 +18604,12 @@ local black: Frame
 local topBar: Frame
 local bottomBar: Frame
 local skipButton: TextButton
+local loadingLabel: TextLabel
+
+-- A plain fade to black that hides teleports: into a run (from the moment your party launches
+-- until the cutscene is ready) and back out to the lobby. Cleared by play() or Uncover().
+local covered = false
+local coverToken = 0
 
 -- Tells the server we're in: the run clock starts with the first player to get past the intro.
 local function reportLoaded()
@@ -18441,13 +18665,21 @@ local function play(levelIndex: number)
 	playing = true
 	skipRequested = false
 	local camera = Workspace.CurrentCamera
+	-- Usually already black from the party launch (so the teleport in is never seen).
+	local wasCovered = covered
+	covered = false
+	coverToken += 1
 
 	gui.Enabled = true
-	black.BackgroundTransparency = 1
 	topBar.Size = UDim2.new(1, 0, 0, 0)
 	bottomBar.Size = UDim2.new(1, 0, 0, 0)
 	skipButton.Visible = false
-	tweenBlack(0, 0.25)
+	if wasCovered then
+		black.BackgroundTransparency = 0
+	else
+		black.BackgroundTransparency = 1
+		tweenBlack(0, 0.25)
+	end
 
 	local restoreHud = hideHud()
 	setControls(false)
@@ -18456,6 +18688,7 @@ local function play(levelIndex: number)
 		scene = Scene.Build(levelIndex, SCENE_ORIGIN, Workspace)
 	end)
 	if not ok or not scene or not camera then
+		loadingLabel.Visible = false
 		reportLoaded()
 		restoreHud()
 		setControls(true)
@@ -18464,6 +18697,7 @@ local function play(levelIndex: number)
 		playing = false
 		return
 	end
+	loadingLabel.Visible = false
 	local oldType, oldFov = camera.CameraType, camera.FieldOfView
 	camera.CameraType = Enum.CameraType.Scriptable
 	scene:Update(0)
@@ -18525,6 +18759,49 @@ local function play(levelIndex: number)
 	playing = false
 end
 
+-- Fades to black (0.35 s) with an optional line of text, and lifts itself after `timeout` seconds
+-- if nothing else does. Returns once the screen is fully black.
+function Cutscene.Cover(text: string?, timeout: number?)
+	if playing or not gui then
+		return
+	end
+	coverToken += 1
+	local token = coverToken
+	local already = covered and black.BackgroundTransparency &lt; 0.05
+	covered = true
+	gui.Enabled = true
+	loadingLabel.Text = text or ""
+	loadingLabel.Visible = text ~= nil
+	if not already then
+		tweenBlack(0, 0.35)
+	end
+	task.delay(timeout or 12, function()
+		if token == coverToken and covered and not playing then
+			Cutscene.Uncover()
+		end
+	end)
+end
+
+function Cutscene.Uncover()
+	if not covered or playing or not gui then
+		return
+	end
+	coverToken += 1
+	local token = coverToken
+	covered = false
+	loadingLabel.Visible = false
+	UIKit.Tween(black, { BackgroundTransparency = 1 }, 0.45)
+	task.delay(0.5, function()
+		if token == coverToken and not playing and not covered then
+			gui.Enabled = false
+		end
+	end)
+end
+
+function Cutscene.IsCovered(): boolean
+	return covered
+end
+
 function Cutscene.IsPlaying(): boolean
 	return playing
 end
@@ -18579,6 +18856,17 @@ function Cutscene.Init()
 		OnClick = Cutscene.Skip,
 	})
 	skipButton.ZIndex = 10
+	loadingLabel = UIKit.Label({
+		Name = "Loading",
+		Text = "",
+		TextSize = 34,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(700, 60),
+		Visible = false,
+		ZIndex = 21,
+		Parent = root,
+	})
 	UIKit.LayoutChanged:Connect(function()
 		local safe = UIKit.SafeInsets()
 		skipButton.Position = UDim2.new(1, -(24 + safe.Right), 1, -(24 + safe.Bottom))
@@ -18594,6 +18882,24 @@ function Cutscene.Init()
 		end
 	end)
 
+	-- Our party is launching: go black now, before the server teleports us into the dishwasher. If
+	-- no run follows (the start failed), the cover lifts again.
+	ClientState.Changed:Connect(function(kind)
+		if kind ~= "Party" then
+			return
+		end
+		local party = ClientState.Party :: Types.PartyState?
+		if party and party.Status == "Launching" and not ClientState.Run then
+			task.spawn(Cutscene.Cover, "Filling the dishwasher...", 20)
+		elseif not party and covered and not playing then
+			task.delay(2, function()
+				if covered and not playing and not ClientState.Run then
+					Cutscene.Uncover()
+				end
+			end)
+		end
+	end)
+
 	-- A new run we're starting from the top: play the cutscene for its level.
 	ClientState.Changed:Connect(function(kind)
 		if kind ~= "Run" then
@@ -18602,6 +18908,10 @@ function Cutscene.Init()
 		local run = ClientState.Run :: Types.RunState?
 		if not run then
 			lastRunKey = nil
+			-- Back in the lobby: lift the cover the Leave / Back to Lobby buttons put up.
+			if covered then
+				task.delay(0.35, Cutscene.Uncover)
+			end
 			return
 		end
 		local key = tostring(run.ArenaName) .. ":" .. tostring(run.StartedAt)
@@ -18619,7 +18929,7 @@ function Cutscene.Init()
 end
 
 return Cutscene</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">CutsceneScene</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">CutsceneScene</string><ProtectedString name="Source">--[[
 	CutsceneScene - the set, actors and timeline for the run-start cutscene (played by Cutscene).
 
 	The story (no words, just implied): a family finishes a meal, Mum stacks the dirty plates,
@@ -19325,7 +19635,7 @@ function Scene:Destroy()
 end
 
 return Scene</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">DailyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">DailyUI</string><ProtectedString name="Source">--[[
 	DailyUI - the daily reward calendar (🎁 Daily button on the left; it also pops up by itself once
 	per session when a reward is waiting).
 
@@ -19370,7 +19680,7 @@ function DailyUI.Ready(): boolean
 end
 
 local function rewardText(reward): string
-	return string.format("%s %s", if reward.Kind == "Gems" then "💎" else "🧼", UIKit.Commas(reward.Amount))
+	return string.format("%s %s", UIKit.Commas(reward.Amount), if reward.Kind == "Gems" then "Gems" else "Bubbles")
 end
 
 local function clock(seconds: number): string
@@ -19412,10 +19722,10 @@ local function render()
 		if isNext then
 			UIKit.Stroke(card, Color3.fromRGB(255, 230, 120), 3)
 		end
-		UIKit.Label({ Text = if day == #Config.DailyRewards then "Day 7 🎉" else "Day " .. day, TextSize = 18, Size = UDim2.new(1, 0, 0, 26), Position = UDim2.fromOffset(0, 8), Parent = card })
+		UIKit.Label({ Text = if day == #Config.DailyRewards then "Day 7" else "Day " .. day, TextSize = 18, Size = UDim2.new(1, 0, 0, 26), Position = UDim2.fromOffset(0, 8), Parent = card })
 		UIKit.Label({ Text = if reward.Kind == "Gems" then "💎" else "🧼", TextSize = 38, Size = UDim2.new(1, 0, 0, 44), Position = UDim2.fromOffset(0, 36), Stroke = false, Parent = card })
 		UIKit.Label({ Text = UIKit.Commas(reward.Amount), TextSize = 20, Size = UDim2.new(1, 0, 0, 24), Position = UDim2.fromOffset(0, 82), Parent = card })
-		UIKit.Label({ Text = if claimed then "✅" else "", TextSize = 18, Size = UDim2.new(1, 0, 0, 20), Position = UDim2.fromOffset(0, 106), Parent = card })
+		UIKit.Label({ Text = if claimed then "Claimed" else "", TextSize = 18, Size = UDim2.new(1, 0, 0, 20), Position = UDim2.fromOffset(0, 106), Parent = card })
 	end
 	if ready then
 		footer.Text = string.format("Day %d is ready: %s!", upcoming, rewardText(Config.DailyRewards[upcoming]))
@@ -19423,7 +19733,7 @@ local function render()
 		UIKit.SetButtonColor(claimButton, Colors.Good)
 	else
 		footer.Text = string.format("Next up: Day %d (%s)", upcoming, rewardText(Config.DailyRewards[upcoming]))
-		claimButton.Text = "⏳ " .. clock(meta.DailyReadyAt - now())
+		claimButton.Text = "Next in " .. clock(meta.DailyReadyAt - now())
 		UIKit.SetButtonColor(claimButton, Colors.Disabled)
 	end
 	-- Missed a day with a streak worth saving: offer to restore it.
@@ -19446,7 +19756,7 @@ local function claim()
 	end
 	UIKit.PlaySound("Sparkle")
 	UIKit.Confetti(50)
-	UIKit.Toast(string.format("🎁 Day %d: %s!", result.Day or 1, result.Message or ""), "Good")
+	UIKit.Toast(string.format("Day %d: %s!", result.Day or 1, result.Message or ""), "Good")
 	render()
 end
 
@@ -19487,7 +19797,7 @@ function DailyUI.Init()
 	})
 	local restore = Config.GetProduct("RestoreStreak")
 	restoreButton = UIKit.Button({
-		Text = "🔥 Restore Streak",
+		Text = "Restore Streak",
 		Size = UDim2.fromOffset(320, 48),
 		Position = UDim2.new(0.5, 0, 0, 262),
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -19497,13 +19807,13 @@ function DailyUI.Init()
 		Parent = content,
 		OnClick = function()
 			if ShopUI.BuyProduct("RestoreStreak") then
-				UIKit.Toast("🔥 Streak restored! Claim your reward.", "Good")
+				UIKit.Toast("Streak restored! Claim your reward.", "Good")
 			end
 		end,
 	})
 	if restore then
 		ShopUI.WatchPrice(restore, false, function(price)
-			restoreButton.Text = string.format("🔥 Restore Streak  (R$ %d)", price)
+			restoreButton.Text = string.format("Restore Streak  (R$ %d)", price)
 		end)
 	end
 	UIKit.RegisterWindow("Daily", {
@@ -19544,7 +19854,7 @@ function DailyUI.Init()
 end
 
 return DailyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
+<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
 -- numbers, dish/sale celebrations), CollectionService-driven decoration (spinning arms, lift
 -- pads), the drain guide beam, remaining-dirt sparkle markers, prompt routing (windows and the
 -- in-arena tool shop), and a little lobby ambience.
@@ -19706,9 +20016,9 @@ local function onCleaned(data: Types.FXCleaned)
 	UIKit.PlaySound("Pop", 0.95 + comboCount * 0.03)
 
 	if data.By == LocalPlayer.UserId then
-		billboardNumber(data.Position, "+" .. UIKit.Short(data.Units) .. " 💧", UIKit.Theme.Colors.Primary)
+		billboardNumber(data.Position, "+" .. UIKit.Short(data.Units), UIKit.Theme.Colors.Primary)
 		if data.Golden and data.Bubbles &gt; 0 then
-			billboardNumber(data.Position, "+" .. UIKit.Short(data.Bubbles) .. " 🧼", UIKit.Theme.Colors.Bubble, FLOATER_RISE + 1)
+			billboardNumber(data.Position, "+" .. UIKit.Short(data.Bubbles) .. " Bubbles", UIKit.Theme.Colors.Bubble, FLOATER_RISE + 1)
 		end
 	end
 end
@@ -19717,9 +20027,9 @@ local function onDishDone(data: Types.FXDishDone)
 	burst(data.Position, UIKit.Theme.Colors.Good, "rbxasset://textures/particles/sparkles_main.dds", 24, 0.8)
 	popBubbles(data.Position, 6, 2)
 	UIKit.PlaySound("Sparkle")
-	billboardNumber(data.Position, "✨ Sparkling!", UIKit.Theme.Colors.Text, FLOATER_RISE + 1)
+	billboardNumber(data.Position, "Sparkling!", UIKit.Theme.Colors.Text, FLOATER_RISE + 1)
 	if data.By == LocalPlayer.UserId and data.Bonus &gt; 0 then
-		billboardNumber(data.Position + Vector3.new(0, 1.4, 0), "+" .. UIKit.Short(data.Bonus) .. " 💰", UIKit.Theme.Colors.Coin, FLOATER_RISE + 1.6)
+		billboardNumber(data.Position + Vector3.new(0, 1.4, 0), "+" .. UIKit.Short(data.Bonus) .. " coins", UIKit.Theme.Colors.Coin, FLOATER_RISE + 1.6)
 	end
 end
 
@@ -19789,13 +20099,13 @@ local function onSold(data: any)
 		local character = LocalPlayer.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		if root and root:IsA("BasePart") then
-			billboardNumber(root.Position + Vector3.new(0, 3, 0), "🐾 +" .. UIKit.Short(data.Coins) .. " 💰", UIKit.Theme.Colors.Coin, FLOATER_RISE + 1)
+			billboardNumber(root.Position + Vector3.new(0, 3, 0), "+" .. UIKit.Short(data.Coins) .. " coins", UIKit.Theme.Colors.Coin, FLOATER_RISE + 1)
 		end
 		UIKit.PlaySound("Coins", 1.2)
 		return
 	end
 	UIKit.PlaySound("Coins")
-	UIKit.Toast("+" .. UIKit.Commas(data.Coins) .. " 💰", "Good")
+	UIKit.Toast("+" .. UIKit.Commas(data.Coins) .. " coins", "Good")
 end
 
 local function onTankFull()
@@ -20322,10 +20632,10 @@ local function updateShopDisplays()
 			if price then
 				local cost = Config.ToolCost(index, run.Level) or 0
 				if owned then
-					price.Text = "✅ Owned"
+					price.Text = "Owned"
 					price.TextColor3 = UIKit.Theme.Colors.Good
 				else
-					price.Text = "💰 " .. UIKit.Short(cost)
+					price.Text = UIKit.Short(cost) .. " coins"
 					price.TextColor3 = if run.Coins &gt;= cost then UIKit.Theme.Colors.Coin else UIKit.Theme.Colors.Bad
 				end
 			end
@@ -20505,7 +20815,7 @@ function Effects.Init()
 end
 
 return Effects</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">HoldPose</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">HoldPose</string><ProtectedString name="Source">--[[
 	HoldPose - how a held cleaning tool looks, for every player on this client.
 
 	  * Anyone holding a tool (character attribute HeldToolIndex &gt; 1) holds it out in front, the
@@ -20606,7 +20916,7 @@ function HoldPose.Init()
 end
 
 return HoldPose</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
+<Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
 --   * top centre: the Bubbles pill with a green "+" (opens the Shop)
 --   * right side: big square buttons (Shop/Pets in the lobby, Upgrades/Pets/Leave in a run) with
 --     key hints for keyboard (Tab/G/P) or gamepad (Y/LB)
@@ -20677,14 +20987,7 @@ function HUD.Init()
 	UIKit.Stroke(topCurrency, Colors.Ink, 3)
 	topCurrency.Parent = root
 
-	UIKit.Label({
-		Text = "🧼",
-		TextSize = 38,
-		Position = UDim2.fromOffset(8, 0),
-		Size = UDim2.fromOffset(50, 58),
-		Stroke = false,
-		Parent = topCurrency,
-	})
+	UIKit.Icon("Bubble", 40, { Position = UDim2.fromOffset(10, 7), Parent = topCurrency })
 	local bubblesValue = UIKit.Label({
 		Name = "Value",
 		Text = "0",
@@ -20745,7 +21048,7 @@ function HUD.Init()
 	UIKit.Gradient(gemsPill, Color3.fromRGB(150, 100, 200), Color3.fromRGB(90, 55, 140))
 	UIKit.Stroke(gemsPill, Colors.Ink, 3)
 	gemsPill.Parent = root
-	UIKit.Label({ Text = "💎", TextSize = 28, Position = UDim2.fromOffset(6, 0), Size = UDim2.fromOffset(38, 44), Stroke = false, Parent = gemsPill })
+	UIKit.Icon("Gem", 34, { Position = UDim2.fromOffset(6, 5), Parent = gemsPill })
 	local gemsValue = UIKit.Label({
 		Text = "0",
 		TextSize = 28,
@@ -21030,11 +21333,13 @@ function HUD.Init()
 	moneyBlock.Visible = false
 	moneyBlock.Parent = root
 
+	UIKit.Icon("Coin", 50, { Position = UDim2.fromOffset(0, 6), Parent = moneyBlock })
 	local coinsLabel = UIKit.Label({
 		Name = "Coins",
-		Text = "💰 0",
+		Text = "0",
 		TextSize = 54,
-		Size = UDim2.new(1, 0, 0, 62),
+		Position = UDim2.fromOffset(58, 0),
+		Size = UDim2.new(1, -58, 0, 62),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextColor3 = Color3.fromRGB(90, 235, 110),
 		StrokeThickness = 3,
@@ -21056,12 +21361,12 @@ function HUD.Init()
 		end,
 	})
 	coinsLabel:GetPropertyChangedSignal("TextBounds"):Connect(function()
-		coinsPlus.Position = UDim2.fromOffset(math.floor(coinsLabel.TextBounds.X / UIKit.GetScale()) + 12, 31)
+		coinsPlus.Position = UDim2.fromOffset(math.floor(coinsLabel.TextBounds.X / UIKit.GetScale()) + 12 + 58, 31)
 	end)
 	local coinsNV = Instance.new("NumberValue")
 	coinsNV.Parent = moneyBlock
 	coinsNV:GetPropertyChangedSignal("Value"):Connect(function()
-		coinsLabel.Text = "💰 " .. UIKit.Commas(math.floor(coinsNV.Value + 0.5))
+		coinsLabel.Text = UIKit.Commas(math.floor(coinsNV.Value + 0.5))
 	end)
 	local coinsShown = -1
 	local function setCoins(value: number)
@@ -21081,11 +21386,12 @@ function HUD.Init()
 		end
 	end
 
+	UIKit.Icon("Drop", 40, { Position = UDim2.fromOffset(2, 72), Parent = moneyBlock })
 	local tankBar = UIKit.ProgressBar({
-		Size = UDim2.new(0, 280, 0, 44),
-		Position = UDim2.fromOffset(0, 70),
+		Size = UDim2.new(0, 240, 0, 44),
+		Position = UDim2.fromOffset(48, 70),
 		Color = Colors.Primary,
-		Text = "💧 0/0",
+		Text = "0/0",
 		TextSize = 24,
 		Parent = moneyBlock,
 	})
@@ -21096,7 +21402,7 @@ function HUD.Init()
 		Size = UDim2.new(0, 280, 0, 26),
 		Position = UDim2.fromOffset(0, 122),
 		Color = Color3.fromRGB(150, 215, 255),
-		Text = "🧼 Hold jump to fly",
+		Text = "Hold jump to fly",
 		TextSize = 16,
 		Value = 1,
 		Parent = moneyBlock,
@@ -21107,7 +21413,7 @@ function HUD.Init()
 		local f = tonumber(Players.LocalPlayer:GetAttribute("JetFuel")) or 1
 		if math.abs(f - lastJet) &gt; 0.02 or (f &gt;= 1 and lastJet &lt; 1) then
 			lastJet = f
-			jetBar.Set(f, if f &lt;= 0.01 then "🧼 Land to refill" else "🧼 Hold jump to fly")
+			jetBar.Set(f, if f &lt;= 0.01 then "Land to refill" else "Hold jump to fly")
 		end
 	end)
 
@@ -21233,7 +21539,7 @@ function HUD.Init()
 	banner.Parent = root
 
 	local bannerTitle = UIKit.Label({
-		Text = "🧽 Clean every dish! 🧽",
+		Text = "Clean every dish!",
 		Size = UDim2.new(1, 0, 0, 52),
 		TextSize = 40,
 		TextXAlignment = Enum.TextXAlignment.Center,
@@ -21301,7 +21607,7 @@ function HUD.Init()
 	resultsScale.Parent = resultsFrame
 
 	local _titleLabel = UIKit.Label({
-		Text = "✨ SPARKLING CLEAN! ✨",
+		Text = "SPARKLING CLEAN!",
 		Size = UDim2.new(1, -40, 0, 56),
 		Position = UDim2.new(0, 20, 0, 18),
 		TextSize = 40,
@@ -21318,7 +21624,7 @@ function HUD.Init()
 		Parent = resultsFrame,
 	})
 	local bestLabel = UIKit.Label({
-		Text = "⭐ NEW BEST!",
+		Text = "NEW BEST!",
 		Size = UDim2.new(1, -40, 0, 26),
 		Position = UDim2.new(0, 20, 0, 108),
 		TextSize = 22,
@@ -21339,7 +21645,7 @@ function HUD.Init()
 	bubblesRowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 	bubblesRowLayout.Padding = UDim.new(0, 8)
 	bubblesRowLayout.Parent = bubblesRow
-	UIKit.Label({ Text = "🧼", TextSize = 34, Size = UDim2.fromOffset(40, 40), Parent = bubblesRow })
+	UIKit.Icon("Bubble", 38, { LayoutOrder = -1, Parent = bubblesRow })
 	local resultsBubblesLabel = UIKit.Label({
 		Text = "+0",
 		TextSize = 34,
@@ -21432,8 +21738,12 @@ function HUD.Init()
 		Color = Colors.Good,
 		Parent = resultsFrame,
 		OnClick = function()
+			-- Fade out first so the teleport home is never seen; the cover lifts in the lobby.
+			local Cutscene = require(script.Parent:WaitForChild("Cutscene")) :: any
+			Cutscene.Cover(nil, 6)
 			local result = ClientState.RunRequest("ReturnToLobby")
 			if not result.Ok then
+				Cutscene.Uncover()
 				UIKit.Toast(result.Error or "Couldn't return to the lobby.", "Bad")
 			end
 		end,
@@ -21454,9 +21764,9 @@ function HUD.Init()
 		if not results then
 			return
 		end
-		local underParText = if results.UnderPar then "  🔥 Under par!" else ""
+		local underParText = if results.UnderPar then "   Under par!" else ""
 		timeLabel.Text = string.format(
-			"⏱ %s   (Par %s)%s",
+			"%s   (Par %s)%s",
 			UIKit.Time(results.TimeSeconds),
 			UIKit.Time(results.ParTime),
 			underParText
@@ -21472,7 +21782,7 @@ function HUD.Init()
 		end
 		if results.UnlockedLevel then
 			local unlocked = Config.GetLevel(results.UnlockedLevel)
-			unlockedLabel.Text = string.format("🔓 %s unlocked!", tostring(unlocked.Name))
+			unlockedLabel.Text = string.format("%s unlocked!", tostring(unlocked.Name))
 			unlockedLabel.Visible = true
 		else
 			unlockedLabel.Visible = false
@@ -21563,8 +21873,11 @@ function HUD.Init()
 		Parent = leaveButtonsRow,
 		OnClick = function()
 			UIKit.CloseWindow("LeaveConfirm")
+			local Cutscene = require(script.Parent:WaitForChild("Cutscene")) :: any
+			Cutscene.Cover(nil, 6)
 			local result = ClientState.RunRequest("Leave")
 			if not result.Ok then
+				Cutscene.Uncover()
 				UIKit.Toast(result.Error or "Couldn't leave the run.", "Bad")
 			end
 		end,
@@ -21693,7 +22006,7 @@ function HUD.Init()
 			setTankFull(full)
 			tankBar.Set(
 				if run.TankMax &gt; 0 then run.Tank / run.TankMax else 0,
-				if full then "💧 FULL! Sell at the drain" else string.format("💧 %s / %s", UIKit.Short(run.Tank), UIKit.Short(run.TankMax))
+				if full then "FULL! Sell at the drain" else string.format("%s / %s", UIKit.Short(run.Tank), UIKit.Short(run.TankMax))
 			)
 			updateProgress()
 		else
@@ -21765,6 +22078,7 @@ function HUD.Init()
 	end)
 
 	-- One slow loop drives the run timer and the results countdown; both are cheap 2Hz text updates.
+	local coveredForReturn: number? = nil
 	task.spawn(function()
 		while true do
 			local run = ClientState.Run :: Types.RunState?
@@ -21775,6 +22089,13 @@ function HUD.Init()
 				elseif run.Phase == "Complete" and run.Results then
 					local remaining = math.max(0, run.Results.ReturnAt - Util.Now())
 					countdownLabel.Text = string.format("Returning to lobby in %ds", math.ceil(remaining))
+					-- Fade out just before the server sends everyone home, so that teleport isn't seen
+					-- either (the cover lifts again once we're back in the lobby).
+					if remaining &lt;= 0.9 and coveredForReturn ~= run.Results.ReturnAt then
+						coveredForReturn = run.Results.ReturnAt
+						local Cutscene = require(script.Parent:WaitForChild("Cutscene")) :: any
+						task.spawn(Cutscene.Cover, nil, 5)
+					end
 				end
 			end
 			task.wait(0.5)
@@ -21833,7 +22154,7 @@ function HUD.Init()
 end
 
 return HUD</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
 	PartyUI - everything shown while ClientState.Party ~= nil (standing in a lobby pad).
 
 	Two screens, Search-for-the-Needle style:
@@ -22044,7 +22365,7 @@ local function renderLevelList()
 		})
 		local best = bestTime(i)
 		UIKit.Label({
-			Text = if locked then string.format("Clear %s to unlock", Config.GetLevel(i - 1).Name) elseif best then "⏱️ Best " .. UIKit.Time(best) else "Not cleared yet",
+			Text = if locked then string.format("Clear %s to unlock", Config.GetLevel(i - 1).Name) elseif best then "Best " .. UIKit.Time(best) else "Not cleared yet",
 			TextSize = 15,
 			Position = UDim2.fromOffset(10, 6),
 			Size = UDim2.new(1, -20, 0, 20),
@@ -22055,7 +22376,7 @@ local function renderLevelList()
 		card.Activated:Connect(function()
 			if locked then
 				UIKit.PlaySound("Error")
-				UIKit.Toast("🔒 Clear " .. Config.GetLevel(i - 1).Name .. " first!", "Bad")
+				UIKit.Toast("Clear " .. Config.GetLevel(i - 1).Name .. " first!", "Bad")
 				return
 			end
 			UIKit.PlaySound("Click")
@@ -22108,7 +22429,7 @@ function renderCreate()
 	privacyRow.Size = UDim2.new(1, -24, 0, 50)
 	privacyRow.Parent = leftCard
 	listLayout(privacyRow, Enum.FillDirection.Horizontal, 10)
-	for _, option in { { "Public", "🌐 PUBLIC", Colors.Primary }, { "Friends", "👥 FRIENDS", Colors.Accent } } do
+	for _, option in { { "Public", "PUBLIC", Colors.Primary }, { "Friends", "FRIENDS", Colors.Accent } } do
 		local key = option[1]
 		UIKit.Button({
 			Text = option[2],
@@ -22291,7 +22612,7 @@ local function renderWait(party: Types.PartyState)
 		Parent = waitContent,
 	})
 	local status = UIKit.Label({
-		Text = if launching then "Teleporting... 🧼" else "",
+		Text = if launching then "Teleporting..." else "",
 		TextSize = 24,
 		Size = UDim2.new(1, 0, 0, 30),
 		TextColor3 = if launching then Colors.Good else Colors.Text,
@@ -22467,7 +22788,7 @@ function PartyUI.Init()
 end
 
 return PartyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
+<Item class="ModuleScript" referent="RBX0000002D"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
 -- state (EquippedPets/&lt;slot&gt; StringValue = pet id, its Target ObjectValue = the grime part being
 -- cleaned); this module is the only thing that actually builds and moves pet models. See
 -- DESIGN.md section 6 ("PetRenderer") and section 4 ("Equipped pets for rendering").
@@ -22970,7 +23291,7 @@ function PetRenderer.Init()
 end
 
 return PetRenderer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002D"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
+<Item class="ModuleScript" referent="RBX0000002E"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
 -- reveal animation. Everything here is built with UIKit; see DESIGN.md section 6 ("PetsUI") for
 -- the contract. Both windows rebuild their contents from ClientState.Meta whenever it changes and
 -- the relevant window is open, so a purchase/hatch/equip anywhere refreshes what's on screen.
@@ -23045,7 +23366,7 @@ end
 
 -- Pets show one number, Power (Config.PetPower): bigger cleans faster, carries more, earns more.
 local function powerText(id: string, tier: number?): string
-	return "💪 Power " .. Config.PetPower(id, tier)
+	return "Power " .. Config.PetPower(id, tier)
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -23168,7 +23489,7 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 		ZIndex = 2,
 	})
 	UIKit.Label({
-		Text = entry.Def.Rarity .. "  💪" .. Config.PetPower(entry.Id, entry.Tier),
+		Text = entry.Def.Rarity .. "  •  " .. Config.PetPower(entry.Id, entry.Tier),
 		Size = UDim2.new(1, -10, 0, 16),
 		Position = UDim2.new(0.5, 0, 0, 118),
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -23268,10 +23589,10 @@ local function refreshMergePanel()
 	if first then
 		local nextTier = (first.Tier or 1) + 1
 		local tierDef = Config.PetTier(nextTier)
-		mergeResult.Text = "➡️ " .. petTitle(first.Id, nextTier)
+		mergeResult.Text = "Makes: " .. petTitle(first.Id, nextTier)
 		mergeResult.TextColor3 = tierDef.Color or C.Text
 	else
-		mergeResult.Text = "➡️ Golden, then Rainbow!"
+		mergeResult.Text = "Makes: Golden, then Rainbow!"
 		mergeResult.TextColor3 = C.TextDim
 	end
 	UIKit.SetButtonColor(mergeGo, if #mergeSel == MERGE_COUNT then C.Good else C.Disabled)
@@ -23313,7 +23634,7 @@ local function setMergeMode(on: boolean)
 	mergePanel.Visible = on
 	detailEmpty.Parent = if on then nil else detailsCard
 	detailFilled.Parent = if on then nil else detailsCard
-	mergeButton.Text = if on then "Done" else "🔮 Merge"
+	mergeButton.Text = if on then "Done" else "Merge"
 	if on then
 		refreshMergePanel()
 	end
@@ -23334,7 +23655,7 @@ local function doMerge()
 	UIKit.PlaySound("Hatch")
 	UIKit.Confetti()
 	local made = result.Pets and result.Pets[1]
-	UIKit.Toast(if made then ("✨ You made a " .. petTitle(made.Id, made.Tier) .. "!") else "Merged!", "Good")
+	UIKit.Toast(if made then ("You made a " .. petTitle(made.Id, made.Tier) .. "!") else "Merged!", "Good")
 	refreshMergePanel()
 end
 
@@ -23347,7 +23668,7 @@ local function doEquipToggle()
 	local equipped = isEquipped(meta, uid)
 	-- All slots full: offer the +2 Pet Slots pass (if they don't have it yet).
 	if not equipped and #meta.Equipped &gt;= meta.PetSlots and not (meta.Passes and meta.Passes.PetSlots) then
-		UIKit.Toast("🐾 All your pet slots are full! Get +2 Pet Slots to bring more pets.", "Info")
+		UIKit.Toast("All your pet slots are full! Get +2 Pet Slots to bring more pets.", "Info")
 		ShopUI.BuyPass("PetSlots")
 		return
 	end
@@ -23435,7 +23756,7 @@ local function buildPetsWindow()
 		Parent = header,
 	})
 	mergeButton = UIKit.Button({
-		Text = "🔮 Merge",
+		Text = "Merge",
 		Size = UDim2.fromOffset(140, 40),
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -190, 0, 0),
@@ -23508,7 +23829,7 @@ local function buildPetsWindow()
 	mergePanel.Size = UDim2.fromScale(1, 1)
 	mergePanel.Visible = false
 	mergePanel.Parent = details
-	UIKit.Label({ Text = "🔮 Merge Pets", Size = UDim2.new(1, -16, 0, 34), Position = UDim2.new(0.5, 0, 0, 14), AnchorPoint = Vector2.new(0.5, 0), TextSize = 26, Parent = mergePanel })
+	UIKit.Label({ Text = "Merge Pets", Size = UDim2.new(1, -16, 0, 34), Position = UDim2.new(0.5, 0, 0, 14), AnchorPoint = Vector2.new(0.5, 0), TextSize = 26, Parent = mergePanel })
 	UIKit.Label({
 		Text = string.format("%d of the same pet become 1 Golden one; %d Golden make a Rainbow. Better speed, bigger bag, more coins.", MERGE_COUNT, MERGE_COUNT),
 		Size = UDim2.new(1, -24, 0, 48),
@@ -23520,7 +23841,7 @@ local function buildPetsWindow()
 		Parent = mergePanel,
 	})
 	mergeInfo = UIKit.Label({ Text = "", Size = UDim2.new(1, -24, 0, 44), Position = UDim2.new(0.5, 0, 0, 116), AnchorPoint = Vector2.new(0.5, 0), TextSize = 17, TextWrapped = true, Parent = mergePanel })
-	mergeResult = UIKit.Label({ Text = "➡️ ?", Size = UDim2.new(1, -24, 0, 36), Position = UDim2.new(0.5, 0, 0, 170), AnchorPoint = Vector2.new(0.5, 0), TextSize = 22, TextScaled = true, Parent = mergePanel })
+	mergeResult = UIKit.Label({ Text = "Makes: ?", Size = UDim2.new(1, -24, 0, 36), Position = UDim2.new(0.5, 0, 0, 170), AnchorPoint = Vector2.new(0.5, 0), TextSize = 22, TextScaled = true, Parent = mergePanel })
 	mergeGo = UIKit.Button({
 		Text = "MERGE!",
 		Icon = "✨",
@@ -23757,7 +24078,7 @@ local function selectEgg(eggId: string)
 
 	UIKit.SetViewportModel(eggViewport, PetModels.Egg(eggId), true)
 	eggNameLabel.Text = egg.Name
-	eggCostLabel.Text = "🧼 " .. Format.Commas(egg.Cost)
+	eggCostLabel.Text = Format.Commas(egg.Cost) .. " Bubbles"
 
 	for _, child in oddsScroll:GetChildren() do
 		if child:IsA("Frame") then
@@ -23787,13 +24108,13 @@ function PetsUI._refreshEggButtons()
 	if locked then
 		local level = Config.Levels[egg.RequiredLevel]
 		local where = if level then (level.Icon or "") .. " " .. level.Name else ("Level " .. egg.RequiredLevel)
-		eggLockedLabel.Text = "🔒 Unlock " .. where .. " to hatch this egg!"
+		eggLockedLabel.Text = "Unlock " .. where .. " to hatch this egg!"
 	end
 
 	hatch1Button:SetAttribute("Disabled", locked or not eggAffordable(egg, 1, meta))
 	hatch3Button:SetAttribute("Disabled", locked or not eggAffordable(egg, 3, meta))
-	hatch1Button.Text = "Hatch 1 (🧼 " .. Format.Commas(egg.Cost) .. ")"
-	hatch3Button.Text = "Hatch 3 (🧼 " .. Format.Commas(egg.Cost * 3) .. ")"
+	hatch1Button.Text = "Hatch 1  (" .. Format.Commas(egg.Cost) .. ")"
+	hatch3Button.Text = "Hatch 3  (" .. Format.Commas(egg.Cost * 3) .. ")"
 end
 
 local function doHatch(count: number)
@@ -24305,7 +24626,7 @@ function PetsUI.Init()
 end
 
 return PetsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002E"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002F"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
 	RanksUI - the "Ranks" window (Rank Shrine in the lobby, the HUD's Ranks button, R / gamepad RB).
 
 	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
@@ -24397,7 +24718,7 @@ local function renderGems()
 	local meta = ClientState.Meta :: Types.MetaState?
 	local gems = if meta then meta.Gems or 0 else 0
 	local luck = meta ~= nil and meta.Passes.DoubleLuck == true
-	gemsLabel.Text = string.format("You have 💎 %s%s", UIKit.Commas(gems), if luck then "   🍀 x2 Luck!" else "")
+	gemsLabel.Text = string.format("You have %s Gems%s", UIKit.Commas(gems), if luck then "   •   x2 Luck on" else "")
 	UIKit.SetDisabled(rollButton, rolling or gems &lt; Config.RankRoll.Cost)
 	if luckButton then
 		local pass = Config.GetPass("DoubleLuck")
@@ -24405,7 +24726,7 @@ local function renderGems()
 		local label = luckButton:FindFirstChildWhichIsA("TextLabel", true)
 		if label and pass then
 			ShopUI.WatchPrice(pass, true, function(price)
-				label.Text = string.format("🍀 x2 Luck pass  •  R$ %d", price)
+				label.Text = string.format("x2 Luck pass  •  R$ %d", price)
 			end)
 		end
 	end
@@ -24457,7 +24778,7 @@ local function renderList()
 			Parent = row,
 		})
 		if equipped then
-			UIKit.Label({ Text = "✅ Yours", TextSize = 18, TextColor3 = Colors.Good, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(96, 36), Parent = row })
+			UIKit.Label({ Text = "Yours", TextSize = 18, TextColor3 = Colors.Good, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(96, 36), Parent = row })
 		end
 	end
 end
@@ -24496,7 +24817,7 @@ local function roll()
 	spinning = false
 	rolling = false
 	if not result.Ok or not result.Rank then
-		reel.Text = "🎲 Roll again!"
+		reel.Text = "Roll again!"
 		reel.TextColor3 = Colors.Text
 		UIKit.Toast(result.Error or "Couldn't roll right now.", "Bad")
 		renderGems()
@@ -24551,7 +24872,7 @@ function RanksUI.Init()
 
 	reel = UIKit.Label({
 		Name = "Reel",
-		Text = "🎲 Try your luck!",
+		Text = "Try your luck!",
 		TextSize = 26,
 		Position = UDim2.fromOffset(0, 202),
 		Size = UDim2.new(1, 0, 0, 40),
@@ -24560,7 +24881,7 @@ function RanksUI.Init()
 	})
 
 	rollButton = UIKit.Button({
-		Text = string.format("🎲 ROLL   💎 %d", Config.RankRoll.Cost),
+		Text = string.format("ROLL  (%d Gems)", Config.RankRoll.Cost),
 		Size = UDim2.new(1, 0, 0, 70),
 		Position = UDim2.fromOffset(0, 252),
 		Color = Colors.Accent,
@@ -24580,7 +24901,7 @@ function RanksUI.Init()
 	})
 
 	UIKit.Button({
-		Text = "💎 Get more Gems",
+		Text = "Get more Gems",
 		Size = UDim2.new(1, 0, 0, 48),
 		Position = UDim2.fromOffset(0, 364),
 		Color = Colors.Good,
@@ -24591,7 +24912,7 @@ function RanksUI.Init()
 		end,
 	})
 	luckButton = UIKit.Button({
-		Text = "🍀 x2 Luck pass",
+		Text = "x2 Luck pass",
 		Size = UDim2.new(1, 0, 0, 44),
 		Position = UDim2.fromOffset(0, 418),
 		Color = Color3.fromRGB(90, 190, 110),
@@ -24602,7 +24923,7 @@ function RanksUI.Init()
 		end,
 	})
 	UIKit.Label({
-		Text = "⚠️ A roll replaces your current rank! Rare+ ranks are twice as likely with x2 Luck.",
+		Text = "A roll replaces your current rank! Rare+ ranks are twice as likely with x2 Luck.",
 		TextSize = 14,
 		TextColor3 = Colors.Warning,
 		TextWrapped = true,
@@ -24650,7 +24971,7 @@ function RanksUI.Init()
 end
 
 return RanksUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002F"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000030"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
 	RebirthUI - the "Rebirth" window (the Rebirth Fountain in the lobby).
 
 	The endgame loop: once you've cleaned the last dishwasher, trade your Bubbles, unlocked
@@ -24692,24 +25013,24 @@ local function render()
 	local meta = ClientState.Meta :: Types.MetaState?
 	local rebirths = (meta and meta.Rebirths) or 0
 	local rb = Config.Rebirth
-	countLabel.Text = string.format("✨ Rebirth %d", rebirths)
+	countLabel.Text = string.format("Rebirth %d", rebirths)
 	nowLabel.Text = if rebirths &gt; 0
 		then string.format("Now: +%s coins, +%s Bubbles", pct(rb.CoinsPer * rebirths), pct(rb.BubblesPer * rebirths))
 		else "No rebirth bonuses yet."
 	nextLabel.Text = string.format(
-		"Next rebirth: +%s coins and +%s Bubbles forever, and %d 💎",
+		"Next rebirth: +%s coins and +%s Bubbles forever, and %d Gems",
 		pct(rb.CoinsPer * (rebirths + 1)),
 		pct(rb.BubblesPer * (rebirths + 1)),
 		rb.Gems
 	)
 	local last = Config.Levels[#Config.Levels]
 	local levelDone = meta ~= nil and meta.RebirthReady == true
-	reqLevel.Text = string.format("%s Clean %s %s", if levelDone then "✅" else "⬜", last.Icon, last.Name)
+	reqLevel.Text = string.format("%s  Clean %s", if levelDone then "Done:" else "To do:", last.Name)
 	reqLevel.TextColor3 = if levelDone then Colors.Good else Colors.Text
 	local cost = Config.RebirthCost(rebirths)
 	local have = (meta and meta.Bubbles) or 0
 	local enough = have &gt;= cost
-	reqBubbles.Text = string.format("%s Have %s / %s 🧼", if enough then "✅" else "⬜", UIKit.Commas(have), UIKit.Commas(cost))
+	reqBubbles.Text = string.format("%s  Have %s / %s Bubbles", if enough then "Done:" else "To do:", UIKit.Commas(have), UIKit.Commas(cost))
 	reqBubbles.TextColor3 = if enough then Colors.Good else Colors.Text
 	UIKit.SetButtonColor(rebirthButton, if levelDone and enough then Colors.Good else Colors.Disabled)
 end
@@ -24727,7 +25048,7 @@ local function doRebirth()
 	end
 	UIKit.PlaySound("Sparkle")
 	UIKit.Confetti(80)
-	UIKit.Toast("✨ Rebirthed! Your bonuses are now permanent.", "Good")
+	UIKit.Toast("Rebirthed! Your bonuses are now permanent.", "Good")
 	render()
 end
 
@@ -24803,7 +25124,7 @@ function RebirthUI.Init()
 end
 
 return RebirthUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000030"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000031"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
 	RewardsUI - two small windows opened from the buttons on the left of the lobby HUD.
 
 	  * "Codes" (🎟️): type a code (Config.Codes) and redeem it. "Look out for codes in the game's
@@ -24897,7 +25218,7 @@ local function buildCodes(screenRoot: Instance)
 			box.Text = ""
 			UIKit.PlaySound("Sparkle")
 			UIKit.Confetti(40)
-			UIKit.Toast("🎟️ Code redeemed: " .. (result.Message or "") .. "!", "Good")
+			UIKit.Toast("Code redeemed: " .. (result.Message or "") .. "!", "Good")
 		else
 			UIKit.Toast(result.Error or "That code doesn't work.", "Bad")
 		end
@@ -24929,9 +25250,9 @@ end
 local function refreshGroup()
 	local meta = ClientState.Meta :: Types.MetaState?
 	local claimed = meta ~= nil and meta.GroupReward == true
-	groupButton.Text = if claimed then "Claimed ✅" else "JOIN &amp; CLAIM"
+	groupButton.Text = if claimed then "Claimed" else "JOIN &amp; CLAIM"
 	UIKit.SetButtonColor(groupButton, if claimed then Colors.Disabled else Colors.Good)
-	groupStatus.Text = if claimed then "Thanks for joining! 💙" else "Reward: " .. Config.RewardText(Config.Social.GroupReward)
+	groupStatus.Text = if claimed then "Thanks for joining!" else "Reward: " .. Config.RewardText(Config.Social.GroupReward)
 end
 
 local function refreshSocial()
@@ -24940,15 +25261,15 @@ local function refreshSocial()
 		local state = if meta then (if kind == "Follow" then meta.FollowState else meta.LikeState) else ""
 		local reward = if kind == "Follow" then Config.Social.FollowReward else Config.Social.LikeReward
 		if state == "Claimed" then
-			rowParts.Button.Text = "Claimed ✅"
+			rowParts.Button.Text = "Claimed"
 			UIKit.SetButtonColor(rowParts.Button, Colors.Disabled)
-			rowParts.Status.Text = "Thank you! 💙"
+			rowParts.Status.Text = "Thank you!"
 		elseif state == "Pending" then
 			rowParts.Button.Text = "Check again"
 			UIKit.SetButtonColor(rowParts.Button, Colors.Warning)
 			rowParts.Status.Text = "Not working? Leave and rejoin."
 		else
-			rowParts.Button.Text = if kind == "Follow" then "I followed! ✔" else "I liked it! ✔"
+			rowParts.Button.Text = if kind == "Follow" then "I followed!" else "I liked it!"
 			UIKit.SetButtonColor(rowParts.Button, Colors.Good)
 			rowParts.Status.Text = "Reward: " .. Config.RewardText(reward :: any)
 		end
@@ -25019,7 +25340,7 @@ local function joinGroup()
 	if result.Ok then
 		UIKit.PlaySound("Sparkle")
 		UIKit.Confetti(60)
-		UIKit.Toast("👥 Welcome to the community! " .. (result.Message or ""), "Good")
+		UIKit.Toast("Welcome to the community! " .. (result.Message or ""), "Good")
 	else
 		UIKit.Toast(result.Error or "Join the community first, then claim!", "Info")
 	end
@@ -25075,7 +25396,7 @@ local function buildFree(screenRoot: Instance)
 
 	-- Like the game: press 👍 on the game page, then the button, then rejoin.
 	if Config.Social.LikeReward then
-		local like = card(list, 2, "👍", "Like the game", "Press 👍 on the game page, then tap the button.")
+		local like = card(list, 2, "👍", "Like the game", "Press the thumbs-up on the game page, then tap the button.")
 		socialButton(like, "Like")
 	end
 
@@ -25128,7 +25449,7 @@ function RewardsUI.Init()
 end
 
 return RewardsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000031"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000032"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
 	ShopUI - the lobby "Shop" window: Perks (bought with Bubbles, permanent) and Robux (game passes).
 	Opened from the Soap Shop ProximityPrompt (routed by Effects via OpenWindow="Shop"), the HUD [🛒 Shop]
 	button, or the G key - all outside our scope, they just call UIKit.OpenWindow("Shop").
@@ -25197,11 +25518,11 @@ local initialized = false
 type Tab = "Perks" | "Passes" | "Bubbles" | "Gems" | "Coins"
 local activeTab: Tab = "Perks"
 local TABS: { { Key: Tab, Text: string, Color: Color3 } } = {
-	{ Key = "Perks", Text = "🧼 Perks", Color = Colors.Bubble },
-	{ Key = "Passes", Text = "👑 Passes", Color = Colors.Good },
-	{ Key = "Bubbles", Text = "🧼 Bubbles", Color = Colors.Primary },
-	{ Key = "Gems", Text = "💎 Gems", Color = Colors.Accent },
-	{ Key = "Coins", Text = "💰 Coins", Color = Colors.Coin },
+	{ Key = "Perks", Text = "Perks", Color = Colors.Bubble },
+	{ Key = "Passes", Text = "Passes", Color = Colors.Good },
+	{ Key = "Bubbles", Text = "Bubbles", Color = Colors.Primary },
+	{ Key = "Gems", Text = "Gems", Color = Colors.Accent },
+	{ Key = "Coins", Text = "Coins", Color = Colors.Coin },
 }
 local tabButtons: { [string]: TextButton } = {}
 
@@ -25267,7 +25588,7 @@ local function buildPerkRow(def: any): Frame
 		})
 	else
 		UIKit.Button({
-			Text = "🧼 " .. UIKit.Short(cost),
+			Text = UIKit.Short(cost) .. " Bubbles",
 			Size = UDim2.fromOffset(130, 46),
 			AnchorPoint = Vector2.new(1, 0.5),
 			Position = UDim2.new(1, -14, 0.5, 0),
@@ -25335,7 +25656,7 @@ local function buildPassRow(def: any): Frame
 
 	if owned then
 		UIKit.Label({
-			Text = "✅ Owned",
+			Text = "Owned",
 			TextSize = 18,
 			TextColor3 = Colors.Good,
 			AnchorPoint = Vector2.new(1, 0.5),
@@ -25396,7 +25717,7 @@ function ShopUI.BuyPass(key: string)
 	-- No Id pasted yet: in Studio this gives the pass free for the test (never in the live game).
 	local result = ClientState.MetaRequest("TestPass", def.Key)
 	if result.Ok then
-		UIKit.Toast(string.format("🧪 Studio test: the %s pass has no ID yet, so you got it free. In the live game this is the Robux prompt.", def.Name), "Info")
+		UIKit.Toast(string.format("Studio test: the %s pass has no ID yet, so you got it free. In the live game this is the Robux prompt.", def.Name), "Info")
 	else
 		UIKit.Toast(result.Error or "Coming soon!", "Info")
 	end
@@ -25416,7 +25737,7 @@ function ShopUI.GetTool(index: number): Types.RequestResult?
 	if run.Coins &lt; cost and tool.PassKey then
 		local pass = Config.GetPass(tool.PassKey)
 		if pass and not (ClientState.Meta and ClientState.Meta.Passes[tool.PassKey]) then
-			UIKit.Toast(string.format("Need %s 💰 more for the %s - or get it forever!", UIKit.Commas(cost - run.Coins), tool.Name), "Info")
+			UIKit.Toast(string.format("Need %s more coins for the %s - or get it forever!", UIKit.Commas(cost - run.Coins), tool.Name), "Info")
 			ShopUI.BuyPass(tool.PassKey)
 			return nil
 		end
@@ -25677,7 +25998,7 @@ function ShopUI.Init()
 					if owned and not ownedBefore[key] then
 						local pass = Config.GetPass(key)
 						UIKit.Confetti()
-						UIKit.Toast(string.format("%s %s unlocked!", pass and pass.Icon or "🎉", pass and pass.Name or key), "Good")
+						UIKit.Toast(string.format("%s unlocked!", pass and pass.Name or key), "Good")
 					end
 				end
 			end
@@ -25690,7 +26011,7 @@ function ShopUI.Init()
 end
 
 return ShopUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000032"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
+<Item class="ModuleScript" referent="RBX00000033"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
 -- Aim comes from the mouse on PC, or the screen centre (with a crosshair) on touch/gamepad, cast
@@ -26201,7 +26522,7 @@ local function updateTouchUIVisibility()
 	end
 	if turnHint then
 		turnHint.Visible = line and not touch
-		turnHint.Text = string.format("%s  %s: turn the line", if washerVertical then "↕️ Up and down" else "↔️ Across", if gamepad then "D-pad ↑" else "T")
+		turnHint.Text = string.format("%s  %s: turn the line", if washerVertical then "Up and down" else "Across", if gamepad then "D-pad ↑" else "T")
 	end
 	if not sprayButton.Visible then
 		touchHeld = false
@@ -26381,7 +26702,7 @@ local function onHeartbeat(dt: number)
 	local needsTool = type(minTool) == "number" and minTool &gt; (stats.Tier or stats.ToolIndex)
 	if needsTool and hintAnchor and hintBillboard and hintLabel then
 		hintAnchor.CFrame = CFrame.new(hitPos)
-		hintLabel.Text = "🐢 A " .. toolName(minTool :: number) .. " cleans this much faster"
+		hintLabel.Text = "A " .. toolName(minTool :: number) .. " cleans this much faster"
 		hintBillboard.Enabled = true
 	elseif hintBillboard then
 		hintBillboard.Enabled = false
@@ -26614,7 +26935,7 @@ function SprayController.Init()
 end
 
 return SprayController</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000033"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000034"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -27274,6 +27595,97 @@ end
 
 -- A rounded inset card for rows and tiles inside a window (lighter navy with a soft rim).
 -- props: any Frame property plus Color, CornerRadius, StrokeColor.
+--[[
+	Drawn icons (no emoji): UIKit.Icon(kind, size, props?) -&gt; Frame
+	kind: "Coin" | "Bubble" | "Gem" | "Drop". Built from rounded frames, gradients and outlines so
+	they match the chunky UI. props: any Frame property (Position, AnchorPoint, LayoutOrder, ZIndex,
+	Parent...).
+]]
+local function round(frame: GuiObject)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(1, 0)
+	c.Parent = frame
+end
+local function iconPart(parent: Instance, size: UDim2, pos: UDim2, color: Color3, transparency: number?): Frame
+	local f = Instance.new("Frame")
+	f.BorderSizePixel = 0
+	f.AnchorPoint = Vector2.new(0.5, 0.5)
+	f.Size = size
+	f.Position = pos
+	f.BackgroundColor3 = color
+	f.BackgroundTransparency = transparency or 0
+	f.Parent = parent
+	return f
+end
+function UIKit.Icon(kind: string, size: number?, props: { [string]: any }?): Frame
+	local px = size or 32
+	local root = Instance.new("Frame")
+	root.Name = kind .. "Icon"
+	root.BackgroundTransparency = 1
+	root.BorderSizePixel = 0
+	root.Size = UDim2.fromOffset(px, px)
+	local ink = Colors.Ink
+	local thick = math.max(1.5, px / 14)
+	local function outline(f: GuiObject, color: Color3?)
+		local st = Instance.new("UIStroke")
+		st.Color = color or ink
+		st.Thickness = thick
+		st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		st.Parent = f
+	end
+	if kind == "Coin" then
+		local body = iconPart(root, UDim2.fromScale(0.9, 0.9), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1))
+		round(body)
+		outline(body)
+		addGradient(body, Color3.fromRGB(255, 226, 110), Color3.fromRGB(240, 170, 30))
+		local ring = iconPart(body, UDim2.fromScale(0.64, 0.64), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1), 1)
+		round(ring)
+		outline(ring, Color3.fromRGB(196, 128, 18))
+		local shine = iconPart(body, UDim2.fromScale(0.3, 0.16), UDim2.fromScale(0.34, 0.26), Color3.new(1, 1, 1), 0.35)
+		shine.Rotation = -35
+		round(shine)
+	elseif kind == "Gem" then
+		local body = iconPart(root, UDim2.fromScale(0.64, 0.64), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1))
+		body.Rotation = 45
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0.18, 0)
+		c.Parent = body
+		outline(body)
+		addGradient(body, Color3.fromRGB(150, 235, 255), Color3.fromRGB(120, 90, 240))
+		local facet = iconPart(body, UDim2.fromScale(0.42, 0.42), UDim2.fromScale(0.36, 0.36), Color3.new(1, 1, 1), 0.55)
+		local fc = Instance.new("UICorner")
+		fc.CornerRadius = UDim.new(0.2, 0)
+		fc.Parent = facet
+	elseif kind == "Drop" then
+		local tip = iconPart(root, UDim2.fromScale(0.5, 0.5), UDim2.fromScale(0.5, 0.42), Color3.new(1, 1, 1))
+		tip.Rotation = 45
+		outline(tip)
+		addGradient(tip, Color3.fromRGB(150, 220, 255), Color3.fromRGB(56, 160, 240))
+		local body = iconPart(root, UDim2.fromScale(0.7, 0.7), UDim2.fromScale(0.5, 0.6), Color3.new(1, 1, 1))
+		round(body)
+		outline(body)
+		addGradient(body, Color3.fromRGB(150, 220, 255), Color3.fromRGB(40, 140, 230))
+		local shine = iconPart(body, UDim2.fromScale(0.2, 0.3), UDim2.fromScale(0.32, 0.4), Color3.new(1, 1, 1), 0.35)
+		round(shine)
+	else -- "Bubble": a soap bubble
+		local body = iconPart(root, UDim2.fromScale(0.9, 0.9), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1))
+		round(body)
+		outline(body)
+		addGradient(body, Color3.fromRGB(255, 196, 226), Color3.fromRGB(236, 92, 160))
+		local shine = iconPart(body, UDim2.fromScale(0.34, 0.22), UDim2.fromScale(0.36, 0.28), Color3.new(1, 1, 1), 0.2)
+		shine.Rotation = -35
+		round(shine)
+		local dot = iconPart(body, UDim2.fromScale(0.12, 0.12), UDim2.fromScale(0.7, 0.72), Color3.new(1, 1, 1), 0.3)
+		round(dot)
+	end
+	if props then
+		for k, v in props do
+			(root :: any)[k] = v
+		end
+	end
+	return root
+end
+
 local CARD_SKIP = { Color = true, CornerRadius = true, StrokeColor = true }
 function UIKit.Card(props: { [string]: any }?): Frame
 	local p: { [string]: any } = props or {}
@@ -28282,8 +28694,9 @@ function UIKit.Window(props: { [string]: any }?): (Frame, Frame)
 	})
 
 	local function applyTitle()
-		local icon = tostring(window:GetAttribute("Icon") or "")
-		local hasIcon = icon ~= ""
+		-- Title-only banners: emoji icons on every window read as clutter.
+		local icon = ""
+		local hasIcon = false
 		badge.Visible = hasIcon
 		iconLabel.Text = icon
 		local left = if hasIcon then 60 else 16
@@ -28553,7 +28966,7 @@ function UIKit.Toast(text: string, kind: string?)
 		textW, textH = math.min(TOAST_MAX_TEXT_W, #message * 11), TOAST_TEXT_SIZE
 	end
 	local height = math.max(50, textH + 22)
-	local width = 16 + 30 + 10 + textW + 22
+	local width = 24 + textW + 24
 	local multiline = textH &gt; TOAST_TEXT_SIZE * 1.5
 
 	local frame = Instance.new("Frame")
@@ -28578,7 +28991,8 @@ function UIKit.Toast(text: string, kind: string?)
 	icon.Size = UDim2.fromOffset(30, 30)
 	icon.BackgroundTransparency = 1
 	icon.Font = Fonts.Title
-	icon.Text = style.Icon
+	icon.Text = ""
+	icon.Visible = false -- toasts are text only (the colour says what kind it is)
 	icon.TextSize = 26
 	icon.TextTransparency = 1
 	icon.ZIndex = 2
@@ -28587,7 +29001,7 @@ function UIKit.Toast(text: string, kind: string?)
 	local label = Instance.new("TextLabel")
 	label.Name = "Text"
 	label.AnchorPoint = Vector2.new(0, 0.5)
-	label.Position = UDim2.new(0, 56, 0.5, 0)
+	label.Position = UDim2.new(0, 24, 0.5, 0)
 	label.Size = UDim2.fromOffset(textW, textH + 4)
 	label.BackgroundTransparency = 1
 	label.Font = Fonts.Title
@@ -29084,7 +29498,7 @@ function UIKit.Init()
 end
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000034"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000035"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button
@@ -29269,7 +29683,7 @@ local function upgradeCard(parent: Instance, def: any, run: Types.RunState, orde
 
 	local cost = Config.UpgradeCost(def.Id, level, run.Level, run.ToolIndex)
 	UIKit.Button({
-		Text = if cost then "💰 " .. UIKit.Short(cost) else "MAX",
+		Text = if cost then UIKit.Short(cost) .. " coins" else "MAX",
 		Size = UDim2.new(1, -20, 0, 42),
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -8),
@@ -29307,11 +29721,11 @@ local function renderLeft(run: Types.RunState)
 	local s = run.Stats
 	ink({
 		Text = string.format(
-			"💪 %s/s   %s   🎯 %s studs",
+			"Power %s/s   %s   Reach %s",
 			fmtNum(s.Power),
-			if s.Mode == "Line" then "📏 " .. fmtNum(s.LineLength or 0) .. " line"
-				elseif s.Mode == "Foam" then "💥 " .. fmtNum(s.Radius) .. " splat"
-				else "🖐️ " .. fmtNum(s.Radius),
+			if s.Mode == "Line" then "Line " .. fmtNum(s.LineLength or 0)
+				elseif s.Mode == "Foam" then "Splat " .. fmtNum(s.Radius)
+				else "Size " .. fmtNum(s.Radius),
 			fmtNum(s.Reach)
 		),
 		TextSize = 16,
@@ -29375,7 +29789,7 @@ local function toolCard(parent: Instance, index: number, run: Types.RunState): F
 
 	if inHand then
 		ink({
-			Text = "✅ In hand",
+			Text = "In hand",
 			TextSize = 16,
 			TextColor3 = Color3.fromRGB(40, 150, 80),
 			AnchorPoint = Vector2.new(0.5, 1),
@@ -29398,7 +29812,7 @@ local function toolCard(parent: Instance, index: number, run: Types.RunState): F
 	else
 		local cost = Config.ToolCost(index, run.Level) or 0
 		UIKit.Button({
-			Text = "💰 " .. UIKit.Short(cost),
+			Text = UIKit.Short(cost) .. " coins",
 			Size = UDim2.new(1, -14, 0, 40),
 			AnchorPoint = Vector2.new(0.5, 1),
 			Position = UDim2.new(0.5, 0, 1, -6),
@@ -29447,7 +29861,7 @@ local function renderRight(run: Types.RunState)
 		Parent = money,
 	})
 	UIKit.Label({
-		Text = "💰 " .. UIKit.Commas(run.Coins),
+		Text = UIKit.Commas(run.Coins) .. " coins",
 		TextSize = 30,
 		TextColor3 = Color3.fromRGB(90, 235, 110),
 		Position = UDim2.new(0.5, 10, 0, 0),
@@ -29560,7 +29974,7 @@ function UpgradesUI.Init()
 end
 
 return UpgradesUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000035"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000036"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
 	WaterFX - the water coming out of your own hose and pressure washer, built from real parts so
 	it looks solid from every angle (a camera-facing Beam flattens to nothing when you look straight
 	down it, which is exactly the first-person view).
@@ -29800,7 +30214,7 @@ end
 
 return WaterFX</ProtectedString></Properties></Item>
 </Item>
-<Item class="LocalScript" referent="RBX00000036"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
+<Item class="LocalScript" referent="RBX00000037"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
 	AdminClient - Rinse Cycle's admin panel and the admin effects every player can see.
 
 	Everyone:
@@ -30373,7 +30787,6 @@ local function opts(list: { string }): () -&gt; { { Label: string, Value: string
 	end
 end
 
-local giveableItems: { string } = {}
 
 local REASON: Input = { Kind = "text", Placeholder = "Reason (optional)" }
 local DURATION: Input = { Kind = "duration" }
@@ -30406,11 +30819,8 @@ local COMMANDS: { Command } = ({
 	{ Name = "controlplayer", Icon = "🎮", Label = "Control", Desc = "Move their character with your controls.", Group = "Move", Target = "player" },
 	{ Name = "viewinv", Icon = "🎒", Label = "Inventory", Desc = "See (and remove) the tools they carry.", Group = "Move", Target = "player" },
 	{ Name = "clearinv", Icon = "🗑️", Label = "Clear inventory", Desc = "Removes every tool they carry.", Group = "Move", Target = "player" },
-	{ Name = "give", Icon = "🎁", Label = "Give item", Desc = "Gives a tool from ServerStorage.AdminGiveableItems.", Group = "Move", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = function()
-		return opts(giveableItems)()
-	end } } },
 	-- Game
-	{ Name = "givecoins", Icon = "🪙", Label = "Give coins", Desc = "Coins for their current run.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
+	{ Name = "givecoins", Icon = "💰", Label = "Give coins", Desc = "Coins for their current run.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
 	{ Name = "setbubbles", Icon = "🧼", Label = "Set bubbles", Desc = "Sets their Bubbles to an amount.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
 	{ Name = "setgems", Icon = "💎", Label = "Set gems", Desc = "Sets their Gems to an amount.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
 	{ Name = "givepet", Icon = "🐾", Label = "Give pet", Desc = "Adds a pet to their pets.", Group = "Game", Target = "player", Inputs = {
@@ -30502,7 +30912,6 @@ local function buildPanel(info: any)
 		allowed[string.lower(tostring(name))] = true
 	end
 	canRemoveLogs = info.CanRemoveLogs == true
-	giveableItems = info.GiveableItems or {}
 	if panelBuilt then
 		return -- already built; the refreshed allow-list is picked up next time a group is drawn
 	end
@@ -30746,7 +31155,7 @@ local function buildPanel(info: any)
 		end
 		values[index] = default or ""
 		if #choices == 0 then
-			UIKit.Label({ Text = "Nothing to pick (add Tools to ServerStorage.AdminGiveableItems).", TextSize = 15, TextColor3 = Colors.TextDim, Size = UDim2.new(1, 0, 1, 0), Parent = strip })
+			UIKit.Label({ Text = "Nothing to pick.", TextSize = 15, TextColor3 = Colors.TextDim, Size = UDim2.new(1, 0, 1, 0), Parent = strip })
 		end
 		for i, choice in choices do
 			local b = Instance.new("TextButton")
@@ -31233,7 +31642,7 @@ local function buildPanel(info: any)
 	HUD.AddAdminButton(function()
 		UIKit.ToggleWindow("Admin")
 	end)
-	print("[AdminClient] Admin panel ready")
+
 end
 
 ------------------------------------------------------------------ spectate / control bars (sent only to admins)
@@ -31373,4 +31782,5 @@ task.spawn(function()
 end)</ProtectedString></Properties></Item>
 </Item>
 </Item>
+<Item class="TextChatService" referent="RBX00000038"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
 </roblox>

@@ -43,7 +43,7 @@ function DailyUI.Ready(): boolean
 end
 
 local function rewardText(reward): string
-	return string.format("%s %s", if reward.Kind == "Gems" then "💎" else "🧼", UIKit.Commas(reward.Amount))
+	return string.format("%s %s", UIKit.Commas(reward.Amount), if reward.Kind == "Gems" then "Gems" else "Bubbles")
 end
 
 local function clock(seconds: number): string
@@ -85,10 +85,10 @@ local function render()
 		if isNext then
 			UIKit.Stroke(card, Color3.fromRGB(255, 230, 120), 3)
 		end
-		UIKit.Label({ Text = if day == #Config.DailyRewards then "Day 7 🎉" else "Day " .. day, TextSize = 18, Size = UDim2.new(1, 0, 0, 26), Position = UDim2.fromOffset(0, 8), Parent = card })
+		UIKit.Label({ Text = if day == #Config.DailyRewards then "Day 7" else "Day " .. day, TextSize = 18, Size = UDim2.new(1, 0, 0, 26), Position = UDim2.fromOffset(0, 8), Parent = card })
 		UIKit.Label({ Text = if reward.Kind == "Gems" then "💎" else "🧼", TextSize = 38, Size = UDim2.new(1, 0, 0, 44), Position = UDim2.fromOffset(0, 36), Stroke = false, Parent = card })
 		UIKit.Label({ Text = UIKit.Commas(reward.Amount), TextSize = 20, Size = UDim2.new(1, 0, 0, 24), Position = UDim2.fromOffset(0, 82), Parent = card })
-		UIKit.Label({ Text = if claimed then "✅" else "", TextSize = 18, Size = UDim2.new(1, 0, 0, 20), Position = UDim2.fromOffset(0, 106), Parent = card })
+		UIKit.Label({ Text = if claimed then "Claimed" else "", TextSize = 18, Size = UDim2.new(1, 0, 0, 20), Position = UDim2.fromOffset(0, 106), Parent = card })
 	end
 	if ready then
 		footer.Text = string.format("Day %d is ready: %s!", upcoming, rewardText(Config.DailyRewards[upcoming]))
@@ -96,7 +96,7 @@ local function render()
 		UIKit.SetButtonColor(claimButton, Colors.Good)
 	else
 		footer.Text = string.format("Next up: Day %d (%s)", upcoming, rewardText(Config.DailyRewards[upcoming]))
-		claimButton.Text = "⏳ " .. clock(meta.DailyReadyAt - now())
+		claimButton.Text = "Next in " .. clock(meta.DailyReadyAt - now())
 		UIKit.SetButtonColor(claimButton, Colors.Disabled)
 	end
 	-- Missed a day with a streak worth saving: offer to restore it.
@@ -119,7 +119,7 @@ local function claim()
 	end
 	UIKit.PlaySound("Sparkle")
 	UIKit.Confetti(50)
-	UIKit.Toast(string.format("🎁 Day %d: %s!", result.Day or 1, result.Message or ""), "Good")
+	UIKit.Toast(string.format("Day %d: %s!", result.Day or 1, result.Message or ""), "Good")
 	render()
 end
 
@@ -160,7 +160,7 @@ function DailyUI.Init()
 	})
 	local restore = Config.GetProduct("RestoreStreak")
 	restoreButton = UIKit.Button({
-		Text = "🔥 Restore Streak",
+		Text = "Restore Streak",
 		Size = UDim2.fromOffset(320, 48),
 		Position = UDim2.new(0.5, 0, 0, 262),
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -170,13 +170,13 @@ function DailyUI.Init()
 		Parent = content,
 		OnClick = function()
 			if ShopUI.BuyProduct("RestoreStreak") then
-				UIKit.Toast("🔥 Streak restored! Claim your reward.", "Good")
+				UIKit.Toast("Streak restored! Claim your reward.", "Good")
 			end
 		end,
 	})
 	if restore then
 		ShopUI.WatchPrice(restore, false, function(price)
-			restoreButton.Text = string.format("🔥 Restore Streak  (R$ %d)", price)
+			restoreButton.Text = string.format("Restore Streak  (R$ %d)", price)
 		end)
 	end
 	UIKit.RegisterWindow("Daily", {

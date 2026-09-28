@@ -16,6 +16,9 @@ tested without Studio. Needs [Lune](https://github.com/lune-org/lune).
     rebirth gate, party pads (Create/SetMax/StartNow).
   - `scen_hud`: the owner-only Admin button under Free (lobby and in runs).
   - `scen_water`: hose / pressure washer water parts while spraying.
+  - `scen_pads`: party pads (menu in 0.1 s, others locked out while picking, join after Create,
+    Back puts you outside, instant re-entry) and the fade that hides the launch teleport.
+  - `scen_return`: the fade before the automatic trip back to the lobby after results.
 
 Paths assume the repo lives at /home/user/Roblox. The mock is permissive: a pass here means
 "no script errors and the flow works", not "pixel-perfect in Roblox".

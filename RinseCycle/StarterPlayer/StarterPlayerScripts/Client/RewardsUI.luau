@@ -92,7 +92,7 @@ local function buildCodes(screenRoot: Instance)
 			box.Text = ""
 			UIKit.PlaySound("Sparkle")
 			UIKit.Confetti(40)
-			UIKit.Toast("🎟️ Code redeemed: " .. (result.Message or "") .. "!", "Good")
+			UIKit.Toast("Code redeemed: " .. (result.Message or "") .. "!", "Good")
 		else
 			UIKit.Toast(result.Error or "That code doesn't work.", "Bad")
 		end
@@ -124,9 +124,9 @@ end
 local function refreshGroup()
 	local meta = ClientState.Meta :: Types.MetaState?
 	local claimed = meta ~= nil and meta.GroupReward == true
-	groupButton.Text = if claimed then "Claimed ✅" else "JOIN & CLAIM"
+	groupButton.Text = if claimed then "Claimed" else "JOIN & CLAIM"
 	UIKit.SetButtonColor(groupButton, if claimed then Colors.Disabled else Colors.Good)
-	groupStatus.Text = if claimed then "Thanks for joining! 💙" else "Reward: " .. Config.RewardText(Config.Social.GroupReward)
+	groupStatus.Text = if claimed then "Thanks for joining!" else "Reward: " .. Config.RewardText(Config.Social.GroupReward)
 end
 
 local function refreshSocial()
@@ -135,15 +135,15 @@ local function refreshSocial()
 		local state = if meta then (if kind == "Follow" then meta.FollowState else meta.LikeState) else ""
 		local reward = if kind == "Follow" then Config.Social.FollowReward else Config.Social.LikeReward
 		if state == "Claimed" then
-			rowParts.Button.Text = "Claimed ✅"
+			rowParts.Button.Text = "Claimed"
 			UIKit.SetButtonColor(rowParts.Button, Colors.Disabled)
-			rowParts.Status.Text = "Thank you! 💙"
+			rowParts.Status.Text = "Thank you!"
 		elseif state == "Pending" then
 			rowParts.Button.Text = "Check again"
 			UIKit.SetButtonColor(rowParts.Button, Colors.Warning)
 			rowParts.Status.Text = "Not working? Leave and rejoin."
 		else
-			rowParts.Button.Text = if kind == "Follow" then "I followed! ✔" else "I liked it! ✔"
+			rowParts.Button.Text = if kind == "Follow" then "I followed!" else "I liked it!"
 			UIKit.SetButtonColor(rowParts.Button, Colors.Good)
 			rowParts.Status.Text = "Reward: " .. Config.RewardText(reward :: any)
 		end
@@ -214,7 +214,7 @@ local function joinGroup()
 	if result.Ok then
 		UIKit.PlaySound("Sparkle")
 		UIKit.Confetti(60)
-		UIKit.Toast("👥 Welcome to the community! " .. (result.Message or ""), "Good")
+		UIKit.Toast("Welcome to the community! " .. (result.Message or ""), "Good")
 	else
 		UIKit.Toast(result.Error or "Join the community first, then claim!", "Info")
 	end
@@ -270,7 +270,7 @@ local function buildFree(screenRoot: Instance)
 
 	-- Like the game: press 👍 on the game page, then the button, then rejoin.
 	if Config.Social.LikeReward then
-		local like = card(list, 2, "👍", "Like the game", "Press 👍 on the game page, then tap the button.")
+		local like = card(list, 2, "👍", "Like the game", "Press the thumbs-up on the game page, then tap the button.")
 		socialButton(like, "Like")
 	end
 

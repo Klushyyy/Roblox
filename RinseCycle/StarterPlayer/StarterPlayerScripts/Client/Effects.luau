@@ -160,9 +160,9 @@ local function onCleaned(data: Types.FXCleaned)
 	UIKit.PlaySound("Pop", 0.95 + comboCount * 0.03)
 
 	if data.By == LocalPlayer.UserId then
-		billboardNumber(data.Position, "+" .. UIKit.Short(data.Units) .. " 💧", UIKit.Theme.Colors.Primary)
+		billboardNumber(data.Position, "+" .. UIKit.Short(data.Units), UIKit.Theme.Colors.Primary)
 		if data.Golden and data.Bubbles > 0 then
-			billboardNumber(data.Position, "+" .. UIKit.Short(data.Bubbles) .. " 🧼", UIKit.Theme.Colors.Bubble, FLOATER_RISE + 1)
+			billboardNumber(data.Position, "+" .. UIKit.Short(data.Bubbles) .. " Bubbles", UIKit.Theme.Colors.Bubble, FLOATER_RISE + 1)
 		end
 	end
 end
@@ -171,9 +171,9 @@ local function onDishDone(data: Types.FXDishDone)
 	burst(data.Position, UIKit.Theme.Colors.Good, "rbxasset://textures/particles/sparkles_main.dds", 24, 0.8)
 	popBubbles(data.Position, 6, 2)
 	UIKit.PlaySound("Sparkle")
-	billboardNumber(data.Position, "✨ Sparkling!", UIKit.Theme.Colors.Text, FLOATER_RISE + 1)
+	billboardNumber(data.Position, "Sparkling!", UIKit.Theme.Colors.Text, FLOATER_RISE + 1)
 	if data.By == LocalPlayer.UserId and data.Bonus > 0 then
-		billboardNumber(data.Position + Vector3.new(0, 1.4, 0), "+" .. UIKit.Short(data.Bonus) .. " 💰", UIKit.Theme.Colors.Coin, FLOATER_RISE + 1.6)
+		billboardNumber(data.Position + Vector3.new(0, 1.4, 0), "+" .. UIKit.Short(data.Bonus) .. " coins", UIKit.Theme.Colors.Coin, FLOATER_RISE + 1.6)
 	end
 end
 
@@ -243,13 +243,13 @@ local function onSold(data: any)
 		local character = LocalPlayer.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		if root and root:IsA("BasePart") then
-			billboardNumber(root.Position + Vector3.new(0, 3, 0), "🐾 +" .. UIKit.Short(data.Coins) .. " 💰", UIKit.Theme.Colors.Coin, FLOATER_RISE + 1)
+			billboardNumber(root.Position + Vector3.new(0, 3, 0), "+" .. UIKit.Short(data.Coins) .. " coins", UIKit.Theme.Colors.Coin, FLOATER_RISE + 1)
 		end
 		UIKit.PlaySound("Coins", 1.2)
 		return
 	end
 	UIKit.PlaySound("Coins")
-	UIKit.Toast("+" .. UIKit.Commas(data.Coins) .. " 💰", "Good")
+	UIKit.Toast("+" .. UIKit.Commas(data.Coins) .. " coins", "Good")
 end
 
 local function onTankFull()
@@ -776,10 +776,10 @@ local function updateShopDisplays()
 			if price then
 				local cost = Config.ToolCost(index, run.Level) or 0
 				if owned then
-					price.Text = "✅ Owned"
+					price.Text = "Owned"
 					price.TextColor3 = UIKit.Theme.Colors.Good
 				else
-					price.Text = "💰 " .. UIKit.Short(cost)
+					price.Text = UIKit.Short(cost) .. " coins"
 					price.TextColor3 = if run.Coins >= cost then UIKit.Theme.Colors.Coin else UIKit.Theme.Colors.Bad
 				end
 			end

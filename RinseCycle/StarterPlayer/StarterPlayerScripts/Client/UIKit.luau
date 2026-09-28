@@ -658,6 +658,97 @@ end
 
 -- A rounded inset card for rows and tiles inside a window (lighter navy with a soft rim).
 -- props: any Frame property plus Color, CornerRadius, StrokeColor.
+--[[
+	Drawn icons (no emoji): UIKit.Icon(kind, size, props?) -> Frame
+	kind: "Coin" | "Bubble" | "Gem" | "Drop". Built from rounded frames, gradients and outlines so
+	they match the chunky UI. props: any Frame property (Position, AnchorPoint, LayoutOrder, ZIndex,
+	Parent...).
+]]
+local function round(frame: GuiObject)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(1, 0)
+	c.Parent = frame
+end
+local function iconPart(parent: Instance, size: UDim2, pos: UDim2, color: Color3, transparency: number?): Frame
+	local f = Instance.new("Frame")
+	f.BorderSizePixel = 0
+	f.AnchorPoint = Vector2.new(0.5, 0.5)
+	f.Size = size
+	f.Position = pos
+	f.BackgroundColor3 = color
+	f.BackgroundTransparency = transparency or 0
+	f.Parent = parent
+	return f
+end
+function UIKit.Icon(kind: string, size: number?, props: { [string]: any }?): Frame
+	local px = size or 32
+	local root = Instance.new("Frame")
+	root.Name = kind .. "Icon"
+	root.BackgroundTransparency = 1
+	root.BorderSizePixel = 0
+	root.Size = UDim2.fromOffset(px, px)
+	local ink = Colors.Ink
+	local thick = math.max(1.5, px / 14)
+	local function outline(f: GuiObject, color: Color3?)
+		local st = Instance.new("UIStroke")
+		st.Color = color or ink
+		st.Thickness = thick
+		st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		st.Parent = f
+	end
+	if kind == "Coin" then
+		local body = iconPart(root, UDim2.fromScale(0.9, 0.9), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1))
+		round(body)
+		outline(body)
+		addGradient(body, Color3.fromRGB(255, 226, 110), Color3.fromRGB(240, 170, 30))
+		local ring = iconPart(body, UDim2.fromScale(0.64, 0.64), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1), 1)
+		round(ring)
+		outline(ring, Color3.fromRGB(196, 128, 18))
+		local shine = iconPart(body, UDim2.fromScale(0.3, 0.16), UDim2.fromScale(0.34, 0.26), Color3.new(1, 1, 1), 0.35)
+		shine.Rotation = -35
+		round(shine)
+	elseif kind == "Gem" then
+		local body = iconPart(root, UDim2.fromScale(0.64, 0.64), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1))
+		body.Rotation = 45
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0.18, 0)
+		c.Parent = body
+		outline(body)
+		addGradient(body, Color3.fromRGB(150, 235, 255), Color3.fromRGB(120, 90, 240))
+		local facet = iconPart(body, UDim2.fromScale(0.42, 0.42), UDim2.fromScale(0.36, 0.36), Color3.new(1, 1, 1), 0.55)
+		local fc = Instance.new("UICorner")
+		fc.CornerRadius = UDim.new(0.2, 0)
+		fc.Parent = facet
+	elseif kind == "Drop" then
+		local tip = iconPart(root, UDim2.fromScale(0.5, 0.5), UDim2.fromScale(0.5, 0.42), Color3.new(1, 1, 1))
+		tip.Rotation = 45
+		outline(tip)
+		addGradient(tip, Color3.fromRGB(150, 220, 255), Color3.fromRGB(56, 160, 240))
+		local body = iconPart(root, UDim2.fromScale(0.7, 0.7), UDim2.fromScale(0.5, 0.6), Color3.new(1, 1, 1))
+		round(body)
+		outline(body)
+		addGradient(body, Color3.fromRGB(150, 220, 255), Color3.fromRGB(40, 140, 230))
+		local shine = iconPart(body, UDim2.fromScale(0.2, 0.3), UDim2.fromScale(0.32, 0.4), Color3.new(1, 1, 1), 0.35)
+		round(shine)
+	else -- "Bubble": a soap bubble
+		local body = iconPart(root, UDim2.fromScale(0.9, 0.9), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1))
+		round(body)
+		outline(body)
+		addGradient(body, Color3.fromRGB(255, 196, 226), Color3.fromRGB(236, 92, 160))
+		local shine = iconPart(body, UDim2.fromScale(0.34, 0.22), UDim2.fromScale(0.36, 0.28), Color3.new(1, 1, 1), 0.2)
+		shine.Rotation = -35
+		round(shine)
+		local dot = iconPart(body, UDim2.fromScale(0.12, 0.12), UDim2.fromScale(0.7, 0.72), Color3.new(1, 1, 1), 0.3)
+		round(dot)
+	end
+	if props then
+		for k, v in props do
+			(root :: any)[k] = v
+		end
+	end
+	return root
+end
+
 local CARD_SKIP = { Color = true, CornerRadius = true, StrokeColor = true }
 function UIKit.Card(props: { [string]: any }?): Frame
 	local p: { [string]: any } = props or {}
@@ -1666,8 +1757,9 @@ function UIKit.Window(props: { [string]: any }?): (Frame, Frame)
 	})
 
 	local function applyTitle()
-		local icon = tostring(window:GetAttribute("Icon") or "")
-		local hasIcon = icon ~= ""
+		-- Title-only banners: emoji icons on every window read as clutter.
+		local icon = ""
+		local hasIcon = false
 		badge.Visible = hasIcon
 		iconLabel.Text = icon
 		local left = if hasIcon then 60 else 16
@@ -1937,7 +2029,7 @@ function UIKit.Toast(text: string, kind: string?)
 		textW, textH = math.min(TOAST_MAX_TEXT_W, #message * 11), TOAST_TEXT_SIZE
 	end
 	local height = math.max(50, textH + 22)
-	local width = 16 + 30 + 10 + textW + 22
+	local width = 24 + textW + 24
 	local multiline = textH > TOAST_TEXT_SIZE * 1.5
 
 	local frame = Instance.new("Frame")
@@ -1962,7 +2054,8 @@ function UIKit.Toast(text: string, kind: string?)
 	icon.Size = UDim2.fromOffset(30, 30)
 	icon.BackgroundTransparency = 1
 	icon.Font = Fonts.Title
-	icon.Text = style.Icon
+	icon.Text = ""
+	icon.Visible = false -- toasts are text only (the colour says what kind it is)
 	icon.TextSize = 26
 	icon.TextTransparency = 1
 	icon.ZIndex = 2
@@ -1971,7 +2064,7 @@ function UIKit.Toast(text: string, kind: string?)
 	local label = Instance.new("TextLabel")
 	label.Name = "Text"
 	label.AnchorPoint = Vector2.new(0, 0.5)
-	label.Position = UDim2.new(0, 56, 0.5, 0)
+	label.Position = UDim2.new(0, 24, 0.5, 0)
 	label.Size = UDim2.fromOffset(textW, textH + 4)
 	label.BackgroundTransparency = 1
 	label.Font = Fonts.Title

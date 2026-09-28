@@ -34,8 +34,8 @@ local function step(name: string, fn: () -> ())
 	local ok, err = xpcall(fn, debug.traceback)
 	if not ok then
 		warn(string.format("[%s] %s FAILED:\n%s", Config.GameName, name, tostring(err)))
-	else
-		print(string.format("[%s] %s ok (%.2fs)", Config.GameName, name, os.clock() - started))
+	elseif os.clock() - started > 5 then
+		print(string.format("[%s] %s took %.1fs", Config.GameName, name, os.clock() - started))
 	end
 end
 

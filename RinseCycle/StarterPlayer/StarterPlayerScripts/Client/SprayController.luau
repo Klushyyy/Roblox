@@ -509,7 +509,7 @@ local function updateTouchUIVisibility()
 	end
 	if turnHint then
 		turnHint.Visible = line and not touch
-		turnHint.Text = string.format("%s  %s: turn the line", if washerVertical then "↕️ Up and down" else "↔️ Across", if gamepad then "D-pad ↑" else "T")
+		turnHint.Text = string.format("%s  %s: turn the line", if washerVertical then "Up and down" else "Across", if gamepad then "D-pad ↑" else "T")
 	end
 	if not sprayButton.Visible then
 		touchHeld = false
@@ -689,7 +689,7 @@ local function onHeartbeat(dt: number)
 	local needsTool = type(minTool) == "number" and minTool > (stats.Tier or stats.ToolIndex)
 	if needsTool and hintAnchor and hintBillboard and hintLabel then
 		hintAnchor.CFrame = CFrame.new(hitPos)
-		hintLabel.Text = "🐢 A " .. toolName(minTool :: number) .. " cleans this much faster"
+		hintLabel.Text = "A " .. toolName(minTool :: number) .. " cleans this much faster"
 		hintBillboard.Enabled = true
 	elseif hintBillboard then
 		hintBillboard.Enabled = false

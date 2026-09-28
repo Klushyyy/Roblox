@@ -54,8 +54,8 @@ local FLOOR_COLORS = {
 	Full = Color3.fromRGB(255, 165, 60), -- orange: full, or launching
 }
 local PRIVACY_TEXT = {
-	Public = "🌐 Public",
-	Friends = "👥 Friends Only",
+	Public = "Public",
+	Friends = "Friends Only",
 }
 local IDLE_TITLE = "Party Pad"
 local IDLE_STATUS = "Touch to create a party"
@@ -125,6 +125,14 @@ local memberConns: { [Player]: { RBXScriptConnection } } = {}
 local pendingJoin: { [Player]: boolean } = {} -- friends check in flight: the poll skips them
 local launching: { [Player]: boolean } = {} -- handed to StartRound, which hasn't returned yet
 local cooldownUntil: { [Player]: number } = {} -- os.clock() before which they can't enter a pad
+-- Just sent out of a pad (Back, ejected, cancelled): that pad is ignored for them until the poll
+-- sees them outside it once. No timer, so walking straight back in starts a new party at once, but
+-- a character still reporting its old spot right after the teleport can't re-trigger it.
+local mustLeave: { [Player]: { Pad: any, Since: number } } = {}
+local MUST_LEAVE_MAX = 4 -- seconds: if the teleport out somehow never lands, stop waiting
+-- The character's own late position updates can put it back in the pad for a moment right after the
+-- teleport out, so "outside" only counts once this long has passed.
+local MUST_LEAVE_SETTLE = 0.6
 local lastPutBack: { [Player]: number } = {}
 local actionWindow: { [Player]: { Start: number, Count: number } } = {}
 -- friendCache[candidate][hostUserId] = the answer to candidate:IsFriendsWithAsync(hostUserId)
@@ -438,7 +446,7 @@ local function releaseMember(party: Party, player: Player, mode: ReleaseMode)
 	player:SetAttribute("InParty", false)
 	releaseGroup(player)
 	if mode == "Exit" then
-		cooldownUntil[player] = os.clock() + PARTY.RejoinCooldown
+		mustLeave[player] = { Pad = party.Pad, Since = os.clock() }
 		if not isInRun(player) then
 			teleport(player, party.Pad.Info.Exit)
 		end
@@ -464,7 +472,7 @@ local function promoteHost(party: Party)
 	end
 	party.Host = newHost
 	party.Level = math.clamp(party.Level, 1, unlockedOf(newHost))
-	notify(newHost, "👑 You're the party host now!", "Good")
+	notify(newHost, "You're the party host now!", "Good")
 end
 
 local function removeMember(player: Player, mode: ReleaseMode, message: string?)
@@ -518,6 +526,7 @@ local function joinParty(party: Party, player: Player)
 	local slot = freeSlot(party)
 	party.Slots[player] = slot
 	cooldownUntil[player] = nil
+	mustLeave[player] = nil
 	lastPutBack[player] = os.clock()
 
 	Characters.SetGroup(player, Characters.Groups.PartyMember)
@@ -564,7 +573,7 @@ end
 
 -- Pushes a free player out the front of a pad they may not join.
 local function eject(player: Player, pad: Pad, message: string)
-	cooldownUntil[player] = os.clock() + PARTY.RejoinCooldown
+	mustLeave[player] = { Pad = pad, Since = os.clock() }
 	teleport(player, pad.Info.Exit)
 	notify(player, message, "Bad")
 end
@@ -655,7 +664,7 @@ function admit(player: Player, pad: Pad)
 		return
 	end
 	if inLockWindow(party) then
-		eject(player, pad, "🚀 That party is launching! Try another pad.")
+		eject(player, pad, "That party is launching! Try another pad.")
 		return
 	end
 	if #party.Members >= party.MaxPlayers then
@@ -668,7 +677,7 @@ function admit(player: Player, pad: Pad)
 			startFriendCheck(player, pad, party)
 			return
 		elseif not isFriend then
-			eject(player, pad, "👥 Friends only!")
+			eject(player, pad, "Friends only!")
 			return
 		end
 	end
@@ -709,6 +718,9 @@ local function launch(party: Party)
 
 	local level = party.Level
 	task.spawn(function()
+		-- Give every member's screen time to fade to black (Cutscene.Cover on "Launching") before
+		-- anyone is moved, so the teleport into the dishwasher is never seen.
+		task.wait(0.4)
 		-- StartRound yields while it builds the dishwasher. Pass a copy: it's RoundService's now.
 		local ok, started, err = pcall(RoundService.StartRound, table.clone(roster), level)
 		for _, member in roster do
@@ -842,9 +854,18 @@ local function tick()
 			local root = Characters.GetRoot(player)
 			if root then
 				local position = root.Position
+				local leaving = mustLeave[player]
+				if leaving then
+					local zone = leaving.Pad.Info.Zone
+					local settled = clock - leaving.Since > MUST_LEAVE_SETTLE
+					if not zone.Parent or (settled and not isInsideZone(zone, position)) or clock - leaving.Since > MUST_LEAVE_MAX then
+						mustLeave[player] = nil
+						leaving = nil
+					end
+				end
 				for _, pad in pads do
 					local zone = pad.Info.Zone
-					if zone.Parent and isInsideZone(zone, position) then
+					if zone.Parent and (not leaving or leaving.Pad ~= pad) and isInsideZone(zone, position) then
 						admit(player, pad)
 						break
 					end
@@ -895,7 +916,7 @@ local function onPartyAction(player: Player, action: any, value: any)
 			return
 		end
 		if level > unlockedOf(player) then
-			notify(player, "🔒 That level is still locked!", "Bad")
+			notify(player, "That level is still locked!", "Bad")
 			return
 		end
 		if not isInteger(max) or max < 1 or max > MAX_PLAYERS then
@@ -935,7 +956,7 @@ local function onPartyAction(player: Player, action: any, value: any)
 			return
 		end
 		if value > unlockedOf(player) then
-			notify(player, "🔒 That level is still locked!", "Bad")
+			notify(player, "That level is still locked!", "Bad")
 			return
 		end
 		party.Level = value
@@ -962,6 +983,7 @@ local function onPlayerRemoving(player: Player)
 	pendingJoin[player] = nil
 	launching[player] = nil
 	cooldownUntil[player] = nil
+	mustLeave[player] = nil
 	lastPutBack[player] = nil
 	actionWindow[player] = nil
 	friendCache[player] = nil

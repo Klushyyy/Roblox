@@ -1071,6 +1071,30 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - **Offline tests:** `_tools/tests` runs the real server and client scripts in Lune (see its
   README). Every admin command, a full run, the lobby systems and the water parts pass there.
 
+## 6j. Launch version (v1.0)
+
+- **Store IDs:** paste every game pass / developer product ID (and the community ID) into
+  `ReplicatedStorage > Shared > StoreIds`; Config applies them on start. See STORE_SETUP.md.
+  Community: GroupId 920260021.
+- **Transitions:** the screen fades to black when your party launches ("Filling the dishwasher...")
+  and stays black through the teleport until the cutscene fades in (the server also waits 0.4 s
+  before moving anyone). Leave, Back to Lobby and the automatic return after results fade the
+  same way (Cutscene.Cover / Uncover).
+- **Levels:** the dishwasher is identical in every level (ArenaBuilder's fixed palette). The room
+  around it has its own bench: a home kitchen (cupboards), a pizzeria line (glass-front steel
+  fridges, open shelving, an extractor hood) and a castle (stone arches with barrels, an oak top,
+  plate racks). Counter height and footprint are unchanged, so play is the same.
+- **Party pads:** polled every 0.1 s. Back / leaving puts you outside and that pad ignores you only
+  until you've been seen outside it (after 0.6 s), so re-entry is instant but a late position
+  update can't re-join you. No rejoin cooldown. Glass + invisible walls + lid hold members in.
+- **UI:** far fewer emojis. Window banners are title-only, toasts are text-only, amounts read as
+  words ("300 Bubbles"), and the HUD uses drawn icons (UIKit.Icon: Coin, Bubble, Gem, Drop).
+  Item art (tools, passes, pets, ranks, levels) and the HUD buttons keep their icons.
+- **Chat:** the place file sets TextChatService (ChatVersion 1, default channels), which :mute needs.
+- **Output:** quiet. Admin logs only with VERBOSE; Studio's "not published" DataStore failures are
+  silent; Main prints only failures and "server ready".
+- **Admin:** :give removed; Give Coins shows a coin icon.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

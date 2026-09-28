@@ -20,11 +20,18 @@ import xml.dom.minidom
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 SERVICE_NAMES = ["Workspace", "ReplicatedStorage", "ReplicatedFirst", "ServerScriptService",
-                 "ServerStorage", "StarterPlayer", "StarterGui", "Lighting", "SoundService"]
+                 "ServerStorage", "StarterPlayer", "StarterGui", "Lighting", "SoundService",
+                 "TextChatService"]
 SPECIAL_FOLDERS = {"StarterPlayerScripts": "StarterPlayerScripts",
                    "StarterCharacterScripts": "StarterCharacterScripts"}
 # Extra properties written onto specific services in the place file.
-SERVICE_PROPS = {"StarterPlayer": "", "Workspace": '<bool name="StreamingEnabled">false</bool>'}
+SERVICE_PROPS = {"StarterPlayer": "", "Workspace": '<bool name="StreamingEnabled">false</bool>',
+                 # The modern chat (TextChatService, ChatVersion 1) with its default channels: the
+                 # admin :mute works on those channels. A place file that doesn't say can come up on
+                 # the legacy chat, which has no TextChannels at all.
+                 "TextChatService": '<token name="ChatVersion">1</token>'
+                                    '<bool name="CreateDefaultTextChannels">true</bool>'
+                                    '<bool name="CreateDefaultCommands">true</bool>'}
 
 ref = 0
 

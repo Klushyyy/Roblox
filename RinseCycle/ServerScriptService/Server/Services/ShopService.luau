@@ -142,7 +142,7 @@ local function buyPerk(player: Player, value: any): Types.RequestResult
 		return fail(perk.Name .. " is maxed out!")
 	end
 	if profile.Bubbles < cost then
-		return fail("You need " .. Format.Short(cost - profile.Bubbles) .. " more 🧼")
+		return fail("You need " .. Format.Short(cost - profile.Bubbles) .. " more Bubbles")
 	end
 	if not DataService.SpendBubbles(player, cost) then
 		return fail("Not enough Bubbles!")
@@ -237,7 +237,7 @@ local function rollRank(player: Player, _value: any): Types.RequestResult
 		return fail(ERR_LOADING)
 	end
 	if profile.Gems < cost then
-		return fail(string.format("You need %d 💎 to roll!", cost))
+		return fail(string.format("You need %d Gems to roll!", cost))
 	end
 	if not DataService.SpendGems(player, cost) then
 		return fail(ERR_GENERIC)
@@ -274,7 +274,7 @@ local function rebirth(player: Player, _value: any): Types.RequestResult
 	local notify = Remotes.Event("Notify")
 	for _, other in Players:GetPlayers() do
 		if other ~= player then
-			notify:FireClient(other, string.format("✨ %s just reached Rebirth %d!", player.DisplayName, count), "Good")
+			notify:FireClient(other, string.format("%s just reached Rebirth %d!", player.DisplayName, count), "Good")
 		end
 	end
 	return { Ok = true }
@@ -333,7 +333,7 @@ local function claimGroup(player: Player, _value: any): Types.RequestResult
 		return fail(ERR_LOADING)
 	end
 	if profile.GroupReward then
-		return fail("You already got this reward. Thanks for joining! 💙")
+		return fail("You already got this reward. Thanks for joining!")
 	end
 	if not inGroup(player, groupId) then
 		return fail("Join the community first, then claim!")

@@ -243,6 +243,7 @@ local ROOM_STYLES: { RoomStyle } = {
 		Handle = K.Handle, HandleMat = Enum.Material.Metal,
 		Kick = K.Kick,
 		Lamp = Color3.fromRGB(255, 248, 225),
+		Bench = "Home",
 	},
 	-- 2: Pizzeria: brick walls, black and white floor, steel cabinets, butcher-block counter.
 	{
@@ -250,23 +251,25 @@ local ROOM_STYLES: { RoomStyle } = {
 		Wall = Color3.fromRGB(165, 78, 58), WallMat = Enum.Material.Brick,
 		Ceiling = Color3.fromRGB(60, 50, 46),
 		Cabinet = Color3.fromRGB(188, 193, 200), CabinetDoor = Color3.fromRGB(205, 210, 216), CabMat = Enum.Material.Metal,
-		Counter = Color3.fromRGB(176, 124, 78), CounterMat = Enum.Material.Wood,
+		Counter = Color3.fromRGB(200, 204, 210), CounterMat = Enum.Material.Metal,
 		Tile = Color3.fromRGB(245, 245, 240), TileMat = Enum.Material.CeramicTiles,
 		Handle = Color3.fromRGB(60, 60, 66), HandleMat = Enum.Material.Metal,
 		Kick = Color3.fromRGB(40, 40, 44),
 		Lamp = Color3.fromRGB(255, 214, 150),
+		Bench = "Steel",
 	},
 	-- 3: Castle banquet hall: stone, dark wood, gold, a red carpet.
 	{
 		Floor = Color3.fromRGB(128, 122, 116), FloorMat = Enum.Material.Slate,
 		Wall = Color3.fromRGB(150, 144, 136), WallMat = Enum.Material.Cobblestone,
 		Ceiling = Color3.fromRGB(70, 52, 40),
-		Cabinet = Color3.fromRGB(92, 58, 38), CabinetDoor = Color3.fromRGB(112, 72, 46), CabMat = Enum.Material.Wood,
-		Counter = Color3.fromRGB(238, 232, 222), CounterMat = Enum.Material.Marble,
+		Cabinet = Color3.fromRGB(150, 144, 136), CabinetDoor = Color3.fromRGB(112, 72, 46), CabMat = Enum.Material.Cobblestone,
+		Counter = Color3.fromRGB(104, 66, 40), CounterMat = Enum.Material.WoodPlanks,
 		Tile = Color3.fromRGB(120, 112, 104), TileMat = Enum.Material.Slate,
 		Handle = Color3.fromRGB(230, 190, 90), HandleMat = Enum.Material.Metal,
 		Kick = Color3.fromRGB(50, 34, 24),
 		Lamp = Color3.fromRGB(255, 205, 140),
+		Bench = "Stone",
 	},
 }
 
@@ -326,8 +329,10 @@ local function buildKitchen(b: Builder, k: RoomStyle)
 	end
 	span(b, "Ceiling", -ROOM_HALF_X, ROOM_HALF_X, fy + ROOM_HEIGHT, fy + ROOM_HEIGHT + 4, ROOM_Z_FRONT, ROOM_Z_BACK, k.Ceiling, nil, shadowless)
 
-	-- Base cabinets either side of the dishwasher, with doors, handles and a toe kick.
+	-- The bench either side of the dishwasher. Same solid body and counter height in every level
+	-- (players run along the top); what it's dressed as depends on the room.
 	local cabFront = -54
+	local bench = k.Bench or "Home"
 	for _, side in { -1, 1 } do
 		local x0, x1 = side * 62, side * ROOM_HALF_X
 		span(b, "Cabinets", x0, x1, fy + 12, COUNTER_TOP_Y - 6, cabFront, ROOM_Z_BACK, k.Cabinet, k.CabMat)
@@ -337,27 +342,124 @@ local function buildKitchen(b: Builder, k: RoomStyle)
 		local doorW = width / doors
 		for i = 0, doors - 1 do
 			local cx = side * (62 + doorW * (i + 0.5))
-			box(b, "Drawer", Vector3.new(doorW - 6, 26, 1.5), cx, COUNTER_TOP_Y - 24, cabFront - 0.75, k.CabinetDoor, k.CabMat)
-			box(b, "DrawerHandle", Vector3.new(24, 2.5, 2.5), cx, COUNTER_TOP_Y - 24, cabFront - 2.5, k.Handle, k.HandleMat, noCollide())
-			box(b, "Door", Vector3.new(doorW - 6, 66, 1.5), cx, fy + 12 + 38, cabFront - 0.75, k.CabinetDoor, k.CabMat)
-			box(b, "DoorHandle", Vector3.new(2.5, 20, 2.5), cx + side * -(doorW / 2 - 12), fy + 12 + 55, cabFront - 2.5, k.Handle, k.HandleMat, noCollide())
+			if bench == "Steel" then
+				-- A commercial line: reach-in fridges with glass fronts and long bar handles.
+				local steel = Color3.fromRGB(205, 210, 216)
+				local y0, y1 = fy + 18, COUNTER_TOP_Y - 12
+				box(b, "FridgeDoor", Vector3.new(doorW - 6, y1 - y0, 1.5), cx, (y0 + y1) / 2, cabFront - 0.75, steel, Enum.Material.Metal)
+				local gy0, gy1 = y0 + 30, y1 - 14
+				box(b, "FridgeInside", Vector3.new(doorW - 22, gy1 - gy0, 0.4), cx, (gy0 + gy1) / 2, cabFront - 1.6, Color3.fromRGB(40, 48, 58), nil, noCollide())
+				for shelf = 0, 1 do
+					local sy = gy0 + 6 + shelf * (gy1 - gy0) / 2
+					box(b, "FridgeShelf", Vector3.new(doorW - 24, 1, 0.6), cx, sy - 4, cabFront - 1.9, Color3.fromRGB(180, 190, 200), Enum.Material.Metal, noCollide())
+					local tubs = { Color3.fromRGB(210, 60, 45), Color3.fromRGB(250, 235, 200), Color3.fromRGB(90, 160, 80), Color3.fromRGB(245, 200, 80) }
+					for t = 0, 3 do
+						local tx = cx - (doorW - 30) / 2 + (doorW - 30) * (t + 0.5) / 4
+						box(b, "FridgeTub", Vector3.new(10, 12, 0.6), tx, sy + 3, cabFront - 1.9, tubs[(t + shelf + i) % #tubs + 1], nil, noCollide())
+					end
+				end
+				local glass = box(b, "FridgeGlass", Vector3.new(doorW - 20, gy1 - gy0, 0.4), cx, (gy0 + gy1) / 2, cabFront - 2.3, Color3.fromRGB(200, 230, 245), Enum.Material.Glass, noCollide())
+				glass.Transparency = 0.55
+				box(b, "BarHandle", Vector3.new(2.5, gy1 - gy0, 2.5), cx + side * -(doorW / 2 - 9), (gy0 + gy1) / 2, cabFront - 4, Color3.fromRGB(150, 155, 162), Enum.Material.Metal, noCollide())
+				box(b, "Vent", Vector3.new(doorW - 20, 8, 0.6), cx, y0 + 12, cabFront - 1.8, Color3.fromRGB(70, 74, 80), Enum.Material.DiamondPlate, noCollide())
+				cyl(b, "Foot", 12, 6, cx - doorW / 2 + 8, fy + 6, cabFront + 4, Color3.fromRGB(150, 155, 162), Enum.Material.Metal, noCollide())
+			elseif bench == "Stone" then
+				-- Carved stone arches with oak barrels resting in them.
+				local ay0, ay1 = fy + 18, COUNTER_TOP_Y - 30
+				local aw = doorW - 22
+				box(b, "Alcove", Vector3.new(aw, ay1 - ay0 - aw / 2, 1.2), cx, ay0 + (ay1 - ay0 - aw / 2) / 2, cabFront - 0.6, Color3.fromRGB(34, 28, 24), Enum.Material.Slate, noCollide())
+				local arch = cyl(b, "AlcoveArch", 1.2, aw, cx, ay1 - aw / 2, cabFront - 0.6, Color3.fromRGB(34, 28, 24), Enum.Material.Slate, noCollide())
+				arch.CFrame = footprint(b.origin, cx, ay1 - aw / 2, cabFront - 0.6) * CFrame.Angles(0, math.rad(90), 0)
+				-- A lighter stone ring just behind the dark alcove face (shows as a border round the arch).
+				local rim = cyl(b, "ArchRim", 1.6, aw + 8, cx, ay1 - aw / 2, cabFront - 0.1, Color3.fromRGB(122, 116, 108), Enum.Material.Slate, noCollide())
+				rim.CFrame = footprint(b.origin, cx, ay1 - aw / 2, cabFront - 0.1) * CFrame.Angles(0, math.rad(90), 0)
+				local barrelD = math.min(aw - 8, 52)
+				local by = ay0 + barrelD / 2
+				local barrel = cyl(b, "Barrel", 30, barrelD, cx, by, cabFront - 14, Color3.fromRGB(128, 84, 48), Enum.Material.Wood, noCollide())
+				barrel.CFrame = footprint(b.origin, cx, by, cabFront - 14) * CFrame.Angles(0, math.rad(90), 0)
+				for _, dz in { -9, 9 } do
+					local band = cyl(b, "BarrelBand", 3, barrelD + 1.2, cx, by, cabFront - 14 + dz, Color3.fromRGB(60, 56, 54), Enum.Material.Metal, noCollide())
+					band.CFrame = footprint(b.origin, cx, by, cabFront - 14 + dz) * CFrame.Angles(0, math.rad(90), 0)
+				end
+				local lid = cyl(b, "BarrelLid", 0.6, barrelD - 6, cx, by, cabFront - 29.4, Color3.fromRGB(150, 104, 62), Enum.Material.Wood, noCollide())
+				lid.CFrame = footprint(b.origin, cx, by, cabFront - 29.4) * CFrame.Angles(0, math.rad(90), 0)
+			else
+				box(b, "Drawer", Vector3.new(doorW - 6, 26, 1.5), cx, COUNTER_TOP_Y - 24, cabFront - 0.75, k.CabinetDoor, k.CabMat)
+				box(b, "DrawerHandle", Vector3.new(24, 2.5, 2.5), cx, COUNTER_TOP_Y - 24, cabFront - 2.5, k.Handle, k.HandleMat, noCollide())
+				box(b, "Door", Vector3.new(doorW - 6, 66, 1.5), cx, fy + 12 + 38, cabFront - 0.75, k.CabinetDoor, k.CabMat)
+				box(b, "DoorHandle", Vector3.new(2.5, 20, 2.5), cx + side * -(doorW / 2 - 12), fy + 12 + 55, cabFront - 2.5, k.Handle, k.HandleMat, noCollide())
+			end
 		end
 	end
 
 	-- Countertop across the whole run (including over the dishwasher) with a backsplash.
 	span(b, "Countertop", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, ROOM_Z_BACK, k.Counter, k.CounterMat, shadowless)
+	if bench == "Stone" then
+		-- A thick oak top: a dark front edge under the planks.
+		span(b, "CounterEdge", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y - 12, COUNTER_TOP_Y - 6, cabFront - 6, cabFront - 2, Color3.fromRGB(80, 50, 30), Enum.Material.Wood, noCollide())
+	elseif bench == "Steel" then
+		span(b, "CounterLip", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y - 10, COUNTER_TOP_Y - 6, cabFront - 6, cabFront - 4, Color3.fromRGB(170, 175, 182), Enum.Material.Metal, noCollide())
+	end
 	span(b, "Backsplash", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y, COUNTER_TOP_Y + 70, ROOM_Z_BACK - 1, ROOM_Z_BACK, k.Tile, k.TileMat, noCollide())
 
-	-- Upper cabinets, leaving a gap over the sink area for each room's centrepiece.
+	-- Up the wall, leaving a gap over the sink area for each room's centrepiece.
 	local upperY0, upperY1 = COUNTER_TOP_Y + 120, COUNTER_TOP_Y + 270
 	for _, seg in { { -ROOM_HALF_X, -220 }, { -40, ROOM_HALF_X } } do
-		span(b, "UpperCabinets", seg[1], seg[2], upperY0, upperY1, ROOM_Z_BACK - 40, ROOM_Z_BACK, k.Cabinet, k.CabMat, shadowless)
 		local w = seg[2] - seg[1]
-		local n = math.floor(w / 70)
-		for i = 0, n - 1 do
-			local cx = seg[1] + w / n * (i + 0.5)
-			box(b, "UpperDoor", Vector3.new(w / n - 5, upperY1 - upperY0 - 8, 1.2), cx, (upperY0 + upperY1) / 2, ROOM_Z_BACK - 40.6, k.CabinetDoor, k.CabMat, noCollide())
-			box(b, "UpperHandle", Vector3.new(2.5, 16, 2.5), cx + (w / n / 2 - 10), upperY0 + 16, ROOM_Z_BACK - 42, k.Handle, k.HandleMat, noCollide())
+		if bench == "Steel" then
+			-- Open steel shelving (pizza pans, tins, oil) under a stainless extractor hood.
+			local steel = Color3.fromRGB(196, 200, 206)
+			for level, y in { upperY0 + 10, upperY0 + 90 } do
+				span(b, "WallShelf", seg[1], seg[2], y - 3, y, ROOM_Z_BACK - 28, ROOM_Z_BACK, steel, Enum.Material.Metal, shadowless)
+				for x = seg[1] + 30, seg[2] - 30, 60 do
+					span(b, "ShelfBracket", x - 1.5, x + 1.5, y - 16, y - 3, ROOM_Z_BACK - 24, ROOM_Z_BACK, Color3.fromRGB(150, 155, 162), Enum.Material.Metal, noCollide())
+				end
+				local n = math.floor(w / 34)
+				for i = 0, n - 1 do
+					local x = seg[1] + w * (i + 0.5) / n
+					local kind = (i + level) % 4
+					if kind == 0 then
+						local pan = cyl(b, "PizzaPan", 2, 30, x, y + 15, ROOM_Z_BACK - 8, Color3.fromRGB(150, 155, 162), Enum.Material.Metal, noCollide())
+						pan.CFrame = footprint(b.origin, x, y + 15, ROOM_Z_BACK - 8) * CFrame.Angles(0, math.rad(90), 0)
+					elseif kind == 1 then
+						cyl(b, "TomatoTin", 18, 14, x, y + 9, ROOM_Z_BACK - 14, Color3.fromRGB(210, 50, 40), Enum.Material.Metal, noCollide())
+					elseif kind == 2 then
+						cyl(b, "OilBottle", 26, 9, x, y + 13, ROOM_Z_BACK - 14, Color3.fromRGB(215, 190, 70), Enum.Material.Glass, { CanCollide = false, CastShadow = false, Transparency = 0.2 })
+					else
+						cyl(b, "DoughTub", 14, 20, x, y + 7, ROOM_Z_BACK - 14, Color3.fromRGB(245, 245, 240), nil, noCollide())
+					end
+				end
+			end
+			span(b, "Hood", seg[1], seg[2], upperY1 - 20, upperY1 + 20, ROOM_Z_BACK - 70, ROOM_Z_BACK, steel, Enum.Material.Metal, shadowless)
+			span(b, "HoodLip", seg[1], seg[2], upperY1 - 26, upperY1 - 20, ROOM_Z_BACK - 70, ROOM_Z_BACK - 64, Color3.fromRGB(150, 155, 162), Enum.Material.Metal, noCollide())
+			span(b, "HoodDuct", seg[1] + w / 2 - 30, seg[1] + w / 2 + 30, upperY1 + 20, KITCHEN_FLOOR_Y + ROOM_HEIGHT, ROOM_Z_BACK - 50, ROOM_Z_BACK, steel, Enum.Material.Metal, shadowless)
+		elseif bench == "Stone" then
+			-- Oak plate racks holding pewter plates and tankards.
+			local oak = Color3.fromRGB(92, 58, 38)
+			span(b, "RackBack", seg[1] + 10, seg[2] - 10, upperY0, upperY1, ROOM_Z_BACK - 3, ROOM_Z_BACK, oak, Enum.Material.WoodPlanks, shadowless)
+			for level, y in { upperY0 + 8, upperY0 + 82 } do
+				span(b, "RackShelf", seg[1] + 11, seg[2] - 11, y - 5, y, ROOM_Z_BACK - 22, ROOM_Z_BACK, oak, Enum.Material.Wood, shadowless)
+				span(b, "RackRail", seg[1] + 11, seg[2] - 11, y + 20, y + 23, ROOM_Z_BACK - 22, ROOM_Z_BACK - 19, oak, Enum.Material.Wood, noCollide())
+				local n = math.floor(w / 36)
+				for i = 0, n - 1 do
+					local x = seg[1] + 20 + (w - 40) * (i + 0.5) / n
+					if (i + level) % 3 == 0 then
+						cyl(b, "Tankard", 20, 14, x, y + 10, ROOM_Z_BACK - 12, Color3.fromRGB(150, 152, 158), Enum.Material.Metal, noCollide())
+					else
+						local plate = cyl(b, "PewterPlate", 2, 30, x, y + 16, ROOM_Z_BACK - 8, Color3.fromRGB(165, 168, 174), Enum.Material.Metal, noCollide())
+						plate.CFrame = footprint(b.origin, x, y + 16, ROOM_Z_BACK - 8) * CFrame.Angles(math.rad(8), math.rad(90), 0)
+					end
+				end
+			end
+			span(b, "RackTop", seg[1] + 6, seg[2] - 6, upperY1, upperY1 + 8, ROOM_Z_BACK - 26, ROOM_Z_BACK, oak, Enum.Material.Wood, shadowless)
+		else
+			span(b, "UpperCabinets", seg[1], seg[2], upperY0, upperY1, ROOM_Z_BACK - 40, ROOM_Z_BACK, k.Cabinet, k.CabMat, shadowless)
+			local n = math.floor(w / 70)
+			for i = 0, n - 1 do
+				local cx = seg[1] + w / n * (i + 0.5)
+				box(b, "UpperDoor", Vector3.new(w / n - 5, upperY1 - upperY0 - 8, 1.2), cx, (upperY0 + upperY1) / 2, ROOM_Z_BACK - 40.6, k.CabinetDoor, k.CabMat, noCollide())
+				box(b, "UpperHandle", Vector3.new(2.5, 16, 2.5), cx + (w / n / 2 - 10), upperY0 + 16, ROOM_Z_BACK - 42, k.Handle, k.HandleMat, noCollide())
+			end
 		end
 	end
 end
@@ -446,7 +548,7 @@ local function pizzeriaProps(b: Builder, k: RoomStyle)
 
 	-- Neon sign in the gap over the counter.
 	span(b, "SignBack", -214, -46, COUNTER_TOP_Y + 110, COUNTER_TOP_Y + 240, ROOM_Z_BACK - 3, ROOM_Z_BACK, Color3.fromRGB(30, 26, 26), nil, noCollide())
-	roomSign(b, "🍕 PIZZA", Vector3.new(150, 70, 2), -130, COUNTER_TOP_Y + 175, ROOM_Z_BACK - 4, Color3.fromRGB(30, 26, 26), Color3.fromRGB(255, 120, 70), Enum.NormalId.Back)
+	roomSign(b, "PIZZA", Vector3.new(150, 70, 2), -130, COUNTER_TOP_Y + 175, ROOM_Z_BACK - 4, Color3.fromRGB(30, 26, 26), Color3.fromRGB(255, 120, 70), Enum.NormalId.Back)
 	for _, y in { COUNTER_TOP_Y + 132, COUNTER_TOP_Y + 218 } do
 		span(b, "NeonStrip", -200, -60, y - 1.5, y + 1.5, ROOM_Z_BACK - 6, ROOM_Z_BACK - 4, Color3.fromRGB(255, 90, 60), Enum.Material.Neon, noCollide())
 	end
@@ -1011,7 +1113,7 @@ local function buildLifts(b: Builder, theme)
 		sign(p, label, 12, 2.6, 7)
 	end
 	for _, lift in LIFTS do
-		pad("BubbleLift", lift.from, lift.to, "⬆️ Bubble Lift", TOP_RACK_Y)
+		pad("BubbleLift", lift.from, lift.to, "Bubble Lift", TOP_RACK_Y)
 	end
 end
 
@@ -1021,7 +1123,7 @@ local function buildDrain(b: Builder, theme): Vector3
 	ring:SetAttribute("SpinSpeed", 2.4)
 	CollectionService:AddTag(ring, "SpinY")
 	local post = box(b, "DrainSign", Vector3.new(0.6, 0.6, 0.6), DRAIN_POS.X, 1, DRAIN_POS.Z, Color3.new(1, 1, 1), nil, { Transparency = 1, CanCollide = false })
-	sign(post, "🌀 DRAIN\nstand here to sell", 16, 5, 8, Color3.fromRGB(150, 230, 255))
+	sign(post, "DRAIN\nstand here to sell", 16, 5, 8, Color3.fromRGB(150, 230, 255))
 	return worldPoint(b.origin, DRAIN_POS.X, 0, DRAIN_POS.Z)
 end
 
@@ -1105,7 +1207,7 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 
 	-- Sign across the top.
 	local _, headerGui = signBoard(b, "ShopSign", Vector3.new(z1 - z0 - 4, 4, 0.5), worldPoint(b.origin, x1 - 0.5, topY + 2.6, (z0 + z1) / 2), toPlayers, theme.Accent)
-	guiText(headerGui, "Title", "🧽 TOOL SHOP  •  any tool, any order", UDim2.fromScale(0.03, 0.1), UDim2.fromScale(0.94, 0.8), Color3.new(1, 1, 1))
+	guiText(headerGui, "Title", "TOOL SHOP  •  any tool, any order", UDim2.fromScale(0.03, 0.1), UDim2.fromScale(0.94, 0.8), Color3.new(1, 1, 1))
 
 	-- Every tool you can buy stands on the waist-high shelf (easy to reach and read from the door).
 	-- Spots run from the front of the unit to the back.
@@ -1162,11 +1264,11 @@ local function buildShop(b: Builder, theme, levelIndex: number): Vector3
 		stroke.Color = tool.Color
 		stroke.Parent = bg
 		guiText(card, "Title", tool.Icon .. " " .. tool.Name, UDim2.fromScale(0.05, 0.06), UDim2.fromScale(0.9, 0.46), Color3.new(1, 1, 1))
-		guiText(card, "Price", "💰 " .. Format.Short(cost), UDim2.fromScale(0.05, 0.5), UDim2.fromScale(0.9, 0.44), Color3.fromRGB(255, 210, 60))
+		guiText(card, "Price", Format.Short(cost) .. " coins", UDim2.fromScale(0.05, 0.5), UDim2.fromScale(0.9, 0.44), Color3.fromRGB(255, 210, 60))
 
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = "Buy"
-		prompt.ObjectText = string.format("%s  💰%s", tool.Name, Format.Short(cost))
+		prompt.ObjectText = string.format("%s  (%s coins)", tool.Name, Format.Short(cost))
 		prompt.HoldDuration = 0
 		prompt.RequiresLineOfSight = false
 		prompt.MaxActivationDistance = 14
@@ -1308,7 +1410,16 @@ end
 function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeScale: number, GoldenChance: number, HpScale: number? }): any
 	assert(type(slot) == "number", "ArenaBuilder.Build: slot must be a number")
 	local level = Config.GetLevel(levelIndex)
-	local theme = level.Theme
+	-- The dishwasher is the same machine in every level (one steel tub, white racks, blue glow);
+	-- only the room around it changes. The level's own theme still colours the dishes.
+	local dishTheme = level.Theme
+	local theme = setmetatable({
+		Tub = Color3.fromRGB(172, 178, 187),
+		Rack = Color3.fromRGB(235, 240, 245),
+		Metal = Color3.fromRGB(190, 195, 200),
+		Accent = Color3.fromRGB(80, 170, 255),
+		Light = Color3.fromRGB(215, 235, 255),
+	}, { __index = dishTheme }) :: any
 	local origin = ArenaBuilder.SlotOrigin(slot)
 	local rng = Random.new()
 	local grimeScale = (options and options.GrimeScale) or 1
@@ -1375,7 +1486,7 @@ function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeSc
 			end
 			for i = 1, math.min(wantCount, #slots) do
 				local cf = dishFrame(origin, kind, slots[i], rng)
-				local dish = DishFactory.BuildDish(kind, cf, theme, rng)
+				local dish = DishFactory.BuildDish(kind, cf, dishTheme, rng)
 				dish.Parent = dishesFolder
 
 				nextId += 1

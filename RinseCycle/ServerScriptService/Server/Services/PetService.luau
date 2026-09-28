@@ -726,7 +726,7 @@ local function hatch(player: Player, eggId: any, count: any): Types.RequestResul
 	end
 	local cost = egg.Cost * count
 	if (tonumber(profile.Bubbles) or 0) < cost then
-		return fail(string.format("Not enough Bubbles! You need %s 🧼.", Format.Commas(cost)))
+		return fail(string.format("Not enough Bubbles! You need %s.", Format.Commas(cost)))
 	end
 
 	-- Roll first: after the payment below, nothing can fail.

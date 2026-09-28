@@ -283,7 +283,7 @@ end
 local function setOffline(value: boolean, reason: string?)
 	offline = value
 	if value then
-		warn("[DataService] Offline mode: progress will not be saved (" .. tostring(reason) .. ")")
+		print("[DataService] Studio test: progress isn't saved (" .. tostring(reason) .. ")")
 	end
 	openLatch(detection)
 end
@@ -1347,7 +1347,7 @@ function DataService.Rebirth(player: Player): (boolean, string?)
 	end
 	local cost = Config.RebirthCost(profile.Rebirths)
 	if profile.Bubbles < cost then
-		return false, string.format("You need %s 🧼 to rebirth.", Format.Commas(cost))
+		return false, string.format("You need %s Bubbles to rebirth.", Format.Commas(cost))
 	end
 	profile.Rebirths += 1
 	profile.RebirthReady = false
@@ -1491,7 +1491,7 @@ function DataService.RecordClear(player: Player, levelIndex: number, seconds: nu
 	if levelIndex == #Config.Levels and not profile.RebirthReady then
 		profile.RebirthReady = true
 		-- A few seconds later, so it lands after the results screen.
-		task.delay(6, queueNotice, session, "✨ Every level is clean! Visit the Rebirth Fountain in the lobby to Rebirth.", "Good")
+		task.delay(6, queueNotice, session, "Every level is clean! Visit the Rebirth Fountain in the lobby to Rebirth.", "Good")
 	end
 
 	-- Unlocks and best times are the progress players care most about: write them soon.

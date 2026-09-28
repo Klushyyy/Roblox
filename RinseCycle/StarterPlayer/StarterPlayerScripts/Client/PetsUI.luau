@@ -73,7 +73,7 @@ end
 
 -- Pets show one number, Power (Config.PetPower): bigger cleans faster, carries more, earns more.
 local function powerText(id: string, tier: number?): string
-	return "💪 Power " .. Config.PetPower(id, tier)
+	return "Power " .. Config.PetPower(id, tier)
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -196,7 +196,7 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 		ZIndex = 2,
 	})
 	UIKit.Label({
-		Text = entry.Def.Rarity .. "  💪" .. Config.PetPower(entry.Id, entry.Tier),
+		Text = entry.Def.Rarity .. "  •  " .. Config.PetPower(entry.Id, entry.Tier),
 		Size = UDim2.new(1, -10, 0, 16),
 		Position = UDim2.new(0.5, 0, 0, 118),
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -296,10 +296,10 @@ local function refreshMergePanel()
 	if first then
 		local nextTier = (first.Tier or 1) + 1
 		local tierDef = Config.PetTier(nextTier)
-		mergeResult.Text = "➡️ " .. petTitle(first.Id, nextTier)
+		mergeResult.Text = "Makes: " .. petTitle(first.Id, nextTier)
 		mergeResult.TextColor3 = tierDef.Color or C.Text
 	else
-		mergeResult.Text = "➡️ Golden, then Rainbow!"
+		mergeResult.Text = "Makes: Golden, then Rainbow!"
 		mergeResult.TextColor3 = C.TextDim
 	end
 	UIKit.SetButtonColor(mergeGo, if #mergeSel == MERGE_COUNT then C.Good else C.Disabled)
@@ -341,7 +341,7 @@ local function setMergeMode(on: boolean)
 	mergePanel.Visible = on
 	detailEmpty.Parent = if on then nil else detailsCard
 	detailFilled.Parent = if on then nil else detailsCard
-	mergeButton.Text = if on then "Done" else "🔮 Merge"
+	mergeButton.Text = if on then "Done" else "Merge"
 	if on then
 		refreshMergePanel()
 	end
@@ -362,7 +362,7 @@ local function doMerge()
 	UIKit.PlaySound("Hatch")
 	UIKit.Confetti()
 	local made = result.Pets and result.Pets[1]
-	UIKit.Toast(if made then ("✨ You made a " .. petTitle(made.Id, made.Tier) .. "!") else "Merged!", "Good")
+	UIKit.Toast(if made then ("You made a " .. petTitle(made.Id, made.Tier) .. "!") else "Merged!", "Good")
 	refreshMergePanel()
 end
 
@@ -375,7 +375,7 @@ local function doEquipToggle()
 	local equipped = isEquipped(meta, uid)
 	-- All slots full: offer the +2 Pet Slots pass (if they don't have it yet).
 	if not equipped and #meta.Equipped >= meta.PetSlots and not (meta.Passes and meta.Passes.PetSlots) then
-		UIKit.Toast("🐾 All your pet slots are full! Get +2 Pet Slots to bring more pets.", "Info")
+		UIKit.Toast("All your pet slots are full! Get +2 Pet Slots to bring more pets.", "Info")
 		ShopUI.BuyPass("PetSlots")
 		return
 	end
@@ -463,7 +463,7 @@ local function buildPetsWindow()
 		Parent = header,
 	})
 	mergeButton = UIKit.Button({
-		Text = "🔮 Merge",
+		Text = "Merge",
 		Size = UDim2.fromOffset(140, 40),
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -190, 0, 0),
@@ -536,7 +536,7 @@ local function buildPetsWindow()
 	mergePanel.Size = UDim2.fromScale(1, 1)
 	mergePanel.Visible = false
 	mergePanel.Parent = details
-	UIKit.Label({ Text = "🔮 Merge Pets", Size = UDim2.new(1, -16, 0, 34), Position = UDim2.new(0.5, 0, 0, 14), AnchorPoint = Vector2.new(0.5, 0), TextSize = 26, Parent = mergePanel })
+	UIKit.Label({ Text = "Merge Pets", Size = UDim2.new(1, -16, 0, 34), Position = UDim2.new(0.5, 0, 0, 14), AnchorPoint = Vector2.new(0.5, 0), TextSize = 26, Parent = mergePanel })
 	UIKit.Label({
 		Text = string.format("%d of the same pet become 1 Golden one; %d Golden make a Rainbow. Better speed, bigger bag, more coins.", MERGE_COUNT, MERGE_COUNT),
 		Size = UDim2.new(1, -24, 0, 48),
@@ -548,7 +548,7 @@ local function buildPetsWindow()
 		Parent = mergePanel,
 	})
 	mergeInfo = UIKit.Label({ Text = "", Size = UDim2.new(1, -24, 0, 44), Position = UDim2.new(0.5, 0, 0, 116), AnchorPoint = Vector2.new(0.5, 0), TextSize = 17, TextWrapped = true, Parent = mergePanel })
-	mergeResult = UIKit.Label({ Text = "➡️ ?", Size = UDim2.new(1, -24, 0, 36), Position = UDim2.new(0.5, 0, 0, 170), AnchorPoint = Vector2.new(0.5, 0), TextSize = 22, TextScaled = true, Parent = mergePanel })
+	mergeResult = UIKit.Label({ Text = "Makes: ?", Size = UDim2.new(1, -24, 0, 36), Position = UDim2.new(0.5, 0, 0, 170), AnchorPoint = Vector2.new(0.5, 0), TextSize = 22, TextScaled = true, Parent = mergePanel })
 	mergeGo = UIKit.Button({
 		Text = "MERGE!",
 		Icon = "✨",
@@ -785,7 +785,7 @@ local function selectEgg(eggId: string)
 
 	UIKit.SetViewportModel(eggViewport, PetModels.Egg(eggId), true)
 	eggNameLabel.Text = egg.Name
-	eggCostLabel.Text = "🧼 " .. Format.Commas(egg.Cost)
+	eggCostLabel.Text = Format.Commas(egg.Cost) .. " Bubbles"
 
 	for _, child in oddsScroll:GetChildren() do
 		if child:IsA("Frame") then
@@ -815,13 +815,13 @@ function PetsUI._refreshEggButtons()
 	if locked then
 		local level = Config.Levels[egg.RequiredLevel]
 		local where = if level then (level.Icon or "") .. " " .. level.Name else ("Level " .. egg.RequiredLevel)
-		eggLockedLabel.Text = "🔒 Unlock " .. where .. " to hatch this egg!"
+		eggLockedLabel.Text = "Unlock " .. where .. " to hatch this egg!"
 	end
 
 	hatch1Button:SetAttribute("Disabled", locked or not eggAffordable(egg, 1, meta))
 	hatch3Button:SetAttribute("Disabled", locked or not eggAffordable(egg, 3, meta))
-	hatch1Button.Text = "Hatch 1 (🧼 " .. Format.Commas(egg.Cost) .. ")"
-	hatch3Button.Text = "Hatch 3 (🧼 " .. Format.Commas(egg.Cost * 3) .. ")"
+	hatch1Button.Text = "Hatch 1  (" .. Format.Commas(egg.Cost) .. ")"
+	hatch3Button.Text = "Hatch 3  (" .. Format.Commas(egg.Cost * 3) .. ")"
 end
 
 local function doHatch(count: number)

@@ -194,7 +194,7 @@ local function drawTimes()
 	for i, page in pages do
 		local level = Config.Levels[i]
 		if level then
-			page.Title.Text = string.format("⏱️ Fastest: %s %s", level.Icon, level.Name)
+			page.Title.Text = string.format("Fastest: %s", level.Name)
 			drawRows(page.List, timesTop[i] or {}, formatTenths, "No clears yet!")
 		end
 	end
@@ -206,7 +206,7 @@ local function drawDishes()
 		return
 	end
 	local board = lobby.Boards.Dishes
-	board.Title.Text = "🍽️ Most Dishes Cleaned"
+	board.Title.Text = "Most Dishes Cleaned"
 	drawRows(board.List, dishesTop, Format.Commas, "No dishes cleaned yet!")
 end
 

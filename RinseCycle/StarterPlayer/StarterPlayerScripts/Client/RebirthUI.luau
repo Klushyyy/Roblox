@@ -40,24 +40,24 @@ local function render()
 	local meta = ClientState.Meta :: Types.MetaState?
 	local rebirths = (meta and meta.Rebirths) or 0
 	local rb = Config.Rebirth
-	countLabel.Text = string.format("✨ Rebirth %d", rebirths)
+	countLabel.Text = string.format("Rebirth %d", rebirths)
 	nowLabel.Text = if rebirths > 0
 		then string.format("Now: +%s coins, +%s Bubbles", pct(rb.CoinsPer * rebirths), pct(rb.BubblesPer * rebirths))
 		else "No rebirth bonuses yet."
 	nextLabel.Text = string.format(
-		"Next rebirth: +%s coins and +%s Bubbles forever, and %d 💎",
+		"Next rebirth: +%s coins and +%s Bubbles forever, and %d Gems",
 		pct(rb.CoinsPer * (rebirths + 1)),
 		pct(rb.BubblesPer * (rebirths + 1)),
 		rb.Gems
 	)
 	local last = Config.Levels[#Config.Levels]
 	local levelDone = meta ~= nil and meta.RebirthReady == true
-	reqLevel.Text = string.format("%s Clean %s %s", if levelDone then "✅" else "⬜", last.Icon, last.Name)
+	reqLevel.Text = string.format("%s  Clean %s", if levelDone then "Done:" else "To do:", last.Name)
 	reqLevel.TextColor3 = if levelDone then Colors.Good else Colors.Text
 	local cost = Config.RebirthCost(rebirths)
 	local have = (meta and meta.Bubbles) or 0
 	local enough = have >= cost
-	reqBubbles.Text = string.format("%s Have %s / %s 🧼", if enough then "✅" else "⬜", UIKit.Commas(have), UIKit.Commas(cost))
+	reqBubbles.Text = string.format("%s  Have %s / %s Bubbles", if enough then "Done:" else "To do:", UIKit.Commas(have), UIKit.Commas(cost))
 	reqBubbles.TextColor3 = if enough then Colors.Good else Colors.Text
 	UIKit.SetButtonColor(rebirthButton, if levelDone and enough then Colors.Good else Colors.Disabled)
 end
@@ -75,7 +75,7 @@ local function doRebirth()
 	end
 	UIKit.PlaySound("Sparkle")
 	UIKit.Confetti(80)
-	UIKit.Toast("✨ Rebirthed! Your bonuses are now permanent.", "Good")
+	UIKit.Toast("Rebirthed! Your bonuses are now permanent.", "Good")
 	render()
 end
 
