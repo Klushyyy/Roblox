@@ -89,6 +89,7 @@ export type Profile = {
 	DailyLast: number, -- os.time() of the last daily claim (0 = never); the next is 24 h later
 	DailyStreak: number, -- 1..#Config.DailyRewards, the day of the streak last claimed
 	RedeemedCodes: { string }, -- Config.Codes already used (upper case)
+	Ducks: { string }, -- lobby rubber ducks found (Config.Ducks ids)
 	GroupReward: boolean, -- the join-the-community reward has been claimed
 	FollowReward: boolean, -- the follow-the-dev reward has been claimed
 	LikeReward: boolean, -- the like-the-game reward has been claimed
@@ -153,6 +154,7 @@ local TEMPLATE: Profile = {
 	DailyLast = 0,
 	DailyStreak = 0,
 	RedeemedCodes = {},
+	Ducks = {},
 	GroupReward = false,
 	FollowReward = false,
 	LikeReward = false,
@@ -360,6 +362,13 @@ local function sanitizeProfile(profile: Profile, player: Player)
 		end
 	end
 	p.RedeemedCodes = codes
+	local ducks = {}
+	for _, id in (if type(p.Ducks) == "table" then p.Ducks else {}) do
+		if type(id) == "string" and #id <= 20 and #ducks < 50 and not table.find(ducks, id) then
+			table.insert(ducks, id)
+		end
+	end
+	p.Ducks = ducks
 	p.GroupReward = p.GroupReward == true
 	p.FollowReward = p.FollowReward == true
 	p.LikeReward = p.LikeReward == true
@@ -1149,6 +1158,19 @@ function DataService.AddBubbles(player: Player, amount: number, reason: string?)
 	applyBubbles(profile, rounded)
 	DataService.PushMeta(player)
 	return true
+end
+
+-- Marks a lobby rubber duck as found. Returns (isNew, foundCount).
+function DataService.FindDuck(player: Player, duckId: string): (boolean, number)
+	local profile = DataService.Get(player)
+	if not profile then
+		return false, 0
+	end
+	if table.find(profile.Ducks, duckId) then
+		return false, #profile.Ducks
+	end
+	table.insert(profile.Ducks, duckId)
+	return true, #profile.Ducks
 end
 
 -- Takes Bubbles if the player has enough. Returns true when paid.

@@ -781,6 +781,33 @@ Config.Codes = {
 	BUBBLES = { Gems = 15 },
 } :: { [string]: { Bubbles: number?, Gems: number?, Expires: number? } }
 
+----------------------------------------------------------------------------------------------------
+-- Lobby fun (LobbyFun service): poppable soap bubbles float over the plaza (+1 Bubble each, a rare
+-- golden one pays more), and rubber ducks are hidden around the lobby. Each duck pays once; finding
+-- them all pays the big reward.
+----------------------------------------------------------------------------------------------------
+Config.LobbyBubbles = {
+	Max = 14, -- alive at once
+	Reward = 1,
+	GoldenReward = 10,
+	GoldenChance = 0.06,
+	RespawnDelay = { 2, 6 }, -- seconds before a popped bubble comes back somewhere else
+	PerMinute = 60, -- per-player pop cap (anti autoclicker)
+}
+
+Config.Ducks = {
+	List = {
+		{ Id = "Fountain", Hint = "Having a swim" },
+		{ Id = "Doghouse", Hint = "Guarding the pets" },
+		{ Id = "Sponge", Hint = "Sunbathing on something soft" },
+		{ Id = "Board", Hint = "Hiding behind the scores" },
+		{ Id = "Shakers", Hint = "Seasoned" },
+		{ Id = "Saucer", Hint = "Coffee break" },
+	},
+	Reward = { Bubbles = 25, Gems = 0 }, -- each duck
+	AllReward = { Bubbles = 500, Gems = 10 }, -- finding every duck
+}
+
 -- "300 Bubbles + 10 Gems"
 function Config.RewardText(reward: { Bubbles: number?, Gems: number? }): string
 	local bits = {}

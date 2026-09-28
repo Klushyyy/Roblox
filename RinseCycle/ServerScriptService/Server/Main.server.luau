@@ -28,6 +28,7 @@ local PartyService = require(ServicesFolder:WaitForChild("PartyService"))
 local LeaderboardService = require(ServicesFolder:WaitForChild("LeaderboardService"))
 local NameTags = require(ServicesFolder:WaitForChild("NameTags"))
 local SocialService = require(ServicesFolder:WaitForChild("SocialService"))
+local LobbyFun = require(ServicesFolder:WaitForChild("LobbyFun"))
 
 local function step(name: string, fn: () -> ())
 	local started = os.clock()
@@ -86,6 +87,7 @@ local services = {
 	{ "LeaderboardService", LeaderboardService },
 	{ "NameTags", NameTags },
 	{ "SocialService", SocialService },
+	{ "LobbyFun", LobbyFun },
 }
 
 for _, entry in services do

@@ -136,6 +136,7 @@ end
 -- RunFX handlers
 ----------------------------------------------------------------------------------------------------
 
+local refreshDuck: (Instance) -> ()
 local comboCount = 0
 local lastCleanedAt = 0
 local COMBO_RESET_GAP = 0.6
@@ -256,8 +257,77 @@ local function onTankFull()
 	UIKit.PlaySound("Error")
 end
 
+-- A lobby bubble popped (anyone's): a splash of little bubbles; the popper gets the number.
+local function onLobbyPop(data: any)
+	local pos = data and data.Position
+	if typeof(pos) ~= "Vector3" then
+		return
+	end
+	local camera = workspace.CurrentCamera
+	if camera and (camera.CFrame.Position - pos).Magnitude > 160 then
+		return
+	end
+	local golden = data.Golden == true
+	burst(pos, if golden then UIKit.Theme.Colors.Coin else Color3.fromRGB(170, 225, 255), "rbxasset://textures/particles/sparkles_main.dds", if golden then 22 else 10, 0.6)
+	Bubbles.Emit(pos, { Count = if golden then 14 else 8, Spread = 1.2, Velocity = Vector3.new(0, 2, 0), Jitter = 4, Size = { 0.3, 0.8 }, Life = { 0.5, 1.1 } })
+	if data.By == LocalPlayer.UserId then
+		UIKit.PlaySound("Pop", if golden then 0.8 else 1 + math.random() * 0.25)
+		if golden then
+			UIKit.PlaySound("Sparkle")
+		end
+		local amount = tonumber(data.Amount) or 1
+		billboardNumber(pos, "+" .. amount .. (if amount == 1 then " Bubble" else " Bubbles"), if golden then UIKit.Theme.Colors.Coin else UIKit.Theme.Colors.Bubble, FLOATER_RISE + 1)
+	end
+end
+
+-- You found a rubber duck.
+local function onDuck(data: any)
+	local pos = data and data.Position
+	if typeof(pos) ~= "Vector3" then
+		return
+	end
+	burst(pos, Color3.fromRGB(255, 215, 60), "rbxasset://textures/particles/sparkles_main.dds", if data.All then 40 else 20, 0.9)
+	Bubbles.Emit(pos, { Count = 12, Spread = 1.5, Velocity = Vector3.new(0, 3, 0), Jitter = 3, Size = { 0.3, 0.9 }, Life = { 0.8, 1.6 } })
+	-- A squeaky "quack": the pop, pitched up, twice.
+	UIKit.PlaySound("Pop", 1.9)
+	task.delay(0.12, function()
+		UIKit.PlaySound("Pop", 2.3)
+	end)
+	UIKit.PlaySound("Sparkle")
+	billboardNumber(pos + Vector3.new(0, 1.5, 0), string.format("Quack! %d/%d", tonumber(data.Count) or 0, tonumber(data.Total) or 0), Color3.fromRGB(255, 215, 60), FLOATER_RISE + 2)
+end
+
+-- Hides a rubber duck (for this player only) once they've found it.
+refreshDuck = function(inst: Instance)
+	local id = inst:GetAttribute("DuckId")
+	if type(id) ~= "string" then
+		return
+	end
+	local found = false
+	local list = LocalPlayer:GetAttribute("DucksFound")
+	if type(list) == "string" then
+		for piece in string.gmatch(list, "[^,]+") do
+			if piece == id then
+				found = true
+				break
+			end
+		end
+	end
+	for _, d in inst:GetDescendants() do
+		if d:IsA("BasePart") then
+			d.LocalTransparencyModifier = if found then 1 else 0
+		elseif d:IsA("ClickDetector") then
+			d.MaxActivationDistance = if found then 0 else 24
+		end
+	end
+end
+
 local function onRunFX(kind: string, data: any)
-	if kind == "Cleaned" then
+	if kind == "LobbyPop" then
+		onLobbyPop(data)
+	elseif kind == "Duck" then
+		onDuck(data)
+	elseif kind == "Cleaned" then
 		onCleaned(data)
 	elseif kind == "Foam" then
 		onFoam(data)
@@ -795,7 +865,7 @@ local lastLobbyAmbienceAt = 0
 
 -- The lobby's big floating bubbles (tag "FloatBubble", placed by the server): bobbed here, locally,
 -- each with a glowing glint on its camera-facing side.
-type FloatBubble = { Part: BasePart, Glint: Part, Base: Vector3, Phase: number, Speed: number }
+type FloatBubble = { Part: BasePart, Glint: Part, Base: Vector3, Phase: number, Speed: number, Amp: number }
 local floatBubbles: { [BasePart]: FloatBubble } = {}
 
 local function addFloatBubble(inst: Instance)
@@ -815,7 +885,10 @@ local function addFloatBubble(inst: Instance)
 	glint.CanTouch = false
 	glint.CastShadow = false
 	glint.Parent = workspace.CurrentCamera
-	floatBubbles[inst] = { Part = inst, Glint = glint, Base = inst.Position, Phase = math.random() * math.pi * 2, Speed = 0.35 + math.random() * 0.25 }
+	-- Poppable lobby bubbles (tag "PopBubble") bob less so they stay where the server thinks they are.
+	local amp = if CollectionService:HasTag(inst, "PopBubble") then 0.3 else 1
+	local speed = 0.35 + math.random() * 0.25
+	floatBubbles[inst] = { Part = inst, Glint = glint, Base = inst.Position, Phase = math.random() * math.pi * 2, Speed = speed * (if amp < 1 then 2.2 else 1), Amp = amp }
 end
 
 local function removeFloatBubble(inst: Instance)
@@ -844,7 +917,7 @@ local function stepFloatBubbles(dt: number)
 			continue
 		end
 		local t = floatClock * fb.Speed + fb.Phase
-		local pos = fb.Base + Vector3.new(math.sin(t) * 2.2, math.sin(t * 1.3) * 1.8, math.cos(t * 0.9) * 2.2)
+		local pos = fb.Base + Vector3.new(math.sin(t) * 2.2, math.sin(t * 1.3) * 1.8, math.cos(t * 0.9) * 2.2) * fb.Amp
 		local size = inst.Size.X
 		local toCam = camCF.Position - pos
 		toCam = if toCam.Magnitude > 1e-3 then toCam.Unit else Vector3.zAxis
@@ -953,6 +1026,24 @@ function Effects.Init()
 	end
 	CollectionService:GetInstanceAddedSignal("FloatBubble"):Connect(addFloatBubble)
 	CollectionService:GetInstanceRemovedSignal("FloatBubble"):Connect(removeFloatBubble)
+	for _, inst in CollectionService:GetTagged("PopBubble") do
+		addFloatBubble(inst)
+	end
+	CollectionService:GetInstanceAddedSignal("PopBubble"):Connect(addFloatBubble)
+	CollectionService:GetInstanceRemovedSignal("PopBubble"):Connect(removeFloatBubble)
+
+	-- Rubber ducks this player already found are hidden (for them only).
+	for _, inst in CollectionService:GetTagged("RubberDuck") do
+		refreshDuck(inst)
+	end
+	CollectionService:GetInstanceAddedSignal("RubberDuck"):Connect(function(inst)
+		task.defer(refreshDuck, inst)
+	end)
+	LocalPlayer:GetAttributeChangedSignal("DucksFound"):Connect(function()
+		for _, inst in CollectionService:GetTagged("RubberDuck") do
+			refreshDuck(inst)
+		end
+	end)
 
 	-- Grime count changes on every Cleaned/Sold push; the marker set only needs to react to those
 	-- and to Run replacing wholesale (onStateChanged already covers both via ClientState.Changed).

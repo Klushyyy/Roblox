@@ -320,7 +320,12 @@ function methods:GetAttribute(k)
 	return rawget(self, "__attrs")[k]
 end
 function methods:SetAttribute(k, v)
-	rawget(self, "__attrs")[k] = v
+	local attrs = rawget(self, "__attrs")
+	local old = attrs[k]
+	attrs[k] = v
+	if old ~= v then
+		getSignal(self, "attr:" .. k):Fire()
+	end
 end
 function methods:GetAttributes()
 	return table.clone(rawget(self, "__attrs"))

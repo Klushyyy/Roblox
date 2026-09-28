@@ -770,6 +770,9 @@ local function buildDishwasherBuilding(parent: Instance)
 			Material = LOW,
 		}, parent)
 	end
+	-- One solid, invisible block over the whole front (door, window, frames, handle, panel), so the
+	-- detail can't be jumped into: it all reads as the face of one big machine.
+	mkPart("Part", { Name = "FrontCollider", Size = Vector3.new(w, h - 4, 4.4), CFrame = at(0, (h - 4) / 2 + 4, HATCHERY_Z + 2.2), Transparency = 1, CastShadow = false, CanQuery = false }, parent)
 	-- Door panel with a recessed window and handle.
 	mkPart("Part", decor({ Name = "Door", Size = Vector3.new(w - 6, h - 16, 1), CFrame = at(0, (h - 16) / 2 + 3, HATCHERY_Z + 0.5), Color = Color3.fromRGB(225, 229, 234), Material = LOW }), parent)
 	-- The window shows a rack of plates behind the glass, like a real dishwasher.
@@ -854,12 +857,12 @@ end
 local function buildSoapShop(parent: Instance)
 	local x, z = SHOP_X, EGG_Z
 	local counter = mkPart("Part", { Name = "Counter", Size = Vector3.new(16, 4, 6), CFrame = at(x, 2, z), Color = Color3.fromRGB(165, 112, 70), Material = Enum.Material.Wood }, parent)
-	mkPart("Part", decor({ Name = "CounterTop", Size = Vector3.new(17, 0.6, 7), CFrame = at(x, 4.3, z), Color = Color3.fromRGB(120, 78, 48), Material = Enum.Material.Wood }), parent)
+	mkPart("Part", ({ Name = "CounterTop", Size = Vector3.new(17, 0.6, 7), CFrame = at(x, 4.3, z), Color = Color3.fromRGB(120, 78, 48), Material = Enum.Material.Wood }), parent)
 	for _, dx in { -7.5, 7.5 } do
-		mkPart("Part", decor({ Name = "AwningPost", Size = Vector3.new(0.8, 12, 0.8), CFrame = at(x + dx, 6, z - 2.5), Color = Color3.fromRGB(250, 250, 250) }), parent)
+		mkPart("Part", ({ Name = "AwningPost", Size = Vector3.new(0.8, 12, 0.8), CFrame = at(x + dx, 6, z - 2.5), Color = Color3.fromRGB(250, 250, 250) }), parent)
 	end
 	for i = 0, 7 do
-		mkPart("Part", decor({
+		mkPart("Part", ({
 			Name = "Awning",
 			Size = Vector3.new(2.2, 0.6, 9),
 			CFrame = at(x - 7.7 + i * 2.2, 12.5, z - 1) * CFrame.Angles(math.rad(-12), 0, 0),
@@ -868,9 +871,9 @@ local function buildSoapShop(parent: Instance)
 	end
 	-- Giant pump bottle behind the stall.
 	mkPart("Part", { Name = "Bottle", Shape = Enum.PartType.Cylinder, Size = Vector3.new(16, 9, 9), CFrame = upright(x, 8, z - 8), Color = Color3.fromRGB(255, 150, 200), Material = Enum.Material.Glass, Transparency = 0.1 }, parent)
-	mkPart("Part", decor({ Name = "BottleCap", Shape = Enum.PartType.Cylinder, Size = Vector3.new(3, 5, 5), CFrame = upright(x, 17.5, z - 8), Color = Color3.new(1, 1, 1) }), parent)
-	mkPart("Part", decor({ Name = "PumpNeck", Size = Vector3.new(1.2, 4, 1.2), CFrame = at(x, 20.5, z - 8), Color = Color3.fromRGB(220, 220, 225), Material = Enum.Material.Metal }), parent)
-	mkPart("Part", decor({ Name = "PumpHead", Size = Vector3.new(4.5, 1.2, 1.4), CFrame = at(x + 1.6, 22.8, z - 8), Color = Color3.new(1, 1, 1) }), parent)
+	mkPart("Part", ({ Name = "BottleCap", Shape = Enum.PartType.Cylinder, Size = Vector3.new(3, 5, 5), CFrame = upright(x, 17.5, z - 8), Color = Color3.new(1, 1, 1) }), parent)
+	mkPart("Part", ({ Name = "PumpNeck", Size = Vector3.new(1.2, 4, 1.2), CFrame = at(x, 20.5, z - 8), Color = Color3.fromRGB(220, 220, 225), Material = Enum.Material.Metal }), parent)
+	mkPart("Part", ({ Name = "PumpHead", Size = Vector3.new(4.5, 1.2, 1.4), CFrame = at(x + 1.6, 22.8, z - 8), Color = Color3.new(1, 1, 1) }), parent)
 	worldSign(counter, "SOAP SHOP", 14, 3, 16.5, Color3.fromRGB(255, 235, 140))
 	worldSign(counter, "Perks", 8, 1.8, 14, Color3.fromRGB(220, 235, 255))
 
@@ -946,6 +949,8 @@ local function buildEggHatchery(parent: Instance)
 		pcall(function()
 			model:PivotTo(at(ex, 8.5, EGG_Z))
 		end)
+		-- The egg model is decor; one invisible capsule-ish block keeps players from walking into it.
+		mkPart("Part", { Name = "EggCollider", Size = Vector3.new(5, 7.5, 5), CFrame = at(ex, 8, EGG_Z), Transparency = 1, CastShadow = false, CanQuery = false }, parent)
 		for _, d in model:GetDescendants() do
 			if d:IsA("BasePart") then
 				d.Anchored = true
@@ -981,7 +986,7 @@ local function buildPetStand(parent: Instance)
 	-- A little doghouse.
 	mkPart("Part", { Name = "Doghouse", Size = Vector3.new(7, 6, 6), CFrame = at(x, 6, z - 1), Color = Color3.fromRGB(240, 120, 150), Material = Enum.Material.WoodPlanks }, parent)
 	for _, side in { -1, 1 } do
-		mkPart("Part", decor({ Name = "Roof", Size = Vector3.new(5.2, 0.6, 7), CFrame = at(x + side * 2.1, 10.2, z - 1) * CFrame.Angles(0, 0, math.rad(side * -40)), Color = Color3.fromRGB(120, 60, 50) }), parent)
+		mkPart("Part", ({ Name = "Roof", Size = Vector3.new(5.2, 0.6, 7), CFrame = at(x + side * 2.1, 10.2, z - 1) * CFrame.Angles(0, 0, math.rad(side * -40)), Color = Color3.fromRGB(120, 60, 50) }), parent)
 	end
 	mkPart("Part", decor({ Name = "DoghouseDoor", Size = Vector3.new(3, 3.6, 0.3), CFrame = at(x, 4.8, z + 2.05), Color = Color3.fromRGB(40, 30, 30) }), parent)
 	worldSign(base, "PETS", 10, 2.6, 13, Color3.fromRGB(255, 170, 210))
@@ -1200,7 +1205,7 @@ end
 
 local function shaker(parent: Instance, x: number, z: number, body: Color3, holes: Color3)
 	hex(parent, "Shaker", x, FLOOR_Y, z, 6, 11, body)
-	hex(parent, "ShakerCap", x, FLOOR_Y + 11, z, 6.4, 2.6, Color3.fromRGB(200, 205, 212), false)
+	hex(parent, "ShakerCap", x, FLOOR_Y + 11, z, 6.4, 2.6, Color3.fromRGB(200, 205, 212))
 	for k = 0, 2 do
 		local a = k / 3 * math.pi * 2
 		mkPart("Part", decor({ Name = "ShakerHole", Size = Vector3.new(0.7, 0.1, 0.7), CFrame = at(x + math.cos(a) * 1.4, FLOOR_Y + 13.63, z + math.sin(a) * 1.4), Color = holes, Material = LOW }), parent)
@@ -1209,7 +1214,7 @@ end
 
 local function flowerVase(parent: Instance, x: number, z: number)
 	hex(parent, "Vase", x, FLOOR_Y, z, 7, 9, Color3.fromRGB(90, 150, 220))
-	hex(parent, "VaseNeck", x, FLOOR_Y + 9, z, 4.4, 2, Color3.fromRGB(70, 125, 200), false)
+	hex(parent, "VaseNeck", x, FLOOR_Y + 9, z, 4.4, 2, Color3.fromRGB(70, 125, 200))
 	local petals = { Color3.fromRGB(255, 120, 150), Color3.fromRGB(255, 200, 80), Color3.fromRGB(190, 130, 255), Color3.fromRGB(255, 255, 255) }
 	for k = 0, 3 do
 		local a = k / 4 * math.pi * 2
@@ -1224,9 +1229,9 @@ end
 local function coffeeCup(parent: Instance, x: number, z: number)
 	mkPart("Part", { Name = "Saucer", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.8, 13, 13), CFrame = upright(x, FLOOR_Y + 0.4, z), Color = Color3.fromRGB(245, 245, 240), Material = LOW }, parent)
 	hex(parent, "Cup", x, FLOOR_Y + 0.8, z, 8, 8, Color3.fromRGB(245, 245, 240))
-	hex(parent, "Coffee", x, FLOOR_Y + 8.7, z, 6.6, 0.2, Color3.fromRGB(110, 70, 45), false)
+	hex(parent, "Coffee", x, FLOOR_Y + 8.7, z, 6.6, 0.2, Color3.fromRGB(110, 70, 45))
 	mkPart("Part", { Name = "CupHandle", Size = Vector3.new(3, 5, 1.2), CFrame = at(x + 5.3, FLOOR_Y + 4.8, z), Color = Color3.fromRGB(245, 245, 240), Material = LOW }, parent)
-	hex(parent, "CupBand", x, FLOOR_Y + 5.8, z, 8.3, 1.2, Color3.fromRGB(90, 170, 230), false)
+	hex(parent, "CupBand", x, FLOOR_Y + 5.8, z, 8.3, 1.2, Color3.fromRGB(90, 170, 230))
 end
 
 -- Cutlery lying flat in the table's margin (outside the invisible walls, just to look at).
@@ -1253,7 +1258,7 @@ local function buildDecorations(parent: Instance)
 
 	-- Giant sponge and soap bars around the spawn.
 	mkPart("Part", { Name = "GiantSponge", Size = Vector3.new(12, 5, 8), CFrame = at(-78, 2.7, 44) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(255, 215, 90), Material = LOW }, parent)
-	mkPart("Part", decor({ Name = "SpongeScrub", Size = Vector3.new(12.2, 1.6, 8.2), CFrame = at(-78, 5.9, 44) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(80, 180, 100), Material = LOW }), parent)
+	mkPart("Part", ({ Name = "SpongeScrub", Size = Vector3.new(12.2, 1.6, 8.2), CFrame = at(-78, 5.9, 44) * CFrame.Angles(0, math.rad(20), 0), Color = Color3.fromRGB(80, 180, 100), Material = LOW }), parent)
 	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(10, 3.5, 6), CFrame = at(78, 2, 44) * CFrame.Angles(0, math.rad(-15), 0), Color = Color3.fromRGB(190, 230, 255), Material = LOW }, parent)
 	mkPart("Part", { Name = "SoapBar", Size = Vector3.new(8, 3, 5), CFrame = at(79, 5.3, 44) * CFrame.Angles(0, math.rad(10), 0), Color = Color3.fromRGB(255, 190, 220), Material = LOW }, parent)
 
