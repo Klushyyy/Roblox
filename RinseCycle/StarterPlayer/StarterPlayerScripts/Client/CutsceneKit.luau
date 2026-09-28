@@ -297,6 +297,58 @@ function Kit.group(ctx: any, parts: { BasePart }, pivot: CFrame, fn: (number) ->
 	end)
 end
 
+-- Throws `part` along an arc from `from` to `to` (world points, or functions of t) between t0 and
+-- t1, `height` studs above the straight line at the top, turning `spin` times. Hidden outside the
+-- flight unless `keep` is "before", "after" or "both" (then it waits at the start / end point).
+function Kit.flight(ctx: any, part: BasePart, t0: number, t1: number, from: any, to: any, height: number, spin: number?, keep: string?)
+	local base = part.CFrame.Rotation
+	local shown = part.Transparency
+	local function at(v: any, t: number): Vector3
+		return if type(v) == "function" then v(t) else v
+	end
+	ctx:onUpdate(function(t)
+		local k
+		if t < t0 then
+			if keep == "before" or keep == "both" then
+				part.Transparency = shown
+				part.CFrame = CFrame.new(at(from, t)) * base
+			else
+				part.Transparency = 1
+			end
+			return
+		elseif t > t1 then
+			if keep == "after" or keep == "both" then
+				part.Transparency = shown
+				part.CFrame = CFrame.new(at(to, t)) * base
+			else
+				part.Transparency = 1
+			end
+			return
+		end
+		k = (t - t0) / (t1 - t0)
+		local p = at(from, t0):Lerp(at(to, t1), k) + Vector3.new(0, 4 * height * k * (1 - k), 0)
+		part.Transparency = shown
+		part.CFrame = CFrame.new(p) * CFrame.Angles(k * PI * 2 * (spin or 0), k * 1.3 * (spin or 0), 0) * base
+	end)
+end
+
+-- Rising smoke (or steam) from a part.
+function Kit.smoke(part: BasePart, color: Color3?, rate: number?, size: number?)
+	local e = Instance.new("ParticleEmitter")
+	e.Texture = "rbxasset://textures/particles/smoke_main.dds"
+	e.Color = ColorSequence.new(color or Color3.fromRGB(230, 230, 230))
+	e.Size = NumberSequence.new(size or 18, (size or 18) * 3)
+	e.Transparency = NumberSequence.new(0.35, 1)
+	e.Lifetime = NumberRange.new(2, 3.5)
+	e.Rate = rate or 6
+	e.Speed = NumberRange.new(30, 60)
+	e.SpreadAngle = Vector2.new(12, 12)
+	e.EmissionDirection = Enum.NormalId.Top
+	e.LightInfluence = 0.6
+	e.Parent = part
+	return e
+end
+
 ----------------------------------------------------------------------------------------------------
 -- Rooms
 ----------------------------------------------------------------------------------------------------
