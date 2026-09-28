@@ -1,0 +1,21 @@
+# Offline game tests (Lune)
+
+A stand-in for the Roblox engine that runs the real scripts, so whole-game flows can be
+tested without Studio. Needs [Lune](https://github.com/lune-org/lune).
+
+- `adminsim.luau`: runs AdminServer + AdminClient, clicks through every command in the panel,
+  checks mute (TextSource.CanSend + the chat filter), lists, spectate/control stop, the
+  command line, a non-owner (no panel, every remote refused) and the owner's status chips.
+  `lune run adminsim.luau [username] [userId] [studio 1|0]`
+- `gamesim.luau`: boots the real server `Main` + all services and the real `ClientMain`,
+  with a virtual clock, ray casts and remotes wired end to end. Optional scenario:
+  `GAMESIM_EXTRA=scen_run.luau lune run gamesim.luau [username] [userId] [studio 1|0]`
+  - `scen_run`: run start, clock starts only on "Loaded", buy/equip tools, finish, rewards,
+    return to lobby, real scrubbing and selling.
+  - `scen_lobby`: codes, daily, like/follow, hatch/equip/merge/delete pets, rank roll,
+    rebirth gate, party pads (Create/SetMax/StartNow).
+  - `scen_hud`: the owner-only Admin button under Free (lobby and in runs).
+  - `scen_water`: hose / pressure washer water parts while spraying.
+
+Paths assume the repo lives at /home/user/Roblox. The mock is permissive: a pass here means
+"no script errors and the flow works", not "pixel-perfect in Roblox".

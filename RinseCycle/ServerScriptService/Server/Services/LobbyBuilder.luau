@@ -1485,7 +1485,7 @@ function LobbyBuilder.GetSpawnCFrame(): CFrame
 	local angle = math.random() * math.pi * 2
 	local radius = 2 + math.random() * 8
 	local pos = Vector3.new(ORIGIN.X + SPAWN.X + math.cos(angle) * radius, ORIGIN.Y + 3, ORIGIN.Z + SPAWN.Z + math.sin(angle) * radius)
-	return CFrame.new(pos, pos + Vector3.new(0, 0, -10))
+	return CFrame.lookAt(pos, pos + Vector3.new(0, 0, -10))
 end
 
 return LobbyBuilder

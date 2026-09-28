@@ -25,7 +25,6 @@ local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
 local UIKit = require(Client:WaitForChild("UIKit"))
 local Bubbles = require(Client:WaitForChild("Bubbles"))
-local HoldPose = require(Client:WaitForChild("HoldPose"))
 local WaterFX = require(Client:WaitForChild("WaterFX"))
 
 local SprayController = {}
@@ -635,11 +634,9 @@ local function onHeartbeat(dt: number)
 	local stats = run.Stats
 
 	if not result then
-		HoldPose.SetAimTarget(nil)
 		hideVisuals()
 		return
 	end
-	HoldPose.SetAimTarget(result.Position)
 
 	local hitPart = result.Instance
 	local hitPos = result.Position
@@ -660,7 +657,7 @@ local function onHeartbeat(dt: number)
 	local lineDir: Vector3? = nil
 	if mode == "Line" then
 		r.Transparency = 1
-		r.CFrame = CFrame.new(hitPos, hitPos + normal) * CFrame.Angles(0, math.rad(90), 0) -- splash source
+		r.CFrame = CFrame.lookAt(hitPos, hitPos + normal) * CFrame.Angles(0, math.rad(90), 0) -- splash source
 		ensureLine()
 		local base = if washerVertical then camera.CFrame.UpVector else camera.CFrame.RightVector
 		local dir = base - normal * base:Dot(normal)
@@ -674,7 +671,7 @@ local function onHeartbeat(dt: number)
 		lp.Transparency = if inReach then 0.3 else 0.6
 	else
 		hideLine()
-		r.CFrame = CFrame.new(hitPos, hitPos + normal) * CFrame.Angles(0, math.rad(90), 0)
+		r.CFrame = CFrame.lookAt(hitPos, hitPos + normal) * CFrame.Angles(0, math.rad(90), 0)
 		r.Size = Vector3.new(RING_THICKNESS, stats.Radius * 2, stats.Radius * 2)
 		if inReach then
 			r.Color = toolColor

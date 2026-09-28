@@ -1022,7 +1022,7 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - **Run clock:** the timer starts when your client reports "Loaded" (the cutscene ended or was
   skipped, or you joined late). If nobody reports it, it starts after `Round.IntroMaxSeconds` (22 s).
   `RunState.ClockAt` is 0 while waiting, and the HUD shows 00:00:00.
-- **Aiming:** your held tool tilts with the camera pitch (±75°) in third and first person.
+- **Aiming:** (removed in v0.9: tools are simply held, see 6i.)
   Other players see a raised arm. Your own name tag hides in first person.
 - **Water FX:** the Nozzle, Washer and Cannon fire from an invisible `Muzzle` part. Each has a
   two-layer beam, streaking droplets, and mist at the muzzle and at the splash. The held
@@ -1035,8 +1035,8 @@ walls instead of clipping through. All gameplay queries use Include filters.
   Overlapping spots choose lifts whose face planes fall between each other's, measured from the
   real surface so curved dishes count.
 - **Admin panel** (`ServerScriptService/Admin`, `AdminClient`): only the owner
-  (`Config.Social.CreatorUserId`) gets the panel, or anyone in Studio. Open it with the backtick
-  key or the 🛡️ button. It uses the same command system as before: moderation, warnings, bans,
+  (`Config.Social.CreatorUserId`) gets the panel, or anyone in Studio. Open it with the 🛡️ Admin
+  button (v0.9; the backtick key was removed). It uses the same command system as before: moderation, warnings, bans,
   mutes, logs, teleports and server tools. It adds Rinse Cycle commands: coins, bubbles, gems,
   ranks, pets, rebirths, gifted passes, the daily streak, and finishing a run.
 
@@ -1047,13 +1047,29 @@ walls instead of clipping through. All gameplay queries use Include filters.
   from the lance tip to its line (across or up and down), with streaks and a centre jet. They are
   real parts, not camera-facing Beams, so they don't vanish in first person. They are placed
   after the tool is aimed each frame (RenderStep Camera + 2).
-- **Aim:** the held tool points at the spot under the crosshair or mouse (SprayController's hit,
-  else 40 studs along the aim ray). The angle is measured from the shoulder, eased, and clamped to
-  ±60°. It fades to level when the aim is beside or behind you.
+- **Aim:** (replaced in v0.9: tools are simply held, see 6i.)
 - **Follow reward:** paid when the follow check can't run (HTTP off, proxy down). A confirmed
   "not following" still asks the player to follow and rejoin.
 - **Wording:** party pads pick a *level*, and the picker is headed LEVELS. How to Play has five
   steps (the bubble-flying step is gone). The cutscene bread basket was removed.
+
+## 6i. Round 11 (v0.9): admin panel rebuilt, tools simply held
+
+- **Holding tools:** the camera-aim tilt is gone. A held tool sits in your raised right hand
+  pointing forward, the classic Roblox way. It is always fully visible: Roblox fades your
+  character when the camera gets close (looking up, backing into a wall, first person), and
+  HoldPose undoes that for the tool every frame.
+- **Admin panel** (`AdminClient`, new): a UIKit window ("Admin") opened from an owner-only 🛡️
+  Admin button under Free on the left (HUD.AddAdminButton; it stays there in runs). There is no
+  key shortcut any more. Players on the left, command groups on top (Punish, Control, Move, Game,
+  Server), the picked command's options with a RUN button at the bottom, plus a command line.
+  Lists (bans, mutes, warnings, log, inventory) open inside the window with Modify / Remove / View.
+  Everyone else only ever sees the effects (notices, announcements, status chips).
+- **Mute** now sets Roblox's `TextSource.CanSend = false` on every chat channel (synced every
+  second and right after any change, which also ends tempmutes on time). The delivery filter
+  stays as a second line, and the muted player's chat bar is switched off with a 🔇 chip.
+- **Offline tests:** `_tools/tests` runs the real server and client scripts in Lune (see its
+  README). Every admin command, a full run, the lobby systems and the water parts pass there.
 
 ## 7. Balance knobs (all in Config)
 

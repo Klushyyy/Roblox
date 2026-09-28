@@ -28,6 +28,19 @@ local Colors = UIKit.Theme.Colors
 local LocalPlayer = Players.LocalPlayer
 
 local HUD = {}
+
+-- The owner-only Admin button (AdminClient asks for it once the server confirms the owner). It
+-- sits under Free in the left column and, unlike Daily / Codes / Free, stays there in runs too.
+local adminClick: (() -> ())? = nil
+local addAdminButton: (() -> ())? = nil
+local adminButton: TextButton? = nil
+
+function HUD.AddAdminButton(onClick: () -> ())
+	adminClick = onClick
+	if addAdminButton then
+		addAdminButton()
+	end
+end
 local initialized = false
 
 ----------------------------------------------------------------------------------------------------
@@ -245,8 +258,34 @@ function HUD.Init()
 		})
 	end
 	local dailyButton = leftButton(1, "🎁", "Daily", Colors.Bubble, "Daily")
-	leftButton(2, "🎟️", "Codes", Colors.Primary, "Codes")
-	leftButton(3, "🎉", "Free", Colors.Good, "Free")
+	local codesButton = leftButton(2, "🎟️", "Codes", Colors.Primary, "Codes")
+	local freeButton = leftButton(3, "🎉", "Free", Colors.Good, "Free")
+	local function makeAdminButton()
+		if adminButton or not adminClick then
+			return
+		end
+		adminButton = UIKit.IconButton({
+			Name = "AdminButton",
+			Icon = "🛡️",
+			Label = "Admin",
+			Color = Colors.PanelLight,
+			Size = UDim2.fromOffset(80, 80),
+			LayoutOrder = 4,
+			Parent = leftColumn,
+			OnClick = function()
+				if adminClick then
+					adminClick()
+				end
+			end,
+		})
+		local inRun = ClientState.Run ~= nil
+		dailyButton.Visible = not inRun
+		codesButton.Visible = not inRun
+		freeButton.Visible = not inRun
+		leftColumn.Visible = true
+	end
+	addAdminButton = makeAdminButton
+	makeAdminButton()
 	local dailyDot = Instance.new("Frame")
 	dailyDot.Name = "Ready"
 	dailyDot.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -1018,7 +1057,10 @@ function HUD.Init()
 		upgradesButton.Visible = inRun
 		leaveButton.Visible = inRun
 		ranksButton.Visible = not inRun
-		leftColumn.Visible = not inRun
+		dailyButton.Visible = not inRun
+		codesButton.Visible = not inRun
+		freeButton.Visible = not inRun
+		leftColumn.Visible = not inRun or adminButton ~= nil
 		upgradesButton.LayoutOrder = 1
 		shopButton.LayoutOrder = 2
 		petsButton.LayoutOrder = 3

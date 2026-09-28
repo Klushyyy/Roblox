@@ -11,7 +11,7 @@
 	    through it and a hard jet down the middle.
 
 	SprayController says what to draw each Heartbeat (Spray / Fan / Hide). The parts are placed in
-	a RenderStep after HoldPose has aimed the tool, from the nozzle's position that frame, so the
+	a RenderStep after the camera moves, from the nozzle's position that frame, so the
 	water never lags behind or comes loose from the tip.
 ]]
 
@@ -229,7 +229,7 @@ function WaterFX.Init()
 	end
 	initialized = true
 	build()
-	-- After the camera (Camera) and HoldPose's tool aim (Camera + 1).
+	-- After the camera (Camera) and HoldPose (Camera + 1).
 	RunService:BindToRenderStep("RinseCycleWater", Enum.RenderPriority.Camera.Value + 2, function()
 		build()
 		render()

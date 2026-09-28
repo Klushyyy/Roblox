@@ -1196,6 +1196,54 @@ local function attachMuteFilter(channel)
 	print("[AdminServer] Mute filter attached to " .. channel.Name)
 end
 
+-- The real mute: Roblox's own TextSource.CanSend. Every player has one TextSource per chat
+-- channel; turning CanSend off stops the message at the source, so nobody (the sender included)
+-- ever sees it. The delivery filter above stays on as a second line. Kept in sync by
+-- syncChatMutes, run right after any mute change and every second (which also ends tempmutes on
+-- time and tells the player).
+local function isMutedNow(userId)
+	local data = mutedUserIds[userId]
+	if not data then return false end
+	if data.ExpiresAt and os.time() >= data.ExpiresAt then
+		mutedUserIds[userId] = nil
+		removeMuteData(userId)
+		local plr = Players:GetPlayerByUserId(userId)
+		if plr then
+			AdminMuteStatus:FireClient(plr, false, nil)
+			AdminNotice:FireClient(plr, "You are no longer muted", "Your mute has ended. You can chat again.")
+		end
+		return false
+	end
+	return true
+end
+
+local function applyTextSource(source)
+	if not source:IsA("TextSource") then return end
+	local canSend = not isMutedNow(source.UserId)
+	if source.CanSend ~= canSend then
+		source.CanSend = canSend
+	end
+end
+
+local function syncChatMutes()
+	local textChannels = TextChatService:FindFirstChild("TextChannels")
+	if not textChannels then return end
+	for _, channel in ipairs(textChannels:GetChildren()) do
+		if channel:IsA("TextChannel") then
+			for _, source in ipairs(channel:GetChildren()) do
+				pcall(applyTextSource, source)
+			end
+		end
+	end
+end
+
+task.spawn(function()
+	while true do
+		task.wait(1)
+		pcall(syncChatMutes)
+	end
+end)
+
 -- Attached to every current AND future text channel rather than a
 -- single channel hardcoded by name ("RBXGeneral") - if this game's
 -- channel is actually named something else, or there's more than one
@@ -1208,14 +1256,20 @@ task.spawn(function()
 		warn("[AdminServer] TextChannels not found - :mute will have no effect")
 		return
 	end
+	local function watchChannel(channel)
+		attachMuteFilter(channel)
+		channel.ChildAdded:Connect(function(source)
+			pcall(applyTextSource, source)
+		end)
+	end
 	for _, channel in ipairs(textChannels:GetChildren()) do
 		if channel:IsA("TextChannel") then
-			attachMuteFilter(channel)
+			watchChannel(channel)
 		end
 	end
 	textChannels.ChildAdded:Connect(function(child)
 		if child:IsA("TextChannel") then
-			attachMuteFilter(child)
+			watchChannel(child)
 		end
 	end)
 end)
@@ -3072,11 +3126,11 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 		if not target then return end
 		local cleaned = RoundService.DebugFinish(target)
 		if not cleaned then
-			sendFeedback(admin, target.Name .. " isn't in a dishwasher", true)
+			sendFeedback(admin, target.Name .. " isn't in a run", true)
 			return
 		end
-		logCommand(admin, "finishrun", target.Name, nil, admin.Name .. " finished " .. target.Name .. "'s dishwasher")
-		sendFeedback(admin, "Finished " .. target.Name .. "'s dishwasher (" .. cleaned .. " spots)", false)
+		logCommand(admin, "finishrun", target.Name, nil, admin.Name .. " finished " .. target.Name .. "'s run")
+		sendFeedback(admin, "Finished " .. target.Name .. "'s run (" .. cleaned .. " spots)", false)
 		return
 	end
 
@@ -3090,7 +3144,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 			return
 		end
 		if not RoundService.AddCoins(target, math.floor(amount)) then
-			sendFeedback(admin, target.Name .. " isn't in a dishwasher", true)
+			sendFeedback(admin, target.Name .. " isn't in a run", true)
 			return
 		end
 		logCommand(admin, "givecoins", target.Name, tostring(math.floor(amount)), admin.Name .. " gave " .. target.Name .. " " .. math.floor(amount) .. " coins")
@@ -3144,8 +3198,8 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 		end
 		profile.Unlocked = #Config.Levels
 		DataService.PushMeta(target)
-		logCommand(admin, "unlockall", target.Name, nil, admin.Name .. " unlocked every dishwasher for " .. target.Name)
-		sendFeedback(admin, "Unlocked every dishwasher for " .. target.Name, false)
+		logCommand(admin, "unlockall", target.Name, nil, admin.Name .. " unlocked every level for " .. target.Name)
+		sendFeedback(admin, "Unlocked every level for " .. target.Name, false)
 		return
 	end
 
@@ -3238,7 +3292,9 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 
 		-- The recipient gets told, with the game's usual celebration toast - only on the way IN.
 		if giving then
-			Remotes.Event("Notify"):FireClient(target, "🎁 You were gifted " .. pass.Icon .. " " .. pass.Name .. "!", "Good")
+			pcall(function()
+				Remotes.Event("Notify"):FireClient(target, "🎁 You were gifted " .. pass.Icon .. " " .. pass.Name .. "!", "Good")
+			end)
 		end
 
 		sendFeedback(admin, (giving and "Gave " or "Removed ") .. pass.Name
@@ -3356,6 +3412,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 			AdminNotice:FireClient(target, "You have been muted", muteNoticeBody(muteData))
 		end
 		AdminMuteStatus:FireClient(target, nowMuted, nowMuted and muteData.ExpiresAt or nil)
+		syncChatMutes()
 		sendFeedback(admin, (nowMuted and "Muted " or "Unmuted ") .. target.Name, false)
 
 	elseif commandName == "tempmute" then
@@ -3371,6 +3428,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 			admin.Name .. " muted " .. target.Name .. " for " .. formatDuration(durationSeconds) .. (reasonText ~= "" and (" - reason: " .. reasonText) or ""))
 		AdminNotice:FireClient(target, "You have been muted", muteNoticeBody(data))
 		AdminMuteStatus:FireClient(target, true, data.ExpiresAt)
+		syncChatMutes()
 		sendFeedback(admin, "Muted " .. target.Name .. " for " .. formatDuration(durationSeconds), false)
 
 	elseif commandName == "warn" then
@@ -3820,6 +3878,7 @@ AdminModifyPunishment.OnServerEvent:Connect(function(admin, kind, userIdStr, act
 				sendFeedback(admin, "Updated mute duration", false)
 			end
 		end
+		syncChatMutes()
 		local entries = buildMuteListEntries()
 		AdminMuteList:FireClient(admin, "Muted Players (" .. #entries .. ")", entries)
 	end
