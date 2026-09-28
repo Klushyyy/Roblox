@@ -1112,7 +1112,15 @@ local function makeEnv(scriptInst)
 		UDim2 = UDim2,
 		Enum = Enum,
 		BrickColor = roblox.BrickColor,
-		ColorSequence = roblox.ColorSequence,
+		ColorSequence = {
+			new = function(a, b)
+				-- Lune's two-colour form repeats the first colour; build the keypoints instead.
+				if typeof(a) == "Color3" and typeof(b) == "Color3" then
+					return roblox.ColorSequence.new({ roblox.ColorSequenceKeypoint.new(0, a), roblox.ColorSequenceKeypoint.new(1, b) })
+				end
+				return roblox.ColorSequence.new(a, b)
+			end,
+		},
 		ColorSequenceKeypoint = roblox.ColorSequenceKeypoint,
 		NumberSequence = roblox.NumberSequence,
 		NumberSequenceKeypoint = roblox.NumberSequenceKeypoint,
@@ -1378,6 +1386,14 @@ for _, g in methods.GetChildren(playerGui) do
 end
 out("PlayerGui: " .. table.concat(names, ", "))
 _G.GAME = { modules = modulesCache, player = player, victim = victim, playerGui = playerGui, frame = frame, find = function(r, n) return methods.FindFirstChild(r, n, true) end, methods = methods, getSignal = getSignal, ReplicatedStorage = ReplicatedStorage, workspace = workspace, Players = Players }
+do
+	local okDump, dumpFn = pcall(require, "./guidump")
+	if okDump then
+		_G.GAME.dumpGui = function(inst, path)
+			fs.writeFile(path, serde.encode("json", dumpFn(inst, methods)))
+		end
+	end
+end
 local extra = process.env.GAMESIM_EXTRA
 if extra then
 	local src = fs.readFile(extra)
@@ -1407,7 +1423,7 @@ if extra then
 		end
 		return table.unpack(result, 1, result.n)
 	end
-	local fn = luau.load(luau.compile(src), { debugName = extra, environment = setmetatable({ out = out, G = _G.GAME, pump = _G.__pump, call = call, CFrame = CFrame, Vector3 = Vector3, Enum = Enum, game = game, RaycastParams = makeEnv(nil).RaycastParams }, { __index = _G }) })
+	local fn = luau.load(luau.compile(src), { debugName = extra, environment = setmetatable({ out = out, G = _G.GAME, pump = _G.__pump, call = call, CFrame = CFrame, Vector3 = Vector3, Enum = Enum, game = game, Instance = { new = newInstanceGlobal }, UDim2 = UDim2, UDim = UDim, Color3 = Color3, Vector2 = Vector2, task = makeEnv(nil).task, RaycastParams = makeEnv(nil).RaycastParams }, { __index = _G }) })
 	fn()
 end
 out("=== DONE")

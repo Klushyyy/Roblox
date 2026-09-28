@@ -59,16 +59,25 @@ end
 local function keepVisible()
 	local character = LocalPlayer.Character
 	local camera = Workspace.CurrentCamera
-	if not character or not camera then
+	if not camera then
 		return
 	end
-	local head = character:FindFirstChild("Head")
+	local head = character and character:FindFirstChild("Head")
 	local firstPerson = head ~= nil and head:IsA("BasePart") and (camera.CFrame.Position - head.Position).Magnitude <= 1.5
-	local tag = head and head:FindFirstChild("NameTag")
-	if tag and tag:IsA("BillboardGui") then
-		tag.Enabled = not firstPerson and character:GetAttribute("AdminHidden") ~= true
+	-- Everyone's name tag follows the admin invisibility flag, so it comes straight back when
+	-- they turn visible again (and after a respawn); yours also hides in first person.
+	for _, player in Players:GetPlayers() do
+		local other = player.Character
+		local otherHead = other and other:FindFirstChild("Head")
+		local tag = otherHead and otherHead:FindFirstChild("NameTag")
+		if other and tag and tag:IsA("BillboardGui") then
+			local show = other:GetAttribute("AdminHidden") ~= true and not (player == LocalPlayer and firstPerson)
+			if tag.Enabled ~= show then
+				tag.Enabled = show
+			end
+		end
 	end
-	if not holding(character) then
+	if not character or not holding(character) then
 		return
 	end
 	local held = character:FindFirstChild("HeldTool")

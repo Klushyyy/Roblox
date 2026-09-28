@@ -216,7 +216,7 @@ function HUD.Init()
 	local petsButton = sideButton("🐾", "Pets", Colors.Warning, "P", "LB", function()
 		UIKit.ToggleWindow("Pets")
 	end)
-	local ranksButton = sideButton("💎", "Ranks", Colors.Accent, "R", "RB", function()
+	local ranksButton = sideButton("@Medal", "Ranks", Colors.Accent, "R", "RB", function()
 		UIKit.ToggleWindow("Ranks")
 	end)
 	local leaveButton = sideButton("🚪", "Leave", Colors.PanelLight, "", "", function()
@@ -250,16 +250,16 @@ function HUD.Init()
 			end,
 		})
 	end
-	local dailyButton = leftButton(1, "🎁", "Daily", Colors.Bubble, "Daily")
-	local codesButton = leftButton(2, "🎟️", "Codes", Colors.Primary, "Codes")
-	local freeButton = leftButton(3, "🎉", "Free", Colors.Good, "Free")
+	local dailyButton = leftButton(1, "@Gift", "Daily", Colors.Bubble, "Daily")
+	local codesButton = leftButton(2, "@Ticket", "Codes", Colors.Primary, "Codes")
+	local freeButton = leftButton(3, "@Star", "Free", Colors.Good, "Free")
 	local function makeAdminButton()
 		if adminButton or not adminClick then
 			return
 		end
 		adminButton = UIKit.IconButton({
 			Name = "AdminButton",
-			Icon = "🛡️",
+			Icon = "@Shield",
 			Label = "Admin",
 			Color = Colors.PanelLight,
 			Size = UDim2.fromOffset(80, 80),
@@ -582,12 +582,15 @@ function HUD.Init()
 		if touch then
 			leftY = math.min(leftY, canvas.Y - 300 - leftH / 2)
 		end
-		leftY = math.max(leftY, inset + 80 + leftH / 2)
-		leftColumn.Position = UDim2.new(0, 16 + safe.Left, 0, math.floor(leftY))
-
 		-- Money block: bottom-left on desktop/console; above the thumbstick on touch.
 		local bottom = if touch then canvas.Y - 330 else canvas.Y - 16 - safe.Bottom
 		moneyBlock.Position = UDim2.new(0, 20 + safe.Left, 0, math.floor(bottom))
+		-- In a run the column (the owner's Admin button) stays clear above the money block.
+		if moneyBlock.Visible then
+			leftY = math.min(leftY, bottom - moneyBlock.Size.Y.Offset - 16 - leftH / 2)
+		end
+		leftY = math.max(leftY, inset + 80 + leftH / 2)
+		leftColumn.Position = UDim2.new(0, 16 + safe.Left, 0, math.floor(leftY))
 
 		-- Timer: bottom-right on desktop/console; top-right under the topbar on touch.
 		if touch then
@@ -603,6 +606,7 @@ function HUD.Init()
 	end
 	rightColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 	leftColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
+	moneyBlock:GetPropertyChangedSignal("Visible"):Connect(relayoutHud)
 
 	local function relayoutTopBar()
 		relayoutHud()
@@ -1083,7 +1087,7 @@ function HUD.Init()
 
 		if playing and run then
 			local level = Config.GetLevel(run.Level)
-			levelLabel.Text = string.format("%s %s", tostring(level.Icon), tostring(level.Name))
+			levelLabel.Text = tostring(level.Name)
 			local full = run.Tank >= run.TankMax and run.TankMax > 0
 			setTankFull(full)
 			tankBar.Set(

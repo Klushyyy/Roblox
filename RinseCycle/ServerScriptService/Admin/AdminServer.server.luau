@@ -2306,7 +2306,30 @@ end)
 -- the two was active so the fresh character starts from a normal,
 -- interactable state instead of an inconsistent one.
 local function watchAdminRespawnForSpectateAndControl(adminPlayer)
-	adminPlayer.CharacterAdded:Connect(function()
+	adminPlayer.CharacterAdded:Connect(function(newCharacter)
+		-- Invisibility the admin chose carries over to the new body (going into a run or back to
+		-- the lobby respawns you), so the next toggle really does bring you - and your name tag -
+		-- back. Invisibility that only spectate/control applied ends with them.
+		local userId = adminPlayer.UserId
+		local wasInvisible = invisibleUserIds[userId] ~= nil
+		local spectate = spectatingState[userId]
+		local control = controllingAdminPreState[userId]
+		local chosen = wasInvisible and ((spectate == nil and control == nil)
+			or (spectate ~= nil and spectate.PreInvis) or (control ~= nil and control.PreInvis))
+		invisibleUserIds[userId] = nil
+		if chosen then
+			task.spawn(function()
+				newCharacter:WaitForChild("Head", 10)
+				task.wait(0.5) -- after the name tag, accessories and body parts arrive
+				if adminPlayer.Character == newCharacter and not invisibleUserIds[userId] then
+					setInvisible(adminPlayer, true)
+				end
+			end)
+		elseif wasInvisible then
+			for _, plr in ipairs(Players:GetPlayers()) do
+				AdminInvisStatus:FireClient(plr, adminPlayer, false)
+			end
+		end
 		if spectatingState[adminPlayer.UserId] then
 			spectatingState[adminPlayer.UserId] = nil
 			AdminSpectate:FireClient(adminPlayer, nil)

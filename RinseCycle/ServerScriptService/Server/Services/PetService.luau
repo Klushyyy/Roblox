@@ -714,7 +714,7 @@ local function hatch(player: Player, eggId: any, count: any): Types.RequestResul
 	local unlocked = tonumber(profile.Unlocked) or 1
 	if unlocked < egg.RequiredLevel then
 		local level = Config.Levels[egg.RequiredLevel]
-		local where = if level then level.Icon .. " " .. level.Name else "the next dishwasher"
+		local where = if level then level.Name else "the next dishwasher"
 		return fail(string.format("Unlock %s to hatch the %s!", where, egg.Name))
 	end
 	local room = RULES.MaxInventory - #profile.Pets

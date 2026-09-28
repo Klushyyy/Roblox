@@ -328,7 +328,7 @@ function Cutscene.Init()
 		end
 		local party = ClientState.Party :: Types.PartyState?
 		if party and party.Status == "Launching" and not ClientState.Run then
-			task.spawn(Cutscene.Cover, "Filling the dishwasher...", 20)
+			task.spawn(Cutscene.Cover, nil, 20)
 		elseif not party and covered and not playing then
 			task.delay(2, function()
 				if covered and not playing and not ClientState.Run then

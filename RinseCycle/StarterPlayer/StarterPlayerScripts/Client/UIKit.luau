@@ -56,6 +56,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Format = require(Shared:WaitForChild("Format"))
 local Util = require(Shared:WaitForChild("Util"))
+local IconArt = require(script.Parent:WaitForChild("IconArt"))
 
 local UIKit = {}
 
@@ -658,92 +659,17 @@ end
 
 -- A rounded inset card for rows and tiles inside a window (lighter navy with a soft rim).
 -- props: any Frame property plus Color, CornerRadius, StrokeColor.
---[[
-	Drawn icons (no emoji): UIKit.Icon(kind, size, props?) -> Frame
-	kind: "Coin" | "Bubble" | "Gem" | "Drop". Built from rounded frames, gradients and outlines so
-	they match the chunky UI. props: any Frame property (Position, AnchorPoint, LayoutOrder, ZIndex,
-	Parent...).
-]]
-local function round(frame: GuiObject)
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(1, 0)
-	c.Parent = frame
-end
-local function iconPart(parent: Instance, size: UDim2, pos: UDim2, color: Color3, transparency: number?): Frame
-	local f = Instance.new("Frame")
-	f.BorderSizePixel = 0
-	f.AnchorPoint = Vector2.new(0.5, 0.5)
-	f.Size = size
-	f.Position = pos
-	f.BackgroundColor3 = color
-	f.BackgroundTransparency = transparency or 0
-	f.Parent = parent
-	return f
-end
+-- One of the game's drawn icons (see IconArt): Coin, Bubble, Gem, Drop, Gift, Ticket, Star, Medal,
+-- Shield, Lock, and the level emblems Pasta, Pizza, Crown.
 function UIKit.Icon(kind: string, size: number?, props: { [string]: any }?): Frame
-	local px = size or 32
-	local root = Instance.new("Frame")
-	root.Name = kind .. "Icon"
-	root.BackgroundTransparency = 1
-	root.BorderSizePixel = 0
-	root.Size = UDim2.fromOffset(px, px)
-	local ink = Colors.Ink
-	local thick = math.max(1.5, px / 14)
-	local function outline(f: GuiObject, color: Color3?)
-		local st = Instance.new("UIStroke")
-		st.Color = color or ink
-		st.Thickness = thick
-		st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-		st.Parent = f
-	end
-	if kind == "Coin" then
-		local body = iconPart(root, UDim2.fromScale(0.9, 0.9), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1))
-		round(body)
-		outline(body)
-		addGradient(body, Color3.fromRGB(255, 226, 110), Color3.fromRGB(240, 170, 30))
-		local ring = iconPart(body, UDim2.fromScale(0.64, 0.64), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1), 1)
-		round(ring)
-		outline(ring, Color3.fromRGB(196, 128, 18))
-		local shine = iconPart(body, UDim2.fromScale(0.3, 0.16), UDim2.fromScale(0.34, 0.26), Color3.new(1, 1, 1), 0.35)
-		shine.Rotation = -35
-		round(shine)
-	elseif kind == "Gem" then
-		local body = iconPart(root, UDim2.fromScale(0.64, 0.64), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1))
-		body.Rotation = 45
-		local c = Instance.new("UICorner")
-		c.CornerRadius = UDim.new(0.18, 0)
-		c.Parent = body
-		outline(body)
-		addGradient(body, Color3.fromRGB(150, 235, 255), Color3.fromRGB(120, 90, 240))
-		local facet = iconPart(body, UDim2.fromScale(0.42, 0.42), UDim2.fromScale(0.36, 0.36), Color3.new(1, 1, 1), 0.55)
-		local fc = Instance.new("UICorner")
-		fc.CornerRadius = UDim.new(0.2, 0)
-		fc.Parent = facet
-	elseif kind == "Drop" then
-		local tip = iconPart(root, UDim2.fromScale(0.5, 0.5), UDim2.fromScale(0.5, 0.42), Color3.new(1, 1, 1))
-		tip.Rotation = 45
-		outline(tip)
-		addGradient(tip, Color3.fromRGB(150, 220, 255), Color3.fromRGB(56, 160, 240))
-		local body = iconPart(root, UDim2.fromScale(0.7, 0.7), UDim2.fromScale(0.5, 0.6), Color3.new(1, 1, 1))
-		round(body)
-		outline(body)
-		addGradient(body, Color3.fromRGB(150, 220, 255), Color3.fromRGB(40, 140, 230))
-		local shine = iconPart(body, UDim2.fromScale(0.2, 0.3), UDim2.fromScale(0.32, 0.4), Color3.new(1, 1, 1), 0.35)
-		round(shine)
-	else -- "Bubble": a soap bubble
-		local body = iconPart(root, UDim2.fromScale(0.9, 0.9), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1))
-		round(body)
-		outline(body)
-		addGradient(body, Color3.fromRGB(255, 196, 226), Color3.fromRGB(236, 92, 160))
-		local shine = iconPart(body, UDim2.fromScale(0.34, 0.22), UDim2.fromScale(0.36, 0.28), Color3.new(1, 1, 1), 0.2)
-		shine.Rotation = -35
-		round(shine)
-		local dot = iconPart(body, UDim2.fromScale(0.12, 0.12), UDim2.fromScale(0.7, 0.72), Color3.new(1, 1, 1), 0.3)
-		round(dot)
-	end
+	local root = IconArt.Draw(kind, size or 32)
 	if props then
 		for k, v in props do
-			(root :: any)[k] = v
+			if k == "ZIndex" then
+				IconArt.SetZIndex(root, v)
+			else
+				(root :: any)[k] = v
+			end
 		end
 	end
 	return root
@@ -1256,13 +1182,36 @@ function UIKit.IconButton(props: { [string]: any }?): TextButton
 	addTextStroke(caption, captionSize)
 	caption.Parent = parts.Face
 
-	-- The emoji sits higher when there is a caption under it.
+	-- The icon sits higher when there is a caption under it. "@Kind" draws one of the IconArt
+	-- icons instead of an emoji.
+	local art: Frame? = nil
+	local artKey = ""
 	local function layoutContent()
 		local text = button.Text
 		local hasCaption = text ~= ""
 		caption.Text = text
 		caption.Visible = hasCaption
-		icon.Text = tostring(button:GetAttribute("Icon") or "")
+		local value = tostring(button:GetAttribute("Icon") or "")
+		local kind = string.match(value, "^@(%a+)$")
+		local artSize = math.floor(height * (if hasCaption then 0.56 else 0.7))
+		local key = if kind then kind .. artSize .. tostring(hasCaption) else ""
+		if key ~= artKey then
+			artKey = key
+			if art then
+				art:Destroy()
+				art = nil
+			end
+			if kind then
+				local drawn = IconArt.Draw(kind, artSize)
+				drawn.Name = "Art"
+				drawn.AnchorPoint = Vector2.new(0.5, 0.5)
+				drawn.Position = UDim2.fromScale(0.5, if hasCaption then 0.4 else 0.5)
+				IconArt.SetZIndex(drawn, 2)
+				drawn.Parent = parts.Face
+				art = drawn
+			end
+		end
+		icon.Text = if kind then "" else value
 		icon.Position = UDim2.fromScale(0.5, if hasCaption then 0.4 else 0.5)
 		icon.Size = UDim2.fromScale(1, if hasCaption then 0.62 else 0.9)
 		icon.TextSize = math.floor(height * (if hasCaption then 0.42 else 0.52))

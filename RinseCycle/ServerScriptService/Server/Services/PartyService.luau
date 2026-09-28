@@ -345,7 +345,7 @@ local function refreshPad(pad: Pad, pulse: boolean?)
 		if party then
 			local level = Config.GetLevel(party.Level)
 			setText(gui.Count, #party.Members .. "/" .. party.MaxPlayers)
-			setText(gui.Title, level.Icon .. " " .. level.Name)
+			setText(gui.Title, level.Name)
 			setText(gui.Privacy, PRIVACY_TEXT[party.Privacy])
 		else
 			setText(gui.Count, "0/" .. MAX_PLAYERS)

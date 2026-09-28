@@ -108,7 +108,7 @@ end
 
 -- "Map thumbnail" art for a dishwasher: a gradient in its theme colours, a big food icon, and a few
 -- bubbles. Built from UI only (no uploaded images).
-local function levelArt(parent: Instance, levelIndex: number, size: UDim2, iconSize: number, locked: boolean): Frame
+local function levelArt(parent: Instance, levelIndex: number, size: UDim2, iconSize: number, locked: boolean, emblemAt: UDim2?): Frame
 	local level = Config.GetLevel(levelIndex)
 	local art = Instance.new("Frame")
 	art.Name = "Art"
@@ -128,13 +128,21 @@ local function levelArt(parent: Instance, levelIndex: number, size: UDim2, iconS
 		UIKit.Corner(b, 999)
 		b.Parent = art
 	end
-	UIKit.Label({
-		Text = if locked then "🔒" else level.Icon,
-		TextSize = iconSize,
+	-- A soft glow behind the level's emblem (a padlock while it's locked).
+	local emblemSize = math.floor(iconSize * 1.35)
+	local at = emblemAt or UDim2.fromScale(0.5, 0.52)
+	local glow = Instance.new("Frame")
+	glow.AnchorPoint = Vector2.new(0.5, 0.5)
+	glow.Position = at
+	glow.Size = UDim2.fromOffset(emblemSize * 1.25, emblemSize * 1.25)
+	glow.BackgroundColor3 = Color3.new(1, 1, 1)
+	glow.BackgroundTransparency = 0.72
+	glow.BorderSizePixel = 0
+	UIKit.Corner(glow, 999)
+	glow.Parent = art
+	UIKit.Icon(if locked then "Lock" else (level.Emblem or "Coin"), emblemSize, {
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromScale(1, 1),
-		Stroke = false,
+		Position = at,
 		Parent = art,
 	})
 	if locked then
@@ -194,7 +202,7 @@ local function renderLevelList()
 		card.BackgroundTransparency = 1
 		card.SelectionImageObject = nil
 		card.Parent = levelList
-		local art = levelArt(card, i, UDim2.fromScale(1, 1), 54, locked)
+		local art = levelArt(card, i, UDim2.fromScale(1, 1), 54, locked, UDim2.new(0, 60, 0.5, 0))
 		local stroke = UIKit.Stroke(art, if selected then Color3.new(1, 1, 1) else Colors.Ink, if selected then 4 else 2)
 		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 		UIKit.Label({
@@ -202,7 +210,7 @@ local function renderLevelList()
 			TextSize = 24,
 			AnchorPoint = Vector2.new(1, 1),
 			Position = UDim2.new(1, -10, 1, -6),
-			Size = UDim2.new(1, -20, 0, 30),
+			Size = UDim2.new(1, -130, 0, 30),
 			TextXAlignment = Enum.TextXAlignment.Right,
 			TextScaled = true,
 			Parent = art,
@@ -211,9 +219,11 @@ local function renderLevelList()
 		UIKit.Label({
 			Text = if locked then string.format("Clear %s to unlock", Config.GetLevel(i - 1).Name) elseif best then "Best " .. UIKit.Time(best) else "Not cleared yet",
 			TextSize = 15,
-			Position = UDim2.fromOffset(10, 6),
-			Size = UDim2.new(1, -20, 0, 20),
-			TextXAlignment = Enum.TextXAlignment.Left,
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -10, 0, 6),
+			Size = UDim2.new(1, -130, 0, 20),
+			TextXAlignment = Enum.TextXAlignment.Right,
+			TextScaled = true,
 			TextColor3 = Color3.fromRGB(235, 240, 250),
 			Parent = art,
 		})

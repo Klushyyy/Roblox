@@ -814,7 +814,7 @@ function PetsUI._refreshEggButtons()
 	eggLockedLabel.Visible = locked
 	if locked then
 		local level = Config.Levels[egg.RequiredLevel]
-		local where = if level then (level.Icon or "") .. " " .. level.Name else ("Level " .. egg.RequiredLevel)
+		local where = if level then level.Name else ("Level " .. egg.RequiredLevel)
 		eggLockedLabel.Text = "Unlock " .. where .. " to hatch this egg!"
 	end
 
