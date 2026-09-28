@@ -743,6 +743,7 @@ local function birthdaySurprise(origin: CFrame, parent: Instance): any
 		Wall = rgb(150, 120, 170), Stripe = rgb(110, 84, 130), StripeH = 180,
 	})
 	Kit.window(ctx, -470, 400, ZW, 180, 180, "night", rgb(120, 60, 110))
+	Kit.ceiling(ctx, -680, 920, -800, ZW, 700, rgb(236, 230, 240))
 	Kit.picture(ctx, 80, 420, ZW, 150, 100, { rgb(120, 180, 230), rgb(90, 160, 90), rgb(255, 230, 120) })
 	-- the banner
 	local banner = ctx:box("Banner", V(420, 60, 3), ctx:at(-150, 560, ZW - 12), rgb(255, 214, 90))

@@ -398,6 +398,12 @@ function Kit.room(ctx: any, spec: { [string]: any })
 	end
 end
 
+-- A ceiling over (x0..x1, z0..z1) at height h (for night scenes: the camera never sees the sky).
+function Kit.ceiling(ctx: any, x0: number, x1: number, z0: number, z1: number, h: number, color: Color3, material: Enum.Material?)
+	local c = ctx:box("Ceiling", Vector3.new(x1 - x0 + 40, 12, z1 - z0 + 40), ctx:at((x0 + x1) / 2, h + 6, (z0 + z1) / 2), color, material)
+	c.CastShadow = false
+end
+
 -- A window drawn on a wall facing the camera (-Z): sky, frame, sill, optional curtains.
 -- view: "day" | "dusk" | "night".
 function Kit.window(ctx: any, x: number, h: number, z: number, w: number, hh: number, view: string?, curtain: Color3?)
@@ -971,7 +977,7 @@ function Kit.endingShots(ctx: any, dw: any, beats: { [string]: number }, side: n
 		return dw:Local(x * sd, y, z)
 	end
 	ctx:shot(beats.Open - 0.6, beats.Close, { eye = { L(330, 260, 330), L(290, 220, 280) }, look = { L(0, 120, 60), L(0, 90, 40) }, fov = { 46, 44 } })
-	ctx:shot(beats.Close, beats.Press - 0.35, { eye = { L(190, 40, 150), L(170, 46, 130) }, look = { L(0, 80, 0), L(0, 90, 0) }, fov = { 42, 40 } })
+	ctx:shot(beats.Close, beats.Press - 0.35, { eye = { L(230, 50, 250), L(210, 56, 225) }, look = { L(0, 80, 0), L(0, 90, 0) }, fov = { 42, 40 } })
 	ctx:shot(beats.Press - 0.35, beats.Press + 1.2, { eye = { L(140, 190, 30), L(130, 186, 26) }, look = { L(44, HINGE_Y + DOOR_H - 9, 0), L(44, HINGE_Y + DOOR_H - 9, 0) }, fov = { 32, 28 } })
 	ctx.Duration = beats.Press + 3.9 -- the film ends a few seconds into the wash
 	local push = beats.Press + 1.2
