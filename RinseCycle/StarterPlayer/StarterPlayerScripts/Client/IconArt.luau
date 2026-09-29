@@ -187,6 +187,11 @@ local function draw(parent: Instance, s: Shape, px: number, grow: number)
 		local f = frame(holder, s.x * px - ox, s.y * px - oy, side, side, 45, color, transparency)
 		if s.r then
 			corner(f, s.r)
+		elseif grow > 0 then
+			-- pushing a sharp corner out by `grow` makes a round corner of that radius, not a spike
+			local c = f:FindFirstChildOfClass("UICorner") or Instance.new("UICorner")
+			c.CornerRadius = UDim.new(0, grow)
+			c.Parent = f
 		end
 		if grow == 0 then
 			gradient(f, fill, 45)
@@ -208,9 +213,6 @@ end
 -- The icons
 ----------------------------------------------------------------------------------------------------
 local ART: { [string]: { any } } = {}
--- Icons outlined as one scaled silhouette (see Heart): { X, Y, Span, Shapes = how many of the
--- first shapes make up the silhouette }.
-local OUTLINE_SCALED: { [string]: { X: number, Y: number, Span: number, Shapes: number } } = {}
 
 -- An embossed emblem: a gem-cut diamond (light upper facets, darker lower ones) with a thin dark
 -- rim, drawn centred at (x, y). Used where a star would go (coin, medal, ticket, shield).
@@ -325,27 +327,22 @@ end
 
 -- A heart (free rewards: like, follow, join): a square turned 45 degrees with a disc on each of
 -- its two upper edges, so both lobes are exact mirror images.
--- A heart (Free), redrawn so it has no inner lines: the outline is the whole heart drawn once,
--- slightly bigger, in ink (a scaled silhouette, not one ring per piece, which left dark slivers
--- where the pieces met), and the fill is one flat colour, so the seams between its pieces can't
--- show. Two round lobes and a square turned 45 degrees for the point; the highlight is round only.
+-- A heart (Free): two round lobes and a square turned 45 degrees for the point, one flat colour.
+-- The outline is every piece pushed out by the same number of pixels (so the rim is equally thick
+-- all the way round), and the point has no rounded corners (a rounded corner left a notch at the
+-- sides where the ink showed through). Round highlights only.
 do
 	local h = 0.33 -- half diagonal of the square
 	local cy = 0.54 -- centre of the square
 	local d = h * SQRT2 -- lobe diameter = the square's side
 	local red = rgb(255, 72, 112)
-	local shapes: { any } = {
-		{ "diamond", x = 0.5, y = cy, hd = h, fill = red },
-		{ "disc", x = 0.5 - h / 2, y = cy - h / 2, d = d, fill = red },
-		{ "disc", x = 0.5 + h / 2, y = cy - h / 2, d = d, fill = red },
+	ART.Heart = {
+		{ "diamond", x = 0.5, y = cy, hd = h, fill = red, o = true },
+		{ "disc", x = 0.5 - h / 2, y = cy - h / 2, d = d, fill = red, o = true },
+		{ "disc", x = 0.5 + h / 2, y = cy - h / 2, d = d, fill = red, o = true },
 		{ "disc", x = 0.32, y = 0.34, d = 0.15, fill = WHITE, t = 0.3 },
 		{ "disc", x = 0.225, y = 0.45, d = 0.065, fill = WHITE, t = 0.4 },
 	}
-	-- silhouette box (top of the lobes to the tip) for the scaled outline
-	local top = cy - h / 2 - d / 2
-	local bottom = cy + h
-	ART.Heart = shapes
-	OUTLINE_SCALED.Heart = { X = 0.5, Y = (top + bottom) / 2, Span = bottom - top, Shapes = 3 }
 end
 
 -- A four-point sparkle with a small twin (bonuses, "new").
@@ -537,26 +534,6 @@ function IconArt.Draw(kind: string, px: number): Frame
 	root.Size = UDim2.fromOffset(px, px)
 	local shapes = ART[kind] or ART.Coin
 	local grow = math.max(1, math.floor(px * 0.06 + 0.5))
-	local scaled = OUTLINE_SCALED[kind]
-	if scaled then
-		-- The silhouette in ink, scaled up about its centre so the rim is `grow` px all round.
-		local k = 1 + 2 * grow / (scaled.Span * px)
-		for i = 1, scaled.Shapes do
-			local src = shapes[i]
-			local c = table.clone(src)
-			c.x = scaled.X + (src.x - scaled.X) * k
-			c.y = scaled.Y + (src.y - scaled.Y) * k
-			if c.d then
-				c.d = src.d * k
-			end
-			if c.hd then
-				c.hd = src.hd * k
-			end
-			c.fill = INK
-			c.t = nil
-			draw(root, c, px, 0)
-		end
-	end
 	-- Each layer (split by "|") gets its outline pass and then its fill pass, so a layer drawn later
 	-- sits on top of the earlier ones with its own outline.
 	local layer: { Shape } = {}
