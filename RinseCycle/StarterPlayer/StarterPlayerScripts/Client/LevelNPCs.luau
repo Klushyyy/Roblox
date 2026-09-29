@@ -336,12 +336,17 @@ local function hairLong(color: Color3)
 	end
 end
 
+-- A cone party hat worn at a jaunty angle: thin slices tapering to a point (so it reads as a cone,
+-- not a stacked cake), one stripe, and a pompom on top.
 local function partyHat(a: any, c1: Color3, c2: Color3)
-	for i = 0, 3 do
-		local r = 0.5 - i * 0.12
-		a:piece("Head", Vector3.new(0.26, r * 2, r * 2), CFrame.new(0, 0.72 + i * 0.24, 0) * CFrame.Angles(0, 0, PI / 2), if i % 2 == 0 then c1 else c2, nil, "Cylinder")
+	local tilt = CFrame.new(0.08, 0.66, 0) * CFrame.Angles(0, 0, -0.14)
+	local N = 8
+	for i = 0, N - 1 do
+		local r = 0.44 * (1 - i / N) + 0.03
+		local color = if i == 2 or i == 5 then c2 else c1
+		a:piece("Head", Vector3.new(0.13, r * 2, r * 2), tilt * CFrame.new(0, 0.065 + i * 0.12, 0) * CFrame.Angles(0, 0, PI / 2), color, nil, "Cylinder")
 	end
-	a:piece("Head", Vector3.new(0.22, 0.22, 0.22), CFrame.new(0, 1.66, 0), rgb(255, 230, 90), nil, "Ball")
+	a:piece("Head", Vector3.new(0.24, 0.24, 0.24), tilt * CFrame.new(0, 0.1 + N * 0.12, 0), rgb(255, 236, 110), nil, "Ball")
 end
 
 local function crown(a: any, gem: Color3, small: boolean?)

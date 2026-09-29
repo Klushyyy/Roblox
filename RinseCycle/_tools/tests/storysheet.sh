@@ -5,7 +5,7 @@ D=$(cd "$(dirname "$0")" && pwd)
 cd $D
 FILES=""
 for T in "$@"; do
-  ( R=$(timeout 300 ../tools/lune run harness.luau "story$L@$T" st_${L}_$T.json 2>&1); echo "$R" | grep -v "^CAM\|^DUR\|wrote\|^LINE" | head -5 >&2; CAM=$(echo "$R" | grep CAM | cut -d' ' -f2-); set -- $CAM; python3 render.py st_${L}_$T.json st_${L}_$T.png $1 $2 $3 $4 $5 $6 $7 640 360 >/dev/null ) &
+  ( R=$(timeout 300 ../tools/lune run harness.luau "story$L@$T" st_${L}_$T.json 2>&1); echo "$R" | grep -v "^CAM\|^DUR\|wrote\|^LINE" | head -5 >&2; CAM=$(echo "$R" | grep CAM | cut -d' ' -f2-); set -- $CAM; python3 eyecheck.py st_${L}_$T.json $1 $2 $3 | sed "s/^/t=$T /" >&2; python3 render.py st_${L}_$T.json st_${L}_$T.png $1 $2 $3 $4 $5 $6 $7 640 360 >/dev/null ) &
   FILES="$FILES st_${L}_$T.png"
 done
 wait

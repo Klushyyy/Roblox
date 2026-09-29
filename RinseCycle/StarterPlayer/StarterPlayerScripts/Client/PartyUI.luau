@@ -215,6 +215,16 @@ local function renderLevelList()
 			TextScaled = true,
 			Parent = art,
 		})
+		UIKit.Label({
+			Text = "CHAPTER " .. i,
+			TextSize = 18,
+			AnchorPoint = Vector2.new(1, 1),
+			Position = UDim2.new(1, -10, 1, -36),
+			Size = UDim2.new(1, -130, 0, 22),
+			TextXAlignment = Enum.TextXAlignment.Right,
+			TextColor3 = Color3.fromRGB(255, 220, 110),
+			Parent = art,
+		})
 		local best = bestTime(i)
 		UIKit.Label({
 			Text = if locked then string.format("Clear %s to unlock", Config.GetLevel(i - 1).Name) elseif best then "Best " .. UIKit.Time(best) else "Not cleared yet",
@@ -238,6 +248,47 @@ local function renderLevelList()
 			renderCreate()
 		end)
 	end
+	-- The next chapter, still being written.
+	local n = #Config.Levels + 1
+	local soon = Instance.new("TextButton")
+	soon.Name = "ComingSoon"
+	soon.LayoutOrder = n
+	soon.Size = UDim2.new(1, -8, 0, 112)
+	soon.AutoButtonColor = false
+	soon.Text = ""
+	soon.BackgroundColor3 = Color3.fromRGB(96, 102, 116)
+	soon.BorderSizePixel = 0
+	soon.SelectionImageObject = nil
+	UIKit.Corner(soon, 14)
+	UIKit.Gradient(soon, Color3.fromRGB(124, 130, 146), Color3.fromRGB(78, 84, 98))
+	local soonStroke = UIKit.Stroke(soon, Colors.Ink, 2)
+	soonStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	soon.Parent = levelList
+	UIKit.Icon("Lock", 64, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, 60, 0.5, 0), Parent = soon })
+	UIKit.Label({
+		Text = "CHAPTER " .. n,
+		TextSize = 18,
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -10, 1, -36),
+		Size = UDim2.new(1, -130, 0, 22),
+		TextXAlignment = Enum.TextXAlignment.Right,
+		TextColor3 = Color3.fromRGB(255, 220, 110),
+		Parent = soon,
+	})
+	UIKit.Label({
+		Text = "MORE CHAPTERS COMING SOON",
+		TextSize = 22,
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -10, 1, -6),
+		Size = UDim2.new(1, -130, 0, 28),
+		TextXAlignment = Enum.TextXAlignment.Right,
+		TextScaled = true,
+		Parent = soon,
+	})
+	soon.Activated:Connect(function()
+		UIKit.PlaySound("Error")
+		UIKit.Toast("The next chapter is on its way. Stay tuned!", "Info")
+	end)
 end
 
 function renderCreate()
@@ -250,6 +301,14 @@ function renderCreate()
 
 	local art = levelArt(leftCard, selLevel, UDim2.new(1, -24, 0, 190), 110, false)
 	art.Position = UDim2.fromOffset(12, 12)
+	UIKit.Label({
+		Text = "CHAPTER " .. selLevel,
+		TextSize = 22,
+		Position = UDim2.fromOffset(14, 10),
+		Size = UDim2.fromOffset(200, 28),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = art,
+	})
 	UIKit.Label({
 		Text = string.upper(level.Name),
 		TextSize = 44,
@@ -388,7 +447,7 @@ local function buildCreateScreen()
 	right.Name = "Dishwashers"
 	right.Position = UDim2.fromOffset(560, 0)
 	UIKit.Label({
-		Text = "LEVELS",
+		Text = "CHAPTERS",
 		TextSize = 26,
 		Position = UDim2.fromOffset(0, 10),
 		Size = UDim2.new(1, 0, 0, 30),
@@ -442,7 +501,7 @@ local function renderWait(party: Types.PartyState)
 	local art = levelArt(waitContent, party.Level, UDim2.new(1, 0, 0, 110), 64, false)
 	art.LayoutOrder = 1
 	UIKit.Label({
-		Text = string.upper(level.Name),
+		Text = string.format("CH. %d: %s", party.Level, string.upper(level.Name)),
 		TextSize = 22,
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -4),

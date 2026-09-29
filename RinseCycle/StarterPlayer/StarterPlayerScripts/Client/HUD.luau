@@ -835,6 +835,63 @@ function HUD.Init()
 		end,
 	})
 
+	-- After the last chapter: the story so far is over. Covers the scoreboard with the news, and
+	-- what a Rebirth gives in the meantime.
+	local finale = Instance.new("Frame")
+	finale.Name = "Finale"
+	finale.Size = UDim2.new(1, -40, 0, 250)
+	finale.Position = UDim2.new(0, 20, 0, 188)
+	finale.BorderSizePixel = 0
+	finale.BackgroundColor3 = Color3.new(1, 1, 1)
+	finale.Visible = false
+	finale.ZIndex = 16
+	UIKit.Corner(finale, 16)
+	UIKit.Gradient(finale, Color3.fromRGB(255, 214, 90), Color3.fromRGB(236, 150, 40))
+	UIKit.Stroke(finale, Colors.Ink, 3)
+	finale.Parent = resultsFrame
+	UIKit.Icon("Crown", 64, { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 8), ZIndex = 17, Parent = finale })
+	UIKit.Label({
+		Text = "CONGRATS! YOU FINISHED ALL THE CURRENT CHAPTERS!",
+		TextSize = 28,
+		TextScaled = true,
+		Size = UDim2.new(1, -30, 0, 34),
+		Position = UDim2.new(0, 15, 0, 76),
+		ZIndex = 17,
+		Parent = finale,
+	})
+	UIKit.Label({
+		Text = "New chapters are coming soon.",
+		TextSize = 20,
+		Size = UDim2.new(1, -30, 0, 26),
+		Position = UDim2.new(0, 15, 0, 114),
+		ZIndex = 17,
+		Parent = finale,
+	})
+	UIKit.Label({
+		Text = string.format(
+			"In the meantime, REBIRTH to get:\n+%d%% Coins   +%d%% Bubbles   +%d Gems   (every rebirth, forever)",
+			math.floor(Config.Rebirth.CoinsPer * 100 + 0.5),
+			math.floor(Config.Rebirth.BubblesPer * 100 + 0.5),
+			Config.Rebirth.Gems
+		),
+		TextSize = 20,
+		TextWrapped = true,
+		Size = UDim2.new(1, -30, 0, 58),
+		Position = UDim2.new(0, 15, 0, 146),
+		TextColor3 = Color3.fromRGB(255, 255, 255),
+		ZIndex = 17,
+		Parent = finale,
+	})
+	UIKit.Label({
+		Text = "Visit the Rebirth Fountain in the lobby.",
+		TextSize = 16,
+		Size = UDim2.new(1, -30, 0, 22),
+		Position = UDim2.new(0, 15, 0, 212),
+		TextColor3 = Color3.fromRGB(255, 244, 214),
+		ZIndex = 17,
+		Parent = finale,
+	})
+
 	local function layoutResults()
 		local canvas = UIKit.CanvasSize()
 		local inset = UIKit.TopInset()
@@ -865,6 +922,16 @@ function HUD.Init()
 			resultsBubblesShown = results.Bubbles
 			resultsBubblesNV.Value = 0
 			UIKit.Tween(resultsBubblesNV, { Value = results.Bubbles }, 0.8)
+		end
+		local lastChapter = run.Level == #Config.Levels
+		if finale.Visible ~= lastChapter then
+			finale.Visible = lastChapter
+			headerRow.Visible = not lastChapter
+			scrollFrame.Visible = not lastChapter
+			if lastChapter then
+				UIKit.Bounce(finale)
+				UIKit.Confetti(80)
+			end
 		end
 		if results.UnlockedLevel then
 			local unlocked = Config.GetLevel(results.UnlockedLevel)
