@@ -252,7 +252,7 @@ function HUD.Init()
 	end
 	local dailyButton = leftButton(1, "@Gift", "Daily", Colors.Bubble, "Daily")
 	local codesButton = leftButton(2, "@Ticket", "Codes", Colors.Primary, "Codes")
-	local freeButton = leftButton(3, "🎉", "Free", Colors.Good, "Free")
+	local freeButton = leftButton(3, "@Heart", "Free", Colors.Good, "Free")
 	local function makeAdminButton()
 		if adminButton or not adminClick then
 			return

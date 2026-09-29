@@ -1338,7 +1338,8 @@ local function buildHowToPlay(parent: Instance, x: number, z: number, faceX: num
 			BackgroundTransparency = 1,
 			Text = tostring(i) .. ". " .. text,
 			Font = Enum.Font.GothamBold,
-			TextScaled = true,
+			-- one fixed size for every step (scaled text made each line a different size)
+			TextSize = 31,
 			TextColor3 = Color3.fromRGB(20, 40, 70),
 			TextXAlignment = Enum.TextXAlignment.Left,
 			TextWrapped = true,

@@ -157,6 +157,11 @@ function Cutscene.Init()
 		Parent = root,
 	})
 
+	-- Just arrived in the party's own run server: stay black until the dishwasher is ready.
+	if Workspace:GetAttribute("RunServer") and not ClientState.Run then
+		task.defer(Cutscene.Cover, "Filling your dishwasher...", 60)
+	end
+
 	-- Our party is launching: go black now, before the server teleports us into the dishwasher. If
 	-- no run follows (the start failed), the cover lifts again.
 	ClientState.Changed:Connect(function(kind)
@@ -183,6 +188,11 @@ function Cutscene.Init()
 		local run = ClientState.Run :: Types.RunState?
 		if not run then
 			lastRunKey = nil
+			if Workspace:GetAttribute("RunServer") then
+				-- A run server: the server is teleporting us home, stay behind the cover.
+				task.spawn(Cutscene.Cover, "Heading back to the lobby...", 40)
+				return
+			end
 			-- Back in the lobby: lift the cover the Leave / Back to Lobby buttons put up.
 			if covered then
 				task.delay(0.35, Cutscene.Uncover)

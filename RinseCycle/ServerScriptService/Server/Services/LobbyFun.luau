@@ -200,6 +200,49 @@ spawnBubble = function()
 	bubble.Parent = parent
 end
 
+-- The big soap bubbles floating over the table (tag "FloatBubble", placed by LobbyBuilder) pop too,
+-- for anyone who manages to reach one: +1 Bubble, and it comes back in the same spot a bit later.
+local function makeFloatPoppable(bubble: BasePart)
+	bubble.CanTouch = true
+	bubble.CanQuery = true
+	local popped = false
+	local click = Instance.new("ClickDetector")
+	click.MaxActivationDistance = 24
+	local function tryPop(player: Player)
+		if popped or not allowPop(player) then
+			return
+		end
+		popped = true
+		local pos = bubble.Position
+		local shown = bubble.Transparency
+		bubble.Transparency = 1
+		bubble.CanTouch = false
+		click.Parent = nil
+		DataService.AddBubbles(player, Config.LobbyBubbles.Reward, "LobbyBubble")
+		fire("LobbyPop", { Position = pos, Golden = false, By = player.UserId, Amount = Config.LobbyBubbles.Reward })
+		task.delay(rng:NextNumber(8, 16), function()
+			if bubble.Parent then
+				bubble.Transparency = shown
+				bubble.CanTouch = true
+				click.Parent = bubble
+				popped = false
+			end
+		end)
+	end
+	click.MouseClick:Connect(function(player: Player)
+		if nearPlayer(player, bubble.Position, 28) then
+			tryPop(player)
+		end
+	end)
+	bubble.Touched:Connect(function(hit: BasePart)
+		local player = playerFromHit(hit)
+		if player then
+			tryPop(player)
+		end
+	end)
+	click.Parent = bubble
+end
+
 ----------------------------------------------------------------------------------------------------
 -- Ducks
 ----------------------------------------------------------------------------------------------------
@@ -365,6 +408,11 @@ function LobbyFun.Start()
 	buildDucks(f)
 	for _ = 1, Config.LobbyBubbles.Max do
 		spawnBubble()
+	end
+	for _, inst in CollectionService:GetTagged("FloatBubble") do
+		if inst:IsA("BasePart") and inst:IsDescendantOf(lobby.Model) then
+			makeFloatPoppable(inst)
+		end
 	end
 	local function onPlayer(player: Player)
 		task.spawn(function()

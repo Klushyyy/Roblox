@@ -11,6 +11,7 @@
 --   Count (1), Spread (radius, 0.5), Velocity (Vector3, (0, 3, 0)), Jitter (random speed added, 1.5),
 --   Size ({ min, max }, { 0.35, 0.9 }), Life ({ min, max }, { 1.6, 2.8 }), Rise (buoyancy, 2.5)
 
+local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local Bubbles = {}
@@ -41,6 +42,7 @@ type Bubble = {
 	Phase: number,
 	Wobble: number,
 	ShownSize: number,
+	Poppable: boolean,
 }
 
 local pool: { Bubble } = {}
@@ -85,6 +87,7 @@ local function ensurePool()
 			Shell = shell,
 			Glint = glint,
 			Active = false,
+			Poppable = false,
 			Pos = Vector3.zero,
 			Vel = Vector3.zero,
 			Age = 0,
@@ -132,6 +135,7 @@ function Bubbles.Emit(position: Vector3, options: { [string]: any }?)
 		b.Phase = math.random() * math.pi * 2
 		b.Wobble = 0.25 + math.random() * 0.35
 		b.ShownSize = -1
+		b.Poppable = o.Poppable == true -- pops early when your character touches it
 		b.Shell.Color = TINTS[math.random(1, #TINTS)]
 		b.Shell.Transparency = 0
 		b.Glint.Transparency = 0.15
@@ -149,11 +153,22 @@ local function step(dt: number)
 	local camCF = if camera then camera.CFrame else CFrame.identity
 	table.clear(moveParts)
 	table.clear(moveCFrames)
+	local character = Players.LocalPlayer and Players.LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local rootPos = if root and root:IsA("BasePart") then root.Position else nil
 	for _, b in pool do
 		if not b.Active then
 			continue
 		end
 		b.Age += dt
+		-- Touched by your character (anywhere from feet to head): pop now.
+		if b.Poppable and rootPos and b.Age < b.Life then
+			local d = b.Pos - rootPos
+			if math.abs(d.Y) < 3.5 + b.Size / 2 and Vector2.new(d.X, d.Z).Magnitude < 1.6 + b.Size / 2 then
+				b.Life = b.Age
+				b.Poppable = false
+			end
+		end
 		if b.Age >= b.Life + POP_TIME then
 			hide(b)
 			continue

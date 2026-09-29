@@ -301,14 +301,14 @@ do
 	local h = 0.34 -- half diagonal of the square
 	local cy = 0.53 -- centre of the square
 	local d = h * SQRT2 -- lobe diameter = the square's side
-	local red = rgb(255, 78, 116)
+	local red = rgb(255, 84, 122)
 	ART.Heart = {
 		{ "diamond", x = 0.5, y = cy, hd = h, r = 0.08, fill = red, o = true },
 		{ "disc", x = 0.5 - h / 2, y = cy - h / 2, d = d, fill = red, o = true },
 		{ "disc", x = 0.5 + h / 2, y = cy - h / 2, d = d, fill = red, o = true },
-		-- a glossy highlight on the left lobe
-		{ "rect", x = 0.27, y = 0.3, w = 0.16, h = 0.08, r = 0.5, rot = -45, fill = WHITE, t = 0.15 },
-		{ "disc", x = 0.2, y = 0.42, d = 0.06, fill = WHITE, t = 0.3 },
+		-- a soft glossy highlight on the left lobe (round shapes only: no rotated edges)
+		{ "disc", x = 0.31, y = 0.33, d = 0.14, fill = WHITE, t = 0.25 },
+		{ "disc", x = 0.22, y = 0.44, d = 0.06, fill = WHITE, t = 0.35 },
 	}
 end
 

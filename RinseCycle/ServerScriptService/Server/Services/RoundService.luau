@@ -1155,10 +1155,18 @@ end
 -- Leaving a run
 ----------------------------------------------------------------------------------------------------
 
+-- Set by RunServers in a run server: players go home to the lobby server instead.
+RoundService.SendHomeHook = nil :: ((Player) -> ())?
+
 local function sendToLobby(player: Player)
 	-- Skip if they were put into another run in the meantime or left the game.
 	if runOf[player] == nil and isHere(player) then
-		Characters.Teleport(player, lobbySpawn())
+		local hook = RoundService.SendHomeHook
+		if hook then
+			hook(player)
+		else
+			Characters.Teleport(player, lobbySpawn())
+		end
 	end
 end
 

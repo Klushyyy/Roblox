@@ -26,6 +26,7 @@ local Characters = require(script.Parent:WaitForChild("Characters"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local LobbyBuilder = require(script.Parent:WaitForChild("LobbyBuilder"))
 local RoundService = require(script.Parent:WaitForChild("RoundService"))
+local RunServers = require(script.Parent:WaitForChild("RunServers"))
 
 local PartyService = {}
 
@@ -727,8 +728,16 @@ local function launch(party: Party)
 		-- Give every member's screen time to fade to black (Cutscene.Cover on "Launching") before
 		-- anyone is moved, so the teleport into the dishwasher is never seen.
 		task.wait(0.4)
-		-- StartRound yields while it builds the dishwasher. Pass a copy: it's RoundService's now.
-		local ok, started, err = pcall(RoundService.StartRound, table.clone(roster), level)
+		-- In the live game the party plays in its own private server; otherwise (Studio, or the
+		-- teleport can't start) StartRound builds the dishwasher here. It yields while it builds.
+		-- Pass a copy: it's RoundService's now.
+		local ok, started, err
+		local teleported = RunServers.Launch(table.clone(roster), level)
+		if teleported then
+			ok, started = true, true
+		else
+			ok, started, err = pcall(RoundService.StartRound, table.clone(roster), level)
+		end
 		for _, member in roster do
 			launching[member] = nil
 		end
@@ -744,7 +753,7 @@ local function launch(party: Party)
 			-- let go of them here without teleporting. Anyone it didn't take is walked out of the pad.
 			party.Dead = true
 			for _, member in party.Members do
-				releaseMember(party, member, if isInRun(member) then "Stay" else "Exit")
+				releaseMember(party, member, if teleported or isInRun(member) then "Stay" else "Exit")
 			end
 			table.clear(party.Members)
 			if pad.Party == party then

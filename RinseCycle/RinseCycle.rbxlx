@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.4.0"
+Config.Version = "1.5.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -12938,7 +12938,8 @@ local function buildHowToPlay(parent: Instance, x: number, z: number, faceX: num
 			BackgroundTransparency = 1,
 			Text = tostring(i) .. ". " .. text,
 			Font = Enum.Font.GothamBold,
-			TextScaled = true,
+			-- one fixed size for every step (scaled text made each line a different size)
+			TextSize = 31,
 			TextColor3 = Color3.fromRGB(20, 40, 70),
 			TextXAlignment = Enum.TextXAlignment.Left,
 			TextWrapped = true,
@@ -13460,6 +13461,49 @@ spawnBubble = function()
 	bubble.Parent = parent
 end
 
+-- The big soap bubbles floating over the table (tag "FloatBubble", placed by LobbyBuilder) pop too,
+-- for anyone who manages to reach one: +1 Bubble, and it comes back in the same spot a bit later.
+local function makeFloatPoppable(bubble: BasePart)
+	bubble.CanTouch = true
+	bubble.CanQuery = true
+	local popped = false
+	local click = Instance.new("ClickDetector")
+	click.MaxActivationDistance = 24
+	local function tryPop(player: Player)
+		if popped or not allowPop(player) then
+			return
+		end
+		popped = true
+		local pos = bubble.Position
+		local shown = bubble.Transparency
+		bubble.Transparency = 1
+		bubble.CanTouch = false
+		click.Parent = nil
+		DataService.AddBubbles(player, Config.LobbyBubbles.Reward, "LobbyBubble")
+		fire("LobbyPop", { Position = pos, Golden = false, By = player.UserId, Amount = Config.LobbyBubbles.Reward })
+		task.delay(rng:NextNumber(8, 16), function()
+			if bubble.Parent then
+				bubble.Transparency = shown
+				bubble.CanTouch = true
+				click.Parent = bubble
+				popped = false
+			end
+		end)
+	end
+	click.MouseClick:Connect(function(player: Player)
+		if nearPlayer(player, bubble.Position, 28) then
+			tryPop(player)
+		end
+	end)
+	bubble.Touched:Connect(function(hit: BasePart)
+		local player = playerFromHit(hit)
+		if player then
+			tryPop(player)
+		end
+	end)
+	click.Parent = bubble
+end
+
 ----------------------------------------------------------------------------------------------------
 -- Ducks
 ----------------------------------------------------------------------------------------------------
@@ -13625,6 +13669,11 @@ function LobbyFun.Start()
 	buildDucks(f)
 	for _ = 1, Config.LobbyBubbles.Max do
 		spawnBubble()
+	end
+	for _, inst in CollectionService:GetTagged("FloatBubble") do
+		if inst:IsA("BasePart") and inst:IsDescendantOf(lobby.Model) then
+			makeFloatPoppable(inst)
+		end
 	end
 	local function onPlayer(player: Player)
 		task.spawn(function()
@@ -14195,6 +14244,7 @@ local Characters = require(script.Parent:WaitForChild("Characters"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local LobbyBuilder = require(script.Parent:WaitForChild("LobbyBuilder"))
 local RoundService = require(script.Parent:WaitForChild("RoundService"))
+local RunServers = require(script.Parent:WaitForChild("RunServers"))
 
 local PartyService = {}
 
@@ -14896,8 +14946,16 @@ local function launch(party: Party)
 		-- Give every member's screen time to fade to black (Cutscene.Cover on "Launching") before
 		-- anyone is moved, so the teleport into the dishwasher is never seen.
 		task.wait(0.4)
-		-- StartRound yields while it builds the dishwasher. Pass a copy: it's RoundService's now.
-		local ok, started, err = pcall(RoundService.StartRound, table.clone(roster), level)
+		-- In the live game the party plays in its own private server; otherwise (Studio, or the
+		-- teleport can't start) StartRound builds the dishwasher here. It yields while it builds.
+		-- Pass a copy: it's RoundService's now.
+		local ok, started, err
+		local teleported = RunServers.Launch(table.clone(roster), level)
+		if teleported then
+			ok, started = true, true
+		else
+			ok, started, err = pcall(RoundService.StartRound, table.clone(roster), level)
+		end
 		for _, member in roster do
 			launching[member] = nil
 		end
@@ -14913,7 +14971,7 @@ local function launch(party: Party)
 			-- let go of them here without teleporting. Anyone it didn't take is walked out of the pad.
 			party.Dead = true
 			for _, member in party.Members do
-				releaseMember(party, member, if isInRun(member) then "Stay" else "Exit")
+				releaseMember(party, member, if teleported or isInRun(member) then "Stay" else "Exit")
 			end
 			table.clear(party.Members)
 			if pad.Party == party then
@@ -17525,10 +17583,18 @@ end
 -- Leaving a run
 ----------------------------------------------------------------------------------------------------
 
+-- Set by RunServers in a run server: players go home to the lobby server instead.
+RoundService.SendHomeHook = nil :: ((Player) -&gt; ())?
+
 local function sendToLobby(player: Player)
 	-- Skip if they were put into another run in the meantime or left the game.
 	if runOf[player] == nil and isHere(player) then
-		Characters.Teleport(player, lobbySpawn())
+		local hook = RoundService.SendHomeHook
+		if hook then
+			hook(player)
+		else
+			Characters.Teleport(player, lobbySpawn())
+		end
 	end
 end
 
@@ -18095,7 +18161,204 @@ function RoundService.Start()
 end
 
 return RoundService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001D"><Properties><string name="Name">ShopService</string><ProtectedString name="Source">-- ShopService: owns the MetaRequest RemoteFunction (permanent purchases and pet management).
+<Item class="ModuleScript" referent="RBX0000001D"><Properties><string name="Name">RunServers</string><ProtectedString name="Source">--[[
+	RunServers - each party plays its run in its own private server.
+
+	  * Lobby side: when a party launches, Launch() teleports the whole party into a freshly reserved
+	    server of this same place, with { Mode = "Run", Level, Party = userIds, Lobby = JobId } as
+	    teleport data. The lobby server stays a lobby: no dishwashers get built there, so it never
+	    carries anybody else's run.
+	  * Run side (IsRunServer): the party's players arrive, their profiles load (DataService waits
+	    for the lobby server to release each save), and once everyone is in (or after ARRIVE_WAIT)
+	    RoundService.StartRound runs for them as usual. When a player's run ends (results, Leave, Back
+	    to Lobby), SendHome teleports them back to the lobby server they came from (or any public
+	    server if that one is full or gone).
+	  * Studio, unpublished places, or a failed teleport: everything falls back to playing the run
+	    in this server, exactly as before.
+
+	The workspace attribute "RunServer" tells clients they're in a run server (they stay behind a
+	loading cover until the run starts, and while heading home).
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
+local Workspace = game:GetService("Workspace")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+
+local DataService = require(script.Parent:WaitForChild("DataService"))
+local RoundService = require(script.Parent:WaitForChild("RoundService"))
+local Characters = require(script.Parent:WaitForChild("Characters"))
+
+local RunServers = {}
+
+local ARRIVE_WAIT = 25 -- seconds to wait for the rest of the party before starting without them
+local PROFILE_WAIT = 40 -- seconds to wait for an arriving player's save to load
+local HOME_RETRIES = 2
+
+-- A reserved server (made by TeleportOptions.ShouldReserveServer) has a PrivateServerId but no owner.
+RunServers.IsRunServer = game.PrivateServerId ~= "" and game.PrivateServerOwnerId == 0
+
+local function canTeleport(): boolean
+	return game.PlaceId ~= 0 and not RunService:IsStudio()
+end
+
+----------------------------------------------------------------------------------------------------
+-- Lobby side
+----------------------------------------------------------------------------------------------------
+
+-- Sends `players` to a new private server for a run of `level`. Returns true if the teleport was
+-- started; false means "play it here instead".
+function RunServers.Launch(players: { Player }, level: number): boolean
+	if RunServers.IsRunServer or not canTeleport() or #players == 0 then
+		return false
+	end
+	local userIds = {}
+	for _, p in players do
+		table.insert(userIds, p.UserId)
+	end
+	local ok, err = pcall(function()
+		local options = Instance.new("TeleportOptions")
+		options.ShouldReserveServer = true
+		options:SetTeleportData({ Mode = "Run", Level = level, Party = userIds, Lobby = game.JobId })
+		TeleportService:TeleportAsync(game.PlaceId, players, options)
+	end)
+	if not ok then
+		warn("[RunServers] couldn't reserve a run server, playing here: " .. tostring(err))
+	end
+	return ok
+end
+
+----------------------------------------------------------------------------------------------------
+-- Run side
+----------------------------------------------------------------------------------------------------
+
+type Plan = { Level: number, Party: { number }, Lobby: string? }
+local plan: Plan? = nil
+local arrived: { [number]: Player } = {}
+local started = false
+local lobbyJobId: string? = nil
+
+-- Teleports a player home to the lobby (their old server when possible).
+function RunServers.SendHome(player: Player)
+	if not player.Parent then
+		return
+	end
+	for attempt = 1, HOME_RETRIES do
+		local ok, err = pcall(function()
+			local options = Instance.new("TeleportOptions")
+			if lobbyJobId and attempt == 1 then
+				options.ServerInstanceId = lobbyJobId
+			end
+			options:SetTeleportData({ Mode = "Lobby" })
+			TeleportService:TeleportAsync(game.PlaceId, { player }, options)
+		end)
+		if ok then
+			return
+		end
+		warn(string.format("[RunServers] home teleport %d for %s failed: %s", attempt, player.Name, tostring(err)))
+	end
+end
+
+local function startRun()
+	if started or not plan then
+		return
+	end
+	started = true
+	local players: { Player } = {}
+	local best = 1
+	for _, p in arrived do
+		if p.Parent == Players then
+			local profile = DataService.WaitFor(p, PROFILE_WAIT) :: any
+			if profile then
+				best = math.max(best, tonumber(profile.Unlocked) or 1)
+			end
+			table.insert(players, p)
+		end
+	end
+	if #players == 0 then
+		return
+	end
+	-- Never deeper than anyone in the party has unlocked.
+	local level = math.clamp(plan.Level, 1, math.min(best, #Config.Levels))
+	for _, p in players do
+		local waited = 0
+		while not Characters.IsAlive(p) and waited &lt; 10 and p.Parent == Players do
+			waited += task.wait(0.25)
+		end
+	end
+	local ok, result, err = pcall(RoundService.StartRound, players, level)
+	if not ok or result ~= true then
+		warn("[RunServers] couldn't start the run: " .. tostring(if ok then err else result))
+		for _, p in players do
+			task.spawn(RunServers.SendHome, p)
+		end
+	end
+end
+
+local function onArrive(player: Player)
+	local data: any = nil
+	pcall(function()
+		data = player:GetJoinData().TeleportData
+	end)
+	if started then
+		-- Too late for this run (or not part of it): back to the lobby.
+		task.spawn(RunServers.SendHome, player)
+		return
+	end
+	if not plan and type(data) == "table" and data.Mode == "Run" then
+		local party = {}
+		if type(data.Party) == "table" then
+			for _, id in data.Party do
+				if type(id) == "number" then
+					table.insert(party, id)
+				end
+			end
+		end
+		local newPlan: Plan = { Level = math.floor(tonumber(data.Level) or 1), Party = party, Lobby = if type(data.Lobby) == "string" then data.Lobby else nil }
+		plan = newPlan
+		lobbyJobId = newPlan.Lobby
+		task.delay(ARRIVE_WAIT, startRun)
+	end
+	arrived[player.UserId] = player
+	-- Everyone's here: start as soon as their saves are loaded.
+	if plan then
+		local all = true
+		for _, id in plan.Party do
+			if not arrived[id] then
+				all = false
+				break
+			end
+		end
+		if all then
+			task.spawn(startRun)
+		end
+	end
+end
+
+function RunServers.Init()
+	if not RunServers.IsRunServer then
+		return
+	end
+	Workspace:SetAttribute("RunServer", true)
+	RoundService.SendHomeHook = RunServers.SendHome
+end
+
+function RunServers.Start()
+	if not RunServers.IsRunServer then
+		return
+	end
+	for _, p in Players:GetPlayers() do
+		task.spawn(onArrive, p)
+	end
+	Players.PlayerAdded:Connect(onArrive)
+end
+
+return RunServers</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX0000001E"><Properties><string name="Name">ShopService</string><ProtectedString name="Source">-- ShopService: owns the MetaRequest RemoteFunction (permanent purchases and pet management).
 --
 --   "BuyPerk"   (perkId)                     handled here: price from Config.PerkCost, pay with
 --                                            DataService.SpendBubbles, level up, push MetaState, and
@@ -18543,7 +18806,7 @@ function ShopService.Start()
 end
 
 return ShopService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001E"><Properties><string name="Name">SocialService</string><ProtectedString name="Source">-- SocialService: settles the Follow / Like rewards (Config.Social) when a player joins.
+<Item class="ModuleScript" referent="RBX0000001F"><Properties><string name="Name">SocialService</string><ProtectedString name="Source">-- SocialService: settles the Follow / Like rewards (Config.Social) when a player joins.
 --
 -- The Free Rewards window's buttons check straight away (CheckNow). A follow Roblox can't show us
 -- yet stays pending and is checked again automatically on the next join:
@@ -18677,7 +18940,7 @@ function SocialService.Start() end
 
 return SocialService</ProtectedString></Properties></Item>
 </Item>
-<Item class="Script" referent="RBX0000001F"><Properties><string name="Name">Main</string><bool name="Disabled">false</bool><token name="RunContext">1</token><ProtectedString name="Source">-- Rinse Cycle server entry point. Builds the world, then starts every service in order.
+<Item class="Script" referent="RBX00000020"><Properties><string name="Name">Main</string><bool name="Disabled">false</bool><token name="RunContext">1</token><ProtectedString name="Source">-- Rinse Cycle server entry point. Builds the world, then starts every service in order.
 -- Each service module exposes Init() (set up state and remote handlers, no long yields)
 -- and Start() (spawn loops). See DESIGN.md for what each one owns.
 
@@ -18708,6 +18971,7 @@ local LeaderboardService = require(ServicesFolder:WaitForChild("LeaderboardServi
 local NameTags = require(ServicesFolder:WaitForChild("NameTags"))
 local SocialService = require(ServicesFolder:WaitForChild("SocialService"))
 local LobbyFun = require(ServicesFolder:WaitForChild("LobbyFun"))
+local RunServers = require(ServicesFolder:WaitForChild("RunServers"))
 
 local function step(name: string, fn: () -&gt; ())
 	local started = os.clock()
@@ -18760,6 +19024,7 @@ local services = {
 	{ "DishFactory", DishFactory },
 	{ "ArenaBuilder", ArenaBuilder },
 	{ "RoundService", RoundService },
+	{ "RunServers", RunServers },
 	{ "PetService", PetService },
 	{ "ShopService", ShopService },
 	{ "PartyService", PartyService },
@@ -18791,10 +19056,10 @@ end
 print(string.format("[%s] v%s server ready", Config.GameName, Config.Version))</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="StarterPlayer" referent="RBX00000020"><Properties><string name="Name">StarterPlayer</string><float name="NameDisplayDistance">0</float><float name="HealthDisplayDistance">0</float></Properties>
-<Item class="StarterPlayerScripts" referent="RBX00000021"><Properties><string name="Name">StarterPlayerScripts</string></Properties>
-<Item class="Folder" referent="RBX00000022"><Properties><string name="Name">Client</string></Properties>
-<Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">BubbleJets</string><ProtectedString name="Source">-- BubbleJets: inside a run, hold jump while in the air to fly up on a jet of soap bubbles.
+<Item class="StarterPlayer" referent="RBX00000021"><Properties><string name="Name">StarterPlayer</string><float name="NameDisplayDistance">0</float><float name="HealthDisplayDistance">0</float></Properties>
+<Item class="StarterPlayerScripts" referent="RBX00000022"><Properties><string name="Name">StarterPlayerScripts</string></Properties>
+<Item class="Folder" referent="RBX00000023"><Properties><string name="Name">Client</string></Properties>
+<Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">BubbleJets</string><ProtectedString name="Source">-- BubbleJets: inside a run, hold jump while in the air to fly up on a jet of soap bubbles.
 -- Fuel (a few seconds) refills while you stand on something. The HUD shows the fuel bar from the
 -- LocalPlayer's "JetFuel" attribute (0..1), so this module owns no UI.
 --
@@ -18917,7 +19182,7 @@ function BubbleJets.Init()
 end
 
 return BubbleJets</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">Bubbles</string><ProtectedString name="Source">-- Bubbles: pooled, client-only 3D soap bubbles. Every bubble is an anchored ForceField sphere (the
+<Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">Bubbles</string><ProtectedString name="Source">-- Bubbles: pooled, client-only 3D soap bubbles. Every bubble is an anchored ForceField sphere (the
 -- shimmering, see-through film with a bright rim) plus a tiny glowing glint that always sits on
 -- the camera-facing, upper-left side, like a real reflection.
 --
@@ -18930,6 +19195,7 @@ return BubbleJets</ProtectedString></Properties></Item>
 --   Count (1), Spread (radius, 0.5), Velocity (Vector3, (0, 3, 0)), Jitter (random speed added, 1.5),
 --   Size ({ min, max }, { 0.35, 0.9 }), Life ({ min, max }, { 1.6, 2.8 }), Rise (buoyancy, 2.5)
 
+local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local Bubbles = {}
@@ -18960,6 +19226,7 @@ type Bubble = {
 	Phase: number,
 	Wobble: number,
 	ShownSize: number,
+	Poppable: boolean,
 }
 
 local pool: { Bubble } = {}
@@ -19004,6 +19271,7 @@ local function ensurePool()
 			Shell = shell,
 			Glint = glint,
 			Active = false,
+			Poppable = false,
 			Pos = Vector3.zero,
 			Vel = Vector3.zero,
 			Age = 0,
@@ -19051,6 +19319,7 @@ function Bubbles.Emit(position: Vector3, options: { [string]: any }?)
 		b.Phase = math.random() * math.pi * 2
 		b.Wobble = 0.25 + math.random() * 0.35
 		b.ShownSize = -1
+		b.Poppable = o.Poppable == true -- pops early when your character touches it
 		b.Shell.Color = TINTS[math.random(1, #TINTS)]
 		b.Shell.Transparency = 0
 		b.Glint.Transparency = 0.15
@@ -19068,11 +19337,22 @@ local function step(dt: number)
 	local camCF = if camera then camera.CFrame else CFrame.identity
 	table.clear(moveParts)
 	table.clear(moveCFrames)
+	local character = Players.LocalPlayer and Players.LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local rootPos = if root and root:IsA("BasePart") then root.Position else nil
 	for _, b in pool do
 		if not b.Active then
 			continue
 		end
 		b.Age += dt
+		-- Touched by your character (anywhere from feet to head): pop now.
+		if b.Poppable and rootPos and b.Age &lt; b.Life then
+			local d = b.Pos - rootPos
+			if math.abs(d.Y) &lt; 3.5 + b.Size / 2 and Vector2.new(d.X, d.Z).Magnitude &lt; 1.6 + b.Size / 2 then
+				b.Life = b.Age
+				b.Poppable = false
+			end
+		end
 		if b.Age &gt;= b.Life + POP_TIME then
 			hide(b)
 			continue
@@ -19130,7 +19410,7 @@ function Bubbles.Init()
 end
 
 return Bubbles</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">ChatNames</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">ChatNames</string><ProtectedString name="Source">--[[
 	ChatNames - VIPs get a gold name in the chat (their overhead name is gold too; see NameTags).
 
 	The server sets Player.VIP (attribute) from the VIP game pass; this client colours the name
@@ -19163,7 +19443,7 @@ function ChatNames.Init()
 end
 
 return ChatNames</ProtectedString></Properties></Item>
-<Item class="LocalScript" referent="RBX00000026"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
+<Item class="LocalScript" referent="RBX00000027"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
 -- Each module exposes Init(); anything that fails is reported without stopping the others.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -19226,7 +19506,7 @@ step("HoldPose", HoldPose.Init)
 step("WaterFX", WaterFX.Init)
 step("LevelNPCs", LevelNPCs.Init)
 step("ChatNames", ChatNames.Init)</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
+<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
 -- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
 -- Changed instead of each hooking the remotes themselves.
 
@@ -19348,7 +19628,7 @@ function ClientState.LocalPlayer(): Player
 end
 
 return ClientState</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">Cutscene</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">Cutscene</string><ProtectedString name="Source">--[[
 	Cutscene - the fade into a run (there is no cutscene any more; the name is kept so the rest of
 	the client, which covers the screen with Cutscene.Cover / Uncover, doesn't change).
 
@@ -19507,6 +19787,11 @@ function Cutscene.Init()
 		Parent = root,
 	})
 
+	-- Just arrived in the party's own run server: stay black until the dishwasher is ready.
+	if Workspace:GetAttribute("RunServer") and not ClientState.Run then
+		task.defer(Cutscene.Cover, "Filling your dishwasher...", 60)
+	end
+
 	-- Our party is launching: go black now, before the server teleports us into the dishwasher. If
 	-- no run follows (the start failed), the cover lifts again.
 	ClientState.Changed:Connect(function(kind)
@@ -19533,6 +19818,11 @@ function Cutscene.Init()
 		local run = ClientState.Run :: Types.RunState?
 		if not run then
 			lastRunKey = nil
+			if Workspace:GetAttribute("RunServer") then
+				-- A run server: the server is teleporting us home, stay behind the cover.
+				task.spawn(Cutscene.Cover, "Heading back to the lobby...", 40)
+				return
+			end
 			-- Back in the lobby: lift the cover the Leave / Back to Lobby buttons put up.
 			if covered then
 				task.delay(0.35, Cutscene.Uncover)
@@ -19554,7 +19844,7 @@ function Cutscene.Init()
 end
 
 return Cutscene</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">DailyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">DailyUI</string><ProtectedString name="Source">--[[
 	DailyUI - the daily reward calendar (🎁 Daily button on the left; it also pops up by itself once
 	per session when a reward is waiting).
 
@@ -19773,7 +20063,7 @@ function DailyUI.Init()
 end
 
 return DailyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
+<Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
 -- numbers, dish/sale celebrations), CollectionService-driven decoration (spinning arms, lift
 -- pads), the drain guide beam, remaining-dirt sparkle markers, prompt routing (windows and the
 -- in-arena tool shop), and a little lobby ambience.
@@ -20661,7 +20951,8 @@ local function addFloatBubble(inst: Instance)
 	glint.CastShadow = false
 	glint.Parent = workspace.CurrentCamera
 	-- Poppable lobby bubbles (tag "PopBubble") bob less so they stay where the server thinks they are.
-	local amp = if CollectionService:HasTag(inst, "PopBubble") then 0.3 else 1
+	-- The big ones pop too now, so they drift only a little from where the server has them.
+	local amp = if CollectionService:HasTag(inst, "PopBubble") then 0.3 else 0.5
 	local speed = 0.35 + math.random() * 0.25
 	floatBubbles[inst] = { Part = inst, Glint = glint, Base = inst.Position, Phase = math.random() * math.pi * 2, Speed = speed * (if amp &lt; 1 then 2.2 else 1), Amp = amp }
 end
@@ -20698,6 +20989,7 @@ local function stepFloatBubbles(dt: number)
 		toCam = if toCam.Magnitude &gt; 1e-3 then toCam.Unit else Vector3.zAxis
 		table.insert(floatParts, inst)
 		table.insert(floatCFrames, CFrame.new(pos))
+		fb.Glint.Transparency = if inst.Transparency &gt;= 0.99 then 1 else 0.15
 		table.insert(floatParts, fb.Glint)
 		table.insert(floatCFrames, CFrame.new(pos + (toCam * 0.3 + camCF.UpVector * 0.25 - camCF.RightVector * 0.22) * size))
 	end
@@ -20735,6 +21027,7 @@ local function stepLobbyAmbience()
 		Size = { 0.8, 2.2 },
 		Life = { 6, 9 },
 		Rise = 0.6,
+		Poppable = true,
 	})
 end
 
@@ -20825,7 +21118,7 @@ function Effects.Init()
 end
 
 return Effects</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">HoldPose</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">HoldPose</string><ProtectedString name="Source">--[[
 	HoldPose - how a held cleaning tool looks, for every player on this client.
 
 	  * Anyone holding a tool (character attribute HeldToolIndex &gt; 1) holds it out in front, the
@@ -20935,7 +21228,7 @@ function HoldPose.Init()
 end
 
 return HoldPose</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
+<Item class="ModuleScript" referent="RBX0000002D"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
 --   * top centre: the Bubbles pill with a green "+" (opens the Shop)
 --   * right side: big square buttons (Shop/Pets in the lobby, Upgrades/Pets/Leave in a run) with
 --     key hints for keyboard (Tab/G/P) or gamepad (Y/LB)
@@ -21189,7 +21482,7 @@ function HUD.Init()
 	end
 	local dailyButton = leftButton(1, "@Gift", "Daily", Colors.Bubble, "Daily")
 	local codesButton = leftButton(2, "@Ticket", "Codes", Colors.Primary, "Codes")
-	local freeButton = leftButton(3, "🎉", "Free", Colors.Good, "Free")
+	local freeButton = leftButton(3, "@Heart", "Free", Colors.Good, "Free")
 	local function makeAdminButton()
 		if adminButton or not adminClick then
 			return
@@ -22244,7 +22537,7 @@ function HUD.Init()
 end
 
 return HUD</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002D"><Properties><string name="Name">IconArt</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002E"><Properties><string name="Name">IconArt</string><ProtectedString name="Source">--[[
 	IconArt - the game's own drawn icons (no emoji, no uploaded images), built from plain Frames so
 	they stay crisp at any size.
 
@@ -22547,14 +22840,14 @@ do
 	local h = 0.34 -- half diagonal of the square
 	local cy = 0.53 -- centre of the square
 	local d = h * SQRT2 -- lobe diameter = the square's side
-	local red = rgb(255, 78, 116)
+	local red = rgb(255, 84, 122)
 	ART.Heart = {
 		{ "diamond", x = 0.5, y = cy, hd = h, r = 0.08, fill = red, o = true },
 		{ "disc", x = 0.5 - h / 2, y = cy - h / 2, d = d, fill = red, o = true },
 		{ "disc", x = 0.5 + h / 2, y = cy - h / 2, d = d, fill = red, o = true },
-		-- a glossy highlight on the left lobe
-		{ "rect", x = 0.27, y = 0.3, w = 0.16, h = 0.08, r = 0.5, rot = -45, fill = WHITE, t = 0.15 },
-		{ "disc", x = 0.2, y = 0.42, d = 0.06, fill = WHITE, t = 0.3 },
+		-- a soft glossy highlight on the left lobe (round shapes only: no rotated edges)
+		{ "disc", x = 0.31, y = 0.33, d = 0.14, fill = WHITE, t = 0.25 },
+		{ "disc", x = 0.22, y = 0.44, d = 0.06, fill = WHITE, t = 0.35 },
 	}
 end
 
@@ -22780,7 +23073,7 @@ function IconArt.Draw(kind: string, px: number): Frame
 end
 
 return IconArt</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002E"><Properties><string name="Name">LevelNPCs</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002F"><Properties><string name="Name">LevelNPCs</string><ProtectedString name="Source">--[[
 	LevelNPCs - the people from the cutscenes, living in the room around the dishwasher during a run.
 
 	They're giants (you're dish-sized): classic R6 blocky figures at 50x scale, the same scale the
@@ -25302,7 +25595,7 @@ LevelNPCs.Kit = {
 }
 
 return LevelNPCs</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002F"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000030"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
 	PartyUI - everything shown while ClientState.Party ~= nil (standing in a lobby pad).
 
 	Two screens, Search-for-the-Needle style:
@@ -25410,8 +25703,10 @@ local function bestTime(levelIndex: number): number?
 	return if t and t &gt; 0 then t else nil
 end
 
--- "Map thumbnail" art for a dishwasher: a gradient in its theme colours, the chapter number big on
--- a soft glow, and a few bubbles. Built from UI only (no uploaded images).
+local LEVEL_EMOJI = { "🍝", "🍕", "👑" } -- one per level, on its card
+
+-- "Map thumbnail" art for a dishwasher: a gradient in its theme colours, the level's emoji big on a
+-- soft glow, and a few bubbles. Built from UI only (no uploaded images).
 local function levelArt(parent: Instance, levelIndex: number, size: UDim2, iconSize: number, locked: boolean, emblemAt: UDim2?): Frame
 	local level = Config.GetLevel(levelIndex)
 	local art = Instance.new("Frame")
@@ -25451,14 +25746,14 @@ local function levelArt(parent: Instance, levelIndex: number, size: UDim2, iconS
 			Parent = art,
 		})
 	else
-		-- the chapter number, big and bold, on the glow
+		-- the level's emoji, big, on the glow
 		UIKit.Label({
-			Text = tostring(levelIndex),
-			TextSize = math.floor(emblemSize * 0.95),
+			Text = LEVEL_EMOJI[levelIndex] or "🍽️",
+			TextSize = math.floor(emblemSize * 0.8),
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = at,
 			Size = UDim2.fromOffset(emblemSize, emblemSize),
-			StrokeThickness = math.max(2, math.floor(emblemSize / 18)),
+			Stroke = false,
 			Parent = art,
 		})
 	end
@@ -26018,7 +26313,7 @@ function PartyUI.Init()
 end
 
 return PartyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000030"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
+<Item class="ModuleScript" referent="RBX00000031"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
 -- state (EquippedPets/&lt;slot&gt; StringValue = pet id, its Target ObjectValue = the grime part being
 -- cleaned); this module is the only thing that actually builds and moves pet models. See
 -- DESIGN.md section 6 ("PetRenderer") and section 4 ("Equipped pets for rendering").
@@ -26521,7 +26816,7 @@ function PetRenderer.Init()
 end
 
 return PetRenderer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000031"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
+<Item class="ModuleScript" referent="RBX00000032"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
 -- reveal animation. Everything here is built with UIKit; see DESIGN.md section 6 ("PetsUI") for
 -- the contract. Both windows rebuild their contents from ClientState.Meta whenever it changes and
 -- the relevant window is open, so a purchase/hatch/equip anywhere refreshes what's on screen.
@@ -27856,7 +28151,7 @@ function PetsUI.Init()
 end
 
 return PetsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000032"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000033"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
 	RanksUI - the "Ranks" window (Rank Shrine in the lobby, the HUD's Ranks button, R / gamepad RB).
 
 	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
@@ -28625,7 +28920,7 @@ function RanksUI.Init()
 end
 
 return RanksUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000033"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000034"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
 	RebirthUI - the "Rebirth" window (the Rebirth Fountain in the lobby).
 
 	The endgame loop: once you've cleaned the last dishwasher, trade your Bubbles, unlocked
@@ -28778,7 +29073,7 @@ function RebirthUI.Init()
 end
 
 return RebirthUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000034"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000035"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
 	RewardsUI - two small windows opened from the buttons on the left of the lobby HUD.
 
 	  * "Codes" (🎟️): type a code (Config.Codes) and redeem it. "Look out for codes in the game's
@@ -29103,7 +29398,7 @@ function RewardsUI.Init()
 end
 
 return RewardsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000035"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000036"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
 	ShopUI - the lobby "Shop" window: Perks (bought with Bubbles, permanent) and Robux (game passes).
 	Opened from the Soap Shop ProximityPrompt (routed by Effects via OpenWindow="Shop"), the HUD [🛒 Shop]
 	button, or the G key - all outside our scope, they just call UIKit.OpenWindow("Shop").
@@ -29665,7 +29960,7 @@ function ShopUI.Init()
 end
 
 return ShopUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000036"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
+<Item class="ModuleScript" referent="RBX00000037"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
 -- Aim comes from the mouse on PC, or the screen centre (with a crosshair) on touch/gamepad, cast
@@ -30589,7 +30884,7 @@ function SprayController.Init()
 end
 
 return SprayController</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000037"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000038"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -33101,7 +33396,7 @@ function UIKit.Init()
 end
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000038"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000039"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button
@@ -33577,7 +33872,7 @@ function UpgradesUI.Init()
 end
 
 return UpgradesUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000039"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003A"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
 	WaterFX - the water coming out of your own hose and pressure washer, built from real parts so
 	it looks solid from every angle (a camera-facing Beam flattens to nothing when you look straight
 	down it, which is exactly the first-person view).
@@ -33817,7 +34112,7 @@ end
 
 return WaterFX</ProtectedString></Properties></Item>
 </Item>
-<Item class="LocalScript" referent="RBX0000003A"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
+<Item class="LocalScript" referent="RBX0000003B"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
 	AdminClient - Rinse Cycle's admin panel and the admin effects every player can see.
 
 	Everyone:
@@ -35385,5 +35680,5 @@ task.spawn(function()
 end)</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="TextChatService" referent="RBX0000003B"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
+<Item class="TextChatService" referent="RBX0000003C"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
 </roblox>

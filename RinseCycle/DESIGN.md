@@ -1182,6 +1182,26 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - **HUD icons:** Shop 🛒, Pets 🐾, Free 🎉 and Admin 🛡️ are the original emoji again; Daily,
   Codes, Upgrades and Ranks keep their drawn icons.
 
+## 6n. Private run servers, poppable bubbles everywhere (v1.5)
+
+- **Runs happen in their own server (RunServers).** When a party launches in the live game, the
+  lobby server teleports the whole party into a freshly reserved server of the same place
+  (TeleportOptions.ShouldReserveServer) with teleport data { Mode = "Run", Level, Party, Lobby }.
+  The run server waits for the party to arrive (up to 25 s) and for their saves to load (the
+  DataService session lock makes it wait until the lobby server has saved and released each
+  profile), then runs RoundService.StartRound as usual. The level is clamped to what the party
+  has unlocked. When a player's run ends (results, Leave, Back to Lobby) they're teleported back
+  to the lobby server they came from, or any public server if that one is gone or full. Late or
+  unexpected arrivals are sent straight home. Clients in a run server (workspace attribute
+  "RunServer") stay behind a loading cover until the run starts and while heading home.
+  In Studio, unpublished places, or if the teleport can't start, the run is played in the
+  current server exactly as before.
+- **Bubbles:** the big bubbles floating over the table can be popped too (+1 Bubble, back in the
+  same spot after 8-16 s), and the small ones drifting around the camera pop when you touch them.
+- **How to Play board:** every step uses the same text size (31) instead of scaling per line.
+- **Icons:** Free uses the drawn heart again (flat fill, round highlights only); the level cards
+  show emoji (🍝 🍕 👑).
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

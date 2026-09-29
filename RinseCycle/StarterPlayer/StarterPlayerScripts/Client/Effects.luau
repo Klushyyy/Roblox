@@ -886,7 +886,8 @@ local function addFloatBubble(inst: Instance)
 	glint.CastShadow = false
 	glint.Parent = workspace.CurrentCamera
 	-- Poppable lobby bubbles (tag "PopBubble") bob less so they stay where the server thinks they are.
-	local amp = if CollectionService:HasTag(inst, "PopBubble") then 0.3 else 1
+	-- The big ones pop too now, so they drift only a little from where the server has them.
+	local amp = if CollectionService:HasTag(inst, "PopBubble") then 0.3 else 0.5
 	local speed = 0.35 + math.random() * 0.25
 	floatBubbles[inst] = { Part = inst, Glint = glint, Base = inst.Position, Phase = math.random() * math.pi * 2, Speed = speed * (if amp < 1 then 2.2 else 1), Amp = amp }
 end
@@ -923,6 +924,7 @@ local function stepFloatBubbles(dt: number)
 		toCam = if toCam.Magnitude > 1e-3 then toCam.Unit else Vector3.zAxis
 		table.insert(floatParts, inst)
 		table.insert(floatCFrames, CFrame.new(pos))
+		fb.Glint.Transparency = if inst.Transparency >= 0.99 then 1 else 0.15
 		table.insert(floatParts, fb.Glint)
 		table.insert(floatCFrames, CFrame.new(pos + (toCam * 0.3 + camCF.UpVector * 0.25 - camCF.RightVector * 0.22) * size))
 	end
@@ -960,6 +962,7 @@ local function stepLobbyAmbience()
 		Size = { 0.8, 2.2 },
 		Life = { 6, 9 },
 		Rise = 0.6,
+		Poppable = true,
 	})
 end
 
