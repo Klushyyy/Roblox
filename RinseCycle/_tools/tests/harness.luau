@@ -650,28 +650,6 @@ elseif string.sub(what, 1, 3) == "npc" then
 	local NPC = loadModule(ROOT .. "/StarterPlayer/StarterPlayerScripts/Client/LevelNPCs")
 	local scene = NPC.Build(level, CFrame.new(), rootInst)
 	scene:Update(tonumber(tt))
-elseif string.sub(what, 1, 7) == "cutscan" then
-	-- cutscan<level>: every part of the cutscene every 0.1 s, for collision checks.
-	local level = tonumber(string.sub(what, 8))
-	local SceneMod = loadModule(ROOT .. "/StarterPlayer/StarterPlayerScripts/Client/CutsceneScene")
-	local holder = Inst.new("Model")
-	local scene = SceneMod.Build(level, CFrame.new(), holder)
-	local frames = {}
-	local t = 0
-	while t <= SceneMod.Duration + 1e-6 do
-		scene:Update(t)
-		local list = {}
-		for _, p in parts(holder) do
-			local pr = p._props
-			local shape = if p._class == "Part" then pr.Shape.Name else p._class
-			table.insert(list, { n = pr.Name, s = shape, sz = { pr.Size.X, pr.Size.Y, pr.Size.Z }, cf = { pr.CFrame:GetComponents() }, t = pr.Transparency or 0 })
-		end
-		table.insert(frames, { t = t, p = list })
-		t += 0.1
-	end
-	fs.writeFile(out, serde.encode("json", frames))
-	print("frames", #frames)
-	return
 elseif string.sub(what, 1, 5) == "story" then
 	-- story<level>@<t>: the level's story chapter, staged in its arena room with the room's own
 	-- furniture (LevelNPCs in cutscene mode) and tiny players on the door; prints the camera.
@@ -738,32 +716,6 @@ elseif string.sub(what, 1, 5) == "story" then
 			print(string.format("SHOT %.2f %.2f", sh.T0, sh.T1))
 		end
 	end
-elseif string.sub(what, 1, 4) == "chap" then
-	-- chap<level><chapter>@<t>: a story chapter at time t; prints the camera for render.py
-	local level, ch, tt = string.match(what, "^chap(%d)(%d)@([%d%.]+)$")
-	local Mod = loadModule(ROOT .. "/StarterPlayer/StarterPlayerScripts/Client/CutsceneChapters")
-	rootInst = Inst.new("Model")
-	local ctx = Mod.Build(tonumber(level), tonumber(ch), CFrame.new(), rootInst)
-	ctx:Update(tonumber(tt))
-	local cf, fov = ctx:Camera(tonumber(tt))
-	local p, l = cf.Position, cf.Position + cf.LookVector * 10
-	print(string.format("CAM %.2f %.2f %.2f %.2f %.2f %.2f %.1f", p.X, p.Y, p.Z, l.X, l.Y, l.Z, fov))
-	print("DUR", ctx.Duration, "BUBBLES", ctx.BubbleStart)
-	if require("@lune/process").env.SHOTS then
-		for _, sh in ctx.Shots do
-			print(string.format("SHOT %.2f %.2f", sh.T0, sh.T1))
-		end
-	end
-elseif string.sub(what, 1, 3) == "cut" then
-	-- cut<level>@<t>: the cutscene set at time t; prints the camera for render.py
-	local level, tt = string.match(what, "^cut(%d)@([%d%.]+)$")
-	local SceneMod = loadModule(ROOT .. "/StarterPlayer/StarterPlayerScripts/Client/CutsceneScene")
-	rootInst = Inst.new("Model")
-	local scene = SceneMod.Build(tonumber(level), CFrame.new(), rootInst)
-	scene:Update(tonumber(tt))
-	local cf, fov = scene:Camera(tonumber(tt))
-	local p, l = cf.Position, cf.Position + cf.LookVector * 10
-	print(string.format("CAM %.2f %.2f %.2f %.2f %.2f %.2f %.1f", p.X, p.Y, p.Z, l.X, l.Y, l.Z, fov))
 elseif what == "pets" then
 	local PetModels = loadModule(ROOT .. "/ReplicatedStorage/Shared/PetModels")
 	local Cfg = loadModule(ROOT .. "/ReplicatedStorage/Shared/Config")

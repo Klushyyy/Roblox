@@ -1060,8 +1060,8 @@ local function carryArms(p: any, ctx: any, hold: { [string]: any }?): any
 	local pelvis = lerp(2 * s, (p.seat or 0) + 0.37 * s, p.sit or 0)
 	local h = pelvis + 1.65 * s
 	local toWorld = ctx.Origin * rootCF(ctx.X, ctx.Z, ctx.Phi)
-	p.armL = { at = (toWorld * CFrame.new(-0.42 * s, h, -0.85 * s)).Position }
-	p.armR = { at = (toWorld * CFrame.new(0.42 * s, h, -0.85 * s)).Position }
+	p.armL = { at = (toWorld * CFrame.new(-0.5 * s, h, -0.85 * s)).Position }
+	p.armR = { at = (toWorld * CFrame.new(0.5 * s, h, -0.85 * s)).Position }
 	return p
 end
 
@@ -1382,8 +1382,8 @@ function P.carry(u: number, ctx: any): Pose
 	local h = (if ctx.Seated then 118 else 100) + 1.65 * s
 	return {
 		head = { pitch = -0.08 },
-		armL = { at = local3(ctx, -0.42 * s, h, 0.85 * s) },
-		armR = { at = local3(ctx, 0.42 * s, h, 0.85 * s) },
+		armL = { at = local3(ctx, -0.5 * s, h, 0.85 * s) },
+		armR = { at = local3(ctx, 0.5 * s, h, 0.85 * s) },
 	}
 end
 
@@ -1728,7 +1728,7 @@ local function buildFamily(scene: any)
 	local tableSpot = atSeat(mumSeat, 0, 92)
 	local counterSpot = W(-222, 112, -32)
 	local carry = { Stack = { "both", off = CFrame.new(0, -8, -4) } }
-	local toTable = P.reach(-0.3 * S, TABLE + 38, 1.85 * S, 0.3 * S, TABLE + 38, 1.85 * S, 1.2, 0.12)
+	local toTable = P.reach(-0.48 * S, TABLE + 38, 1.85 * S, 0.48 * S, TABLE + 38, 1.85 * S, 1.2, 0.12)
 	local toCounter = P.reach(-1.6 * S, 172, 1.3 * S, -1.2 * S, 172, 1.3 * S, 1.2, 0.2)
 	pm:still(7, P.eat, { Fork3 = FORK_HOLD })
 	local t1 = pm.T
@@ -1809,14 +1809,15 @@ local function buildPizzeria(scene: any)
 				bob = breathe(u),
 				lean = 0.08,
 				head = { pitch = -0.1 },
-				armL = { at = local3(ctx, -0.22 * s, up, fwd - 0.4 * s) },
-				armR = { at = local3(ctx, 0.22 * s, up, fwd) },
+				-- one hand on the handle (a two-handed grip would cross the arms into a block)
+				armL = { p = 0.35, r = 0.12, e = 0.7 },
+				armR = { at = local3(ctx, 0.35 * s, up, fwd) },
 			}
 		end
 	end
 	local peelOff = CFrame.new(0, 0, 0.2 * S) * CFrame.Angles(-0.06, 0, 0)
-	local peelHold = { "both", off = peelOff }
-	local onPeel = { "both", off = peelOff * CFrame.new(0, 3, -110) }
+	local peelHold = { "R", off = peelOff }
+	local onPeel = { "R", off = peelOff * CFrame.new(0, 3, -110) }
 	local function slide(from: Vector2, to: Vector2, dur: number, fwdA: number, fwdB: number, hold: any)
 		pc:add(dur, function(u)
 			local p = from:Lerp(to, smooth(u / dur))
@@ -2024,7 +2025,7 @@ local function buildPizzeria(scene: any)
 	local full = { DrinkTray = trayHold, SodaA = { "both", off = CFrame.new(-14, -2, -6) }, SodaB = { "both", off = CFrame.new(14, -2, -6) } }
 	local empty = { DrinkTray = trayHold }
 	local tucked = { DrinkTray = { "L", off = CFrame.new(0, 40, 14) * CFrame.Angles(PI / 2, 0, 0) } }
-	local putDown = P.reach(-0.3 * S, TABLE + 34, 1.75 * S, 0.3 * S, TABLE + 34, 1.75 * S, 1.4, 0.2)
+	local putDown = P.reach(-0.48 * S, TABLE + 34, 1.75 * S, 0.48 * S, TABLE + 34, 1.75 * S, 1.4, 0.2)
 	-- fetch drinks from the fridge, step back from the counter and bring them over
 	pw:swap(1.4, P.reachOne(1.25 * S, 160, 1.4), nil, full)
 	pw:walk({ V2(-148, -165) }, full, P.carry, nil, true)
@@ -2168,8 +2169,8 @@ local function buildCastle(scene: any)
 	scene:prop("ServTray", "Tray")
 	local trayOnly = { ServTray = { "both", off = CFrame.new(0, -4, -12) } }
 	local roast = { ServTray = trayOnly.ServTray, Roast = { "both", off = CFrame.new(0, -2, -12) } }
-	local atMantel = P.reach(-0.3 * S, 222, 1.4 * S, 0.3 * S, 222, 1.4 * S, 1.6, 0)
-	local atTable = P.reach(-0.3 * S, TABLE + 34, 1.55 * S, 0.3 * S, TABLE + 34, 1.55 * S, 1.4, 0.2)
+	local atMantel = P.reach(-0.48 * S, 222, 1.4 * S, 0.48 * S, 222, 1.4 * S, 1.6, 0)
+	local atTable = P.reach(-0.48 * S, TABLE + 34, 1.55 * S, 0.48 * S, TABLE + 34, 1.55 * S, 1.4, 0.2)
 	local back = V2(255, -240)
 	local up = V2(290, -240)
 	local toTable = { V2(250, -182), V2(12, -182), V2(0, -184) }

@@ -233,6 +233,7 @@ local function play(levelIndex: number)
 	skipButton.Visible = false
 	titleCard.Visible = false
 	subtitle.Visible = false
+	subtitleText.Text = ""
 	tweenBlack(0, FADE)
 	conn:Disconnect()
 	pcall(function()

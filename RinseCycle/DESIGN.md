@@ -1141,37 +1141,8 @@ walls instead of clipping through. All gameplay queries use Include filters.
 
 ## 6l. Story chapters, lobby fun, rolls (v1.2)
 
-- **Run-start cutscenes are story chapters.** Each level tells its own story, one chapter per run,
-  in a completely different place each time, and the chapters build on each other (running gags
-  and props carry over). `CutsceneChapters` picks the chapter: the profile counts chapters seen
-  per level (`Profile.Episodes`, sent as `MetaState.Episodes`); the client asks the server
-  `MetaRequest "SawEpisode"` when a chapter starts (skipping counts), so the next run plays the
-  next chapter and the story loops after the last one. A chapter that fails to build falls back to
-  the classic `CutsceneScene`.
-  - Family: 1 Pancake Morning (kitchen: Dad's pancake flip lands on his head), 2 Backyard
-    Barbecue (garden: Dad nails the burger flip in a pancake apron, the kid's football lands in
-    the salad, Grandpa naps under the paper), 3 Birthday Surprise (living room at night: cake,
-    candles, confetti, and the frosting lands on Dad's party hat; Grandpa does the dishes).
-  - Pizzeria: 1 Dough Show (the dough comes down over the chef like a poncho), 2 The Food Critic
-    (the dining room at night; the chef, still in his poncho, frets through the door; 10/10),
-    3 Pizza in the Park (the new food truck with the critic's 10 framed on it; a cheese pull from
-    the truck all the way across the park; a rubber duck in the pond).
-  - Castle: 1 The Royal Feast (a juggling ball knocks the king's crown onto the jester), 2 The
-    Garden Tea Party (the crowned jester's teacup tower topples; the queen catches every cup),
-    3 The Midnight Snack (the king in his nightcap and the jester sneak in for cake by candlelight,
-    the queen turns the lights on, the crown goes back, the king does the washing up).
-- **CutsceneKit** is the toolbox: set builders (rooms, walls, windows, counters, sinks, stoves,
-  fridges, tables, chairs, grass, fences, trees, balloons, ceilings), a shot list with hard cuts
-  and eased moves (points or functions, `Kit.follow` tracks a bone), `Kit.flight` for thrown
-  things, a Lighting mood per chapter (applied while it plays, restored after), a title card
-  ("Chapter 2 / Backyard Barbecue"), and the shared ending: a fully animated dishwasher (door on a
-  hinge, sliding rack, dishes appearing in it, Start button and display lighting up, a hum and a
-  glow) that the loader fills one-handed, then steps aside while the camera pushes in through the
-  window into the bubbles. Chapters are built at the LevelNPCs scale (a person is 250 studs) with
-  the LevelNPCs rig, looks, props, plans and poses (`LevelNPCs.Kit`). The set is client-only, far
-  from the map (16000, -6000, 16000).
-- Offline: `harness.luau chap<level><chapter>@<t>` dumps a chapter at time t with its camera;
-  `chapsheet.sh` renders a contact sheet.
+- **Run-start cutscenes** were nine rotating chapters (three per level) built on far-away sets.
+  Replaced in v1.3 by one linked story chapter per level (section 6m).
 - **Lobby fun (LobbyFun service):** poppable soap bubbles float over the plaza (touch or click:
   +1 Bubble, golden ones +10; Config.LobbyBubbles, capped per minute), and six rubber ducks are
   hidden around the lobby (Config.Ducks; +25 each, +500 Bubbles and 10 Gems for all six; saved in
@@ -1188,6 +1159,48 @@ walls instead of clipping through. All gameplay queries use Include filters.
   diamond where the stars were.
 - **NPCs:** the jester plays to the players (always turned toward the dishwasher) and cartwheels
   along a clear lane; the king and queen sit clear of their thrones.
+
+## 6m. One story, three chapters, staged where you play (v1.3)
+
+- **Story (client `Story` + `Cutscene`).** One chapter per level, one story running through all
+  three, with subtitles (speaker name in their colour, then the line):
+  1. *Family Dinner* (level 1): spaghetti night. The kid learns the birthday party is at Luigi's,
+     cheers so hard a meatball lands on Grandpa's newspaper ("...Is it raining meatballs?"), Mum
+     announces the dishes, tosses the plates into the dishwasher, wishes the little helpers good
+     luck and presses Start.
+  2. *Pizza Party* (level 2): the party at Luigi's. Luigi's famous dough toss lands on his hat;
+     a stranger in a fedora tastes the pizza, lifts the hat and reveals a crown: the King, who
+     invites Luigi and the birthday boy to his banquet. The waiter loads the dishwasher.
+  3. *Royal Banquet* (level 3): the King's toast, Luigi's birthday cake (the dough is still on his
+     hat), the jester's trick shot knocks the crown onto Grandpa ("...Is it raining crowns now?"),
+     and Dad does the dishes, family tradition.
+- **Staged in the real room.** The chapter is built in the arena you were just teleported into
+  (its `Origin` attribute), so the set is the room you play in: walls, ceiling, windows and
+  furniture are the level's own, nothing outside is ever in shot, and the last shot is you and
+  your party standing on the dishwasher door. `LevelNPCs.SetCutscene(true, hideFurn)` sends the
+  room's people off (their furniture stays; a chapter can take over a piece it needs to move,
+  e.g. Mum's chair gets tucked in) and the chapter brings its own cast.
+- **The shared ending** (every chapter): the loader walks up beside the open door, kneels, tosses
+  the plates in over the helpers' heads, waves ("Good luck in there, little helpers!"), bows in and
+  presses the lit Start button on the door's edge (it flashes), stands and walks off while the
+  camera cranes down onto the players; bubbles start as it's pressed.
+- **Title card** "Chapter N / Name" is a CanvasGroup, so its outline fades with the text; it fades
+  out after 5.5 s.
+- **Camera craft:** establishing wide, then medium / over-the-shoulder on whoever speaks, cut on
+  action, 2-4 s holds; high angles and longer lenses where the rooms are crowded. Every shot was
+  checked offline with the story harness (`harness.luau story<L>@<t>`, `render.py`, and
+  `eyecheck.py`, which flags a camera inside any part).
+- **Party menu:** cards read "Chapter N" over the name, plus a locked "Chapter 4 - More chapters
+  coming soon" card. **Finishing the last chapter** shows a gold banner on the results screen:
+  congrats, new chapters are coming, and what a Rebirth gives meanwhile (from Config.Rebirth).
+- **Holding things:** two-handed holds keep the hands an arm apart so the forearms never merge into
+  one block; the chef handles his peel one-handed; Grandpa holds his paper at chest height (his
+  face shows above it). Party hats are thin-sliced cones.
+- **Insta Roll:** no server lock for pass owners (a 0.05 s guard only), the popup stays open and
+  just swaps the card, and clicks made while an answer is on its way queue the next roll.
+- **Icons:** each drawn shape gets its own ZIndex in drawing order (siblings with equal ZIndex
+  have no guaranteed order, which let outlines land over fills: the ragged edges), rotated shapes
+  get a 1 px corner for smoother edges, and the paw, cart and admin shield were refined.
 
 ## 7. Balance knobs (all in Config)
 

@@ -159,7 +159,7 @@ local function ending(ctx: any, plan: any, who: string, stack: string, side: num
 	local phi = R.phiOf(-side * 18, 60)
 	local carry = { [stack] = { "both", off = C(0, -6, -4) } }
 	local function carryArms(_u: number, _c: any): any
-		return { head = { pitch = -0.1 }, armL = { at = chest(-0.42, -0.3, 0.9) }, armR = { at = chest(0.42, -0.3, 0.9) } }
+		return { head = { pitch = -0.1 }, armL = { at = chest(-0.5, -0.3, 0.9) }, armR = { at = chest(0.5, -0.3, 0.9) } }
 	end
 
 	-- walk up beside the door and face it
@@ -171,8 +171,8 @@ local function ending(ctx: any, plan: any, who: string, stack: string, side: num
 	plan:still(1.0, function(u)
 		local p = kneel(smooth(u / 1.0), 0.1)
 		p.head = { pitch = -0.2 }
-		p.armL = { at = chest(-0.42, -0.3, 0.9) }
-		p.armR = { at = chest(0.42, -0.3, 0.9) }
+		p.armL = { at = chest(-0.5, -0.3, 0.9) }
+		p.armR = { at = chest(0.5, -0.3, 0.9) }
 		return p
 	end, carry)
 	beats.Kneel = plan.T
@@ -187,8 +187,8 @@ local function ending(ctx: any, plan: any, who: string, stack: string, side: num
 		p.head = { pitch = 0.05 * push }
 		local fwd = 0.9 - 0.3 * back + 0.8 * push
 		local up = -0.3 - 0.1 * back + 0.75 * push
-		p.armL = { at = chest(-0.42, up, fwd) }
-		p.armR = { at = chest(0.42, up, fwd) }
+		p.armL = { at = chest(-0.5, up, fwd) }
+		p.armR = { at = chest(0.5, up, fwd) }
 		return p
 	end, carry)
 	plan:split(plan.Steps[#plan.Steps], 0.55, nil)
@@ -641,8 +641,8 @@ end
 local function handsUp(k: number, fwd: number?): any
 	return {
 		head = { pitch = 0.35 * k },
-		armL = { at = chest(-0.34, -0.2 + 1.55 * k, (fwd or 0.75) - 0.35 * k) },
-		armR = { at = chest(0.34, -0.2 + 1.55 * k, (fwd or 0.75) - 0.35 * k) },
+		armL = { at = chest(-0.46, -0.2 + 1.55 * k, (fwd or 0.75) - 0.35 * k) },
+		armR = { at = chest(0.46, -0.2 + 1.55 * k, (fwd or 0.75) - 0.35 * k) },
 	}
 end
 
@@ -720,7 +720,7 @@ local function pizzaParty(origin: CFrame, parent: Instance): any
 	-- kneading and showing off the dough
 	pc:still(T_TOSS1, function(u, _c)
 		local w = math.sin(u * 3)
-		return { bob = R.breathe(u), head = { pitch = -0.15 }, armL = { at = chest(-0.36 + w * 0.05, -0.35, 0.95) }, armR = { at = chest(0.36 + w * 0.05, -0.35, 0.95) } }
+		return { bob = R.breathe(u), head = { pitch = -0.15 }, armL = { at = chest(-0.48 + w * 0.05, -0.35, 0.95) }, armR = { at = chest(0.48 + w * 0.05, -0.35, 0.95) } }
 	end, inHands)
 	-- a toss: dip, push up (release), arms up while it flies, catch
 	local function toss(release: number, flight: number, catch: boolean, hold: any)
@@ -758,15 +758,15 @@ local function pizzaParty(origin: CFrame, parent: Instance): any
 	-- the birthday pizza: off the oven ledge, round the corner, onto the table
 	local withPizza = { Dough = onHat.Dough, Pizza = { "both", off = C(0, -2, -6) } }
 	pc:turn(0, onHat)
-	pc:swap(1.1, P.reach(-0.3 * S, 128, 0.95 * S, 0.3 * S, 128, 0.95 * S, 1.1, 0.2), onHat, withPizza)
+	pc:swap(1.1, P.reach(-0.48 * S, 128, 0.95 * S, 0.48 * S, 128, 0.95 * S, 1.1, 0.2), onHat, withPizza)
 	scene:place("Pizza", 0, T_SERVE + 1.0, ctx:at(250, 119, -262))
 	local tableSpot = V2(190, -380)
 	pc:walk({ V2(248, -338) }, withPizza, function(_u, _c)
-		return { head = { pitch = -0.1 }, armL = { at = chest(-0.42, -0.3, 0.9) }, armR = { at = chest(0.42, -0.3, 0.9) } }
+		return { head = { pitch = -0.1 }, armL = { at = chest(-0.5, -0.3, 0.9) }, armR = { at = chest(0.5, -0.3, 0.9) } }
 	end, 90)
 	pc:turn(R.phiOf(tableSpot.X - 248, tableSpot.Y + 338), withPizza)
 	local tPut = pc.T
-	pc:swap(1.2, P.reach(-0.3 * S, TABLE + 12, 1.35 * S, 0.3 * S, TABLE + 12, 1.35 * S, 1.2, 0.3), withPizza, onHat)
+	pc:swap(1.2, P.reach(-0.48 * S, TABLE + 12, 1.35 * S, 0.48 * S, TABLE + 12, 1.35 * S, 1.2, 0.3), withPizza, onHat)
 	scene:place("Pizza", tPut + 0.6, ALL, ctx:at(tableSpot.X, TABLE + 0.4, tableSpot.Y))
 	-- watches the stranger, jumps at the crown, bows
 	local toKing = R.phiOf(-270 - 248, -335 + 338)
@@ -903,7 +903,7 @@ local function pizzaParty(origin: CFrame, parent: Instance): any
 	local pw = R.newPlan(waiter, -160, -168, R.phiOf(150 + 160, -400 + 168))
 	local carry = { Stack = { "both", off = C(0, -6, -4) } }
 	local function carrying(u: number, _c: any): any
-		return { bob = R.breathe(u), head = { pitch = -0.1, yaw = math.sin(u * 0.5) * 0.2 }, armL = { at = chest(-0.42, -0.3, 0.9) }, armR = { at = chest(0.42, -0.3, 0.9) } }
+		return { bob = R.breathe(u), head = { pitch = -0.1, yaw = math.sin(u * 0.5) * 0.2 }, armL = { at = chest(-0.5, -0.3, 0.9) }, armR = { at = chest(0.5, -0.3, 0.9) } }
 	end
 	pw:still(T_WAITER, carrying, carry)
 	pw:still(2.2, function(u, c)
@@ -1226,13 +1226,13 @@ local function royalBanquet(origin: CFrame, parent: Instance): any
 	local pc = R.newPlan(chef, 330, -150, -PI / 2)
 	local withCake = { Cake = { "both", off = C(0, -4, -8) }, Flames = { "both", off = C(0, -4, -8) } }
 	local cakeArms = function(_u: number, _c: any): any
-		return { head = { pitch = -0.05 }, armL = { at = chest(-0.44, -0.2, 0.95) }, armR = { at = chest(0.44, -0.2, 0.95) } }
+		return { head = { pitch = -0.05 }, armL = { at = chest(-0.5, -0.2, 0.95) }, armR = { at = chest(0.5, -0.2, 0.95) } }
 	end
 	pc:still(T_CAKE, cakeArms, withCake)
 	pc:walk({ V2(150, -155), V2(84, -208) }, withCake, cakeArms, 95)
 	pc:turn(R.phiOf(15 - 84, -270 + 208), withCake, cakeArms)
 	local tSet = pc.T
-	pc:swap(1.2, P.reach(-0.36 * S, TABLE + 10, 1.4 * S, 0.36 * S, TABLE + 10, 1.4 * S, 1.2, 0.35), withCake, nil)
+	pc:swap(1.2, P.reach(-0.48 * S, TABLE + 10, 1.4 * S, 0.48 * S, TABLE + 10, 1.4 * S, 1.2, 0.35), withCake, nil)
 	pc:walk({ V2(170, -175), V2(300, -262) }, nil, nil, 90)
 	pc:turn(R.phiOf(-200, -60))
 	pc:still(T_TRICK - pc.T, P.clap)
@@ -1342,7 +1342,7 @@ local function royalBanquet(origin: CFrame, parent: Instance): any
 	pd:swap(1.2, P.reach(0.2 * S, TABLE + 36, 1.6 * S, 0.9 * S, TABLE + 36, 1.6 * S, 1.2, 0.2), nil, carry)
 	pd:standUp(V2(-100, -222), carry)
 	pd:walk({ V2(-60, -157), V2(70, -157) }, carry, function(_u, _c)
-		return { head = { pitch = -0.1 }, armL = { at = chest(-0.42, -0.3, 0.9) }, armR = { at = chest(0.42, -0.3, 0.9) } }
+		return { head = { pitch = -0.1 }, armL = { at = chest(-0.5, -0.3, 0.9) }, armR = { at = chest(0.5, -0.3, 0.9) } }
 	end)
 	local beats = ending(ctx, pd, "Dad", "Stack", 1, "Good luck, little helpers! Make it sparkle!", { V2(150, -215), V2(200, -150) }, {
 		ArriveEye = { ctx:R(-120, 300, -85), ctx:R(-110, 290, -92) },
