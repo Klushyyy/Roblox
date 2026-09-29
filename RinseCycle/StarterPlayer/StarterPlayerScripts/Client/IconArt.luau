@@ -88,9 +88,34 @@ local function snap(c: number, len: number): (number, number)
 	return c2 / 2, l
 end
 
+-- Like snap, for a square shape (disc, diamond): one whole-pixel side for both axes, and each centre
+-- nudged by at most half a pixel so both edges land on whole pixels.
+local function snapSquare(cx: number, cy: number, len: number): (number, number, number)
+	local l = math.max(1, math.floor(len + 0.5))
+	-- a shape centred exactly on a pixel line (like the icon's middle) grows by a pixel instead of
+	-- moving, so it stays exactly centred and the icon stays mirror-symmetric
+	local x2 = cx * 2
+	if math.abs(x2 - math.floor(x2 + 0.5)) < 1e-6 and (math.floor(x2 + 0.5) - l) % 2 ~= 0 then
+		l += 1
+	end
+	local function centre(c: number): number
+		local c2 = math.floor(c * 2 + 0.5)
+		if (c2 - l) % 2 ~= 0 then
+			c2 += if c * 2 >= c2 then 1 else -1
+		end
+		return c2 / 2
+	end
+	return centre(cx), centre(cy), l
+end
+
 local function frame(parent: Instance, cx: number, cy: number, w: number, h: number, rot: number, color: Color3, transparency: number): Frame
 	local x, sw = snap(cx, w)
 	local y, sh = snap(cy, h)
+	if w == h then
+		local l
+		x, y, l = snapSquare(cx, cy, w)
+		sw, sh = l, l
+	end
 	local f = Instance.new("Frame")
 	f.BorderSizePixel = 0
 	f.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -183,6 +208,9 @@ end
 -- The icons
 ----------------------------------------------------------------------------------------------------
 local ART: { [string]: { any } } = {}
+-- Icons outlined as one scaled silhouette (see Heart): { X, Y, Span, Shapes = how many of the
+-- first shapes make up the silhouette }.
+local OUTLINE_SCALED: { [string]: { X: number, Y: number, Span: number, Shapes: number } } = {}
 
 -- An embossed emblem: a gem-cut diamond (light upper facets, darker lower ones) with a thin dark
 -- rim, drawn centred at (x, y). Used where a star would go (coin, medal, ticket, shield).
@@ -297,19 +325,27 @@ end
 
 -- A heart (free rewards: like, follow, join): a square turned 45 degrees with a disc on each of
 -- its two upper edges, so both lobes are exact mirror images.
+-- A heart (Free), redrawn so it has no inner lines: the outline is the whole heart drawn once,
+-- slightly bigger, in ink (a scaled silhouette, not one ring per piece, which left dark slivers
+-- where the pieces met), and the fill is one flat colour, so the seams between its pieces can't
+-- show. Two round lobes and a square turned 45 degrees for the point; the highlight is round only.
 do
-	local h = 0.34 -- half diagonal of the square
-	local cy = 0.53 -- centre of the square
+	local h = 0.33 -- half diagonal of the square
+	local cy = 0.54 -- centre of the square
 	local d = h * SQRT2 -- lobe diameter = the square's side
-	local red = rgb(255, 84, 122)
-	ART.Heart = {
-		{ "diamond", x = 0.5, y = cy, hd = h, r = 0.08, fill = red, o = true },
-		{ "disc", x = 0.5 - h / 2, y = cy - h / 2, d = d, fill = red, o = true },
-		{ "disc", x = 0.5 + h / 2, y = cy - h / 2, d = d, fill = red, o = true },
-		-- a soft glossy highlight on the left lobe (round shapes only: no rotated edges)
-		{ "disc", x = 0.31, y = 0.33, d = 0.14, fill = WHITE, t = 0.25 },
-		{ "disc", x = 0.22, y = 0.44, d = 0.06, fill = WHITE, t = 0.35 },
+	local red = rgb(255, 72, 112)
+	local shapes: { any } = {
+		{ "diamond", x = 0.5, y = cy, hd = h, fill = red },
+		{ "disc", x = 0.5 - h / 2, y = cy - h / 2, d = d, fill = red },
+		{ "disc", x = 0.5 + h / 2, y = cy - h / 2, d = d, fill = red },
+		{ "disc", x = 0.32, y = 0.34, d = 0.15, fill = WHITE, t = 0.3 },
+		{ "disc", x = 0.225, y = 0.45, d = 0.065, fill = WHITE, t = 0.4 },
 	}
+	-- silhouette box (top of the lobes to the tip) for the scaled outline
+	local top = cy - h / 2 - d / 2
+	local bottom = cy + h
+	ART.Heart = shapes
+	OUTLINE_SCALED.Heart = { X = 0.5, Y = (top + bottom) / 2, Span = bottom - top, Shapes = 3 }
 end
 
 -- A four-point sparkle with a small twin (bonuses, "new").
@@ -501,6 +537,26 @@ function IconArt.Draw(kind: string, px: number): Frame
 	root.Size = UDim2.fromOffset(px, px)
 	local shapes = ART[kind] or ART.Coin
 	local grow = math.max(1, math.floor(px * 0.06 + 0.5))
+	local scaled = OUTLINE_SCALED[kind]
+	if scaled then
+		-- The silhouette in ink, scaled up about its centre so the rim is `grow` px all round.
+		local k = 1 + 2 * grow / (scaled.Span * px)
+		for i = 1, scaled.Shapes do
+			local src = shapes[i]
+			local c = table.clone(src)
+			c.x = scaled.X + (src.x - scaled.X) * k
+			c.y = scaled.Y + (src.y - scaled.Y) * k
+			if c.d then
+				c.d = src.d * k
+			end
+			if c.hd then
+				c.hd = src.hd * k
+			end
+			c.fill = INK
+			c.t = nil
+			draw(root, c, px, 0)
+		end
+	end
 	-- Each layer (split by "|") gets its outline pass and then its fill pass, so a layer drawn later
 	-- sits on top of the earlier ones with its own outline.
 	local layer: { Shape } = {}
