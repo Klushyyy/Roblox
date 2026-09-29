@@ -36,6 +36,15 @@ local GameServices = ServerScriptService:WaitForChild("Server"):WaitForChild("Se
 local DataService = require(GameServices:WaitForChild("DataService"))
 local RoundService = require(GameServices:WaitForChild("RoundService"))
 local PetService = require(GameServices:WaitForChild("PetService"))
+local LeaderboardService = require(GameServices:WaitForChild("LeaderboardService"))
+local MessagingService = game:GetService("MessagingService")
+
+-- The big "congrats" popup with confetti (Celebrate on the client).
+local function celebrate(player, title, text, icon)
+	pcall(function()
+		Remotes.Event("Celebrate"):FireClient(player, title, text, icon)
+	end)
+end
 
 -- Quiet by default: the Output window only gets one "ready" line and real problems. Set VERBOSE
 -- to true to see every step and every command in the Output window again.
@@ -103,6 +112,7 @@ local ALL_COMMANDS = {
 	"spectate", "controlplayer", "invis",
 	"viewinv", "clearinv",
 	"fly",
+	"leaderboards", "globalannounce",
 }
 
 -- =====================================================================
@@ -545,6 +555,12 @@ AdminModifyPunishment.Parent = ReplicatedStorage
 local AdminLogsList = Instance.new("RemoteEvent")
 AdminLogsList.Name = "AdminLogsList"
 AdminLogsList.Parent = ReplicatedStorage
+
+-- The Leaderboards view. C->S ("View", boardIndex) / ("Reset", boardIndex, userId);
+-- S->C (boardIndex, boardCount, title, rows).
+local AdminLeaderboard = Instance.new("RemoteEvent")
+AdminLeaderboard.Name = "AdminLeaderboard"
+AdminLeaderboard.Parent = ReplicatedStorage
 
 -- Tells one client to black its screen out and fade back in. Fired at a
 -- player the server is teleporting a long way without them asking for it
@@ -3327,9 +3343,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 
 		-- The recipient gets told, with the game's usual celebration toast - only on the way IN.
 		if giving then
-			pcall(function()
-				Remotes.Event("Notify"):FireClient(target, "You were gifted " .. pass.Name .. "!", "Good")
-			end)
+			celebrate(target, "You got a gift!", "You've been gifted " .. pass.Name .. " by an admin!", pass.Icon)
 		end
 
 		sendFeedback(admin, (giving and "Gave " or "Removed ") .. pass.Name
@@ -3366,6 +3380,37 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 	-- No player target at all - the whole rest of the input (targetName
 	-- + extraText, which the client only split apart because every other
 	-- command has a target as its first word) is the announcement text.
+	if commandName == "leaderboards" then
+		task.spawn(function()
+			local rows = LeaderboardService.ListBoard(1, 100)
+			AdminLeaderboard:FireClient(admin, 1, LeaderboardService.BoardCount(), LeaderboardService.BoardTitle(1), rows)
+		end)
+		sendFeedback(admin, "Loading leaderboards...", false)
+		return
+	end
+
+	-- Like :announce, but on every server of the game (MessagingService).
+	if commandName == "globalannounce" then
+		local fullMessage = (targetName ~= "" and (targetName .. " " .. extraText) or extraText)
+		fullMessage = fullMessage:gsub("%s+$", "")
+		if fullMessage == "" then
+			sendFeedback(admin, "Usage: :globalannounce [message]", true)
+			return
+		end
+		local ok = pcall(function()
+			MessagingService:PublishAsync("RinseCycle_GlobalAnnounce", { Text = fullMessage })
+		end)
+		if not ok then
+			-- MessagingService isn't available (Studio): at least tell this server.
+			for _, plr in ipairs(Players:GetPlayers()) do
+				AdminAnnouncement:FireClient(plr, fullMessage)
+			end
+		end
+		logCommand(admin, "globalannounce", nil, fullMessage, admin.Name .. " announced to every server: " .. fullMessage)
+		sendFeedback(admin, if ok then "Announcement sent to every server" else "Couldn't reach other servers - announced here only", not ok)
+		return
+	end
+
 	if commandName == "announce" then
 		local fullMessage = (targetName ~= "" and (targetName .. " " .. extraText) or extraText)
 		fullMessage = fullMessage:gsub("%s+$", "")
@@ -3523,6 +3568,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 			return
 		end
 		applyRank(target, rank)
+		celebrate(target, "Congrats!", "You've been gifted the " .. rank.Label .. " rank by an admin!", "🎖️")
 		logCommand(admin, "setrank", target.Name, rank.Label, admin.Name .. " set " .. target.Name .. "'s rank to " .. rank.Label)
 		sendFeedback(admin, "Set " .. target.Name .. "'s rank to " .. rank.Label, false)
 
@@ -3534,6 +3580,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 		end
 		local rank = IN_GAME_RANKS[index + 1]
 		applyRank(target, rank)
+		celebrate(target, "Congrats!", "An admin promoted you to the " .. rank.Label .. " rank!", "🎖️")
 		logCommand(admin, "promote", target.Name, rank.Label, admin.Name .. " promoted " .. target.Name .. " to " .. rank.Label)
 		sendFeedback(admin, "Promoted " .. target.Name .. " to " .. rank.Label, false)
 
@@ -3961,3 +4008,67 @@ AdminStopControlling.OnServerEvent:Connect(function(admin)
 end)
 
 print("[AdminServer] ready" .. (if storesOffline then " (Studio: bans, mutes, warnings and logs are kept for this session only; they save once the place is published with API access on)" else ""))
+
+-- =====================================================================
+-- Leaderboards view (admin panel): every board, reset a player on one
+-- =====================================================================
+local leaderboardBusy = {}
+AdminLeaderboard.OnServerEvent:Connect(function(admin, action, index, userId)
+	if not tierHasCommand(getPlayerTier(admin), "leaderboards") then
+		return
+	end
+	if leaderboardBusy[admin] then
+		return
+	end
+	local count = LeaderboardService.BoardCount()
+	if type(index) ~= "number" or index ~= index then
+		return
+	end
+	index = ((math.floor(index) - 1) % count) + 1
+	leaderboardBusy[admin] = true
+	local ok, err = pcall(function()
+		if action == "Reset" then
+			if type(userId) ~= "number" then
+				return
+			end
+			local done, message = LeaderboardService.ResetEntry(index, userId)
+			sendFeedback(admin, message, not done)
+			if done then
+				logCommand(admin, "leaderboards", tostring(userId), LeaderboardService.BoardTitle(index), admin.Name .. " " .. message)
+			end
+		end
+		local rows = LeaderboardService.ListBoard(index, 100)
+		-- A reset player can still be in the list for a moment (DataStore caching): hide them here.
+		if action == "Reset" and type(userId) == "number" then
+			for i = #rows, 1, -1 do
+				if rows[i].UserId == userId then
+					table.remove(rows, i)
+				end
+			end
+		end
+		AdminLeaderboard:FireClient(admin, index, count, LeaderboardService.BoardTitle(index), rows)
+	end)
+	leaderboardBusy[admin] = nil
+	if not ok then
+		dsWarn("[AdminServer] leaderboards: " .. tostring(err))
+		sendFeedback(admin, "Couldn't load that leaderboard", true)
+	end
+end)
+Players.PlayerRemoving:Connect(function(p)
+	leaderboardBusy[p] = nil
+end)
+
+-- :globalannounce from any server shows here too.
+task.spawn(function()
+	pcall(function()
+		MessagingService:SubscribeAsync("RinseCycle_GlobalAnnounce", function(message)
+			local data = message.Data
+			local text = type(data) == "table" and data.Text
+			if type(text) == "string" and text ~= "" then
+				for _, plr in ipairs(Players:GetPlayers()) do
+					AdminAnnouncement:FireClient(plr, string.sub(text, 1, 200))
+				end
+			end
+		end)
+	end)
+end)

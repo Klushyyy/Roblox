@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.5.2"
+Config.Version = "1.6.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -861,6 +861,29 @@ function Config.GetGroupId(): number
 	return if ok and type(id) == "number" then id else 0
 end
 
+-- Gifting a game pass: Roblox can't sell a pass to one player for another, so every pass has a
+-- matching developer product ("Gift: VIP", same price). Buying it gives the pass to the friend you
+-- picked (GiftService). The Ids go in StoreIds, under GiftPasses.
+Config.GiftProducts = {}
+for _, pass in Config.GamePasses do
+	table.insert(Config.GiftProducts, {
+		Key = pass.Key, -- the pass it gifts
+		Id = 0,
+		Price = pass.Price,
+		Name = "Gift: " .. pass.Name,
+		Icon = pass.Icon,
+	})
+end
+
+function Config.GetGiftProduct(passKey: string)
+	for _, g in Config.GiftProducts do
+		if g.Key == passKey then
+			return g
+		end
+	end
+	return nil
+end
+
 -- The IDs pasted into StoreIds (ReplicatedStorage > Shared > StoreIds), the one script to edit
 -- once the passes and products exist on Roblox. A number there replaces the matching Id here.
 do
@@ -881,6 +904,7 @@ do
 		end
 		apply(Config.GamePasses, ids.GamePasses)
 		apply(Config.DevProducts, ids.DevProducts)
+		apply(Config.GiftProducts, ids.GiftPasses)
 		local group = tonumber(ids.GroupId)
 		if group and group > 0 then
 			Config.Social.GroupId = math.floor(group)

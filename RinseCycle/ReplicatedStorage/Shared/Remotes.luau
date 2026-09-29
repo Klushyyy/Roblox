@@ -15,12 +15,16 @@ Remotes.Events = {
 	"RunFX", -- S->C (kind: string, data: table)
 	"MetaState", -- S->C (state: MetaState)
 	"Notify", -- S->C (text: string, kind: "Info" | "Good" | "Bad")
+	"Celebrate", -- S->C (title: string, text: string, icon: string?) a centred popup with confetti
+	"TradeAction", -- C->S (action: string, value: any)
+	"TradeState", -- S->C (state: TradeState?) / ("Request", fromUserId, fromName) for an invite
 }
 
 Remotes.Functions = {
 	"RunRequest", -- C->S (action: string, value: any) -> { Ok: boolean, Error: string? }
 	"MetaRequest", -- C->S (action: string, value: any) -> { Ok: boolean, Error: string?, ... }
 	"GetMeta", -- C->S () -> MetaState?
+	"GiftRequest", -- C->S (passKey: string, toUserId: number) -> { Ok: boolean, Error: string?, ProductId: number? }
 }
 
 local FOLDER_NAME = "Remotes"

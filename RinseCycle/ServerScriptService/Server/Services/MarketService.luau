@@ -25,6 +25,7 @@ local Remotes = require(Shared:WaitForChild("Remotes"))
 
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local RoundService = require(script.Parent:WaitForChild("RoundService"))
+local GiftService = require(script.Parent:WaitForChild("GiftService"))
 
 local MarketService = {}
 
@@ -79,6 +80,17 @@ for _, product in Config.DevProducts or {} do
 			-- Only ever runs once per real purchase (the receipt is recorded right after).
 			if player.Parent == Players then
 				Remotes.Event("Notify"):FireClient(player, string.format("Congrats! You bought %s %s", product.Name, product.Icon or ""), "Good")
+			end
+		end
+	end
+end
+
+-- Gift products (Config.GiftProducts): the pass goes to whoever the buyer picked (GiftService).
+for _, gift in Config.GiftProducts or {} do
+	if type(gift.Id) == "number" and gift.Id ~= 0 then
+		PRODUCTS[gift.Id] = function(player: Player, _profile: any, _receipt: Receipt)
+			if not GiftService.Deliver(player, gift.Key) then
+				error("gift failed")
 			end
 		end
 	end

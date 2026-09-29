@@ -65,6 +65,7 @@ local AdminStopControlling = remote("AdminStopControlling")
 local AdminControlTargetStatus = remote("AdminControlTargetStatus")
 local AdminInventoryList = remote("AdminInventoryList")
 local AdminInventoryRemoveItem = remote("AdminInventoryRemoveItem")
+local AdminLeaderboard = remote("AdminLeaderboard")
 
 ----------------------------------------------------------------------------------------------------
 -- Small helpers
@@ -648,6 +649,8 @@ local COMMANDS: { Command } = ({
 	{ Name = "demote", Icon = "⬇️", Label = "Demote", Desc = "Next more common rank.", Group = "Game", Target = "player" },
 	-- Server
 	{ Name = "announce", Icon = "📢", Label = "Announce", Desc = "A banner on everyone's screen.", Group = "Server", Target = "none", Inputs = { { Kind = "text", Placeholder = "Announcement", Required = true } } },
+	{ Name = "globalannounce", Icon = "🌍", Label = "Global announce", Desc = "A banner on everyone's screen in EVERY server of the game.", Group = "Server", Target = "none", Inputs = { { Kind = "text", Placeholder = "Announcement", Required = true } } },
+	{ Name = "leaderboards", Icon = "🏆", Label = "Leaderboards", Desc = "See everyone on every leaderboard; reset someone's spot (they keep their stats).", Group = "Server", Target = "none" },
 	{ Name = "givegamepass", Icon = "🎟️", Label = "Gift pass", Desc = "Gives them a game pass for free (saved).", Group = "Server", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = function()
 		local out = {}
 		for _, pass in Config.GamePasses do
@@ -1138,6 +1141,36 @@ local function buildPanel(info: any)
 		end,
 	})
 	local listSearch = field(overlay, UDim2.fromOffset(270, 40), UDim2.new(1, -274, 0, 6), "🔍 Filter")
+	-- ◀ ▶ to flip between pages of a list that has several (the Leaderboards view).
+	local listNav: { Prev: () -> (), Next: () -> () }? = nil
+	local navPrev = UIKit.Button({
+		Text = "◀",
+		Color = Colors.Primary,
+		Size = UDim2.fromOffset(48, 40),
+		TextSize = 20,
+		Position = UDim2.new(1, -384, 0, 6),
+		Parent = overlay,
+		OnClick = function()
+			if listNav then
+				listNav.Prev()
+			end
+		end,
+	})
+	local navNext = UIKit.Button({
+		Text = "▶",
+		Color = Colors.Primary,
+		Size = UDim2.fromOffset(48, 40),
+		TextSize = 20,
+		Position = UDim2.new(1, -330, 0, 6),
+		Parent = overlay,
+		OnClick = function()
+			if listNav then
+				listNav.Next()
+			end
+		end,
+	})
+	navPrev.Visible = false
+	navNext.Visible = false
 	local listScroll = scroller(overlay, UDim2.new(1, -8, 1, -60), UDim2.fromOffset(4, 56))
 	listLayout(listScroll, 6)
 
@@ -1197,7 +1230,11 @@ local function buildPanel(info: any)
 	end
 	listSearch:GetPropertyChangedSignal("Text"):Connect(drawRows)
 
-	local function showList(title: string, rows: { Row }, action: string?, onAction: ((Row) -> ())?)
+	local function showList(title: string, rows: { Row }, action: string?, onAction: ((Row) -> ())?, nav: { Prev: () -> (), Next: () -> () }?)
+		listNav = nav
+		navPrev.Visible = nav ~= nil
+		navNext.Visible = nav ~= nil
+		overlayTitle.Size = if nav then UDim2.new(1, -550, 0, 44) else UDim2.new(1, -440, 0, 44)
 		overlayTitle.Text = title
 		currentRows = if type(rows) == "table" then rows else {}
 		currentAction = action
@@ -1362,6 +1399,58 @@ local function buildPanel(info: any)
 	end)
 	AdminLogsList.OnClientEvent:Connect(function(title, entries)
 		showList(title, entries, "View", logDetail)
+	end)
+
+	-- Leaderboards: one board at a time, ◀ ▶ to flip, Reset on each row (with a confirm step).
+	local boardIndex, boardCount = 1, 1
+	local function requestBoard(index: number)
+		boardIndex = ((index - 1) % math.max(boardCount, 1)) + 1
+		AdminLeaderboard:FireServer("View", boardIndex)
+	end
+	local function confirmReset(entry: Row)
+		local body = detailPage("🏆 Reset " .. tostring(entry.Name))
+		UIKit.Label({
+			Text = string.format("Take %s off \"%s\"?\n\nThey keep all their real stats. Only this leaderboard starts again from zero for them.", tostring(entry.Name), tostring(entry.Board)),
+			TextSize = 20,
+			Font = Fonts.Body,
+			TextWrapped = true,
+			Size = UDim2.new(1, 0, 0, 120),
+			Parent = body,
+		})
+		UIKit.Button({
+			Text = "RESET",
+			Color = Colors.Bad,
+			Size = UDim2.fromOffset(260, 60),
+			Position = UDim2.new(0.5, 0, 0, 150),
+			AnchorPoint = Vector2.new(0.5, 0),
+			Parent = body,
+			OnClick = function()
+				detail.Visible = false
+				AdminLeaderboard:FireServer("Reset", boardIndex, entry.Id)
+			end,
+		})
+	end
+	AdminLeaderboard.OnClientEvent:Connect(function(index, count, title, entries)
+		boardIndex = tonumber(index) or 1
+		boardCount = tonumber(count) or 1
+		local rows = {}
+		for i, e in (if type(entries) == "table" then entries else {}) do
+			table.insert(rows, {
+				Id = e.UserId,
+				Name = e.Name,
+				Board = title,
+				Line1 = string.format("#%d  %s", i, tostring(e.Name)),
+				Line2 = tostring(e.Text) .. "  ·  UserId " .. tostring(e.UserId),
+			})
+		end
+		showList(string.format("🏆 %s (%d/%d)", tostring(title), boardIndex, boardCount), rows, "Reset", confirmReset, {
+			Prev = function()
+				requestBoard(boardIndex - 1)
+			end,
+			Next = function()
+				requestBoard(boardIndex + 1)
+			end,
+		})
 	end)
 
 	AdminFeedback.OnClientEvent:Connect(function(text, isError)

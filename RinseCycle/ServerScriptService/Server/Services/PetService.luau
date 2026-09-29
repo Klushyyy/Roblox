@@ -1029,6 +1029,88 @@ function PetService.Delete(player: Player, uid: string): Types.RequestResult
 	return guarded(player, delete, uid)
 end
 
+-- (Trading) Swaps pets between two players in one go: a's `giveA` uids go to b, b's `giveB` go to
+-- a. Everything is checked first (both still own every pet, both have room), then both profiles
+-- change with no yield in between, so a trade can never half-happen or duplicate a pet. Moved pets
+-- get fresh uids from their new owner. Returns (true) or (false, reason).
+function PetService.Transfer(a: Player, b: Player, giveA: { string }, giveB: { string }): (boolean, string?)
+	if a == b or busy[a] or busy[b] then
+		return false, "Hold on, still working on your last request!"
+	end
+	local pa, pb = getProfile(a), getProfile(b)
+	if not pa or not pb then
+		return false, LOADING
+	end
+	local function collect(profile: Profile, uids: { string }): { Types.PetEntry }?
+		local out, seen = {}, {}
+		for _, uid in uids do
+			local pet = type(uid) == "string" and not seen[uid] and findPet(profile, uid) or nil
+			if not pet then
+				return nil
+			end
+			seen[uid] = true
+			table.insert(out, pet)
+		end
+		return out
+	end
+	local petsA, petsB = collect(pa, giveA), collect(pb, giveB)
+	if not petsA or not petsB then
+		return false, "A pet in the trade isn't there any more."
+	end
+	local max = RULES.MaxInventory
+	if #pa.Pets - #petsA + #petsB > max or #pb.Pets - #petsB + #petsA > max then
+		return false, "Someone's pet inventory would be too full."
+	end
+
+	busy[a], busy[b] = true, true
+	local ok, err = pcall(function()
+		local function take(profile: Profile, pets: { Types.PetEntry })
+			for _, pet in pets do
+				local _, index = findPet(profile, pet.Uid)
+				if index then
+					table.remove(profile.Pets, index)
+				end
+				local e = table.find(profile.Equipped, pet.Uid)
+				if e then
+					table.remove(profile.Equipped, e)
+				end
+			end
+		end
+		local function give(profile: Profile, pets: { Types.PetEntry })
+			local used = {}
+			for _, pet in profile.Pets do
+				used[pet.Uid] = true
+			end
+			local nextUid = math.max(1, math.floor(tonumber(profile.NextUid) or 1))
+			for _, pet in pets do
+				while used[tostring(nextUid)] do
+					nextUid += 1
+				end
+				local entry: Types.PetEntry = { Uid = tostring(nextUid), Id = pet.Id }
+				if pet.Tier and pet.Tier > 1 then
+					entry.Tier = pet.Tier
+				end
+				used[entry.Uid] = true
+				table.insert(profile.Pets, entry)
+				nextUid += 1
+			end
+			profile.NextUid = nextUid
+		end
+		take(pa, petsA)
+		take(pb, petsB)
+		give(pa, petsB)
+		give(pb, petsA)
+	end)
+	busy[a], busy[b] = nil, nil
+	if not ok then
+		warn("[PetService] Transfer: " .. tostring(err))
+		return false, "Something went wrong. Try again!"
+	end
+	afterChange(a, true)
+	afterChange(b, true)
+	return true, nil
+end
+
 -- Rebuilds a player's EquippedPets now (e.g. right after a Pet Slot perk purchase). Optional: the
 -- slot watcher catches slot-count changes within SLOT_WATCH_INTERVAL anyway.
 function PetService.Refresh(player: Player)

@@ -253,6 +253,7 @@ function HUD.Init()
 	local dailyButton = leftButton(1, "@Gift", "Daily", Colors.Bubble, "Daily")
 	local codesButton = leftButton(2, "@Ticket", "Codes", Colors.Primary, "Codes")
 	local freeButton = leftButton(3, "@Heart", "Free", Colors.Good, "Free")
+	local tradeButton = leftButton(4, "🤝", "Trade", Colors.Accent, "Trade")
 	local function makeAdminButton()
 		if adminButton or not adminClick then
 			return
@@ -263,7 +264,7 @@ function HUD.Init()
 			Label = "Admin",
 			Color = Colors.PanelLight,
 			Size = UDim2.fromOffset(80, 80),
-			LayoutOrder = 4,
+			LayoutOrder = 5,
 			Parent = leftColumn,
 			OnClick = function()
 				if adminClick then
@@ -275,6 +276,7 @@ function HUD.Init()
 		dailyButton.Visible = not inRun
 		codesButton.Visible = not inRun
 		freeButton.Visible = not inRun
+		tradeButton.Visible = not inRun
 		leftColumn.Visible = true
 	end
 	addAdminButton = makeAdminButton
@@ -1134,6 +1136,7 @@ function HUD.Init()
 		dailyButton.Visible = not inRun
 		codesButton.Visible = not inRun
 		freeButton.Visible = not inRun
+		tradeButton.Visible = not inRun
 		leftColumn.Visible = not inRun or adminButton ~= nil
 		upgradesButton.LayoutOrder = 1
 		shopButton.LayoutOrder = 2

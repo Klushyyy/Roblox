@@ -10,8 +10,15 @@
 --     of every store, and redraw.
 --   * Offline (Studio without API access) the boards rank the players in this server instead.
 --   * The Times board draws every level's page; each client shows the page it picked (Effects).
+--   * Admin resets (the admin panel's Leaderboards view): a reset takes a player off one board
+--     without touching their real stats. For Dishes / Rebirths / Bubbles it stores an offset
+--     (RinseCycle_LbResets), so the board only counts what they earn after the reset (2,000 dishes
+--     reset, then 2,000 more = 4,000 dishes but 2,000 on the board). For a Fastest board they come
+--     back once they beat the time they had when they were reset. Other servers hear about a
+--     reset through MessagingService.
 
 local DataStoreService = game:GetService("DataStoreService")
+local MessagingService = game:GetService("MessagingService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -53,15 +60,15 @@ local timesTop: { [number]: { Row } } = {}
 local timeStores: { [number]: OrderedDataStore } = {}
 
 -- The "Top Players" pages, in page order: what each ranks and how it reads from a profile.
-type Stat = { Store: string, Title: string, Empty: string, Get: (any) -> number, Top: { Row }, DS: OrderedDataStore?, Written: { [number]: number } }
+type Stat = { Key: string, Store: string, Title: string, Empty: string, Get: (any) -> number, Top: { Row }, DS: OrderedDataStore?, Written: { [number]: number } }
 local STATS: { Stat } = {
-	{ Store = "RinseCycle_Dishes", Title = "Most Dishes Cleaned", Empty = "No dishes cleaned yet!", Get = function(p)
+	{ Key = "Dishes", Store = "RinseCycle_Dishes", Title = "Most Dishes Cleaned", Empty = "No dishes cleaned yet!", Get = function(p)
 		return p.Stats.DishesCleaned or 0
 	end, Top = {}, Written = {} },
-	{ Store = "RinseCycle_Rebirths", Title = "Most Rebirths", Empty = "No rebirths yet!", Get = function(p)
+	{ Key = "Rebirths", Store = "RinseCycle_Rebirths", Title = "Most Rebirths", Empty = "No rebirths yet!", Get = function(p)
 		return p.Rebirths or 0
 	end, Top = {}, Written = {} },
-	{ Store = "RinseCycle_Bubbles", Title = "Most Bubbles Collected", Empty = "No Bubbles yet!", Get = function(p)
+	{ Key = "Bubbles", Store = "RinseCycle_Bubbles", Title = "Most Bubbles Collected", Empty = "No Bubbles yet!", Get = function(p)
 		return p.Stats.BubblesEarned or 0
 	end, Top = {}, Written = {} },
 }
@@ -69,6 +76,15 @@ local STATS: { Stat } = {
 -- What this server last wrote per user, so unchanged values aren't rewritten every refresh.
 local writtenTimes: { [number]: { [number]: number } } = {}
 local nameCache: { [number]: string } = {}
+
+-- Admin resets, per user: Stats[statKey] = amount taken off, Times[tostring(level)] = the time
+-- (tenths) they have to beat to be listed again.
+type Resets = { Stats: { [string]: number }, Times: { [string]: number } }
+local RESET_STORE = "RinseCycle_LbResets"
+local RESET_TOPIC = "RinseCycle_LbReset"
+local resets: { [number]: Resets } = {}
+local resetsLoaded: { [number]: boolean } = {}
+local resetStore: DataStore? = nil
 
 ----------------------------------------------------------------------------------------------------
 -- Helpers
@@ -101,6 +117,80 @@ local function nameFor(userId: number): string
 		return name
 	end
 	return "Player " .. tostring(userId)
+end
+
+local function emptyResets(): Resets
+	return { Stats = {}, Times = {} }
+end
+
+local function resetsOf(userId: number): Resets
+	local r = resets[userId]
+	if not r then
+		r = emptyResets()
+		resets[userId] = r
+	end
+	return r
+end
+
+local function getResetStore(): DataStore?
+	if not resetStore then
+		local ok, store = pcall(function()
+			return DataStoreService:GetDataStore(RESET_STORE)
+		end)
+		if ok then
+			resetStore = store
+		end
+	end
+	return resetStore
+end
+
+local function cleanResets(value: any): Resets
+	local r = emptyResets()
+	if type(value) == "table" then
+		for k, v in (if type(value.Stats) == "table" then value.Stats else {}) do
+			if type(k) == "string" and type(v) == "number" then
+				r.Stats[k] = v
+			end
+		end
+		for k, v in (if type(value.Times) == "table" then value.Times else {}) do
+			if type(v) == "number" then
+				r.Times[tostring(k)] = v
+			end
+		end
+	end
+	return r
+end
+
+-- Reads a player's resets (on join, and when another server reset them). Until this has worked,
+-- their values aren't written, so a reset can't be undone by a server that doesn't know about it.
+local function loadResets(userId: number)
+	if DataService.IsOffline() then
+		resetsLoaded[userId] = true
+		return
+	end
+	local store = getResetStore()
+	if not store then
+		return
+	end
+	local ok, value = pcall(function()
+		return store:GetAsync(KEY_PREFIX .. userId)
+	end)
+	if ok then
+		resets[userId] = cleanResets(value)
+		resetsLoaded[userId] = true
+	end
+end
+
+-- The value a player shows on a stat board: their real total minus any admin reset.
+local function boardValue(stat: Stat, profile: any, userId: number): number
+	local taken = resetsOf(userId).Stats[stat.Key] or 0
+	return math.max(0, math.floor(stat.Get(profile)) - taken)
+end
+
+-- May this best time go on the board? (After a reset, only a better time than back then.)
+local function timeAllowed(userId: number, level: number, tenths: number): boolean
+	local floor = resetsOf(userId).Times[tostring(level)]
+	return floor == nil or tenths < floor
 end
 
 local function openStores(): boolean
@@ -240,7 +330,7 @@ local function refreshOffline()
 		for _, player in Players:GetPlayers() do
 			local profile = DataService.Get(player)
 			local best = profile and profile.BestTimes[i]
-			if best and best > 0 then
+			if best and best > 0 and timeAllowed(player.UserId, i, toTenths(best)) then
 				table.insert(rows, { Name = player.Name, Value = toTenths(best) })
 			end
 		end
@@ -254,7 +344,7 @@ local function refreshOffline()
 		local rows: { Row } = {}
 		for _, player in Players:GetPlayers() do
 			local profile = DataService.Get(player)
-			local value = if profile then math.floor(stat.Get(profile)) else 0
+			local value = if profile then boardValue(stat, profile, player.UserId) else 0
 			if value > 0 then
 				table.insert(rows, { Name = player.Name, Value = value })
 			end
@@ -274,6 +364,10 @@ local function writeOnline()
 		end
 		local userId = player.UserId
 		local key = KEY_PREFIX .. userId
+		if not resetsLoaded[userId] then
+			task.spawn(loadResets, userId)
+			continue
+		end
 
 		local written = writtenTimes[userId] or {}
 		writtenTimes[userId] = written
@@ -285,6 +379,9 @@ local function writeOnline()
 			end
 			local tenths = toTenths(best)
 			if written[i] and written[i] <= tenths then
+				continue
+			end
+			if not timeAllowed(userId, i, tenths) then
 				continue
 			end
 			local ok = pcall(function()
@@ -301,7 +398,7 @@ local function writeOnline()
 		end
 
 		for _, stat in STATS do
-			local value = math.floor(stat.Get(profile))
+			local value = boardValue(stat, profile, userId)
 			local store = stat.DS
 			if value > 0 and stat.Written[userId] ~= value and store then
 				local ok = pcall(function()
@@ -353,6 +450,189 @@ local function refreshOnline()
 end
 
 ----------------------------------------------------------------------------------------------------
+-- Admin: view every board, reset a player on one
+----------------------------------------------------------------------------------------------------
+
+export type BoardRow = { UserId: number, Name: string, Value: number, Text: string }
+
+-- Board n: 1..#STATS are the Top Players pages, then one Fastest page per level.
+function LeaderboardService.BoardCount(): number
+	return #STATS + levelCount
+end
+
+function LeaderboardService.BoardTitle(index: number): string
+	local stat = STATS[index]
+	if stat then
+		return stat.Title
+	end
+	local level = Config.Levels[index - #STATS]
+	return if level then "Fastest: " .. level.Name else "?"
+end
+
+-- Up to `limit` entries of board `index`, best first. Yields (DataStore reads).
+function LeaderboardService.ListBoard(index: number, limit: number?): { BoardRow }
+	local count = math.clamp(math.floor(limit or 100), 1, 100)
+	local stat = STATS[index]
+	local level = if stat then nil else index - #STATS
+	local rows: { BoardRow } = {}
+	local offline = DataService.IsOffline() or not openStores()
+	if offline then
+		for _, player in Players:GetPlayers() do
+			local profile = DataService.Get(player)
+			if not profile then
+				continue
+			end
+			if stat then
+				local v = boardValue(stat, profile, player.UserId)
+				if v > 0 then
+					table.insert(rows, { UserId = player.UserId, Name = player.Name, Value = v, Text = Format.Commas(v) })
+				end
+			elseif level then
+				local best = profile.BestTimes[level]
+				local tenths = if best and best > 0 then toTenths(best) else nil
+				if tenths and timeAllowed(player.UserId, level, tenths) then
+					table.insert(rows, { UserId = player.UserId, Name = player.Name, Value = tenths, Text = formatTenths(tenths) })
+				end
+			end
+		end
+		table.sort(rows, function(a, b)
+			return if stat then a.Value > b.Value else a.Value < b.Value
+		end)
+		return { table.unpack(rows, 1, math.min(#rows, count)) }
+	end
+	local store: OrderedDataStore? = if stat then stat.DS elseif level then timeStores[level] else nil
+	if not store then
+		return rows
+	end
+	local ok, entries = pcall(function()
+		return (store :: OrderedDataStore):GetSortedAsync(stat == nil, count):GetCurrentPage()
+	end)
+	if not ok or type(entries) ~= "table" then
+		return rows
+	end
+	for _, entry in entries do
+		local userId = tonumber((string.match(tostring(entry.key), "^" .. KEY_PREFIX .. "(%d+)$")))
+		local value = tonumber(entry.value)
+		if userId and value and value > 0 then
+			table.insert(rows, {
+				UserId = userId,
+				Name = nameFor(userId),
+				Value = value,
+				Text = if stat then Format.Commas(value) else formatTenths(value),
+			})
+		end
+	end
+	return rows
+end
+
+-- Takes a player off board `index` (they keep their real stats). Yields. Returns (ok, message).
+function LeaderboardService.ResetEntry(index: number, userId: number): (boolean, string)
+	local stat = STATS[index]
+	local level = if stat then nil else index - #STATS
+	if not stat and not (level and Config.Levels[level]) then
+		return false, "Unknown leaderboard."
+	end
+	local key = KEY_PREFIX .. userId
+	local player = Players:GetPlayerByUserId(userId)
+	local profile = player and DataService.Get(player)
+	local offline = DataService.IsOffline() or not openStores()
+	local store: OrderedDataStore? = if offline then nil elseif stat then stat.DS else timeStores[level :: number]
+
+	-- What they show on the board right now.
+	local shown: number? = nil
+	if profile then
+		if stat then
+			shown = boardValue(stat, profile, userId)
+		else
+			local best = profile.BestTimes[level :: number]
+			shown = if best and best > 0 then toTenths(best) else nil
+		end
+	end
+	if store then
+		local ok, value = pcall(function()
+			return (store :: OrderedDataStore):GetAsync(key)
+		end)
+		if ok and tonumber(value) then
+			local v = tonumber(value) :: number
+			shown = if shown == nil then v elseif stat then math.max(shown, v) else math.min(shown, v)
+		end
+	end
+
+	-- The new reset record: stats move the offset up by what's shown; times remember the time to beat.
+	local function apply(r: Resets): Resets
+		if stat then
+			if profile then
+				r.Stats[stat.Key] = math.floor(stat.Get(profile))
+			else
+				r.Stats[stat.Key] = (r.Stats[stat.Key] or 0) + (shown or 0)
+			end
+		elseif shown then
+			local floor = r.Times[tostring(level)]
+			r.Times[tostring(level)] = if floor then math.min(floor, shown) else shown
+		end
+		return r
+	end
+
+	if offline then
+		resets[userId] = apply(resetsOf(userId))
+		resetsLoaded[userId] = true
+	else
+		local rs = getResetStore()
+		if not rs then
+			return false, "Couldn't reach the leaderboard save."
+		end
+		local newResets: Resets? = nil
+		local ok, err = pcall(function()
+			(rs :: DataStore):UpdateAsync(key, function(old)
+				newResets = apply(cleanResets(old))
+				return newResets
+			end)
+		end)
+		if not ok or not newResets then
+			return false, "Couldn't save the reset: " .. tostring(err)
+		end
+		resets[userId] = newResets :: Resets
+		resetsLoaded[userId] = true
+		if store then
+			pcall(function()
+				(store :: OrderedDataStore):RemoveAsync(key)
+			end)
+		end
+		task.spawn(function()
+			pcall(function()
+				MessagingService:PublishAsync(RESET_TOPIC, { UserId = userId })
+			end)
+		end)
+	end
+
+	-- Forget what this server wrote for them, and take them off the boards on screen now.
+	if stat then
+		stat.Written[userId] = nil
+		local name = nameFor(userId)
+		for i = #stat.Top, 1, -1 do
+			if stat.Top[i].Name == name then
+				table.remove(stat.Top, i)
+			end
+		end
+	else
+		local w = writtenTimes[userId]
+		if w then
+			w[level :: number] = nil
+		end
+		local top = timesTop[level :: number] or {}
+		local name = nameFor(userId)
+		for i = #top, 1, -1 do
+			if top[i].Name == name then
+				table.remove(top, i)
+			end
+		end
+	end
+	pcall(drawTimes)
+	pcall(drawDishes)
+	return true, string.format("Reset %s on %s", nameFor(userId), LeaderboardService.BoardTitle(index))
+end
+
+----------------------------------------------------------------------------------------------------
 -- Lifecycle
 ----------------------------------------------------------------------------------------------------
 
@@ -360,6 +640,36 @@ function LeaderboardService.Init()
 	for i = 1, levelCount do
 		timesTop[i] = {}
 	end
+	Players.PlayerAdded:Connect(function(player)
+		loadResets(player.UserId)
+	end)
+	for _, player in Players:GetPlayers() do
+		task.spawn(loadResets, player.UserId)
+	end
+	Players.PlayerRemoving:Connect(function(player)
+		resets[player.UserId] = nil
+		resetsLoaded[player.UserId] = nil
+	end)
+	-- Another server reset someone: re-read their resets and forget what we wrote for them.
+	task.spawn(function()
+		pcall(function()
+			MessagingService:SubscribeAsync(RESET_TOPIC, function(message)
+				local data = message.Data
+				local userId = type(data) == "table" and tonumber(data.UserId)
+				if not userId then
+					return
+				end
+				for _, stat in STATS do
+					stat.Written[userId] = nil
+				end
+				writtenTimes[userId] = nil
+				if Players:GetPlayerByUserId(userId) then
+					resetsLoaded[userId] = nil
+					loadResets(userId)
+				end
+			end)
+		end)
+	end)
 end
 
 function LeaderboardService.Start()

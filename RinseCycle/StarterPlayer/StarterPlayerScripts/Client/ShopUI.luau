@@ -14,6 +14,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Types = require(Shared:WaitForChild("Types"))
+local Remotes = require(Shared:WaitForChild("Remotes"))
 
 local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
@@ -164,6 +165,25 @@ end
 -- Robux tab
 ----------------------------------------------------------------------------------------------------
 
+-- Buying a pass for yourself: Roblox's prompt (MarketService grants it), or a free Studio test.
+local function buyPassForSelf(def: any)
+	if type(def.Id) == "number" and def.Id ~= 0 then
+		pcall(function()
+			MarketplaceService:PromptGamePassPurchase(LocalPlayer, def.Id)
+		end)
+		return
+	end
+	-- No Id yet: test mode (Studio only by default). See Config.GamePasses.
+	local result = ClientState.MetaRequest("TestPass", def.Key)
+	if not result.Ok then
+		UIKit.Toast(result.Error or "Coming soon!", "Info")
+	end
+end
+
+local function openPassBuy(def: any, giftOnly: boolean?)
+	UIKit.OpenWindow("PassBuy", { Def = def, GiftOnly = giftOnly == true })
+end
+
 local function buildPassRow(def: any): Frame
 	local meta = ClientState.Meta
 	local owned = meta ~= nil and meta.Passes[def.Key] == true
@@ -204,15 +224,27 @@ local function buildPassRow(def: any): Frame
 	})
 
 	if owned then
+		-- You have it: you can still gift it to someone.
 		UIKit.Label({
 			Text = "Owned",
-			TextSize = 18,
+			TextSize = 14,
 			TextColor3 = Colors.Good,
-			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -14, 0.5, 0),
-			Size = UDim2.fromOffset(130, 30),
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -14, 0, 4),
+			Size = UDim2.fromOffset(130, 18),
 			TextXAlignment = Enum.TextXAlignment.Center,
 			Parent = row,
+		})
+		UIKit.Button({
+			Text = "🎁 Gift",
+			Size = UDim2.fromOffset(130, 42),
+			AnchorPoint = Vector2.new(1, 1),
+			Position = UDim2.new(1, -14, 1, -6),
+			Color = Colors.Primary,
+			Parent = row,
+			OnClick = function()
+				openPassBuy(def, true)
+			end,
 		})
 	else
 		local buyButton = UIKit.Button({
@@ -223,18 +255,8 @@ local function buildPassRow(def: any): Frame
 			Color = Colors.Good,
 			Parent = row,
 			OnClick = function()
-				if type(def.Id) == "number" and def.Id ~= 0 then
-					-- A real pass: Roblox's purchase prompt; MarketService grants it when bought.
-					pcall(function()
-						MarketplaceService:PromptGamePassPurchase(LocalPlayer, def.Id)
-					end)
-					return
-				end
-				-- No Id yet: test mode (Studio only by default). See Config.GamePasses.
-				local result = ClientState.MetaRequest("TestPass", def.Key)
-				if not result.Ok then
-					UIKit.Toast(result.Error or "Coming soon!", "Info")
-				end
+				-- For yourself, or as a gift? (PassBuy window)
+				openPassBuy(def)
 			end,
 		})
 		ShopUI.WatchPrice(def, true, function(price)
@@ -478,6 +500,142 @@ function ShopUI.Init()
 		Parent = screenRoot,
 	})
 	content = windowContent
+
+	------------------------------------------------------------------ Buy for yourself, or gift it
+	local _passWindow, passContent = UIKit.Window({
+		Name = "PassBuy",
+		Title = "Get a Pass",
+		Icon = "🎁",
+		Size = Vector2.new(560, 470),
+		Parent = screenRoot,
+	})
+	local passBody = Instance.new("Frame")
+	passBody.BackgroundTransparency = 1
+	passBody.Size = UDim2.fromScale(1, 1)
+	passBody.Parent = passContent
+	local function clearBody()
+		for _, child in passBody:GetChildren() do
+			child:Destroy()
+		end
+	end
+	local function header(def: any)
+		UIKit.Label({ Text = def.Icon .. "  " .. def.Name, TextSize = 28, Size = UDim2.new(1, 0, 0, 40), Parent = passBody })
+	end
+	local function giftTo(def: any, target: Player)
+		local ok, result = pcall(function()
+			return Remotes.Function("GiftRequest"):InvokeServer(def.Key, target.UserId)
+		end)
+		if not ok or type(result) ~= "table" then
+			UIKit.Toast("Couldn't start the gift. Try again!", "Bad")
+			return
+		end
+		if not result.Ok then
+			UIKit.Toast(result.Error or "Couldn't gift that.", "Bad")
+			return
+		end
+		UIKit.CloseWindow("PassBuy")
+		if type(result.ProductId) == "number" then
+			pcall(function()
+				MarketplaceService:PromptProductPurchase(LocalPlayer, result.ProductId)
+			end)
+		end
+	end
+	local function drawPicker(def: any)
+		clearBody()
+		header(def)
+		UIKit.Label({ Text = "Who do you want to gift it to?", TextSize = 20, TextColor3 = Colors.TextDim, Position = UDim2.fromOffset(0, 44), Size = UDim2.new(1, 0, 0, 26), Parent = passBody })
+		local list = Instance.new("ScrollingFrame")
+		list.BackgroundTransparency = 1
+		list.BorderSizePixel = 0
+		list.Position = UDim2.fromOffset(0, 80)
+		list.Size = UDim2.new(1, 0, 1, -80)
+		list.ScrollBarThickness = 6
+		list.CanvasSize = UDim2.new()
+		list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+		list.Parent = passBody
+		local layout = Instance.new("UIListLayout")
+		layout.Padding = UDim.new(0, 8)
+		layout.SortOrder = Enum.SortOrder.LayoutOrder
+		layout.Parent = list
+		local count = 0
+		for i, plr in Players:GetPlayers() do
+			if plr == LocalPlayer then
+				continue
+			end
+			count += 1
+			local r = UIKit.Card({ Size = UDim2.new(1, -12, 0, 58), Color = Colors.PanelLight, Parent = list })
+			r.LayoutOrder = i
+			UIKit.Label({ Text = plr.DisplayName .. "  @" .. plr.Name, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -160, 1, 0), Parent = r })
+			UIKit.Button({
+				Text = "🎁 Gift",
+				Color = Colors.Good,
+				TextSize = 18,
+				Size = UDim2.fromOffset(130, 44),
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -8, 0.5, 0),
+				Parent = r,
+				OnClick = function()
+					giftTo(def, plr)
+				end,
+			})
+		end
+		if count == 0 then
+			UIKit.Label({ Text = "Nobody else is in this server yet.", TextSize = 18, TextColor3 = Colors.TextDim, Size = UDim2.new(1, 0, 0, 50), Parent = list })
+		end
+	end
+	local function drawChoice(def: any)
+		clearBody()
+		header(def)
+		UIKit.Label({ Text = tostring(def.Desc or ""), TextSize = 18, TextColor3 = Colors.TextDim, TextWrapped = true, Position = UDim2.fromOffset(10, 46), Size = UDim2.new(1, -20, 0, 60), Parent = passBody })
+		local selfButton = UIKit.Button({
+			Text = "Buy for myself  (R$ " .. tostring(def.Price or "?") .. ")",
+			Color = Colors.Good,
+			TextSize = 22,
+			Size = UDim2.new(1, -40, 0, 70),
+			AnchorPoint = Vector2.new(0.5, 0),
+			Position = UDim2.new(0.5, 0, 0, 124),
+			Parent = passBody,
+			OnClick = function()
+				UIKit.CloseWindow("PassBuy")
+				buyPassForSelf(def)
+			end,
+		})
+		ShopUI.WatchPrice(def, true, function(price)
+			if selfButton.Parent then
+				selfButton.Text = "Buy for myself  (R$ " .. price .. ")"
+			end
+		end)
+		UIKit.Button({
+			Text = "🎁 Gift it to a friend",
+			Color = Colors.Primary,
+			TextSize = 22,
+			Size = UDim2.new(1, -40, 0, 70),
+			AnchorPoint = Vector2.new(0.5, 0),
+			Position = UDim2.new(0.5, 0, 0, 210),
+			Parent = passBody,
+			OnClick = function()
+				drawPicker(def)
+			end,
+		})
+	end
+	UIKit.RegisterWindow("PassBuy", {
+		Open = function(arg)
+			local def = type(arg) == "table" and arg.Def
+			if not def then
+				return
+			end
+			if arg.GiftOnly or not Config.GetGiftProduct(def.Key) then
+				if arg.GiftOnly then
+					drawPicker(def)
+				else
+					UIKit.CloseWindow("PassBuy")
+					buyPassForSelf(def)
+				end
+			else
+				drawChoice(def)
+			end
+		end,
+	})
 
 	tabsRow = Instance.new("Frame")
 	tabsRow.Name = "Tabs"

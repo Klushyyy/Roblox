@@ -1230,6 +1230,24 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - Purchases: "Congrats! You bought ..." only on a real purchase (game pass or developer product),
   never when owned passes are re-checked on joining a server.
 
+## 6q. Trading, gifting, leaderboard resets, global announcements (v1.6)
+- Pet trading (TradeService / TradeUI, lobby only): 🤝 Trade button -> pick a player -> they get an
+  Accept / Decline invite. Both sides offer up to 8 pets, press Ready, and after a 4 s countdown
+  PetService.Transfer swaps them in one step (fresh uids for the new owner, both saves written).
+  Any change un-readies both; a party, run, teleport or leaving cancels the trade.
+- Gifting passes (GiftService): every pass has a matching developer product in
+  Config.GiftProducts ("Gift: VIP", Ids in StoreIds > GiftPasses). Buy -> "Buy for myself" or
+  "Gift it to a friend" -> pick a player in the server -> Roblox prompt. On the receipt the friend
+  gets the pass (saved in the same grant store as the admin's :givegamepass) and both get a
+  Celebrate popup ("Successfully gifted..." / "X gifted you..."). Owned passes show a Gift button.
+- Celebrate: a centred popup with confetti, also used for admin gifts (:givegamepass, :setrank,
+  :promote -> "You've been gifted the X rank by an admin!").
+- Admin :leaderboards: every board (Most Dishes / Rebirths / Bubbles, Fastest per level), top 100,
+  ◀ ▶ to flip, Reset per row. A reset keeps the player's real stats: stat boards store an offset
+  (RinseCycle_LbResets) so only what they earn afterwards counts; a Fastest board lists them again
+  once they beat their old time.
+- Admin :globalannounce: the announcement banner in every server (MessagingService).
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family
