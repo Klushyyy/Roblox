@@ -715,9 +715,9 @@ Config.DailyRewards = {
 -- Rebirth (the endgame loop): after clearing the last dishwasher, trade your Bubbles, unlocked levels
 -- and perks for a permanent bonus. Pets, gems, ranks, passes and best times are kept.
 Config.Rebirth = {
-	BaseCost = 5000, -- Bubbles for the first rebirth (a Royal Banquet clear pays ~700, plus lobby bubbles)
+	BaseCost = 2500, -- Bubbles for the first rebirth (a Royal Banquet clear pays ~700, plus lobby bubbles)
 	CostStep = 2500, -- each rebirth after that costs this much more...
-	MaxCost = 20000, -- ...until it levels off here (from the 7th rebirth on, every rebirth costs this)
+	MaxCost = 20000, -- ...until it levels off here (from the 8th rebirth on, every rebirth costs this)
 	CoinsPer = 0.25, -- +25% coins per rebirth (they stack: 4 rebirths = +100%)
 	BubblesPer = 0.5, -- +50% Bubbles per rebirth
 	Gems = 50, -- gems for the first rebirth...
@@ -726,7 +726,7 @@ Config.Rebirth = {
 }
 
 -- Bubbles needed for the next rebirth when you have `rebirths` already:
--- 5,000 / 7,500 / 10,000 / 12,500 / 15,000 / 17,500 / then 20,000 every time.
+-- 2,500 / 5,000 / 7,500 / ... / 17,500 / then 20,000 every time.
 function Config.RebirthCost(rebirths: number): number
 	local rb = Config.Rebirth
 	return math.min(rb.BaseCost + rb.CostStep * (rebirths or 0), rb.MaxCost)

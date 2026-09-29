@@ -1174,7 +1174,7 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - **Leaderboards:** the right-hand board is "Top Players" with arrows (and the Next page prompt)
   flipping between Most Dishes Cleaned, Most Rebirths and Most Bubbles Collected
   (RinseCycle_Dishes / _Rebirths / _Bubbles, Stats.BubblesEarned).
-- **Rebirth curve:** 5,000 Bubbles for the first, +2,500 each time, capped at 20,000 from the 7th
+- **Rebirth curve:** 2,500 Bubbles for the first, +2,500 each time, capped at 20,000 from the 8th
   on. Perks keep stacking (+25% coins, +50% Bubbles per rebirth) and the Gem reward grows: 50, 60,
   70 ... up to 250 (Config.RebirthCost / Config.RebirthGems).
 - **Party menu:** chapter cards show the chapter number big instead of the food emblems; the
