@@ -533,27 +533,20 @@ function ShopUI.Init()
 		end
 	end)
 
-	-- Celebrate a pass the moment it becomes owned (a real purchase or a test grant).
-	local ownedBefore: { [string]: boolean }? = nil
+	-- Celebrate a purchase the moment it happens, never just because a pass you already own showed
+	-- up (ownership is re-checked on every join and server hop). MarketService sends the message.
+	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, _passId, purchased)
+		if player == LocalPlayer and purchased then
+			UIKit.Confetti()
+		end
+	end)
+	MarketplaceService.PromptProductPurchaseFinished:Connect(function(userId, _productId, purchased)
+		if userId == LocalPlayer.UserId and purchased then
+			UIKit.Confetti(50)
+		end
+	end)
 	ClientState.Changed:Connect(function(kind)
-		if kind ~= "Meta" then
-			return
-		end
-		local meta = ClientState.Meta
-		if meta then
-			local now = table.clone(meta.Passes or {})
-			if ownedBefore then
-				for key, owned in now do
-					if owned and not ownedBefore[key] then
-						local pass = Config.GetPass(key)
-						UIKit.Confetti()
-						UIKit.Toast(string.format("%s unlocked!", pass and pass.Name or key), "Good")
-					end
-				end
-			end
-			ownedBefore = now
-		end
-		if UIKit.IsWindowOpen("Shop") then
+		if kind == "Meta" and UIKit.IsWindowOpen("Shop") then
 			render()
 		end
 	end)

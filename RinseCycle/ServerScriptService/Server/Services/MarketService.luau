@@ -76,6 +76,10 @@ for _, product in Config.DevProducts or {} do
 			if not MarketService.GrantProduct(player, product) then
 				error("grant failed")
 			end
+			-- Only ever runs once per real purchase (the receipt is recorded right after).
+			if player.Parent == Players then
+				Remotes.Event("Notify"):FireClient(player, string.format("Congrats! You bought %s %s", product.Name, product.Icon or ""), "Good")
+			end
 		end
 	end
 end
@@ -206,7 +210,7 @@ local function onPassPurchaseFinished(player: Player, passId: number, wasPurchas
 	bought[pass.Key] = true
 	DataService.SetPass(player, pass.Key, true)
 	DataService.PushMeta(player)
-	notify(player, "Thanks! " .. pass.Icon .. " " .. pass.Name .. " unlocked", "Good")
+	notify(player, string.format("Congrats! You bought %s %s", pass.Name, pass.Icon or ""), "Good")
 end
 
 ----------------------------------------------------------------------------------------------------
