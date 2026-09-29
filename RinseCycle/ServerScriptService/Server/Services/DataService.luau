@@ -1402,7 +1402,7 @@ function DataService.Rebirth(player: Player): (boolean, string?)
 	for id in profile.Perks do
 		profile.Perks[id] = 0
 	end
-	profile.Gems += Config.Rebirth.Gems
+	profile.Gems += Config.RebirthGems(profile.Rebirths)
 	local session = sessions[player]
 	if session then
 		session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)

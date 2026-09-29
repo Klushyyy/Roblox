@@ -195,6 +195,168 @@ local function worldSign(parent: BasePart, text: string, width: number, height: 
 end
 
 ----------------------------------------------------------------------------------------------------
+-- The dining room around the table: panelling, curtains, pictures, a fireplace, a bookcase, a sofa,
+-- ceiling beams and plants. Everything that meets a wall or the floor overlaps into it (never a
+-- face flush with another face), so nothing z-fights.
+----------------------------------------------------------------------------------------------------
+local function buildHouseDetail(parent: Instance, box: (string, number, number, number, number, number, number, Color3, { [string]: any }?) -> BasePart)
+	local fy = ROOM_FLOOR_Y
+	local white = Color3.fromRGB(250, 248, 242)
+	local panel = Color3.fromRGB(222, 206, 178)
+	local trim = Color3.fromRGB(244, 238, 226)
+	local nc = { CanCollide = false, CastShadow = false }
+	local winY0, winY1 = fy + 110, fy + 380
+	local IN = 2 -- walls are 4 thick, centred on the room edge: inner faces are 2 in
+
+	-- Floorboards: slightly darker seams (the rug covers the middle).
+	for x = -ROOM_X + 40, ROOM_X - 40, 40 do
+		box("FloorSeam", x - 0.6, x + 0.6, fy - 1, fy + 0.25, ROOM_Z0 + IN, ROOM_Z1 - IN, Color3.fromRGB(128, 86, 56), nc)
+	end
+
+	-- Window positions (the same maths as the walls): 3 per wall.
+	local function spots(a0: number, a1: number): { number }
+		local winW = 120
+		local gap = (a1 - a0 - 3 * winW) / 4
+		return { a0 + gap, a0 + 2 * gap + winW, a0 + 3 * gap + 2 * winW }
+	end
+
+	-- Along one wall. `along(a0, a1, y0, y1, d0, d1)` makes a box spanning a0..a1 along the wall,
+	-- y0..y1 up, d0..d1 in from the wall's inner face.
+	local function dress(along: (string, number, number, number, number, number, number, Color3, { [string]: any }?) -> (), a0: number, a1: number)
+		-- wainscot (dado) panelling with a chair rail and raised panels
+		along("Wainscot", a0, a1, fy + 6, fy + 100, -0.5, 1.5, panel)
+		along("ChairRail", a0 + 0.3, a1 - 0.3, fy + 98, fy + 105, -0.8, 3, trim)
+		local n = math.floor((a1 - a0) / 60)
+		local step = (a1 - a0) / n
+		for k = 0, n - 1 do
+			local c = a0 + step * (k + 0.5)
+			along("Panel", c - step / 2 + 7, c + step / 2 - 7, fy + 20, fy + 88, 1, 2.2, Color3.fromRGB(232, 218, 192))
+		end
+		-- crown moulding under the ceiling
+		along("Crown", a0 + 0.6, a1 - 0.6, ROOM_TOP - 12, ROOM_TOP + 1, -1.1, 4, trim)
+		-- curtains and rods at each window
+		for _, w0 in spots(a0, a1) do
+			local w1 = w0 + 120
+			along("CurtainRod", w0 - 40, w1 + 40, winY1 + 16, winY1 + 20, 8, 12, Color3.fromRGB(150, 110, 60), nc)
+			for _, e in { { w0 - 36, w0 - 4 }, { w1 + 4, w1 + 36 } } do
+				along("Curtain", e[1], e[2], winY0 - 30, winY1 + 16, 6, 12, Color3.fromRGB(176, 60, 64), nc)
+				along("CurtainTie", e[1] - 1, e[2] + 1, winY0 + 60, winY0 + 68, 5, 13, Color3.fromRGB(236, 196, 96), nc)
+			end
+		end
+	end
+	-- back and front walls (along X)
+	for _, zw in { ROOM_Z0, ROOM_Z1 } do
+		local inward = if zw < 0 then 1 else -1
+		local face = zw + inward * IN
+		dress(function(name, a0, a1, y0, y1, d0, d1, color, extra)
+			box(name, a0, a1, y0, y1, face + inward * d0, face + inward * d1, color, extra)
+		end, -ROOM_X + IN, ROOM_X - IN)
+	end
+	-- side walls (along Z)
+	for _, xw in { -ROOM_X, ROOM_X } do
+		local inward = if xw < 0 then 1 else -1
+		local face = xw + inward * IN
+		dress(function(name, a0, a1, y0, y1, d0, d1, color, extra)
+			box(name, face + inward * d0, face + inward * d1, y0, y1, a0, a1, color, extra)
+		end, ROOM_Z0 + IN, ROOM_Z1 - IN)
+	end
+
+	-- Pictures between the windows on the back wall (frame, mat, painting: each proud of the last).
+	local backFace = ROOM_Z0 + IN
+	local paintings = {
+		{ -120, Color3.fromRGB(90, 150, 210), Color3.fromRGB(120, 190, 110) }, -- hills
+		{ 120, Color3.fromRGB(250, 190, 110), Color3.fromRGB(230, 120, 90) }, -- sunset
+	}
+	for _, pnt in paintings do
+		local cx = pnt[1]
+		box("PictureFrame", cx - 40, cx + 40, fy + 190, fy + 290, backFace - 0.5, backFace + 3, Color3.fromRGB(160, 116, 60))
+		box("PictureMat", cx - 33, cx + 33, fy + 197, fy + 283, backFace + 2, backFace + 3.6, white)
+		box("PictureSky", cx - 28, cx + 28, fy + 230, fy + 278, backFace + 3, backFace + 4.2, pnt[2])
+		box("PictureLand", cx - 28, cx + 28, fy + 202, fy + 231, backFace + 3, backFace + 4.4, pnt[3])
+	end
+
+	-- Fireplace on the left wall, between the first two windows.
+	local lf = -ROOM_X + IN
+	local fz0, fz1 = -275, -155
+	box("ChimneyBreast", lf - 1.4, lf + 30, fy - 0.6, ROOM_TOP + 1.3, fz0, fz1, Color3.fromRGB(200, 120, 96))
+	box("Hearth", lf + 28.4, lf + 60, fy - 1, fy + 6, fz0 - 10, fz1 + 10, Color3.fromRGB(120, 120, 128))
+	box("FireSurround", lf + 29, lf + 40, fy + 4, fy + 120, fz0 - 6, fz1 + 6, white)
+	box("Mantel", lf + 28, lf + 50, fy + 118, fy + 128, fz0 - 14, fz1 + 14, Color3.fromRGB(150, 104, 70))
+	box("Firebox", lf + 36, lf + 41, fy + 6, fy + 80, fz0 + 18, fz1 - 18, Color3.fromRGB(34, 30, 30))
+	for i, c in { Color3.fromRGB(255, 150, 40), Color3.fromRGB(255, 210, 90) } do
+		local flame = box("Flame", lf + 41.5 - i, lf + 43.5 - i, fy + 8, fy + 40 - i * 8, fz0 + 34 + i * 8, fz1 - 34 - i * 8, c, { CanCollide = false, CastShadow = false, Material = Enum.Material.Neon })
+		if i == 1 then
+			mk("PointLight", { Range = 50, Brightness = 1.2, Color = Color3.fromRGB(255, 170, 90), Shadows = false }, flame)
+		end
+	end
+	box("Log", lf + 41, lf + 49, fy + 6, fy + 14, fz0 + 26, fz1 - 26, Color3.fromRGB(110, 70, 40))
+	-- a clock and two candlesticks on the mantel
+	box("MantelClock", lf + 32, lf + 46, fy + 128, fy + 158, -222, -208, Color3.fromRGB(120, 80, 50))
+	box("ClockFace", lf + 46, lf + 47, fy + 134, fy + 152, -220, -210, white)
+	for _, cz in { fz0 + 4, fz1 - 4 } do
+		box("Candlestick", lf + 36, lf + 42, fy + 128, fy + 134, cz - 3, cz + 3, Color3.fromRGB(236, 196, 96))
+		box("Candle", lf + 37.5, lf + 40.5, fy + 134, fy + 150, cz - 1.5, cz + 1.5, white)
+	end
+
+	-- Bookcase on the right wall, between the first two windows.
+	local rf = ROOM_X - IN
+	local bz0, bz1 = -270, -160
+	local wood = Color3.fromRGB(120, 80, 50)
+	box("Bookcase", rf - 40, rf + 1.3, fy - 0.4, fy + 250, bz0, bz1, wood)
+	local bookColors = { Color3.fromRGB(200, 60, 60), Color3.fromRGB(60, 110, 190), Color3.fromRGB(240, 200, 80), Color3.fromRGB(80, 160, 100), Color3.fromRGB(150, 90, 170), Color3.fromRGB(230, 130, 60) }
+	for shelf = 0, 4 do
+		local y0 = fy + 14 + shelf * 46
+		box("BookShelfBack", rf - 38, rf - 36, y0, y0 + 40, bz0 + 6, bz1 - 6, Color3.fromRGB(90, 60, 38))
+		local z = bz0 + 8
+		local k = shelf * 3
+		while z < bz1 - 14 do
+			k += 1
+			local thick = 5 + (k * 7) % 5
+			local tall = 26 + (k * 11) % 12
+			box("Book", rf - 44, rf - 36.5, y0, y0 + tall, z, z + thick, bookColors[(k % #bookColors) + 1])
+			z += thick + 0.6
+		end
+	end
+
+	-- A sofa by the front wall, facing the table, with cushions.
+	local sz0 = ROOM_Z1 - IN - 64
+	local sofa = Color3.fromRGB(90, 130, 110)
+	box("SofaBase", -130, 130, fy, fy + 42, sz0, sz0 + 60, sofa)
+	box("SofaBack", -130, 130, fy + 40, fy + 100, sz0 + 42, sz0 + 61.4, sofa)
+	for _, sx in { -1, 1 } do
+		box("SofaArm", sx * 130 - 12, sx * 130 + 12, fy, fy + 66, sz0 - 2, sz0 + 62, Color3.fromRGB(80, 118, 100))
+	end
+	for i = -1, 1 do
+		box("SofaCushion", i * 80 - 38, i * 80 + 38, fy + 41, fy + 52, sz0 + 2, sz0 + 42, Color3.fromRGB(110, 152, 130))
+	end
+	box("Pillow", -100, -70, fy + 50, fy + 78, sz0 + 32, sz0 + 41.2, Color3.fromRGB(236, 196, 96))
+	box("Pillow", 70, 100, fy + 50, fy + 78, sz0 + 32, sz0 + 41.2, Color3.fromRGB(200, 90, 90))
+
+	-- Ceiling beams (they sink into the ceiling a little).
+	for _, bz in { -330, -80, 170 } do
+		box("CeilingBeam", -ROOM_X + IN + 1.5, ROOM_X - IN - 1.5, ROOM_TOP - 14, ROOM_TOP + 1.7, bz - 9, bz + 9, Color3.fromRGB(150, 104, 70))
+	end
+
+	-- Potted plants in the corners.
+	for _, c in { { -370, -510 }, { 370, -510 }, { -370, 350 }, { 370, 350 } } do
+		local px, pz = c[1], c[2]
+		box("PlantPot", px - 18, px + 18, fy, fy + 40, pz - 18, pz + 18, Color3.fromRGB(190, 110, 70))
+		box("PlantSoil", px - 15, px + 15, fy + 38, fy + 40.6, pz - 15, pz + 15, Color3.fromRGB(80, 56, 40))
+		for i, leaf in { { 0, 70, 0, 44 }, { -14, 56, 8, 30 }, { 14, 60, -8, 30 }, { 4, 92, 4, 28 } } do
+			mkPart("Part", {
+				Name = "PlantLeaves",
+				Shape = Enum.PartType.Ball,
+				Size = Vector3.new(leaf[4], leaf[4], leaf[4]),
+				CFrame = at(px + leaf[1], fy + leaf[2], pz + leaf[3]),
+				Color = if i % 2 == 0 then Color3.fromRGB(70, 150, 80) else Color3.fromRGB(90, 170, 90),
+				Material = LOW,
+				CanCollide = false,
+			}, parent)
+		end
+	end
+end
+
+----------------------------------------------------------------------------------------------------
 -- Ground: the plaza is the top of a giant wooden dining table (planks, a checked runner down the
 -- middle), with invisible walls at its edges. The table stands in a dining room (buildRoom).
 ----------------------------------------------------------------------------------------------------
@@ -318,8 +480,8 @@ local function buildRoom(parent: Instance)
 
 	-- Floor, walls with windows, ceiling.
 	box("RoomFloor", -ROOM_X, ROOM_X, fy - 4, fy, ROOM_Z0, ROOM_Z1, ROOM_FLOOR)
-	box("Rug", -200, 200, fy, fy + 0.4, -330, 170, Color3.fromRGB(70, 110, 150), { CanCollide = false })
-	box("RugBorder", -210, 210, fy - 0.1, fy + 0.3, -340, 180, Color3.fromRGB(240, 200, 110), { CanCollide = false })
+	box("Rug", -200, 200, fy, fy + 0.9, -330, 170, Color3.fromRGB(70, 110, 150), { CanCollide = false })
+	box("RugBorder", -210, 210, fy - 0.1, fy + 0.5, -340, 180, Color3.fromRGB(240, 200, 110), { CanCollide = false })
 	box("Ceiling", -ROOM_X, ROOM_X, ROOM_TOP, ROOM_TOP + 4, ROOM_Z0, ROOM_Z1, Color3.fromRGB(250, 246, 238), shadowless)
 
 	local winY0, winY1 = fy + 110, fy + 380
@@ -330,15 +492,15 @@ local function buildRoom(parent: Instance)
 		local gap = (span - n * winW) / (n + 1)
 		box("Wall", -ROOM_X, ROOM_X, fy, winY0, z - 2, z + 2, ROOM_WALL, shadowless)
 		box("Wall", -ROOM_X, ROOM_X, winY1, ROOM_TOP, z - 2, z + 2, ROOM_WALL, shadowless)
-		box("Skirting", -ROOM_X, ROOM_X, fy, fy + 10, z - 3, z + 3, Color3.fromRGB(255, 255, 255), shadowless)
+		box("Skirting", -ROOM_X - 1, ROOM_X + 1, fy, fy + 10, z - 3, z + 3, Color3.fromRGB(255, 255, 255), shadowless)
 		local x = -ROOM_X
 		for k = 0, n do
 			box("Wall", x, x + gap, winY0, winY1, z - 2, z + 2, ROOM_WALL, shadowless)
 			x += gap
 			if k < n then
 				box("WindowSill", x - 6, x + winW + 6, winY0 - 6, winY0 + 0.4, z - 8, z + 8, Color3.fromRGB(255, 255, 255), shadowless)
-				box("WindowBar", x + winW / 2 - 2, x + winW / 2 + 2, winY0, winY1, z - 1, z + 1, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
-				box("WindowBar", x, x + winW, (winY0 + winY1) / 2 - 2, (winY0 + winY1) / 2 + 2, z - 1, z + 1, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
+				box("WindowBar", x + winW / 2 - 2, x + winW / 2 + 2, winY0 - 1, winY1 + 1, z - 1, z + 1, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
+				box("WindowBar", x - 1, x + winW + 1, (winY0 + winY1) / 2 - 2, (winY0 + winY1) / 2 + 2, z - 1, z + 1, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
 				box("WindowGlass", x, x + winW, winY0, winY1, z - 0.3, z + 0.3, Color3.fromRGB(200, 230, 255), { Transparency = 0.85, Material = Enum.Material.Glass, CastShadow = false })
 				x += winW
 			end
@@ -350,15 +512,15 @@ local function buildRoom(parent: Instance)
 		local gap = (span - n * winW) / (n + 1)
 		box("Wall", xw - 2, xw + 2, fy, winY0, ROOM_Z0, ROOM_Z1, ROOM_WALL, shadowless)
 		box("Wall", xw - 2, xw + 2, winY1, ROOM_TOP, ROOM_Z0, ROOM_Z1, ROOM_WALL, shadowless)
-		box("Skirting", xw - 3, xw + 3, fy, fy + 10, ROOM_Z0, ROOM_Z1, Color3.fromRGB(255, 255, 255), shadowless)
+		box("Skirting", xw - 3, xw + 3, fy, fy + 10, ROOM_Z0 - 1, ROOM_Z1 + 1, Color3.fromRGB(255, 255, 255), shadowless)
 		local z = ROOM_Z0
 		for k = 0, n do
 			box("Wall", xw - 2, xw + 2, winY0, winY1, z, z + gap, ROOM_WALL, shadowless)
 			z += gap
 			if k < n then
 				box("WindowSill", xw - 8, xw + 8, winY0 - 6, winY0 + 0.4, z - 6, z + winW + 6, Color3.fromRGB(255, 255, 255), shadowless)
-				box("WindowBar", xw - 1, xw + 1, winY0, winY1, z + winW / 2 - 2, z + winW / 2 + 2, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
-				box("WindowBar", xw - 1, xw + 1, (winY0 + winY1) / 2 - 2, (winY0 + winY1) / 2 + 2, z, z + winW, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
+				box("WindowBar", xw - 1, xw + 1, winY0 - 1, winY1 + 1, z + winW / 2 - 2, z + winW / 2 + 2, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
+				box("WindowBar", xw - 1, xw + 1, (winY0 + winY1) / 2 - 2, (winY0 + winY1) / 2 + 2, z - 1, z + winW + 1, Color3.fromRGB(255, 255, 255), { CanCollide = false, CastShadow = false })
 				box("WindowGlass", xw - 0.3, xw + 0.3, winY0, winY1, z, z + winW, Color3.fromRGB(200, 230, 255), { Transparency = 0.85, Material = Enum.Material.Glass, CastShadow = false })
 				z += winW
 			end
@@ -418,6 +580,8 @@ local function buildRoom(parent: Instance)
 	end
 	local bulb = mkPart("Part", { Name = "LampBulb", Shape = Enum.PartType.Ball, Size = Vector3.new(16, 16, 16), CFrame = at(0, lampY - 2, -18), Color = Color3.fromRGB(255, 240, 200), Material = Enum.Material.Neon, CanCollide = false, CastShadow = false }, parent)
 	mk("PointLight", { Range = 60, Brightness = 0.6, Color = Color3.fromRGB(255, 230, 190), Shadows = false }, bulb)
+
+	buildHouseDetail(parent, box)
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -764,8 +928,8 @@ local function buildDishwasherBuilding(parent: Instance)
 		-- Vertical chamfer strips on the front corners.
 		mkPart("Part", {
 			Name = "CornerChamfer",
-			Size = Vector3.new(4, h - 4, 4),
-			CFrame = at(side * (w / 2 - 1.4), (h - 4) / 2 + 4, HATCHERY_Z - 1.4) * CFrame.Angles(0, math.rad(45), 0),
+			Size = Vector3.new(4, h - 4.4, 4),
+			CFrame = at(side * (w / 2 - 1.4), (h - 4.4) / 2 + 4, HATCHERY_Z - 1.4) * CFrame.Angles(0, math.rad(45), 0),
 			Color = Color3.fromRGB(214, 222, 230),
 			Material = LOW,
 		}, parent)
@@ -781,7 +945,7 @@ local function buildDishwasherBuilding(parent: Instance)
 	for i = 0, 4 do
 		local px = -winW / 2 + 6 + i * ((winW - 12) / 4)
 		mkPart("Part", decor({ Name = "WindowPlate", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.4, 13, 13), CFrame = at(px, winY - 1, HATCHERY_Z + 2.2) * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(110, 170, 230), Material = Enum.Material.SmoothPlastic }), parent)
-		mkPart("Part", decor({ Name = "WindowPlateFace", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.5, 11, 11), CFrame = at(px, winY - 1, HATCHERY_Z + 2.25) * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(250, 250, 248), Material = Enum.Material.SmoothPlastic }), parent)
+		mkPart("Part", decor({ Name = "WindowPlateFace", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.4, 11, 11), CFrame = at(px, winY - 1, HATCHERY_Z + 2.45) * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(250, 250, 248), Material = Enum.Material.SmoothPlastic }), parent)
 	end
 	mkPart("Part", decor({ Name = "WindowRack", Size = Vector3.new(winW - 2, 0.6, 2), CFrame = at(0, winY - 8, HATCHERY_Z + 2.3), Color = Color3.fromRGB(220, 225, 230), Material = LOW }), parent)
 	local window = mkPart("Part", decor({ Name = "Window", Size = Vector3.new(winW, winH, 0.3), CFrame = at(0, winY, HATCHERY_Z + 3.2), Color = Color3.fromRGB(150, 215, 250), Material = Enum.Material.Glass, Transparency = 0.55 }), parent)
@@ -1125,8 +1289,8 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 		mk("ClickDetector", { MaxActivationDistance = 70 }, arrow)
 	end
 	local prompt = mk("ProximityPrompt", {
-		ActionText = "Next level",
-		ObjectText = "Fastest Clean",
+		ActionText = "Next page",
+		ObjectText = titleText,
 		RequiresLineOfSight = false,
 		HoldDuration = 0,
 		MaxActivationDistance = 14,
@@ -1458,7 +1622,7 @@ function LobbyBuilder.Build(): Lobby
 	-- Leaderboards in the back corners, angled at the middle of the plaza; How to Play beside the
 	-- spawn, facing it. Nothing stands behind the spawn, so the default camera has a clear view.
 	local timesBoard = buildBoard(model, -80, -74, "Fastest Clean", 0, 0, #Config.Levels)
-	local dishesBoard = buildBoard(model, 80, -74, "Most Dishes Cleaned", 0, 0)
+	local dishesBoard = buildBoard(model, 80, -74, "Top Players", 0, 0, 3) -- dishes / rebirths / bubbles
 	buildHowToPlay(model, 34, 44, SPAWN.X, SPAWN.Z)
 
 	buildRankShrine(model)

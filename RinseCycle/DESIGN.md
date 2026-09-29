@@ -1160,47 +1160,27 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - **NPCs:** the jester plays to the players (always turned toward the dishwasher) and cartwheels
   along a clear lane; the king and queen sit clear of their thrones.
 
-## 6m. One story, three chapters, staged where you play (v1.3)
+## 6m. No cutscenes; house detail, Top Players board, rebirth curve (v1.4)
 
-- **Story (client `Story` + `Cutscene`).** One chapter per level, one story running through all
-  three, with subtitles (speaker name in their colour, then the line):
-  1. *Family Dinner* (level 1): spaghetti night. The kid learns the birthday party is at Luigi's,
-     cheers so hard a meatball lands on Grandpa's newspaper ("...Is it raining meatballs?"), Mum
-     announces the dishes, tosses the plates into the dishwasher, wishes the little helpers good
-     luck and presses Start.
-  2. *Pizza Party* (level 2): the party at Luigi's. Luigi's famous dough toss lands on his hat;
-     a stranger in a fedora tastes the pizza, lifts the hat and reveals a crown: the King, who
-     invites Luigi and the birthday boy to his banquet. The waiter loads the dishwasher.
-  3. *Royal Banquet* (level 3): the King's toast, Luigi's birthday cake (the dough is still on his
-     hat), the jester's trick shot knocks the crown onto Grandpa ("...Is it raining crowns now?"),
-     and Dad does the dishes, family tradition.
-- **Staged in the real room.** The chapter is built in the arena you were just teleported into
-  (its `Origin` attribute), so the set is the room you play in: walls, ceiling, windows and
-  furniture are the level's own, nothing outside is ever in shot, and the last shot is you and
-  your party standing on the dishwasher door. `LevelNPCs.SetCutscene(true, hideFurn)` sends the
-  room's people off (their furniture stays; a chapter can take over a piece it needs to move,
-  e.g. Mum's chair gets tucked in) and the chapter brings its own cast.
-- **The shared ending** (every chapter): the loader walks up beside the open door, kneels, tosses
-  the plates in over the helpers' heads, waves ("Good luck in there, little helpers!"), bows in and
-  presses the lit Start button on the door's edge (it flashes), stands and walks off while the
-  camera cranes down onto the players; bubbles start as it's pressed.
-- **Title card** "Chapter N / Name" is a CanvasGroup, so its outline fades with the text; it fades
-  out after 5.5 s.
-- **Camera craft:** establishing wide, then medium / over-the-shoulder on whoever speaks, cut on
-  action, 2-4 s holds; high angles and longer lenses where the rooms are crowded. Every shot was
-  checked offline with the story harness (`harness.luau story<L>@<t>`, `render.py`, and
-  `eyecheck.py`, which flags a camera inside any part).
-- **Party menu:** cards read "Chapter N" over the name, plus a locked "Chapter 4 - More chapters
-  coming soon" card. **Finishing the last chapter** shows a gold banner on the results screen:
-  congrats, new chapters are coming, and what a Rebirth gives meanwhile (from Config.Rebirth).
-- **Holding things:** two-handed holds keep the hands an arm apart so the forearms never merge into
-  one block; the chef handles his peel one-handed; Grandpa holds his paper at chest height (his
-  face shows above it). Party hats are thin-sliced cones.
-- **Insta Roll:** no server lock for pass owners (a 0.05 s guard only), the popup stays open and
-  just swaps the card, and clicks made while an answer is on its way queue the next roll.
-- **Icons:** each drawn shape gets its own ZIndex in drawing order (siblings with equal ZIndex
-  have no guaranteed order, which let outlines land over fills: the ragged edges), rotated shapes
-  get a 1 px corner for smoother edges, and the paw, cart and admin shield were refined.
+- **No run-start cutscene.** The screen goes black when the party launches (hiding the teleport),
+  and when the run starts the camera is put on your character in the dishwasher and it fades in
+  (client `Cutscene`, kept as the fade module). The level's people still live in each room.
+  v1.3's story chapters (Story / CutsceneKit) were removed.
+- **The house around the lobby table:** wainscot panelling with a chair rail, crown moulding,
+  ceiling beams, floorboard seams, red curtains on every window, two paintings, a fireplace with a
+  mantel clock and a glowing fire, a bookcase, a sofa, and potted plants in the corners. Every
+  piece that meets a wall, floor or ceiling overlaps into it instead of sitting flush; the offline
+  coplanar-face check (zf6.py) finds no z-fighting candidates in the lobby.
+- **Leaderboards:** the right-hand board is "Top Players" with arrows (and the Next page prompt)
+  flipping between Most Dishes Cleaned, Most Rebirths and Most Bubbles Collected
+  (RinseCycle_Dishes / _Rebirths / _Bubbles, Stats.BubblesEarned).
+- **Rebirth curve:** 5,000 Bubbles for the first, +2,500 each time, capped at 20,000 from the 7th
+  on. Perks keep stacking (+25% coins, +50% Bubbles per rebirth) and the Gem reward grows: 50, 60,
+  70 ... up to 250 (Config.RebirthCost / Config.RebirthGems).
+- **Party menu:** chapter cards show the chapter number big instead of the food emblems; the
+  locked "Chapter 4 - More chapters coming soon" card and the finale banner stay.
+- **HUD icons:** Shop 🛒, Pets 🐾, Free 🎉 and Admin 🛡️ are the original emoji again; Daily,
+  Codes, Upgrades and Ranks keep their drawn icons.
 
 ## 7. Balance knobs (all in Config)
 

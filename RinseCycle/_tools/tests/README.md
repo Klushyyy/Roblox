@@ -25,11 +25,7 @@ Paths assume the repo lives at /home/user/Roblox. The mock is permissive: a pass
 
 ## Renders (harness.luau + render.py)
 
-- `lune run harness.luau story<L>@<t> out.json` builds level L's arena room, its LevelNPCs furniture
-  (cutscene mode), tiny stand-in players on the door and the level's story chapter at time t, and
-  prints `CAM ex ey ez tx ty tz fov` (and `LINE who text` for the subtitle showing). Also
-  `npc<L>@<t>` (the room's people at loop time t), `arena<L>`, `npclineup`, `lobby`.
+- `lune run harness.luau npc<L>@<t> out.json` dumps level L's room with its people at loop time t.
+  Also `arena<L>`, `npclineup`, `lobby`.
 - `python3 render.py out.json out.png ex ey ez tx ty tz fov W H` draws a dump (flat-shaded, near
   plane clipped). `python3 eyecheck.py out.json ex ey ez` names any part the camera is inside of.
-- `storysheet.sh L sheet.png t1 t2 ...` renders a contact sheet of chapter L at those times (expects
-  `lune` at `../tools/lune`; edit the path for your setup).

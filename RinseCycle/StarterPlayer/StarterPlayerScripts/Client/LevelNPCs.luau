@@ -2483,7 +2483,7 @@ LevelNPCs.newPlan = newPlan
 LevelNPCs.newScene = newScene
 LevelNPCs.rootCF = rootCF
 
--- Everything the run-start cutscenes (CutsceneKit and the chapters) build their casts from: the
+-- The rig's building blocks, for anything else that wants to build people the same way: the
 -- same rig, looks, props, plans and poses as the people in the rooms.
 LevelNPCs.Kit = {
 	S = S,

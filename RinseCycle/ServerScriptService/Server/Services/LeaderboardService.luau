@@ -1,8 +1,9 @@
--- Lobby leaderboards: "Fastest Clean" (one page per level; players flip pages with the arrows) and
--- "Most Dishes Cleaned".
+-- Lobby leaderboards: "Fastest Clean" (one page per level) and "Top Players" (pages: Most Dishes
+-- Cleaned, Most Rebirths, Most Bubbles Collected). Players flip pages with the arrows.
 --
 --   * OrderedDataStores: RinseCycle_Fastest_L<n> holds best times in tenths of a second (ascending,
---     lower is better), RinseCycle_Dishes holds lifetime DishesCleaned (descending). Keys are
+--     lower is better); RinseCycle_Dishes / _Rebirths / _Bubbles hold lifetime DishesCleaned,
+--     Rebirths and Stats.BubblesEarned (descending). Keys are
 --     "u_" .. userId, the same as the profile store.
 --   * Every REFRESH_INTERVAL seconds: write the online players' values (times only when they
 --     improved, and only values that changed since this server last wrote them), read the top 10
@@ -49,14 +50,24 @@ type Row = { Name: string, Value: number }
 
 local levelCount = #Config.Levels
 local timesTop: { [number]: { Row } } = {}
-local dishesTop: { Row } = {}
-
 local timeStores: { [number]: OrderedDataStore } = {}
-local dishesStore: OrderedDataStore? = nil
+
+-- The "Top Players" pages, in page order: what each ranks and how it reads from a profile.
+type Stat = { Store: string, Title: string, Empty: string, Get: (any) -> number, Top: { Row }, DS: OrderedDataStore?, Written: { [number]: number } }
+local STATS: { Stat } = {
+	{ Store = "RinseCycle_Dishes", Title = "Most Dishes Cleaned", Empty = "No dishes cleaned yet!", Get = function(p)
+		return p.Stats.DishesCleaned or 0
+	end, Top = {}, Written = {} },
+	{ Store = "RinseCycle_Rebirths", Title = "Most Rebirths", Empty = "No rebirths yet!", Get = function(p)
+		return p.Rebirths or 0
+	end, Top = {}, Written = {} },
+	{ Store = "RinseCycle_Bubbles", Title = "Most Bubbles Collected", Empty = "No Bubbles yet!", Get = function(p)
+		return p.Stats.BubblesEarned or 0
+	end, Top = {}, Written = {} },
+}
 
 -- What this server last wrote per user, so unchanged values aren't rewritten every refresh.
 local writtenTimes: { [number]: { [number]: number } } = {}
-local writtenDishes: { [number]: number } = {}
 local nameCache: { [number]: string } = {}
 
 ----------------------------------------------------------------------------------------------------
@@ -93,16 +104,18 @@ local function nameFor(userId: number): string
 end
 
 local function openStores(): boolean
-	if dishesStore then
+	if STATS[#STATS].DS then
 		return true
 	end
 	local ok = pcall(function()
 		for i = 1, levelCount do
 			timeStores[i] = DataStoreService:GetOrderedDataStore("RinseCycle_Fastest_L" .. i)
 		end
-		dishesStore = DataStoreService:GetOrderedDataStore("RinseCycle_Dishes")
+		for _, stat in STATS do
+			stat.DS = DataStoreService:GetOrderedDataStore(stat.Store)
+		end
 	end)
-	return ok and dishesStore ~= nil
+	return ok and STATS[#STATS].DS ~= nil
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -206,8 +219,14 @@ local function drawDishes()
 		return
 	end
 	local board = lobby.Boards.Dishes
-	board.Title.Text = "Most Dishes Cleaned"
-	drawRows(board.List, dishesTop, Format.Commas, "No dishes cleaned yet!")
+	local pages = board.Pages or { { Title = board.Title, List = board.List } }
+	for i, page in pages do
+		local stat = STATS[i]
+		if stat then
+			page.Title.Text = stat.Title
+			drawRows(page.List, stat.Top, Format.Commas, stat.Empty)
+		end
+	end
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -231,18 +250,20 @@ local function refreshOffline()
 		timesTop[i] = { table.unpack(rows, 1, math.min(#rows, TOP_N)) }
 	end
 
-	local rows: { Row } = {}
-	for _, player in Players:GetPlayers() do
-		local profile = DataService.Get(player)
-		local dishes = profile and profile.Stats.DishesCleaned or 0
-		if dishes > 0 then
-			table.insert(rows, { Name = player.Name, Value = dishes })
+	for _, stat in STATS do
+		local rows: { Row } = {}
+		for _, player in Players:GetPlayers() do
+			local profile = DataService.Get(player)
+			local value = if profile then math.floor(stat.Get(profile)) else 0
+			if value > 0 then
+				table.insert(rows, { Name = player.Name, Value = value })
+			end
 		end
+		table.sort(rows, function(a, b)
+			return a.Value > b.Value
+		end)
+		stat.Top = { table.unpack(rows, 1, math.min(#rows, TOP_N)) }
 	end
-	table.sort(rows, function(a, b)
-		return a.Value > b.Value
-	end)
-	dishesTop = { table.unpack(rows, 1, math.min(#rows, TOP_N)) }
 end
 
 local function writeOnline()
@@ -279,14 +300,16 @@ local function writeOnline()
 			end
 		end
 
-		local dishes = math.floor(profile.Stats.DishesCleaned or 0)
-		if dishes > 0 and writtenDishes[userId] ~= dishes and dishesStore then
-			local store = dishesStore :: OrderedDataStore
-			local ok = pcall(function()
-				store:SetAsync(key, dishes)
-			end)
-			if ok then
-				writtenDishes[userId] = dishes
+		for _, stat in STATS do
+			local value = math.floor(stat.Get(profile))
+			local store = stat.DS
+			if value > 0 and stat.Written[userId] ~= value and store then
+				local ok = pcall(function()
+					store:SetAsync(key, value)
+				end)
+				if ok then
+					stat.Written[userId] = value
+				end
 			end
 		end
 	end
@@ -321,10 +344,10 @@ local function refreshOnline()
 			timesTop[i] = rows
 		end
 	end
-	if dishesStore then
-		local rows = readTop(dishesStore, false)
+	for _, stat in STATS do
+		local rows = stat.DS and readTop(stat.DS, false)
 		if rows then
-			dishesTop = rows
+			stat.Top = rows
 		end
 	end
 end

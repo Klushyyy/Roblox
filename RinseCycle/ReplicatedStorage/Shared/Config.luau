@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.3.0"
+Config.Version = "1.4.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -153,7 +153,6 @@ Config.Levels = {
 		Name = "Family Dinner",
 		Subtitle = "Crumbs, ketchup and a whole lot of gravy.",
 		Icon = "🍝",
-		Emblem = "Pasta", -- the drawn icon (IconArt) on level cards
 		Place = "Family Kitchen",
 		Toughness = 5.5, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 1,
@@ -182,7 +181,6 @@ Config.Levels = {
 		Name = "Pizza Party",
 		Subtitle = "Greasy pizza trays, sauce everywhere and burnt crust.",
 		Icon = "🍕",
-		Emblem = "Pizza", -- the drawn icon (IconArt) on level cards
 		Place = "Pizzeria",
 		Toughness = 6.0, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 4,
@@ -217,7 +215,6 @@ Config.Levels = {
 		Name = "Royal Banquet",
 		Subtitle = "Golden platters, fancy food and ancient gravy.",
 		Icon = "👑",
-		Emblem = "Crown", -- the drawn icon (IconArt) on level cards
 		Place = "Castle Hall",
 		Toughness = 8.5, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 16,
@@ -714,15 +711,27 @@ Config.DailyRewards = {
 -- Rebirth (the endgame loop): after clearing the last dishwasher, trade your Bubbles, unlocked levels
 -- and perks for a permanent bonus. Pets, gems, ranks, passes and best times are kept.
 Config.Rebirth = {
-	BaseCost = 5000, -- Bubbles needed for the first rebirth (a Royal Banquet clear pays ~700)
-	CostGrowth = 1.6, -- each rebirth costs this much more
-	CoinsPer = 0.25, -- +25% coins per rebirth
+	BaseCost = 5000, -- Bubbles for the first rebirth (a Royal Banquet clear pays ~700, plus lobby bubbles)
+	CostStep = 2500, -- each rebirth after that costs this much more...
+	MaxCost = 20000, -- ...until it levels off here (from the 7th rebirth on, every rebirth costs this)
+	CoinsPer = 0.25, -- +25% coins per rebirth (they stack: 4 rebirths = +100%)
 	BubblesPer = 0.5, -- +50% Bubbles per rebirth
-	Gems = 50, -- gems granted per rebirth
+	Gems = 50, -- gems for the first rebirth...
+	GemsStep = 10, -- ...and this many more for each one after it...
+	MaxGems = 250, -- ...up to this
 }
 
+-- Bubbles needed for the next rebirth when you have `rebirths` already:
+-- 5,000 / 7,500 / 10,000 / 12,500 / 15,000 / 17,500 / then 20,000 every time.
 function Config.RebirthCost(rebirths: number): number
-	return Config.Round2(Config.Rebirth.BaseCost * (Config.Rebirth.CostGrowth ^ (rebirths or 0)))
+	local rb = Config.Rebirth
+	return math.min(rb.BaseCost + rb.CostStep * (rebirths or 0), rb.MaxCost)
+end
+
+-- Gems paid for reaching rebirth number `n` (1 = the first): 50, 60, 70 ... up to 250.
+function Config.RebirthGems(n: number): number
+	local rb = Config.Rebirth
+	return math.min(rb.Gems + rb.GemsStep * math.max((n or 1) - 1, 0), rb.MaxGems)
 end
 
 function Config.RebirthCoinMult(rebirths: number?): number

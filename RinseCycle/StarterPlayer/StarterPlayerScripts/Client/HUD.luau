@@ -210,10 +210,10 @@ function HUD.Init()
 	local upgradesButton = sideButton("📖", "Upgrades", Colors.Good, "Tab", "Y", function()
 		UIKit.ToggleWindow("Upgrades")
 	end)
-	local shopButton = sideButton("@Cart", "Shop", Colors.Bad, "G", "Y", function()
+	local shopButton = sideButton("🛒", "Shop", Colors.Bad, "G", "Y", function()
 		UIKit.ToggleWindow("Shop")
 	end)
-	local petsButton = sideButton("@Paw", "Pets", Colors.Warning, "P", "LB", function()
+	local petsButton = sideButton("🐾", "Pets", Colors.Warning, "P", "LB", function()
 		UIKit.ToggleWindow("Pets")
 	end)
 	local ranksButton = sideButton("@Medal", "Ranks", Colors.Accent, "R", "RB", function()
@@ -252,14 +252,14 @@ function HUD.Init()
 	end
 	local dailyButton = leftButton(1, "@Gift", "Daily", Colors.Bubble, "Daily")
 	local codesButton = leftButton(2, "@Ticket", "Codes", Colors.Primary, "Codes")
-	local freeButton = leftButton(3, "@Heart", "Free", Colors.Good, "Free")
+	local freeButton = leftButton(3, "🎉", "Free", Colors.Good, "Free")
 	local function makeAdminButton()
 		if adminButton or not adminClick then
 			return
 		end
 		adminButton = UIKit.IconButton({
 			Name = "AdminButton",
-			Icon = "@Shield",
+			Icon = "🛡️",
 			Label = "Admin",
 			Color = Colors.PanelLight,
 			Size = UDim2.fromOffset(80, 80),
@@ -849,7 +849,7 @@ function HUD.Init()
 	UIKit.Gradient(finale, Color3.fromRGB(255, 214, 90), Color3.fromRGB(236, 150, 40))
 	UIKit.Stroke(finale, Colors.Ink, 3)
 	finale.Parent = resultsFrame
-	UIKit.Icon("Crown", 64, { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 8), ZIndex = 17, Parent = finale })
+	UIKit.Label({ Text = "🏆", TextSize = 56, Stroke = false, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 8), Size = UDim2.fromOffset(80, 64), ZIndex = 17, Parent = finale })
 	UIKit.Label({
 		Text = "CONGRATS! YOU FINISHED ALL THE CURRENT CHAPTERS!",
 		TextSize = 28,
@@ -869,10 +869,10 @@ function HUD.Init()
 	})
 	UIKit.Label({
 		Text = string.format(
-			"In the meantime, REBIRTH to get:\n+%d%% Coins   +%d%% Bubbles   +%d Gems   (every rebirth, forever)",
+			"In the meantime, REBIRTH to get:\n+%d%% Coins and +%d%% Bubbles more every rebirth, forever, and %d+ Gems (more each time)",
 			math.floor(Config.Rebirth.CoinsPer * 100 + 0.5),
 			math.floor(Config.Rebirth.BubblesPer * 100 + 0.5),
-			Config.Rebirth.Gems
+			Config.RebirthGems(1)
 		),
 		TextSize = 20,
 		TextWrapped = true,

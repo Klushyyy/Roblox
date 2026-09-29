@@ -48,7 +48,7 @@ local function render()
 		"Next rebirth: +%s coins and +%s Bubbles forever, and %d Gems",
 		pct(rb.CoinsPer * (rebirths + 1)),
 		pct(rb.BubblesPer * (rebirths + 1)),
-		rb.Gems
+		Config.RebirthGems(rebirths + 1)
 	)
 	local last = Config.Levels[#Config.Levels]
 	local levelDone = meta ~= nil and meta.RebirthReady == true

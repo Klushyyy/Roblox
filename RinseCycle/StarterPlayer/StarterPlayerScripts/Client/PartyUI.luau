@@ -106,8 +106,8 @@ local function bestTime(levelIndex: number): number?
 	return if t and t > 0 then t else nil
 end
 
--- "Map thumbnail" art for a dishwasher: a gradient in its theme colours, a big food icon, and a few
--- bubbles. Built from UI only (no uploaded images).
+-- "Map thumbnail" art for a dishwasher: a gradient in its theme colours, the chapter number big on
+-- a soft glow, and a few bubbles. Built from UI only (no uploaded images).
 local function levelArt(parent: Instance, levelIndex: number, size: UDim2, iconSize: number, locked: boolean, emblemAt: UDim2?): Frame
 	local level = Config.GetLevel(levelIndex)
 	local art = Instance.new("Frame")
@@ -140,11 +140,24 @@ local function levelArt(parent: Instance, levelIndex: number, size: UDim2, iconS
 	glow.BorderSizePixel = 0
 	UIKit.Corner(glow, 999)
 	glow.Parent = art
-	UIKit.Icon(if locked then "Lock" else (level.Emblem or "Coin"), emblemSize, {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = at,
-		Parent = art,
-	})
+	if locked then
+		UIKit.Icon("Lock", emblemSize, {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = at,
+			Parent = art,
+		})
+	else
+		-- the chapter number, big and bold, on the glow
+		UIKit.Label({
+			Text = tostring(levelIndex),
+			TextSize = math.floor(emblemSize * 0.95),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = at,
+			Size = UDim2.fromOffset(emblemSize, emblemSize),
+			StrokeThickness = math.max(2, math.floor(emblemSize / 18)),
+			Parent = art,
+		})
+	end
 	if locked then
 		art.BackgroundColor3 = Color3.fromRGB(120, 125, 135)
 	end
