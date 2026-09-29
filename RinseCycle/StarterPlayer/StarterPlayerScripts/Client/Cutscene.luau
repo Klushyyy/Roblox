@@ -1,9 +1,11 @@
 --[[
-	Cutscene - plays the run-start cutscene (CutsceneScene) when your party's dishwasher starts.
+	Cutscene - plays the level's story chapter (Story) when your party's dishwasher starts.
 
-	  * Fades to black, builds the scene far from everything (client-only parts, so each player sees
-	    their own and nobody waits for anybody), and flies the camera through it with cinematic
-	    letterbox bars. The HUD is hidden while it plays.
+	  * Fades to black and stages the chapter in the very room you're about to play in (client-only
+	    parts, so each player sees their own and nobody waits for anybody): the room's people step
+	    out (LevelNPCs.SetCutscene), the chapter's cast steps in, and the camera films it with
+	    cinematic letterbox bars and subtitles. The HUD is hidden while it plays. It ends on you,
+	    already standing on the dishwasher door.
 	  * SKIP (bottom-right; also Space / Enter / gamepad B) fades out early. Either way it fades to
 	    black, the scene is removed, the camera comes back to your character and it fades in: you're
 	    in the dishwasher, and the run is already going (skippers get a head start).
@@ -22,16 +24,15 @@ local Types = require(Shared:WaitForChild("Types"))
 local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
 local UIKit = require(Client:WaitForChild("UIKit"))
-local Scene = require(Client:WaitForChild("CutsceneScene"))
-local Chapters = require(Client:WaitForChild("CutsceneChapters"))
+local Story = require(Client:WaitForChild("Story"))
+local LevelNPCs = require(Client:WaitForChild("LevelNPCs"))
 local Bubbles = require(Client:WaitForChild("Bubbles"))
 
 local Cutscene = {}
 
 local LocalPlayer = Players.LocalPlayer
--- Far out under the map, well away from the lobby and the arenas (so nothing shades the set).
-local SCENE_ORIGIN = CFrame.new(16000, -6000, 16000)
 local FADE = 0.45
+local TITLE_HOLD = 5.5 -- seconds the "Chapter 1 / Family Dinner" card stays up
 local MAX_START_AGE = 12 -- seconds into a run after which we don't start the cutscene
 
 local initialized = false
@@ -45,9 +46,11 @@ local topBar: Frame
 local bottomBar: Frame
 local skipButton: TextButton
 local loadingLabel: TextLabel
-local titleCard: Frame
+local titleCard: CanvasGroup
 local titleSmall: TextLabel
 local titleBig: TextLabel
+local subtitle: CanvasGroup
+local subtitleText: TextLabel
 
 -- A plain fade to black that hides teleports: into a run (from the moment your party launches
 -- until the cutscene is ready) and back out to the lobby. Cleared by play() or Uncover().
@@ -126,23 +129,24 @@ local function play(levelIndex: number)
 
 	local restoreHud = hideHud()
 	setControls(false)
-	-- This level's next story chapter (the profile counts the ones already seen); the old single
-	-- scene is the fallback if a chapter can't be built.
+	-- The chapter is staged in our own arena's room (its Origin is the room's centre line).
 	local scene
-	local meta = ClientState.Meta :: any
-	local seen = meta and meta.Episodes and meta.Episodes[levelIndex] or 0
 	local ok, err = pcall(function()
-		scene = Chapters.Build(levelIndex, Chapters.Pick(levelIndex, seen), SCENE_ORIGIN, Workspace)
+		local arena: Model? = nil
+		local waited = 0
+		while waited < 4 do
+			arena = ClientState.GetArena()
+			if arena and typeof(arena:GetAttribute("Origin")) == "Vector3" then
+				break
+			end
+			waited += task.wait(0.1)
+		end
+		local originPos = arena and arena:GetAttribute("Origin")
+		assert(typeof(originPos) == "Vector3", "no arena to stage the story in")
+		scene = Story.Build(levelIndex, CFrame.new(originPos), Workspace)
 	end)
-	if ok and scene then
-		task.spawn(function()
-			pcall(ClientState.MetaRequest, "SawEpisode", levelIndex)
-		end)
-	else
-		warn("[Cutscene] chapter failed, using the classic scene: " .. tostring(err))
-		ok = pcall(function()
-			scene = Scene.Build(levelIndex, SCENE_ORIGIN, Workspace)
-		end)
+	if not ok then
+		warn("[Cutscene] story chapter failed: " .. tostring(err))
 	end
 	if not ok or not scene or not camera then
 		loadingLabel.Visible = false
@@ -154,14 +158,15 @@ local function play(levelIndex: number)
 		playing = false
 		return
 	end
+	LevelNPCs.SetCutscene(true, scene.HideFurn)
 	loadingLabel.Visible = false
 	local oldType, oldFov = camera.CameraType, camera.FieldOfView
 	camera.CameraType = Enum.CameraType.Scriptable
 	if scene.ApplyMood then
 		pcall(scene.ApplyMood, scene)
 	end
-	local duration = tonumber(scene.Duration) or Scene.Duration
-	local bubbleStart = tonumber(scene.BubbleStart) or 16.2
+	local duration = tonumber(scene.Duration) or 30
+	local bubbleStart = tonumber(scene.BubbleStart) or duration
 	scene:Update(0)
 	local cf, fov = scene:Camera(0)
 	camera.CFrame, camera.FieldOfView = cf, fov
@@ -171,19 +176,19 @@ local function play(levelIndex: number)
 	UIKit.Tween(bottomBar, { Size = UDim2.new(1, 0, 0.1, 0) }, 0.5)
 	tweenBlack(1, FADE)
 	skipButton.Visible = true
-	-- "Chapter 2 / Backyard Barbecue" in the corner for the first few seconds
+	-- "Chapter 1 / Family Dinner" in the corner for the first few seconds. The card is a
+	-- CanvasGroup so the text and its outline fade out together.
 	if type(scene.Subtitle) == "string" and scene.Subtitle ~= "" then
 		titleSmall.Text = string.upper(tostring(scene.Title or ""))
 		titleBig.Text = scene.Subtitle
 		titleCard.Visible = true
-		titleSmall.TextTransparency, titleBig.TextTransparency = 1, 1
-		UIKit.Tween(titleSmall, { TextTransparency = 0 }, 0.6)
-		UIKit.Tween(titleBig, { TextTransparency = 0 }, 0.6)
-		task.delay(3.6, function()
-			UIKit.Tween(titleSmall, { TextTransparency = 1 }, 0.6)
-			UIKit.Tween(titleBig, { TextTransparency = 1 }, 0.6)
+		titleCard.GroupTransparency = 1
+		UIKit.Tween(titleCard, { GroupTransparency = 0 }, 0.6)
+		task.delay(TITLE_HOLD, function()
+			UIKit.Tween(titleCard, { GroupTransparency = 1 }, 0.8)
 		end)
 	end
+	local shownLine: any = nil
 
 	local t = 0
 	local bubbleClock = 0
@@ -203,6 +208,20 @@ local function play(levelIndex: number)
 			scene:Update(t)
 			local c, f = scene:Camera(t)
 			camera.CFrame, camera.FieldOfView = c, f
+			-- subtitles: who's speaking, in their colour, then the line
+			local line = if scene.Line then scene:Line(t) else nil
+			if line ~= shownLine then
+				shownLine = line
+				if line then
+					local col = line.Color or Color3.new(1, 1, 1)
+					subtitleText.Text = string.format('<font color="#%s"><b>%s:</b></font> %s', col:ToHex(), line.Who, line.Text)
+					subtitle.Visible = true
+					subtitle.GroupTransparency = 1
+					UIKit.Tween(subtitle, { GroupTransparency = 0 }, 0.15)
+				else
+					subtitle.Visible = false
+				end
+			end
 		end)
 		if not okStep then
 			skipRequested = true
@@ -213,11 +232,13 @@ local function play(levelIndex: number)
 	end
 	skipButton.Visible = false
 	titleCard.Visible = false
+	subtitle.Visible = false
 	tweenBlack(0, FADE)
 	conn:Disconnect()
 	pcall(function()
 		scene:Destroy()
 	end)
+	LevelNPCs.SetCutscene(false)
 	camera.CameraType = if oldType == Enum.CameraType.Scriptable then Enum.CameraType.Custom else oldType
 	camera.FieldOfView = oldFov
 	local character = LocalPlayer.Character
@@ -343,7 +364,7 @@ function Cutscene.Init()
 		ZIndex = 21,
 		Parent = root,
 	})
-	titleCard = Instance.new("Frame")
+	titleCard = Instance.new("CanvasGroup")
 	titleCard.Name = "TitleCard"
 	titleCard.BackgroundTransparency = 1
 	titleCard.AnchorPoint = Vector2.new(0, 1)
@@ -372,6 +393,27 @@ function Cutscene.Init()
 		Size = UDim2.new(1, 0, 0, 64),
 		ZIndex = 8,
 		Parent = titleCard,
+	})
+	-- Subtitles: centred just above the bottom letterbox bar.
+	subtitle = Instance.new("CanvasGroup")
+	subtitle.Name = "Subtitle"
+	subtitle.BackgroundTransparency = 1
+	subtitle.AnchorPoint = Vector2.new(0.5, 1)
+	subtitle.Position = UDim2.new(0.5, 0, 0.9, -14)
+	subtitle.Size = UDim2.new(0.8, 0, 0, 84)
+	subtitle.Visible = false
+	subtitle.ZIndex = 9
+	subtitle.Parent = root
+	subtitleText = UIKit.Label({
+		Name = "Line",
+		Text = "",
+		TextSize = 30,
+		RichText = true,
+		TextWrapped = true,
+		TextYAlignment = Enum.TextYAlignment.Bottom,
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = 9,
+		Parent = subtitle,
 	})
 	UIKit.LayoutChanged:Connect(function()
 		local safe = UIKit.SafeInsets()

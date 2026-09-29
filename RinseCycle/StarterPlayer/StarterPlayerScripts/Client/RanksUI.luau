@@ -521,13 +521,18 @@ end
 
 local function showPopup(instant: boolean)
 	local pp = ensurePopup()
+	-- Insta Roll: rolling again from an open popup just swaps the card (no pop-in, no flicker).
+	if instant and popupGui and popupGui.Enabled then
+		pp.Insta.Visible = false
+		return
+	end
 	if popupGui then
 		popupGui.Enabled = true
 	end
 	pp.Title.Text = if instant then "" else "ROLLING..."
 	pp.Title.TextColor3 = Colors.Text
 	setResultText(nil)
-	pp.Buttons.Visible = false
+	pp.Buttons.Visible = instant
 	local meta = ClientState.Meta :: Types.MetaState?
 	pp.Insta.Visible = not instant and not (meta ~= nil and meta.Passes.InstaRoll == true)
 	local scale = pp.Panel:FindFirstChild("PopScale") :: UIScale
@@ -548,8 +553,14 @@ local function finishPopup(ok: boolean)
 	end
 end
 
+local queued = false -- an Insta Roll click that came in while the last answer was on its way
+
 local function roll_()
 	if rolling then
+		local meta = ClientState.Meta :: Types.MetaState?
+		if meta ~= nil and meta.Passes.InstaRoll == true then
+			queued = true
+		end
 		return
 	end
 	rolling = true
@@ -608,6 +619,12 @@ local function roll_()
 	rolling = false
 	finishPopup(ok)
 	render()
+	if queued then
+		queued = false
+		if ok and instant then
+			task.defer(roll)
+		end
+	end
 end
 
 roll = function()

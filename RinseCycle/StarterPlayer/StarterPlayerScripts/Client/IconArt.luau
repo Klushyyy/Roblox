@@ -71,7 +71,7 @@ local function baseColor(fill: any): Color3
 end
 
 local function corner(f: GuiObject, scale: number)
-	local c = Instance.new("UICorner")
+	local c = f:FindFirstChildOfClass("UICorner") or Instance.new("UICorner")
 	c.CornerRadius = UDim.new(scale, 0)
 	c.Parent = f
 end
@@ -99,6 +99,12 @@ local function frame(parent: Instance, cx: number, cy: number, w: number, h: num
 	f.Rotation = rot
 	f.BackgroundColor3 = color
 	f.BackgroundTransparency = transparency
+	-- Rotated edges render smoother through the rounded-rect path, so give them a 1 px corner.
+	if rot % 90 ~= 0 then
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, 1)
+		c.Parent = f
+	end
 	f.Parent = parent
 	return f
 end
@@ -143,7 +149,7 @@ local function draw(parent: Instance, s: Shape, px: number, grow: number)
 		local w, h = s.w * px + grow * 2, s.h * px + grow * 2
 		local f = frame(holder, s.x * px - ox, s.y * px - oy, w, h, rot, color, transparency)
 		if s.r then
-			local c = Instance.new("UICorner")
+			local c = f:FindFirstChildOfClass("UICorner") or Instance.new("UICorner")
 			c.CornerRadius = UDim.new(0, math.floor(s.r * math.min(s.w, s.h) * px + grow + 0.5))
 			c.Parent = f
 		end
@@ -346,6 +352,8 @@ do
 	local shapes = outline(0, rgb(222, 232, 248), true)
 	append(shapes, outline(inset, rgb(52, 98, 226)))
 	append(shapes, outline(inset, rgb(92, 146, 255), nil, { 0, 0, 0.5, 1 }))
+	append(shapes, outline(inset + 0.035, rgb(70, 124, 244), nil, { 0, 0, 0.5, 1 }))
+	append(shapes, outline(inset + 0.035, rgb(44, 84, 204), nil, { 0.5, 0, 1, 1 }))
 	append(shapes, { "|" })
 	append(shapes, emblem(0.5, 0.45, 0.15, rgb(255, 250, 214), rgb(255, 216, 90), rgb(232, 150, 26), rgb(120, 60, 8)))
 	append(shapes, {
@@ -356,28 +364,31 @@ end
 
 -- A paw print (pets): a big pad and four toes, mirror-symmetric.
 ART.Paw = {
-	{ "disc", x = 0.5, y = 0.66, d = 0.44, fill = { rgb(255, 196, 120), rgb(240, 140, 60) }, o = true },
-	{ "disc", x = 0.36, y = 0.72, d = 0.26, fill = { rgb(255, 196, 120), rgb(240, 140, 60) }, o = true },
-	{ "disc", x = 0.64, y = 0.72, d = 0.26, fill = { rgb(255, 196, 120), rgb(240, 140, 60) }, o = true },
-	{ "disc", x = 0.14, y = 0.42, d = 0.2, fill = rgb(255, 184, 104), o = true },
-	{ "disc", x = 0.86, y = 0.42, d = 0.2, fill = rgb(255, 184, 104), o = true },
-	{ "disc", x = 0.34, y = 0.22, d = 0.22, fill = rgb(255, 184, 104), o = true },
-	{ "disc", x = 0.66, y = 0.22, d = 0.22, fill = rgb(255, 184, 104), o = true },
-	{ "rect", x = 0.4, y = 0.56, w = 0.14, h = 0.06, r = 0.5, rot = -30, fill = WHITE, t = 0.35 },
+	{ "disc", x = 0.5, y = 0.62, d = 0.4, fill = { rgb(255, 200, 124), rgb(240, 140, 60) }, o = true },
+	{ "rect", x = 0.5, y = 0.73, w = 0.54, h = 0.24, r = 0.5, fill = { rgb(250, 170, 92), rgb(238, 132, 54) }, o = true },
+	{ "disc", x = 0.18, y = 0.43, d = 0.19, fill = { rgb(255, 204, 130), rgb(246, 160, 76) }, o = true },
+	{ "disc", x = 0.82, y = 0.43, d = 0.19, fill = { rgb(255, 204, 130), rgb(246, 160, 76) }, o = true },
+	{ "disc", x = 0.36, y = 0.23, d = 0.21, fill = { rgb(255, 204, 130), rgb(246, 160, 76) }, o = true },
+	{ "disc", x = 0.64, y = 0.23, d = 0.21, fill = { rgb(255, 204, 130), rgb(246, 160, 76) }, o = true },
+	{ "disc", x = 0.41, y = 0.57, d = 0.1, fill = WHITE, t = 0.4 },
+	{ "disc", x = 0.33, y = 0.19, d = 0.06, fill = WHITE, t = 0.4 },
+	{ "disc", x = 0.61, y = 0.19, d = 0.06, fill = WHITE, t = 0.4 },
 }
 
 -- A shopping cart (shop): basket, handle and two wheels.
 ART.Cart = {
-	{ "line", x1 = 0.06, y1 = 0.2, x2 = 0.2, y2 = 0.2, w = 0.08, fill = rgb(206, 216, 232), o = true },
-	{ "line", x1 = 0.2, y1 = 0.2, x2 = 0.3, y2 = 0.66, w = 0.08, fill = rgb(206, 216, 232), o = true },
+	{ "line", x1 = 0.1, y1 = 0.2, x2 = 0.2, y2 = 0.2, w = 0.08, fill = rgb(206, 216, 232), o = true },
+	{ "line", x1 = 0.2, y1 = 0.2, x2 = 0.3, y2 = 0.68, w = 0.08, fill = rgb(206, 216, 232), o = true },
 	{ "line", x1 = 0.3, y1 = 0.7, x2 = 0.82, y2 = 0.7, w = 0.08, fill = rgb(206, 216, 232), o = true },
-	{ "rect", x = 0.56, y = 0.44, w = 0.6, h = 0.34, r = 0.14, fill = { rgb(255, 128, 146), rgb(222, 60, 88) }, o = true },
-	{ "rect", x = 0.56, y = 0.44, w = 0.44, h = 0.04, fill = WHITE, t = 0.55 },
-	{ "rect", x = 0.44, y = 0.44, w = 0.04, h = 0.22, fill = rgb(170, 30, 60), t = 0.4 },
-	{ "rect", x = 0.68, y = 0.44, w = 0.04, h = 0.22, fill = rgb(170, 30, 60), t = 0.4 },
+	{ "rect", x = 0.57, y = 0.44, w = 0.58, h = 0.34, r = 0.16, fill = { rgb(255, 128, 146), rgb(222, 60, 88) }, o = true },
+	{ "rect", x = 0.44, y = 0.44, w = 0.045, h = 0.24, r = 0.5, fill = rgb(176, 36, 66), t = 0.35 },
+	{ "rect", x = 0.7, y = 0.44, w = 0.045, h = 0.24, r = 0.5, fill = rgb(176, 36, 66), t = 0.35 },
+	{ "rect", x = 0.57, y = 0.35, w = 0.46, h = 0.045, r = 0.5, fill = WHITE, t = 0.45 },
 	"|",
-	{ "disc", x = 0.36, y = 0.85, d = 0.16, fill = rgb(70, 84, 110), o = true },
-	{ "disc", x = 0.76, y = 0.85, d = 0.16, fill = rgb(70, 84, 110), o = true },
+	{ "disc", x = 0.37, y = 0.84, d = 0.16, fill = rgb(70, 84, 110), o = true },
+	{ "disc", x = 0.75, y = 0.84, d = 0.16, fill = rgb(70, 84, 110), o = true },
+	{ "disc", x = 0.37, y = 0.84, d = 0.06, fill = rgb(206, 216, 232) },
+	{ "disc", x = 0.75, y = 0.84, d = 0.06, fill = rgb(206, 216, 232) },
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -472,13 +483,10 @@ ART.Lock = {
 }
 
 -- Puts the whole icon on one ZIndex (for ScreenGuis that use Global ZIndex ordering).
+-- Moves a drawn icon to layer z. Its shapes keep their own stacking order inside it (every
+-- ScreenGui here uses Sibling ZIndex, so they only order among themselves).
 function IconArt.SetZIndex(root: GuiObject, z: number)
 	root.ZIndex = z
-	for _, d in root:GetDescendants() do
-		if d:IsA("GuiObject") then
-			d.ZIndex = z
-		end
-	end
 end
 
 function IconArt.Has(kind: string): boolean
@@ -515,6 +523,13 @@ function IconArt.Draw(kind: string, px: number): Frame
 		end
 	end
 	flush()
+	-- Pin the drawing order: siblings with the same ZIndex have no guaranteed order in Roblox, which
+	-- let an outline land on top of its fill (the ragged edges). Each shape sits above the last.
+	for i, child in root:GetChildren() do
+		if child:IsA("GuiObject") then
+			child.ZIndex = i
+		end
+	end
 	return root
 end
 

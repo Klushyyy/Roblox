@@ -146,6 +146,22 @@ function Ctx:light(x: number, h: number, z: number, color: Color3, range: number
 	return bulb
 end
 
+-- A subtitle: `who` says `text` from t0 to t1 (shown by the cutscene player).
+function Ctx:say(t0: number, t1: number, who: string, text: string, color: Color3?)
+	self.Lines = self.Lines or {}
+	table.insert(self.Lines, { T0 = t0, T1 = t1, Who = who, Text = text, Color = color })
+end
+
+-- The subtitle showing at time t, if any.
+function Ctx:Line(t: number): any
+	for _, l in self.Lines or {} do
+		if t >= l.T0 and t < l.T1 then
+			return l
+		end
+	end
+	return nil
+end
+
 function Ctx:onUpdate(fn: (number) -> ())
 	table.insert(self.Updaters, fn)
 end

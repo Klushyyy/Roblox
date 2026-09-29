@@ -306,19 +306,33 @@ end
 -- Looks: hair, hats and outfits (all built with Actor:piece on the head / torso bones)
 ----------------------------------------------------------------------------------------------------
 
+-- Hair is built like classic block hair: a crown slab the same shape as the (round) head, a
+-- softened top, a back piece, a fringe and sideburns: clean edges, nothing mushroom-shaped.
+local function hairCap(a: any, color: Color3)
+	a:piece("Head", Vector3.new(0.4, 1.36, 1.36), CFrame.new(0, 0.49, 0.02) * CFrame.Angles(0, 0, PI / 2), color, nil, "Cylinder")
+	a:piece("Head", Vector3.new(1.26, 0.2, 1.26), CFrame.new(0, 0.69, 0.02), color, nil, "Sphere")
+	a:piece("Head", Vector3.new(1.3, 0.86, 0.3), CFrame.new(0, 0.12, 0.58), color)
+	for _, sd in { -1, 1 } do
+		a:piece("Head", Vector3.new(0.1, 0.34, 0.26), CFrame.new(sd * 0.64, 0.1, -0.1), color)
+	end
+end
+
 local function hairShort(color: Color3)
 	return function(a: any)
-		a:piece("Head", Vector3.new(1.36, 0.78, 1.34), CFrame.new(0, 0.4, 0.06), color, nil, "Sphere")
-		a:piece("Head", Vector3.new(1.3, 0.8, 0.4), CFrame.new(0, 0.12, 0.46), color, nil, "Sphere")
+		hairCap(a, color)
+		a:piece("Head", Vector3.new(1.1, 0.16, 0.12), CFrame.new(0, 0.34, -0.61), color)
 	end
 end
 
 local function hairLong(color: Color3)
 	return function(a: any)
-		a:piece("Head", Vector3.new(1.4, 0.8, 1.38), CFrame.new(0, 0.4, 0.04), color, nil, "Sphere")
-		a:piece("Head", Vector3.new(1.34, 1.3, 0.36), CFrame.new(0, -0.18, 0.52), color)
-		a:piece("Head", Vector3.new(0.24, 0.9, 0.7), CFrame.new(-0.6, -0.05, 0.18), color)
-		a:piece("Head", Vector3.new(0.24, 0.9, 0.7), CFrame.new(0.6, -0.05, 0.18), color)
+		hairCap(a, color)
+		a:piece("Head", Vector3.new(0.54, 0.2, 0.12), CFrame.new(-0.3, 0.33, -0.61) * CFrame.Angles(0, 0, 0.18), color)
+		a:piece("Head", Vector3.new(0.54, 0.2, 0.12), CFrame.new(0.3, 0.33, -0.61) * CFrame.Angles(0, 0, -0.18), color)
+		a:piece("Head", Vector3.new(1.34, 1.2, 0.3), CFrame.new(0, -0.22, 0.6), color)
+		for _, sd in { -1, 1 } do
+			a:piece("Head", Vector3.new(0.14, 1.0, 0.56), CFrame.new(sd * 0.66, -0.16, 0.22), color)
+		end
 	end
 end
 
@@ -1309,10 +1323,11 @@ function P.read(u: number, ctx: any): Pose
 	local turn = math.sin(u * 0.5) * 0.08
 	return {
 		bob = breathe(u),
-		lean = 0.05,
-		head = { yaw = turn, pitch = -0.08 },
-		armL = { at = local3(ctx, -0.7 * s, 120 + 2.6 * s, 1.1 * s) },
-		armR = { at = local3(ctx, 0.7 * s, 120 + 2.6 * s, 1.1 * s) },
+		lean = 0.04,
+		head = { yaw = turn * 0.5, pitch = -0.3 },
+		-- held at arm's length below the chin, so the paper never meets the face
+		armL = { at = local3(ctx, -0.66 * s + turn * 20, (if ctx.Seated then 84 else 60) + 2.0 * s, 1.15 * s) },
+		armR = { at = local3(ctx, 0.66 * s + turn * 20, (if ctx.Seated then 84 else 60) + 2.0 * s, 1.15 * s) },
 	}
 end
 
@@ -1409,6 +1424,11 @@ local function newScene(origin: CFrame, parent: Instance): any
 	folder.Name = "LevelNPCs"
 	folder.Parent = parent
 	self.Folder = folder
+	local actors = Instance.new("Folder")
+	actors.Name = "Actors"
+	actors.Parent = folder
+	self.ActorFolder = actors
+	self.CutsceneMode = false
 	self.Origin = origin
 	self.Actors = {} :: { any }
 	self.Plans = {} :: { any }
@@ -1419,7 +1439,7 @@ local function newScene(origin: CFrame, parent: Instance): any
 end
 
 function Scene:actor(name: string, lookName: string): any
-	local a = buildActor(name, LOOKS[lookName], self.Folder)
+	local a = buildActor(name, LOOKS[lookName], self.ActorFolder)
 	table.insert(self.Actors, a)
 	return a
 end
@@ -1431,8 +1451,9 @@ function Scene:prop(name: string, kind: string): any
 	return p
 end
 
--- The prop sits at `cf` (room space) from loop time t0 to t1 (wrapping round the loop).
-function Scene:place(name: string, t0: number, t1: number, cf: CFrame)
+-- The prop sits at `cf` (room space, or a function of the loop time giving one) from loop time t0
+-- to t1 (wrapping round the loop).
+function Scene:place(name: string, t0: number, t1: number, cf: CFrame | (number) -> CFrame)
 	table.insert(self.Placements[name], { t0 % self.Period, t1 % self.Period, cf, t1 - t0 >= self.Period })
 end
 
@@ -1452,7 +1473,11 @@ function Scene:Update(clock: number)
 	local parts, cframes = {}, {}
 	local origin = self.Origin
 	local held: { [string]: boolean } = {}
-	for _, plan in self.Plans do
+	-- While a story cutscene plays in this room, the room's people step out: only the furniture
+	-- they brought stays (the cutscene brings its own cast).
+	local still = self.CutsceneMode
+	self.ActorFolder.Parent = if still then nil else self.Folder
+	for _, plan in (if still then {} else self.Plans) do
 		local root, pose, hold, u, step = plan:eval(t, origin)
 		u += step.Offset or 0
 		local a = plan.Actor
@@ -1494,12 +1519,20 @@ function Scene:Update(clock: number)
 		if held[name] then
 			continue
 		end
+		if still and (string.sub(name, 1, 4) ~= "Furn" or (self.CutsceneHide and self.CutsceneHide[name])) then
+			prop:SetVisible(false)
+			continue
+		end
 		local shown = false
 		for _, pl in self.Placements[name] do
 			if inRange(t, pl[1], pl[2], pl[4]) then
+				local cf = pl[3]
+				if type(cf) == "function" then
+					cf = cf(t)
+				end
 				prop:SetScale(1)
 				prop:SetVisible(true)
-				prop:Emit(origin * pl[3], parts, cframes)
+				prop:Emit(origin * cf, parts, cframes)
 				shown = true
 				break
 			end
@@ -1602,7 +1635,7 @@ local function buildFamily(scene: any)
 	scene:prop("Paper", "Newspaper")
 	scene:prop("Tea", "TeaCup")
 	scene:place("Tea", 0, 60, side * CFrame.new(-10, 128, 0))
-	local paperHold = { "both", off = CFrame.new(0, 12, -6) }
+	local paperHold = { "both", off = CFrame.new(0, 10, -3) * CFrame.Angles(-0.35, 0, 0) }
 	-- hands resting on the lap
 	local function lap(u: number, ctx: any): Pose
 		local s = ctx.Actor.S
@@ -2336,6 +2369,18 @@ end
 ----------------------------------------------------------------------------------------------------
 
 local initialized = false
+local cutsceneMode = false
+local cutsceneHide: { [string]: boolean } = {}
+
+-- The story cutscene is playing in this room: hide the room's people (their furniture stays,
+-- except the pieces named in `hide`, which the cutscene brings and moves itself).
+function LevelNPCs.SetCutscene(on: boolean, hide: { string }?)
+	cutsceneMode = on == true
+	cutsceneHide = {}
+	for _, n in (hide or {}) :: { string } do
+		cutsceneHide[n] = true
+	end
+end
 
 function LevelNPCs.Init()
 	if initialized then
@@ -2413,6 +2458,8 @@ function LevelNPCs.Init()
 			end
 		end
 		if current then
+			current.CutsceneMode = cutsceneMode
+			current.CutsceneHide = cutsceneHide
 			local okNow, now = pcall(function()
 				return Workspace:GetServerTimeNow()
 			end)

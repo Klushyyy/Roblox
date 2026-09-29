@@ -89,12 +89,26 @@ def project(p):
     x, y, z = d @ right, d @ up, d @ fwd
     return x, y, z
 
+NEAR = 0.3
 def draw_tri(P, color, alpha):
+    # clip against the near plane, then fan-triangulate what's left
+    q = [np.array(project(p)) for p in P]
+    if all(v[2] >= NEAR for v in q):
+        return raster(q, color, alpha)
+    out = []
+    for i in range(3):
+        a, b = q[i], q[(i + 1) % 3]
+        if a[2] >= NEAR:
+            out.append(a)
+        if (a[2] >= NEAR) != (b[2] >= NEAR):
+            k = (NEAR - a[2]) / (b[2] - a[2])
+            out.append(a + (b - a) * k)
+    for i in range(1, len(out) - 1):
+        raster([out[0], out[i], out[i + 1]], color, alpha)
+
+def raster(Q, color, alpha):
     xs, ys, zs = [], [], []
-    for p in P:
-        x, y, z = project(p)
-        if z < 0.3:
-            return
+    for x, y, z in Q:
         xs.append((x / z * f * H / 2) + W / 2)
         ys.append(H / 2 - (y / z * f * H / 2))
         zs.append(z)
