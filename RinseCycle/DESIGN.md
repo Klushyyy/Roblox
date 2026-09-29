@@ -1215,6 +1215,21 @@ walls instead of clipping through. All gameplay queries use Include filters.
   hearts are the big one shrunk rather than re-snapped shape by shape.
 - **VIP:** a gold [VIP] tag before the name overhead and in chat; the name itself stays white.
 
+## 6p. Live fixes: teleports, save handoff, pet slots, purchases (v1.5.2)
+- Launching a party: every member is frozen and kept behind the black cover (player attribute
+  `Teleporting`) until the teleport lands; pads ignore them meanwhile, so nobody is bumped out of the
+  pad or starts a new party while leaving. A teleport that fails is retried (same reserved server via
+  its access code) and, if it still fails, the player is unfrozen, told, and walked out of the pad.
+- Save handoff: right before any teleport the player is saved with a `Handoff` lock; the server they
+  arrive in may take that lock at once (within 2 minutes), so runs and lobbies load straight away.
+- Run servers: party saves/characters are awaited in parallel; a party member who arrives after the
+  run started joins it (RoundService.JoinLate) instead of being sent home. Going home now teleports
+  to any lobby server (retried), not one specific server that may be full or gone.
+- Pet slots: until the +2 Pet Slots pass has been checked, an on-sale slot pass counts as owned, so
+  owners are never trimmed to 3 while the other passes are being checked.
+- Purchases: "Congrats! You bought ..." only on a real purchase (game pass or developer product),
+  never when owned passes are re-checked on joining a server.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

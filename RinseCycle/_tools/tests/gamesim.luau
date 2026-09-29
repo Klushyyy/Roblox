@@ -119,7 +119,7 @@ local EVENTS = {
 	PlayerAdded = true, PlayerRemoving = true, CharacterAdded = true, CharacterRemoving = true, CharacterAppearanceLoaded = true,
 	Died = true, Touched = true, TouchEnded = true, Completed = true, StateChanged = true, Running = true,
 	HealthChanged = true, Chatted = true, MessageReceived = true, SendingMessage = true, TextChanged = true,
-	PromptGamePassPurchaseFinished = true, PromptProductPurchaseFinished = true, JumpRequest = true,
+	PromptGamePassPurchaseFinished = true, PromptProductPurchaseFinished = true, JumpRequest = true, TeleportInitFailed = true,
 	TouchStarted = true, TouchTap = true, LastInputTypeChanged = true, WindowFocused = true, WindowFocusReleased = true,
 	MouseHoverEnter = true, MouseHoverLeave = true, Triggered = true, TriggerEnded = true, PromptShown = true, PromptHidden = true, Seated = true, Loaded = true, Ended = true, Played = true, Stopped = true, GamepadConnected = true, GamepadDisconnected = true, MenuOpened = true, MenuClosed = true, TouchSwipe = true, MouseClick = true, SelectionGained = true, SelectionLost = true, Destroying = true, MouseButton1Down = true, RightMouseClick = true, Triggered = true, PromptTriggered = true, OnInvoke = false, ViewportSize = false,
 }

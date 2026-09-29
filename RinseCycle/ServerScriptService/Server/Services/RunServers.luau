@@ -1,20 +1,22 @@
 --[[
 	RunServers - each party plays its run in its own private server.
 
-	  * Lobby side: when a party launches, Launch() teleports the whole party into a freshly reserved
-	    server of this same place, with { Mode = "Run", Level, Party = userIds, Lobby = JobId } as
-	    teleport data. The lobby server stays a lobby: no dishwashers get built there, so it never
-	    carries anybody else's run.
-	  * Run side (IsRunServer): the party's players arrive, their profiles load (DataService waits
-	    for the lobby server to release each save), and once everyone is in (or after ARRIVE_WAIT)
-	    RoundService.StartRound runs for them as usual. When a player's run ends (results, Leave, Back
-	    to Lobby), SendHome teleports them back to the lobby server they came from (or any public
-	    server if that one is full or gone).
-	  * Studio, unpublished places, or a failed teleport: everything falls back to playing the run
-	    in this server, exactly as before.
+	  * Lobby side: when a party launches, Launch() freezes the party (their screens are already
+	    black), saves each of them with a "handoff" lock (DataService.BeginHandoff) so the run server
+	    can load their saves at once, and teleports the whole party into a freshly reserved server of
+	    this same place, with { Mode = "Run", Level, Party = userIds } as teleport data.
+	  * Run side (IsRunServer): the party's players arrive, their saves load, and once everyone is in
+	    (or after ARRIVE_WAIT) RoundService.StartRound runs for them as usual. A party member who
+	    arrives after that joins the run already going. When a player's run ends (results, Leave,
+	    Back to Lobby), SendHome teleports them back to a lobby server.
+	  * Every teleport is watched: a teleport Roblox couldn't start (TeleportInitFailed) is retried,
+	    and if it still fails the player is unfrozen and told, instead of being left stuck.
+	  * Studio, unpublished places, or a teleport that can't start: everything falls back to playing
+	    the run in this server, exactly as before.
 
 	The workspace attribute "RunServer" tells clients they're in a run server (they stay behind a
-	loading cover until the run starts, and while heading home).
+	loading cover until the run starts, and while heading home). The player attribute "Teleporting"
+	keeps a player's screen black while a teleport is in progress.
 ]]
 
 local Players = game:GetService("Players")
@@ -25,6 +27,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
+local Remotes = require(Shared:WaitForChild("Remotes"))
 
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local RoundService = require(script.Parent:WaitForChild("RoundService"))
@@ -33,8 +36,11 @@ local Characters = require(script.Parent:WaitForChild("Characters"))
 local RunServers = {}
 
 local ARRIVE_WAIT = 25 -- seconds to wait for the rest of the party before starting without them
-local PROFILE_WAIT = 40 -- seconds to wait for an arriving player's save to load
-local HOME_RETRIES = 2
+local PROFILE_WAIT = 20 -- seconds to wait for an arriving player's save to load
+local CHARACTER_WAIT = 15 -- seconds to wait for an arriving player's character
+local HANDOFF_WAIT = 6 -- seconds the handoff saves may take before teleporting anyway
+local TELEPORT_TIMEOUT = 45 -- a teleport still not done after this long counts as failed
+local TELEPORT_RETRIES = 3 -- tries per teleport (the first one included)
 
 -- A reserved server (made by TeleportOptions.ShouldReserveServer) has a PrivateServerId but no owner.
 RunServers.IsRunServer = game.PrivateServerId ~= "" and game.PrivateServerOwnerId == 0
@@ -43,60 +49,222 @@ local function canTeleport(): boolean
 	return game.PlaceId ~= 0 and not RunService:IsStudio()
 end
 
+local function isHere(player: Player): boolean
+	return player.Parent == Players
+end
+
+local function notify(player: Player, text: string, kind: string)
+	if isHere(player) then
+		Remotes.Event("Notify"):FireClient(player, text, kind)
+	end
+end
+
+-- Holds a player still (anchored in place) while they are being teleported.
+local function setFrozen(player: Player, frozen: boolean)
+	local root = Characters.GetRoot(player)
+	if root then
+		root.Anchored = frozen
+	end
+end
+
+----------------------------------------------------------------------------------------------------
+-- Watched teleports
+----------------------------------------------------------------------------------------------------
+
+type Pending = {
+	Kind: "Run" | "Home",
+	Tries: number,
+	Token: number,
+	AccessCode: string?, -- Run: the reserved server's code, so a retry goes to the same server
+	Data: { [string]: any },
+	OnFail: ((Player) -> ())?,
+}
+local pending: { [Player]: Pending } = {}
+local nextToken = 0
+
+local function giveUp(player: Player, p: Pending)
+	if pending[player] ~= p then
+		return
+	end
+	pending[player] = nil
+	if not isHere(player) then
+		return
+	end
+	player:SetAttribute("Teleporting", false)
+	setFrozen(player, false)
+	DataService.CancelHandoff(player)
+	if p.Kind == "Run" then
+		notify(player, "Couldn't reach the dishwasher. Please try again!", "Bad")
+	else
+		notify(player, "Couldn't get back to the lobby. Please rejoin the game.", "Bad")
+	end
+	if p.OnFail then
+		task.spawn(p.OnFail, player)
+	end
+end
+
+-- One teleport attempt for one player (retries go one player at a time).
+local function sendOne(player: Player, p: Pending): boolean
+	local ok, err = pcall(function()
+		local options = Instance.new("TeleportOptions")
+		if p.AccessCode then
+			options.ReservedServerAccessCode = p.AccessCode
+		end
+		options:SetTeleportData(p.Data)
+		TeleportService:TeleportAsync(game.PlaceId, { player }, options)
+	end)
+	if not ok then
+		warn(string.format("[RunServers] teleport for %s failed: %s", player.Name, tostring(err)))
+	end
+	return ok
+end
+
+-- Tries again (up to TELEPORT_RETRIES in all), or gives up.
+local function retry(player: Player, p: Pending)
+	while pending[player] == p and isHere(player) do
+		if p.Tries >= TELEPORT_RETRIES then
+			giveUp(player, p)
+			return
+		end
+		p.Tries += 1
+		task.wait(1.5 * p.Tries)
+		if pending[player] ~= p or not isHere(player) then
+			return
+		end
+		if sendOne(player, p) then
+			return
+		end
+	end
+end
+
+-- Starts watching a teleport that was just started for `player`.
+local function watch(player: Player, p: Pending)
+	nextToken += 1
+	p.Token = nextToken
+	pending[player] = p
+	local token = p.Token
+	task.delay(TELEPORT_TIMEOUT, function()
+		local current = pending[player]
+		if current and current.Token == token and isHere(player) then
+			giveUp(player, current)
+		end
+	end)
+end
+
+local function onTeleportInitFailed(player: Player, result: Enum.TeleportResult, message: string)
+	local p = pending[player]
+	if not p then
+		return
+	end
+	warn(string.format("[RunServers] teleport for %s didn't start (%s): %s", player.Name, tostring(result), tostring(message)))
+	task.spawn(retry, player, p)
+end
+
 ----------------------------------------------------------------------------------------------------
 -- Lobby side
 ----------------------------------------------------------------------------------------------------
 
 -- Sends `players` to a new private server for a run of `level`. Returns true if the teleport was
--- started; false means "play it here instead".
-function RunServers.Launch(players: { Player }, level: number): boolean
+-- started; false means "play it here instead". `onFail` runs for anyone whose teleport later fails.
+function RunServers.Launch(players: { Player }, level: number, onFail: ((Player) -> ())?): boolean
 	if RunServers.IsRunServer or not canTeleport() or #players == 0 then
 		return false
 	end
 	local userIds = {}
 	for _, p in players do
 		table.insert(userIds, p.UserId)
+		p:SetAttribute("Teleporting", true)
+		setFrozen(p, true)
 	end
-	local ok, err = pcall(function()
+
+	-- Save everyone with a handoff lock (all at once), so the run server can load them straight away.
+	local left = #players
+	for _, p in players do
+		task.spawn(function()
+			pcall(DataService.BeginHandoff, p)
+			left -= 1
+		end)
+	end
+	local deadline = os.clock() + HANDOFF_WAIT
+	while left > 0 and os.clock() < deadline do
+		task.wait(0.1)
+	end
+
+	local going: { Player } = {}
+	for _, p in players do
+		if isHere(p) then
+			table.insert(going, p)
+		end
+	end
+	local data: { [string]: any } = { Mode = "Run", Level = level, Party = userIds }
+	local ok, result = pcall(function()
 		local options = Instance.new("TeleportOptions")
 		options.ShouldReserveServer = true
-		options:SetTeleportData({ Mode = "Run", Level = level, Party = userIds, Lobby = game.JobId })
-		TeleportService:TeleportAsync(game.PlaceId, players, options)
+		options:SetTeleportData(data)
+		return TeleportService:TeleportAsync(game.PlaceId, going, options)
 	end)
-	if not ok then
-		warn("[RunServers] couldn't reserve a run server, playing here: " .. tostring(err))
+	if not ok or #going == 0 then
+		if not ok then
+			warn("[RunServers] couldn't reserve a run server, playing here: " .. tostring(result))
+		end
+		for _, p in players do
+			if isHere(p) then
+				p:SetAttribute("Teleporting", false)
+				setFrozen(p, false)
+				DataService.CancelHandoff(p)
+			end
+		end
+		return false
 	end
-	return ok
+	local accessCode = nil
+	pcall(function()
+		accessCode = (result :: any).ReservedServerAccessCode
+	end)
+	for _, p in going do
+		watch(p, {
+			Kind = "Run",
+			Tries = 1,
+			Token = 0,
+			AccessCode = if type(accessCode) == "string" and accessCode ~= "" then accessCode else nil,
+			Data = data,
+			OnFail = onFail,
+		})
+	end
+	return true
 end
 
 ----------------------------------------------------------------------------------------------------
 -- Run side
 ----------------------------------------------------------------------------------------------------
 
-type Plan = { Level: number, Party: { number }, Lobby: string? }
+type Plan = { Level: number, Party: { number } }
 local plan: Plan? = nil
 local arrived: { [number]: Player } = {}
 local started = false
-local lobbyJobId: string? = nil
 
--- Teleports a player home to the lobby (their old server when possible).
+-- Teleports a player home to a lobby server. Safe to call more than once.
 function RunServers.SendHome(player: Player)
-	if not player.Parent then
+	if not isHere(player) or pending[player] then
 		return
 	end
-	for attempt = 1, HOME_RETRIES do
-		local ok, err = pcall(function()
-			local options = Instance.new("TeleportOptions")
-			if lobbyJobId and attempt == 1 then
-				options.ServerInstanceId = lobbyJobId
-			end
-			options:SetTeleportData({ Mode = "Lobby" })
-			TeleportService:TeleportAsync(game.PlaceId, { player }, options)
-		end)
-		if ok then
-			return
-		end
-		warn(string.format("[RunServers] home teleport %d for %s failed: %s", attempt, player.Name, tostring(err)))
+	player:SetAttribute("Teleporting", true)
+	setFrozen(player, true)
+	pcall(DataService.BeginHandoff, player)
+	if not isHere(player) then
+		return
+	end
+	local p: Pending = { Kind = "Home", Tries = 1, Token = 0, Data = { Mode = "Lobby" } }
+	watch(player, p)
+	if not sendOne(player, p) then
+		task.spawn(retry, player, p)
+	end
+end
+
+local function waitUntilReady(player: Player)
+	DataService.WaitFor(player, PROFILE_WAIT)
+	local waited = 0
+	while not Characters.IsAlive(player) and waited < CHARACTER_WAIT and isHere(player) do
+		waited += task.wait(0.25)
 	end
 end
 
@@ -106,33 +274,62 @@ local function startRun()
 	end
 	started = true
 	local players: { Player } = {}
-	local best = 1
 	for _, p in arrived do
-		if p.Parent == Players then
-			local profile = DataService.WaitFor(p, PROFILE_WAIT) :: any
-			if profile then
-				best = math.max(best, tonumber(profile.Unlocked) or 1)
-			end
+		if isHere(p) then
 			table.insert(players, p)
 		end
 	end
 	if #players == 0 then
+		started = false -- nobody left to play: the next arrival starts it
+		return
+	end
+	-- Everyone's save and character at once, not one after another.
+	local left = #players
+	for _, p in players do
+		task.spawn(function()
+			waitUntilReady(p)
+			left -= 1
+		end)
+	end
+	while left > 0 do
+		task.wait(0.1)
+	end
+
+	local best = 1
+	local ready: { Player } = {}
+	for _, p in players do
+		if isHere(p) then
+			local profile = DataService.Get(p) :: any
+			if profile then
+				best = math.max(best, tonumber(profile.Unlocked) or 1)
+			end
+			table.insert(ready, p)
+		end
+	end
+	if #ready == 0 then
+		started = false
 		return
 	end
 	-- Never deeper than anyone in the party has unlocked.
-	local level = math.clamp(plan.Level, 1, math.min(best, #Config.Levels))
-	for _, p in players do
-		local waited = 0
-		while not Characters.IsAlive(p) and waited < 10 and p.Parent == Players do
-			waited += task.wait(0.25)
-		end
-	end
-	local ok, result, err = pcall(RoundService.StartRound, players, level)
+	local level = math.clamp((plan :: Plan).Level, 1, math.min(best, #Config.Levels))
+	local ok, result, err = pcall(RoundService.StartRound, ready, level)
 	if not ok or result ~= true then
 		warn("[RunServers] couldn't start the run: " .. tostring(if ok then err else result))
-		for _, p in players do
+		for _, p in ready do
 			task.spawn(RunServers.SendHome, p)
 		end
+	end
+end
+
+-- A party member who got here after the run started: into the run with the others.
+local function joinLate(player: Player)
+	waitUntilReady(player)
+	if not isHere(player) then
+		return
+	end
+	local ok, joined = pcall(RoundService.JoinLate, player)
+	if not (ok and joined) then
+		RunServers.SendHome(player) -- the run is already over
 	end
 end
 
@@ -141,11 +338,6 @@ local function onArrive(player: Player)
 	pcall(function()
 		data = player:GetJoinData().TeleportData
 	end)
-	if started then
-		-- Too late for this run (or not part of it): back to the lobby.
-		task.spawn(RunServers.SendHome, player)
-		return
-	end
 	if not plan and type(data) == "table" and data.Mode == "Run" then
 		local party = {}
 		if type(data.Party) == "table" then
@@ -155,28 +347,35 @@ local function onArrive(player: Player)
 				end
 			end
 		end
-		local newPlan: Plan = { Level = math.floor(tonumber(data.Level) or 1), Party = party, Lobby = if type(data.Lobby) == "string" then data.Lobby else nil }
+		local newPlan: Plan = { Level = math.floor(tonumber(data.Level) or 1), Party = party }
 		plan = newPlan
-		lobbyJobId = newPlan.Lobby
 		task.delay(ARRIVE_WAIT, startRun)
 	end
+	local current = plan
+	if not current then
+		RunServers.SendHome(player) -- no run was ever set up here
+		return
+	end
 	arrived[player.UserId] = player
+	if started then
+		joinLate(player)
+		return
+	end
 	-- Everyone's here: start as soon as their saves are loaded.
-	if plan then
-		local all = true
-		for _, id in plan.Party do
-			if not arrived[id] then
-				all = false
-				break
-			end
-		end
-		if all then
-			task.spawn(startRun)
+	for _, id in current.Party do
+		if not arrived[id] then
+			return
 		end
 	end
+	task.spawn(startRun)
 end
 
 function RunServers.Init()
+	TeleportService.TeleportInitFailed:Connect(onTeleportInitFailed)
+	Players.PlayerRemoving:Connect(function(player)
+		pending[player] = nil
+		arrived[player.UserId] = nil
+	end)
 	if not RunServers.IsRunServer then
 		return
 	end

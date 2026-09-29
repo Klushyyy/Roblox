@@ -7,10 +7,13 @@
 	  * When the run starts, the camera is put back on your character in the dishwasher and the
 	    screen fades in. Reporting "Loaded" starts the run clock.
 	  * Leaving / returning to the lobby uses the same cover.
+	  * While the server is teleporting us (player attribute "Teleporting"), the cover never lifts
+	    on its own; if the teleport fails the server clears the attribute and it lifts.
 ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService = game:GetService("TeleportService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -36,6 +39,22 @@ local loadingLabel: TextLabel
 
 local covered = false
 local coverToken = 0
+
+local function isTeleporting(): boolean
+	return LocalPlayer:GetAttribute("Teleporting") == true
+end
+
+-- True in a party's own run server. The workspace attribute can arrive a moment after this script
+-- starts, so the teleport data we arrived with counts too.
+local function inRunServer(): boolean
+	if Workspace:GetAttribute("RunServer") then
+		return true
+	end
+	local ok, data = pcall(function()
+		return TeleportService:GetLocalPlayerTeleportData()
+	end)
+	return ok and type(data) == "table" and (data :: any).Mode == "Run"
+end
 
 -- Tells the server we're in: the run clock starts with the first player to get past the fade.
 local function reportLoaded()
@@ -97,11 +116,17 @@ function Cutscene.Cover(text: string?, timeout: number?)
 	if not already then
 		tweenBlack(0, 0.35)
 	end
-	task.delay(timeout or 12, function()
-		if token == coverToken and covered and not playing then
-			Cutscene.Uncover()
+	local function lift()
+		if token ~= coverToken or not covered or playing then
+			return
 		end
-	end)
+		if isTeleporting() then
+			task.delay(2, lift) -- still on our way: stay black
+			return
+		end
+		Cutscene.Uncover()
+	end
+	task.delay(timeout or 12, lift)
 end
 
 function Cutscene.Uncover()
@@ -158,8 +183,23 @@ function Cutscene.Init()
 	})
 
 	-- Just arrived in the party's own run server: stay black until the dishwasher is ready.
-	if Workspace:GetAttribute("RunServer") and not ClientState.Run then
+	if inRunServer() and not ClientState.Run then
 		task.defer(Cutscene.Cover, "Filling your dishwasher...", 60)
+	end
+
+	-- The server is teleporting us (to a run, or home): black until we're gone. If it gives up, the
+	-- attribute clears and we're back.
+	local function onTeleporting()
+		if isTeleporting() then
+			local text = if inRunServer() then "Heading back to the lobby..." else "Heading to your dishwasher..."
+			task.spawn(Cutscene.Cover, text, 60)
+		elseif covered and not playing and not ClientState.Run then
+			Cutscene.Uncover()
+		end
+	end
+	LocalPlayer:GetAttributeChangedSignal("Teleporting"):Connect(onTeleporting)
+	if isTeleporting() then
+		onTeleporting()
 	end
 
 	-- Our party is launching: go black now, before the server teleports us into the dishwasher. If
@@ -173,7 +213,7 @@ function Cutscene.Init()
 			task.spawn(Cutscene.Cover, nil, 20)
 		elseif not party and covered and not playing then
 			task.delay(2, function()
-				if covered and not playing and not ClientState.Run then
+				if covered and not playing and not ClientState.Run and not isTeleporting() then
 					Cutscene.Uncover()
 				end
 			end)
@@ -188,7 +228,7 @@ function Cutscene.Init()
 		local run = ClientState.Run :: Types.RunState?
 		if not run then
 			lastRunKey = nil
-			if Workspace:GetAttribute("RunServer") then
+			if inRunServer() then
 				-- A run server: the server is teleporting us home, stay behind the cover.
 				task.spawn(Cutscene.Cover, "Heading back to the lobby...", 40)
 				return
@@ -205,7 +245,9 @@ function Cutscene.Init()
 		end
 		lastRunKey = key
 		local age = Workspace:GetServerTimeNow() - (tonumber(run.StartedAt) or 0)
-		if run.Phase == "Playing" and age < MAX_START_AGE then
+		-- Fade in when the run just started, or whenever we're still behind the cover (e.g. we got to
+		-- the run server after the others and joined their run already going).
+		if run.Phase == "Playing" and (age < MAX_START_AGE or covered) then
 			task.spawn(play, run.Level)
 		elseif run.Phase == "Playing" then
 			reportLoaded() -- joined mid-run: we're in straight away

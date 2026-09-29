@@ -1151,6 +1151,23 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 	return true
 end
 
+-- (Run servers) A party member who arrived after their run had already started joins it now.
+-- Returns false if there is no run still being played to join.
+function RoundService.JoinLate(player: Player): boolean
+	if not isHere(player) or runOf[player] or starting[player] then
+		return false
+	end
+	for _, run in runs do
+		if not run.Ended and run.Phase == "Playing" then
+			joinRun(run, player, #run.Order + 1)
+			rebuildMemberIds(run)
+			pushAll(run)
+			return true
+		end
+	end
+	return false
+end
+
 ----------------------------------------------------------------------------------------------------
 -- Leaving a run
 ----------------------------------------------------------------------------------------------------

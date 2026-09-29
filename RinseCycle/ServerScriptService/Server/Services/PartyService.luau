@@ -609,6 +609,10 @@ local function canEnterPads(player: Player, clock: number): boolean
 	if player.Parent ~= Players or memberOf[player] or pendingJoin[player] or launching[player] then
 		return false
 	end
+	-- On their way to a run server (still standing on the pad, frozen, screen black): hands off.
+	if player:GetAttribute("Teleporting") == true then
+		return false
+	end
 	local cooldown = cooldownUntil[player]
 	if cooldown then
 		if clock < cooldown then
@@ -732,7 +736,13 @@ local function launch(party: Party)
 		-- teleport can't start) StartRound builds the dishwasher here. It yields while it builds.
 		-- Pass a copy: it's RoundService's now.
 		local ok, started, err
-		local teleported = RunServers.Launch(table.clone(roster), level)
+		-- Anyone whose teleport fails later is unfrozen by RunServers and walked out of the pad here.
+		local teleported = RunServers.Launch(table.clone(roster), level, function(member: Player)
+			if member.Parent == Players and not memberOf[member] then
+				mustLeave[member] = { Pad = pad, Since = os.clock() }
+				teleport(member, pad.Info.Exit)
+			end
+		end)
 		if teleported then
 			ok, started = true, true
 		else

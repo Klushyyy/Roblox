@@ -45,6 +45,7 @@ local PROFILE_VERSION = 1
 local LOCK_TTL = 1800 -- seconds; an older lock belongs to a server that died without releasing it
 local LOCK_RETRIES = 6 -- locked loads to wait through before stealing the lock
 local LOCK_WAIT_MIN, LOCK_WAIT_MAX = 3, 5 -- seconds between locked load attempts
+local HANDOFF_TTL = 120 -- seconds a handoff lock may be taken over straight away (see BeginHandoff)
 local LOAD_ATTEMPTS = 6 -- DataStore errors tolerated while loading before falling back to a temp profile
 local FINAL_SAVE_ATTEMPTS = 3
 local RECEIPT_SAVE_ATTEMPTS = 2
@@ -122,6 +123,7 @@ type Session = {
 	Left: boolean, -- PlayerRemoving has fired
 	Finalizing: boolean, -- the final (lock-releasing) save has started; nothing is saved after it
 	Released: boolean, -- the lock has been cleared
+	Handoff: boolean, -- a teleport to another server is under way: that server may take the lock at once
 	Busy: boolean, -- a save is in flight (saves for one session never overlap)
 	SaveQueue: { thread },
 	Loaded: Latch, -- opens when Profile is set, or the player leaves
@@ -330,15 +332,21 @@ end
 -- Profile repair (runs after every load, outside the UpdateAsync transform)
 ----------------------------------------------------------------------------------------------------
 
--- Pet slots used to trim Equipped while loading. Pass ownership isn't known yet at that point, so a
--- slot pass that is on sale counts as owned; SetPass trims again once MarketService knows for sure.
-local function loadSlotCap(player: Player, profile: Profile): number
+-- Passes as far as pet slots are concerned. Until MarketService has checked the +2 Pet Slots pass
+-- (it checks every pass one by one after the profile loads), an on-sale slot pass counts as owned,
+-- so nobody who owns it is ever cut down to 3 pets while the checks are still running. Once the
+-- answer is known, SetPass trims for real.
+local function slotPasses(player: Player): { [string]: boolean }
 	local passes = table.clone(passesOf[player] or {})
 	local pass = Config.GetPass("PetSlots")
 	if pass and type(pass.Id) == "number" and pass.Id > 0 and passes.PetSlots == nil then
 		passes.PetSlots = true
 	end
-	return Config.PetSlots(profile.Perks, passes)
+	return passes
+end
+
+local function loadSlotCap(player: Player, profile: Profile): number
+	return Config.PetSlots(profile.Perks, slotPasses(player))
 end
 
 local function sanitizeProfile(profile: Profile, player: Player)
@@ -593,7 +601,7 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		Perks = perks,
 		Pets = pets,
 		Equipped = equipped,
-		PetSlots = Config.PetSlots(profile.Perks, passes),
+		PetSlots = Config.PetSlots(profile.Perks, slotPasses(player)),
 		MaxPets = Config.PetRules.MaxInventory,
 		Unlocked = profile.Unlocked,
 		BestTimes = table.clone(profile.BestTimes),
@@ -688,6 +696,11 @@ local function lockedElsewhere(record: { [string]: any }): boolean
 	if type(lock) ~= "table" or lock.JobId == game.JobId or not isFinite(lock.Time) then
 		return false
 	end
+	-- The other server saved this player just before teleporting them here and said so: the save is
+	-- up to date, so take it now instead of waiting for that server to notice they left.
+	if lock.Handoff == true and os.time() - lock.Time < HANDOFF_TTL then
+		return false
+	end
 	return os.time() - lock.Time < LOCK_TTL
 end
 
@@ -730,7 +743,9 @@ local function writeProfile(session: Session, release: boolean): boolean
 				outcome = "LockLost"
 				return nil
 			end
-			payload.Lock = if release then nil else { JobId = game.JobId, Time = os.time() }
+			payload.Lock = if release
+				then nil
+				else { JobId = game.JobId, Time = os.time(), Handoff = if session.Handoff then true else nil }
 			outcome = "Ok"
 			return payload, userIds
 		end)
@@ -958,6 +973,7 @@ local function ensureSession(player: Player): Session?
 		CanSave = false,
 		Left = false,
 		Finalizing = false,
+		Handoff = false,
 		Released = false,
 		Busy = false,
 		SaveQueue = {},
@@ -1484,7 +1500,7 @@ function DataService.SetPass(player: Player, key: string, owned: boolean)
 	local trimmed = false
 	local profile = DataService.Get(player)
 	if profile then
-		local slots = Config.PetSlots(profile.Perks, passes)
+		local slots = Config.PetSlots(profile.Perks, slotPasses(player))
 		while #profile.Equipped > slots do
 			table.remove(profile.Equipped)
 			trimmed = true
@@ -1499,7 +1515,7 @@ end
 
 function DataService.GetPetSlots(player: Player): number
 	local profile = DataService.Get(player)
-	return Config.PetSlots(profile and profile.Perks, passesOf[player] or {})
+	return Config.PetSlots(profile and profile.Perks, slotPasses(player))
 end
 
 -- Records a finished run. Returns (firstClear, newBest, unlockedLevel?). A first clear also counts as
@@ -1572,6 +1588,34 @@ function DataService.Save(player: Player): boolean
 		session.NextAutosave = os.clock() + AUTOSAVE_INTERVAL
 	end
 	return saved == true
+end
+
+-- (Addition) Server hops. Saves the player right now with a "handoff" lock, just before they are
+-- teleported, so the server they arrive in can load them straight away (no waiting for this server
+-- to notice they left). Yields until the save is done; false if it couldn't be written (the next
+-- server then just waits for the normal release, as before).
+function DataService.BeginHandoff(player: Player): boolean
+	local session = sessions[player]
+	if not session or not session.Profile or not session.CanSave or session.Finalizing then
+		return false
+	end
+	session.Handoff = true
+	activeJobs += 1
+	local ok, saved = pcall(saveSession, session, false, 2)
+	activeJobs -= 1
+	return ok and saved == true
+end
+
+-- (Addition) The teleport failed and the player is staying: take the save back as a normal lock.
+function DataService.CancelHandoff(player: Player)
+	local session = sessions[player]
+	if not session or not session.Handoff then
+		return
+	end
+	session.Handoff = false
+	if session.CanSave and not session.Finalizing then
+		task.spawn(track, saveSession, session, false, 2)
+	end
 end
 
 -- (Addition) True when this player's progress is being persisted: the profile loaded from the
