@@ -28914,7 +28914,7 @@ function RanksUI.Init()
 
 	currentCard = Instance.new("Frame")
 	currentCard.Name = "Current"
-	currentCard.Size = UDim2.new(1, 0, 0, 190)
+	currentCard.Size = UDim2.new(1, 0, 0, 184)
 	currentCard.BackgroundColor3 = Color3.new(1, 1, 1)
 	currentCard.BorderSizePixel = 0
 	UIKit.Corner(currentCard, 16)
@@ -28925,16 +28925,16 @@ function RanksUI.Init()
 		Name = "Reel",
 		Text = "Try your luck!",
 		TextSize = 26,
-		Position = UDim2.fromOffset(0, 202),
-		Size = UDim2.new(1, 0, 0, 40),
+		Position = UDim2.fromOffset(0, 190),
+		Size = UDim2.new(1, 0, 0, 32),
 		TextScaled = true,
 		Parent = leftPanel,
 	})
 
 	rollButton = UIKit.Button({
 		Text = string.format("ROLL  (%d Gems)", Config.RankRoll.Cost),
-		Size = UDim2.new(1, 0, 0, 70),
-		Position = UDim2.fromOffset(0, 252),
+		Size = UDim2.new(1, 0, 0, 62),
+		Position = UDim2.fromOffset(0, 228),
 		Color = Colors.Accent,
 		TextSize = 30,
 		Parent = leftPanel,
@@ -28946,15 +28946,15 @@ function RanksUI.Init()
 	gemsLabel = UIKit.Label({
 		Text = "",
 		TextSize = 20,
-		Position = UDim2.fromOffset(0, 330),
-		Size = UDim2.new(1, 0, 0, 26),
+		Position = UDim2.fromOffset(0, 296),
+		Size = UDim2.new(1, 0, 0, 24),
 		Parent = leftPanel,
 	})
 
 	UIKit.Button({
 		Text = "Get more Gems",
-		Size = UDim2.new(1, 0, 0, 48),
-		Position = UDim2.fromOffset(0, 364),
+		Size = UDim2.new(1, 0, 0, 42),
+		Position = UDim2.fromOffset(0, 326),
 		Color = Colors.Good,
 		TextSize = 22,
 		Parent = leftPanel,
@@ -28964,8 +28964,8 @@ function RanksUI.Init()
 	})
 	luckButton = UIKit.Button({
 		Text = "x2 Luck pass",
-		Size = UDim2.new(1, 0, 0, 44),
-		Position = UDim2.fromOffset(0, 418),
+		Size = UDim2.new(1, 0, 0, 40),
+		Position = UDim2.fromOffset(0, 374),
 		Color = Color3.fromRGB(90, 190, 110),
 		TextSize = 20,
 		Parent = leftPanel,
@@ -28978,8 +28978,9 @@ function RanksUI.Init()
 		TextSize = 14,
 		TextColor3 = Colors.Warning,
 		TextWrapped = true,
-		Position = UDim2.fromOffset(0, 466),
-		Size = UDim2.new(1, 0, 0, 36),
+		TextScaled = true,
+		Position = UDim2.fromOffset(0, 418),
+		Size = UDim2.new(1, 0, 0, 38),
 		Parent = leftPanel,
 	})
 
