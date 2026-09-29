@@ -1,6 +1,7 @@
 -- NameTags: the overhead tag every player wears: their name (with an "R N" badge once they've
 -- rebirthed) and their rank underneath in its rarity colour. No rank yet: just the name. VIPs get
--- a gold name (and a gold name in chat: the VIP attribute is read by the client's chat hook).
+-- a gold [VIP] tag in front of their name (and in chat: the VIP attribute is read by the client's
+-- chat hook).
 --
 -- Sizing is what makes or breaks overhead GUIs, so the rules are:
 --   * the BillboardGui is sized in STUDS (UDim2 scale), so it behaves like a real object: it
@@ -107,8 +108,11 @@ local function refresh(player: Player)
 	local rankLabel = tag:FindFirstChild("Rank", true)
 	local hasRank = rankText ~= ""
 	if nameLabel and nameLabel:IsA("TextLabel") then
-		nameLabel.Text = nameText
-		nameLabel.TextColor3 = if vip then GOLD else Color3.new(1, 1, 1)
+		-- display names can't contain markup characters, but escape anyway: the label is rich text
+		local safe = string.gsub(string.gsub(string.gsub(nameText, "&", "&amp;"), "<", "&lt;"), ">", "&gt;")
+		nameLabel.RichText = true
+		nameLabel.Text = if vip then string.format('<font color="#%s">[VIP]</font> %s', GOLD:ToHex(), safe) else safe
+		nameLabel.TextColor3 = Color3.new(1, 1, 1)
 		-- without a rank line the name sits in the middle of the tag
 		nameLabel.Position = UDim2.fromScale(0, if hasRank then 0 else 0.3)
 	end
