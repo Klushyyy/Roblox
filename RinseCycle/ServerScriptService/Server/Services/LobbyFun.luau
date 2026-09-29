@@ -47,7 +47,7 @@ local DUCK_SPOTS: { [string]: { Pos: Vector3, Yaw: number, Float: boolean? } } =
 	Doghouse = { Pos = Vector3.new(40, 3, -62.4), Yaw = 0 },
 	Sponge = { Pos = Vector3.new(-79, 6.7, 45), Yaw = 160 },
 	Board = { Pos = Vector3.new(88, FLOOR_Y, -86), Yaw = 200 },
-	Shakers = { Pos = Vector3.new(-21.5, 73.1, -113.6), Yaw = 150 }, -- tucked behind the obby's trophy
+	Shakers = { Pos = Vector3.new(-44, 55.1, -101.5), Yaw = 130 }, -- on the building's roof, back corner
 	Saucer = { Pos = Vector3.new(84.4, FLOOR_Y + 0.8, 56), Yaw = -60 },
 }
 
@@ -243,30 +243,6 @@ local function makeFloatPoppable(bubble: BasePart)
 	click.Parent = bubble
 end
 
--- The rooftop obby's finish pad (tag "ObbyFinish"): the reward, once per player.
-local obbyCooldown: { [Player]: number } = {}
-local function watchObbyFinish(pad: BasePart)
-	pad.CanTouch = true
-	pad.Touched:Connect(function(hit: BasePart)
-		local player = playerFromHit(hit)
-		if not player or (obbyCooldown[player] or 0) > os.clock() then
-			return
-		end
-		obbyCooldown[player] = os.clock() + 3
-		if DataService.ClaimObby(player) then
-			local amount = Config.Obby.Reward
-			DataService.AddBubbles(player, amount, "Obby")
-			DataService.PushMeta(player)
-			DataService.Notice(player, string.format("Obby complete! +%d Bubbles", amount), "Good")
-			if fxRemote then
-				fxRemote:FireClient(player, "LobbyPop", { Position = pad.Position + Vector3.new(0, 2, 0), Golden = true, By = player.UserId, Amount = amount })
-			end
-		else
-			DataService.Notice(player, "You already finished the obby. Nice climbing!", "Info")
-		end
-	end)
-end
-
 ----------------------------------------------------------------------------------------------------
 -- Ducks
 ----------------------------------------------------------------------------------------------------
@@ -415,7 +391,6 @@ function LobbyFun.Init()
 	fxRemote = Remotes.Event("RunFX")
 	Players.PlayerRemoving:Connect(function(player)
 		popLog[player] = nil
-		obbyCooldown[player] = nil
 		duckCooldown[player] = nil
 	end)
 end
@@ -433,11 +408,6 @@ function LobbyFun.Start()
 	buildDucks(f)
 	for _ = 1, Config.LobbyBubbles.Max do
 		spawnBubble()
-	end
-	for _, inst in CollectionService:GetTagged("ObbyFinish") do
-		if inst:IsA("BasePart") and inst:IsDescendantOf(lobby.Model) then
-			watchObbyFinish(inst)
-		end
 	end
 	for _, inst in CollectionService:GetTagged("FloatBubble") do
 		if inst:IsA("BasePart") and inst:IsDescendantOf(lobby.Model) then

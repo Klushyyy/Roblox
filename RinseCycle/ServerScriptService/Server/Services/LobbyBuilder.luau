@@ -1140,13 +1140,10 @@ local function buildEggHatchery(parent: Instance)
 end
 
 ----------------------------------------------------------------------------------------------------
--- Rooftop obby: a ladder up the right side of the dishwasher building, then a run of floating
--- kitchen things (sponges, soap bars, cups, a spoon) from its roof up to a coaster with a trophy.
--- Touching the finish pad (tag "ObbyFinish") pays Config.Obby.Reward once (LobbyFun).
+-- A ladder up the right side of the dishwasher building, so players can climb onto its roof.
 ----------------------------------------------------------------------------------------------------
-local function buildObby(parent: Instance)
-	local roofY = 55 -- top of the building's worktop
-	-- The ladder: one invisible TrussPart does the climbing; rails and rungs are the looks.
+local function buildRoofLadder(parent: Instance)
+	-- One invisible TrussPart does the climbing; rails and rungs are the looks.
 	local lx, lz = 48.2, -84
 	mkPart("TrussPart", { Name = "LadderClimb", Size = Vector3.new(2, 56, 2), CFrame = at(lx, 28, lz), Transparency = 1, CastShadow = false }, parent)
 	local wood = Color3.fromRGB(196, 146, 98)
@@ -1156,50 +1153,6 @@ local function buildObby(parent: Instance)
 	for y = 2, 56, 2 do
 		mkPart("Part", decor({ Name = "LadderRung", Size = Vector3.new(0.4, 0.4, 2.8), CFrame = at(lx + 0.6, y, lz), Color = Color3.fromRGB(170, 120, 78), Material = LOW }), parent)
 	end
-	local sign = mkPart("Part", decor({ Name = "ObbySignPost", Size = Vector3.new(0.6, 6, 0.6), CFrame = at(40, roofY + 3, -80), Color = wood, Material = LOW }), parent)
-	worldSign(sign, "OBBY", 8, 2, 4.5, Color3.fromRGB(255, 220, 110))
-
-	-- The course, from the roof's left edge. { kind, x, top y, z, size }
-	local sponge = Color3.fromRGB(250, 214, 70)
-	local scrub = Color3.fromRGB(80, 170, 90)
-	local soaps = { Color3.fromRGB(255, 170, 210), Color3.fromRGB(160, 210, 255), Color3.fromRGB(200, 255, 220) }
-	local steps = {
-		{ "Sponge", -55, roofY + 1, -90 },
-		{ "Soap", -64, roofY + 3, -99 },
-		{ "Cup", -74, roofY + 5, -91 },
-		{ "Sponge", -85, roofY + 7, -99 },
-		{ "Soap", -84, roofY + 9, -110 },
-		{ "Spoon", -70, roofY + 10, -112 },
-		{ "Cup", -54, roofY + 12, -109 },
-		{ "Soap", -44, roofY + 14, -104 },
-		{ "Sponge", -33, roofY + 16, -108 },
-	}
-	for i, st in steps do
-		local kind, x, top, z = st[1], st[2], st[3], st[4]
-		if kind == "Sponge" then
-			mkPart("Part", { Name = "ObbySponge", Size = Vector3.new(6, 2.4, 4.6), CFrame = at(x, top - 1.6, z), Color = sponge, Material = LOW }, parent)
-			mkPart("Part", { Name = "ObbyScrub", Size = Vector3.new(6.02, 0.8, 4.62), CFrame = at(x, top - 0.1, z), Color = scrub, Material = LOW }, parent)
-		elseif kind == "Soap" then
-			mkPart("Part", { Name = "ObbySoap", Size = Vector3.new(5, 2, 3.6), CFrame = at(x, top - 1, z) * CFrame.Angles(0, math.rad(i * 23), 0), Color = soaps[i % #soaps + 1], Material = LOW }, parent)
-		elseif kind == "Cup" then
-			mkPart("Part", { Name = "ObbyCup", Shape = Enum.PartType.Cylinder, Size = Vector3.new(5, 5, 5), CFrame = upright(x, top - 2.5, z), Color = Color3.fromRGB(245, 245, 240), Material = LOW }, parent)
-			mkPart("Part", decor({ Name = "ObbyCupTea", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.3, 4.2, 4.2), CFrame = upright(x, top + 0.05, z), Color = Color3.fromRGB(170, 100, 60), Material = LOW }), parent)
-		elseif kind == "Spoon" then
-			mkPart("Part", { Name = "ObbySpoon", Size = Vector3.new(14, 0.8, 1.6), CFrame = at(x, top - 0.4, z), Color = Color3.fromRGB(200, 205, 214), Material = Enum.Material.Metal }, parent)
-			mkPart("Part", { Name = "ObbySpoonBowl", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.8, 4.4, 4.4), CFrame = upright(x - 8.5, top - 0.4, z), Color = Color3.fromRGB(200, 205, 214), Material = Enum.Material.Metal }, parent)
-		end
-	end
-
-	-- The finish: a big coaster with a gold trophy and a glowing pad.
-	local fx, fy, fz = -19, roofY + 18, -108
-	mkPart("Part", { Name = "ObbyCoaster", Shape = Enum.PartType.Cylinder, Size = Vector3.new(1.2, 13, 13), CFrame = upright(fx, fy - 0.6, fz), Color = Color3.fromRGB(150, 104, 70), Material = LOW }, parent)
-	local pad = mkPart("Part", { Name = "ObbyFinish", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.3, 6, 6), CFrame = upright(fx, fy + 0.15, fz), Color = Color3.fromRGB(255, 214, 90), Material = Enum.Material.Neon, CanCollide = false, CastShadow = false }, parent)
-	CollectionService:AddTag(pad, "ObbyFinish")
-	local gold = Color3.fromRGB(240, 196, 70)
-	mkPart("Part", { Name = "TrophyBase", Size = Vector3.new(3, 1, 3), CFrame = at(fx, fy + 0.5, fz - 4.2), Color = Color3.fromRGB(90, 60, 40), Material = LOW }, parent)
-	mkPart("Part", { Name = "TrophyStem", Shape = Enum.PartType.Cylinder, Size = Vector3.new(2, 0.8, 0.8), CFrame = upright(fx, fy + 2, fz - 4.2), Color = gold, Material = Enum.Material.Metal }, parent)
-	mkPart("Part", { Name = "TrophyCup", Shape = Enum.PartType.Cylinder, Size = Vector3.new(2.6, 3, 3), CFrame = upright(fx, fy + 4.2, fz - 4.2), Color = gold, Material = Enum.Material.Metal }, parent)
-	worldSign(pad, "FINISH! +" .. tostring(Config.Obby.Reward) .. " Bubbles", 14, 2.2, 6, Color3.fromRGB(255, 220, 110))
 end
 
 local function buildPetStand(parent: Instance)
@@ -1709,7 +1662,7 @@ function LobbyBuilder.Build(): Lobby
 	buildEggHatchery(model)
 	buildSoapShop(model)
 	buildPetStand(model)
-	buildObby(model)
+	buildRoofLadder(model)
 
 	-- Leaderboards in the back corners, angled at the middle of the plaza; How to Play beside the
 	-- spawn, facing it. Nothing stands behind the spawn, so the default camera has a clear view.
