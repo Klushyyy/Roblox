@@ -55,3 +55,18 @@ for _, d in ducks do
 	end
 end
 out("ducks hidden client-side: " .. hidden)
+
+-- the rooftop obby: finish pad pays once
+do
+	local CSx = game:GetService("CollectionService")
+	local pad = CSx:GetTagged("ObbyFinish")[1]
+	local root2 = G.player.Character.HumanoidRootPart
+	local before = DS.Get(G.player).Bubbles
+	pad.Touched:Fire(root2)
+	pump(0.2, G.frame)
+	local mid = DS.Get(G.player).Bubbles
+	pump(3.5, G.frame)
+	pad.Touched:Fire(root2)
+	pump(0.2, G.frame)
+	out(string.format("obby: +%d first, +%d second, done=%s", mid - before, DS.Get(G.player).Bubbles - mid, tostring(DS.Get(G.player).ObbyDone)))
+end

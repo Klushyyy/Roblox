@@ -1202,6 +1202,20 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - **Icons:** Free uses the drawn heart again (flat fill, round highlights only); the level cards
   show emoji (🍝 🍕 👑).
 
+## 6o. Rooftop obby, cleaner lobby props (v1.5.1)
+
+- **Obby:** a ladder (an invisible TrussPart with wooden rails and rungs) up the right side of the
+  lobby's dishwasher building, then nine floating kitchen things (sponges, soap bars, teacups, a
+  spoon) rising from its roof to a coaster with a gold trophy. The finish pad (tag "ObbyFinish")
+  pays Config.Obby.Reward (50 Bubbles) once per player (Profile.ObbyDone). One rubber duck
+  ("Shakers", hint "Top of the obby") now hides behind the trophy.
+- **Doghouse (Pets):** a proper gable roof: wedge gables close the triangle, two planks sit on the
+  slopes with an overhang, and a ridge cap covers the join.
+- **Soap Shop:** the giant pump bottle behind it (it poked into the dishwasher) is gone.
+- **Heart icon:** always drawn at 120 px and scaled down as one picture (UIScale), so small
+  hearts are the big one shrunk rather than re-snapped shape by shape.
+- **VIP:** a gold [VIP] tag before the name overhead and in chat; the name itself stays white.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

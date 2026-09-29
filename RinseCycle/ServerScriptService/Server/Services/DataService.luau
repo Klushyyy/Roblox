@@ -90,6 +90,7 @@ export type Profile = {
 	DailyStreak: number, -- 1..#Config.DailyRewards, the day of the streak last claimed
 	RedeemedCodes: { string }, -- Config.Codes already used (upper case)
 	Ducks: { string }, -- lobby rubber ducks found (Config.Ducks ids)
+	ObbyDone: boolean, -- the lobby rooftop obby's one-time reward was paid
 	Episodes: { number }, -- per level index: run-start cutscene chapters seen (picks the next one)
 	GroupReward: boolean, -- the join-the-community reward has been claimed
 	FollowReward: boolean, -- the follow-the-dev reward has been claimed
@@ -156,6 +157,7 @@ local TEMPLATE: Profile = {
 	DailyStreak = 0,
 	RedeemedCodes = {},
 	Ducks = {},
+	ObbyDone = false,
 	Episodes = {},
 	GroupReward = false,
 	FollowReward = false,
@@ -371,6 +373,7 @@ local function sanitizeProfile(profile: Profile, player: Player)
 		end
 	end
 	p.Ducks = ducks
+	p.ObbyDone = p.ObbyDone == true
 	local episodes = {}
 	for i = 1, #Config.Levels do
 		local n = if type(p.Episodes) == "table" then p.Episodes[i] else nil
@@ -1195,6 +1198,16 @@ function DataService.FindDuck(player: Player, duckId: string): (boolean, number)
 	end
 	table.insert(profile.Ducks, duckId)
 	return true, #profile.Ducks
+end
+
+-- Marks the lobby obby as finished. True only the first time (the reward is paid once).
+function DataService.ClaimObby(player: Player): boolean
+	local profile = DataService.Get(player)
+	if not profile or profile.ObbyDone then
+		return false
+	end
+	profile.ObbyDone = true
+	return true
 end
 
 -- Takes Bubbles if the player has enough. Returns true when paid.

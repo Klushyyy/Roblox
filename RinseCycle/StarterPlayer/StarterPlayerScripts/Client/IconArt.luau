@@ -526,6 +526,9 @@ function IconArt.Has(kind: string): boolean
 	return ART[kind] ~= nil
 end
 
+local HI_RES: { [string]: boolean } = { Heart = true }
+local HI_RES_SIZE = 120
+
 function IconArt.Draw(kind: string, px: number): Frame
 	local root = Instance.new("Frame")
 	root.Name = kind .. "Icon"
@@ -533,6 +536,23 @@ function IconArt.Draw(kind: string, px: number): Frame
 	root.BorderSizePixel = 0
 	root.Size = UDim2.fromOffset(px, px)
 	local shapes = ART[kind] or ART.Coin
+	-- Icons listed in HI_RES are always drawn at the reference size and scaled down as one picture
+	-- (UIScale), so a small one is exactly the big one shrunk: snapping each shape to a few whole
+	-- pixels at small sizes knocked them out of line with each other.
+	local canvas: Frame = root
+	if HI_RES[kind] and px < HI_RES_SIZE then
+		local inner = Instance.new("Frame")
+		inner.Name = "Art"
+		inner.BackgroundTransparency = 1
+		inner.BorderSizePixel = 0
+		inner.Size = UDim2.fromOffset(HI_RES_SIZE, HI_RES_SIZE)
+		local scale = Instance.new("UIScale")
+		scale.Scale = px / HI_RES_SIZE
+		scale.Parent = inner
+		inner.Parent = root
+		canvas = inner
+		px = HI_RES_SIZE
+	end
 	local grow = math.max(1, math.floor(px * 0.06 + 0.5))
 	-- Each layer (split by "|") gets its outline pass and then its fill pass, so a layer drawn later
 	-- sits on top of the earlier ones with its own outline.
@@ -540,11 +560,11 @@ function IconArt.Draw(kind: string, px: number): Frame
 	local function flush()
 		for _, s in layer do
 			if s.o then
-				draw(root, s, px, grow)
+				draw(canvas, s, px, grow)
 			end
 		end
 		for _, s in layer do
-			draw(root, s, px, 0)
+			draw(canvas, s, px, 0)
 		end
 		table.clear(layer)
 	end
@@ -558,7 +578,7 @@ function IconArt.Draw(kind: string, px: number): Frame
 	flush()
 	-- Pin the drawing order: siblings with the same ZIndex have no guaranteed order in Roblox, which
 	-- let an outline land on top of its fill (the ragged edges). Each shape sits above the last.
-	for i, child in root:GetChildren() do
+	for i, child in canvas:GetChildren() do
 		if child:IsA("GuiObject") then
 			child.ZIndex = i
 		end

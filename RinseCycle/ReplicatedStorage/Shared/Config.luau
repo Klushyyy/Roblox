@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.5.0"
+Config.Version = "1.5.1"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -805,13 +805,16 @@ Config.LobbyBubbles = {
 	PerMinute = 60, -- per-player pop cap (anti autoclicker)
 }
 
+-- Rooftop obby on the lobby's dishwasher building: finishing it pays this once per player.
+Config.Obby = { Reward = 50 }
+
 Config.Ducks = {
 	List = {
 		{ Id = "Fountain", Hint = "Having a swim" },
 		{ Id = "Doghouse", Hint = "Guarding the pets" },
 		{ Id = "Sponge", Hint = "Sunbathing on something soft" },
 		{ Id = "Board", Hint = "Hiding behind the scores" },
-		{ Id = "Shakers", Hint = "Seasoned" },
+		{ Id = "Shakers", Hint = "Top of the obby" },
 		{ Id = "Saucer", Hint = "Coffee break" },
 	},
 	Reward = { Bubbles = 25, Gems = 0 }, -- each duck
