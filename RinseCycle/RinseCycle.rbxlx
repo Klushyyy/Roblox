@@ -33462,16 +33462,44 @@ local function grid(parent: Instance, size: UDim2, position: UDim2): ScrollingFr
 	return s
 end
 
-local function heading(text: string, x: number, y: number, w: number)
+-- A small grey heading. position / size are UDim2s so the two halves follow the window's width.
+local function heading(text: string, position: UDim2, size: UDim2)
 	UIKit.Label({
 		Text = text,
 		TextSize = 18,
+		TextScaled = true,
 		TextColor3 = Colors.TextDim,
 		TextXAlignment = Enum.TextXAlignment.Left,
-		Position = UDim2.fromOffset(x, y),
-		Size = UDim2.new(0, w, 0, 24),
+		Position = position,
+		Size = size,
 		Parent = body,
 	})
+end
+
+-- One side's offer: a dark panel holding the pet tiles, with a centred hint while it's empty
+-- (the hint sits on the panel, not in the tile grid, so it's never cut to one tile's width).
+local function offerPanel(position: UDim2, hint: string, empty: boolean): ScrollingFrame
+	local panel = UIKit.Card({
+		Size = UDim2.new(0.5, -8, 0, CELL.Y + 20),
+		Position = position,
+		Color = Colors.PanelDark,
+		Parent = body,
+	})
+	local tiles = grid(panel, UDim2.new(1, -8, 1, -4), UDim2.fromOffset(4, 2))
+	if empty then
+		UIKit.Label({
+			Text = hint,
+			TextSize = 20,
+			TextScaled = true,
+			TextWrapped = true,
+			TextColor3 = Colors.TextDim,
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.new(1, -24, 0, 48),
+			Parent = panel,
+		})
+	end
+	return tiles
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -33587,11 +33615,10 @@ local function drawTrade()
 		Parent = body,
 	})
 
-	local half = 410
-	heading(string.format("YOUR OFFER  (%d/%d)%s", #s.Mine, s.MaxOffer, if s.MyReady then "  ✅ READY" else ""), 0, 32, half)
-	heading(string.format("%s'S OFFER%s", string.upper(tostring(s.Partner.Name)), if s.TheirReady then "  ✅ READY" else ""), half + 20, 32, half)
-	local mine = grid(body, UDim2.fromOffset(half, CELL.Y + 16), UDim2.fromOffset(0, 58))
-	local theirs = grid(body, UDim2.fromOffset(half, CELL.Y + 16), UDim2.fromOffset(half + 20, 58))
+	heading(string.format("YOUR OFFER  (%d/%d)%s", #s.Mine, s.MaxOffer, if s.MyReady then "  ✅ READY" else ""), UDim2.fromOffset(4, 32), UDim2.new(0.5, -12, 0, 22))
+	heading(string.format("%s'S OFFER%s", string.upper(tostring(s.Partner.Name)), if s.TheirReady then "  ✅ READY" else ""), UDim2.new(0.5, 8, 0, 32), UDim2.new(0.5, -12, 0, 22))
+	local mine = offerPanel(UDim2.fromOffset(0, 58), "Select pets below to offer them", #s.Mine == 0)
+	local theirs = offerPanel(UDim2.new(0.5, 8, 0, 58), "Nothing offered yet", #s.Theirs == 0)
 	for i, entry in s.Mine do
 		petCell(mine, entry, i, function()
 			send("Remove", entry.Uid)
@@ -33600,19 +33627,13 @@ local function drawTrade()
 	for i, entry in s.Theirs do
 		petCell(theirs, entry, i)
 	end
-	if #s.Mine == 0 then
-		UIKit.Label({ Text = "Tap your pets below to offer them.", TextSize = 16, TextColor3 = Colors.TextDim, Size = UDim2.fromOffset(half - 12, 40), Parent = mine })
-	end
-	if #s.Theirs == 0 then
-		UIKit.Label({ Text = "Nothing offered yet.", TextSize = 16, TextColor3 = Colors.TextDim, Size = UDim2.fromOffset(half - 12, 40), Parent = theirs })
-	end
 
-	heading("YOUR PETS  (tap to offer)", 0, 196, 400)
+	heading("YOUR PETS  (tap to offer)", UDim2.fromOffset(4, 200), UDim2.new(1, -200, 0, 22))
 	local offered: { [string]: boolean } = {}
 	for _, e in s.Mine do
 		offered[e.Uid] = true
 	end
-	local pets = grid(body, UDim2.new(1, -190, 1, -226), UDim2.fromOffset(0, 222))
+	local pets = grid(body, UDim2.new(1, -196, 1, -228), UDim2.fromOffset(0, 226))
 	local meta = ClientState.Meta
 	for i, entry in (meta and meta.Pets or {}) do
 		if not offered[entry.Uid] then
@@ -37442,11 +37463,45 @@ local controlledChip, controlledLabel = makeChip("Controlled", Colors.Warning, 3
 controlledLabel.Text = "🎮 Being controlled by staff"
 local flyChip, flyLabel = makeChip("Flying", Colors.Accent, 4)
 
+-- While frozen or being controlled by staff, this player's own movement keys / thumbstick / jump
+-- do nothing at all (Roblox's PlayerModule controls are switched off), so they can't fight it.
+local controlLocks: { [string]: boolean? } = {}
+local function applyControlLock()
+	local locked = next(controlLocks) ~= nil
+	pcall(function()
+		local playerModule = require(player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule") :: any) :: any
+		local controls = playerModule:GetControls()
+		if locked then
+			controls:Disable()
+		else
+			controls:Enable()
+		end
+	end)
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if humanoid and locked then
+		humanoid.Jump = false
+	end
+end
+local function setControlLock(reason: string, on: boolean)
+	controlLocks[reason] = if on then true else nil
+	applyControlLock()
+end
+
 AdminFreezeStatus.OnClientEvent:Connect(function(frozen: boolean)
 	frozenChip.Visible = frozen == true
+	setControlLock("Frozen", frozen == true)
 end)
 AdminControlTargetStatus.OnClientEvent:Connect(function(controlled: boolean)
 	controlledChip.Visible = controlled == true
+	setControlLock("Controlled", controlled == true)
+end)
+-- A freeze only covers the character it was put on: a new character moves again.
+player.CharacterAdded:Connect(function()
+	if controlLocks.Frozen then
+		frozenChip.Visible = false
+		setControlLock("Frozen", false)
+	end
 end)
 
 -- Muted: a chip with the time left, and the chat bar switched off (the server blocks the messages

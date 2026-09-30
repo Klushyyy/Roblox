@@ -353,11 +353,45 @@ local controlledChip, controlledLabel = makeChip("Controlled", Colors.Warning, 3
 controlledLabel.Text = "🎮 Being controlled by staff"
 local flyChip, flyLabel = makeChip("Flying", Colors.Accent, 4)
 
+-- While frozen or being controlled by staff, this player's own movement keys / thumbstick / jump
+-- do nothing at all (Roblox's PlayerModule controls are switched off), so they can't fight it.
+local controlLocks: { [string]: boolean? } = {}
+local function applyControlLock()
+	local locked = next(controlLocks) ~= nil
+	pcall(function()
+		local playerModule = require(player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule") :: any) :: any
+		local controls = playerModule:GetControls()
+		if locked then
+			controls:Disable()
+		else
+			controls:Enable()
+		end
+	end)
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if humanoid and locked then
+		humanoid.Jump = false
+	end
+end
+local function setControlLock(reason: string, on: boolean)
+	controlLocks[reason] = if on then true else nil
+	applyControlLock()
+end
+
 AdminFreezeStatus.OnClientEvent:Connect(function(frozen: boolean)
 	frozenChip.Visible = frozen == true
+	setControlLock("Frozen", frozen == true)
 end)
 AdminControlTargetStatus.OnClientEvent:Connect(function(controlled: boolean)
 	controlledChip.Visible = controlled == true
+	setControlLock("Controlled", controlled == true)
+end)
+-- A freeze only covers the character it was put on: a new character moves again.
+player.CharacterAdded:Connect(function()
+	if controlLocks.Frozen then
+		frozenChip.Visible = false
+		setControlLock("Frozen", false)
+	end
 end)
 
 -- Muted: a chip with the time left, and the chat bar switched off (the server blocks the messages
