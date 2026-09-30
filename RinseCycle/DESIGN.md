@@ -1276,6 +1276,19 @@ walls instead of clipping through. All gameplay queries use Include filters.
   answered ("Wait m:ss" on the button); after one accepted trade the two can ask each other freely.
 - Both press Ready, then "Trading in 3... 2... 1..."; either can un-ready or cancel meanwhile.
 
+## 6t. Staff ranks (v1.6.3)
+- :setadminrank (owner only): Moderator / Admin / Developer, or clear. Saved in the
+  "RinseCycleStaffTiers" DataStore (one record: userId -> { Tier, Name }), applied at once (panel
+  built / changed / removed, AdminInfoChanged) in every server (MessagingService), no rejoin.
+  :stafflist shows every staff member, online or not, with Remove.
+- Moderator: kick, mute, tempmute, warn, warn list, mute list. Admin: every Punish command plus
+  Go to, Join server, Spectate. Developer: every command except the owner's own (staff ranks,
+  gifted passes, wiping the log). Staff can't use commands on staff at or above their own rank.
+- Tags (player attribute StaffTag): [MOD] green, [ADMIN] red, [DEV] blue, [OWNER] purple, overhead
+  and in chat, in place of [VIP].
+- The Admin button is back under Trade in the left column (in a run it's alone there, clear of
+  the timer).
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

@@ -93,6 +93,14 @@ local function updateLeaderstats(player: Player)
 	;(value :: IntValue).Value = (profile and tonumber(profile.Rebirths)) or 0
 end
 
+-- Staff wear their rank's tag instead of [VIP] (player attribute StaffTag, set by AdminServer).
+local STAFF_COLORS = {
+	MOD = Color3.fromRGB(80, 220, 100),
+	ADMIN = Color3.fromRGB(255, 75, 75),
+	DEV = Color3.fromRGB(80, 160, 255),
+	OWNER = Color3.fromRGB(185, 100, 255),
+}
+
 local function refresh(player: Player)
 	pcall(updateLeaderstats, player)
 	local character = player.Character
@@ -111,7 +119,15 @@ local function refresh(player: Player)
 		-- display names can't contain markup characters, but escape anyway: the label is rich text
 		local safe = string.gsub(string.gsub(string.gsub(nameText, "&", "&amp;"), "<", "&lt;"), ">", "&gt;")
 		nameLabel.RichText = true
-		nameLabel.Text = if vip then string.format('<font color="#%s">[VIP]</font> %s', GOLD:ToHex(), safe) else safe
+		local staff = player:GetAttribute("StaffTag")
+		local staffColor = type(staff) == "string" and STAFF_COLORS[staff]
+		if staffColor then
+			nameLabel.Text = string.format('<font color="#%s">[%s]</font> %s', staffColor:ToHex(), staff, safe)
+		elseif vip then
+			nameLabel.Text = string.format('<font color="#%s">[VIP]</font> %s', GOLD:ToHex(), safe)
+		else
+			nameLabel.Text = safe
+		end
 		nameLabel.TextColor3 = Color3.new(1, 1, 1)
 		-- without a rank line the name sits in the middle of the tag
 		nameLabel.Position = UDim2.fromScale(0, if hasRank then 0 else 0.3)
@@ -158,6 +174,9 @@ local function watch(player: Player)
 		task.spawn(attach, player, player.Character)
 	end
 	player:GetPropertyChangedSignal("DisplayName"):Connect(function()
+		refresh(player)
+	end)
+	player:GetAttributeChangedSignal("StaffTag"):Connect(function()
 		refresh(player)
 	end)
 end

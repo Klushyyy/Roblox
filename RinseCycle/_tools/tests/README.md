@@ -32,7 +32,8 @@ Paths assume the repo lives at /home/user/Roblox. The mock is permissive: a pass
   - `scen_social`: pet trade (with a mid-countdown change), gifting a pass, leaderboard reset.
   - `scen_petsadmin`: a hidden admin's pets stop, the admin Pets view (add / remove), :invis remembered.
   - `scen_tradereq`: trade requests (Request / Cancel / 2-minute wait, no wait after an accepted trade) and the 3-2-1 countdown.
-  - `scen_adminbtn`: the right column's buttons, including the owner's Admin button.
+  - `scen_adminbtn`: the left column's buttons, including the staff Admin button (under Trade).
 
 Also run `python3 _tools/check_locals.py` before sending scripts: Roblox refuses a script with more
 than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch that.
+  - `scen_staff`: staff tiers (Moderator / Admin / Developer / clear), their tags, the staff list, and staff can't target higher ranks.

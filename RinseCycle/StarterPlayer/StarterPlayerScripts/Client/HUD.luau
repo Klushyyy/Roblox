@@ -29,12 +29,22 @@ local LocalPlayer = Players.LocalPlayer
 
 local HUD = {}
 
--- The owner-only Admin button (AdminClient asks for it once the server confirms the owner). It
--- sits at the bottom of the right column (the left column's spot under Free is Trade's now) and
--- stays there in runs too.
+-- The staff Admin button (AdminClient asks for it once the server confirms a staff tier). It sits
+-- under Trade in the left column and stays there in runs too (alone, away from the timer).
 local adminClick: (() -> ())? = nil
 local addAdminButton: (() -> ())? = nil
 local adminButton: TextButton? = nil
+
+-- Shows or hides the Admin button (a staff rank given or taken away while playing).
+function HUD.SetAdminButtonVisible(visible: boolean)
+	if adminButton then
+		adminButton.Visible = visible
+		local column = adminButton.Parent
+		if column and column:IsA("GuiObject") and visible then
+			column.Visible = true
+		end
+	end
+end
 
 function HUD.AddAdminButton(onClick: () -> ())
 	adminClick = onClick
@@ -264,9 +274,9 @@ function HUD.Init()
 			Icon = "🛡️",
 			Label = "Admin",
 			Color = Colors.PanelLight,
-			Size = UDim2.fromOffset(100, 100),
-			LayoutOrder = 99, -- the bottom of the right column, under Shop / Pets / Ranks
-			Parent = rightColumn,
+			Size = UDim2.fromOffset(80, 80),
+			LayoutOrder = 5, -- under Trade in the left column (and alone there in a run, clear of the timer)
+			Parent = leftColumn,
 			OnClick = function()
 				if adminClick then
 					adminClick()
@@ -278,6 +288,7 @@ function HUD.Init()
 		codesButton.Visible = not inRun
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
+		leftColumn.Visible = true
 	end
 	addAdminButton = makeAdminButton
 	makeAdminButton()
@@ -1137,7 +1148,7 @@ function HUD.Init()
 		codesButton.Visible = not inRun
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
-		leftColumn.Visible = not inRun
+		leftColumn.Visible = not inRun or (adminButton ~= nil and adminButton.Visible)
 		upgradesButton.LayoutOrder = 1
 		shopButton.LayoutOrder = 2
 		petsButton.LayoutOrder = 3

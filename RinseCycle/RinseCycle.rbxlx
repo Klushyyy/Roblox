@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.6.2"
+Config.Version = "1.6.3"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -3065,10 +3065,9 @@ local ALL_COMMANDS = {
 -- ordinary player would be worse than a bug, which is why the gate is
 -- "Studio, or you are the owner account" rather than "you are senior
 -- enough" - a Developer or a Founder still gets nothing.
-local STUDIO_ONLY_COMMANDS = {
-	"setadminrank", "wipelogs", "givegamepass", "removegamepass", "daily",
-	"finishrun", "givecoins", "unlockall", "setrebirths",
-}
+-- Nothing is hidden behind Studio any more: every command belongs to a staff tier (below), and
+-- the owner-only ones (staff ranks, gifted passes, wiping the log) are only on the owner's list.
+local STUDIO_ONLY_COMMANDS = {}
 
 -- Commands FOUNDER alone gets, on top of everything Developer has.
 --
@@ -3077,7 +3076,8 @@ local STUDIO_ONLY_COMMANDS = {
 -- :setgems hand out the game's currencies - that's not
 -- a Studio tool, it's a live one, but it's also not something a
 -- Developer should be able to do on a whim.
-local FOUNDER_ONLY_COMMANDS = { "setbubbles", "setgems" }
+-- Developer: everything on ALL_COMMANDS plus these game tools.
+local FOUNDER_ONLY_COMMANDS = { "setbubbles", "setgems", "daily", "finishrun", "givecoins", "unlockall", "setrebirths" }
 
 local STUDIO_ONLY_SET = {}
 for _, name in ipairs(STUDIO_ONLY_COMMANDS) do
@@ -3126,37 +3126,33 @@ local function canUseStudioCommands(player)
 	return ownerCheck ~= nil and ownerCheck(player) == true
 end
 
-local STUDIO_TIER_VALUES = { "Moderator", "Admin", "Developer", "Founder" }
--- The "Admin" tier's own list, kept separate so both it and the smaller
--- Moderator list can each name only the commands they actually get,
--- rather than every tier needing to redundantly re-list Moderator's
--- commands too.
+-- The staff ranks the owner can hand out with :setadminrank ("Founder" is the owner alone).
+local STUDIO_TIER_VALUES = { "Moderator", "Admin", "Developer" }
+-- Admin: every Punish command, plus the Move ones except pulling people (Bring, Bring any server)
+-- and Control Player.
 local ADMIN_TIER_COMMANDS = {
-	"kick", "mute", "tempmute", "warn", "msg", "goto", "ban", "tempban",
-	"freeze", "unfreeze", "bring", "warnlist", "banlist", "mutelist",
-	"setrank", "promote", "demote", "announce", "cmdlogs", "playerlogs",
-	"kill", "jail", "god", "respawn",
-	"spectate", "controlplayer", "invis",
-	"viewpets",
+	"kick", "mute", "tempmute", "warn", "ban", "tempban", "warnlist", "banlist", "mutelist",
+	"goto", "joinserver", "spectate",
 }
 local TIER_COMMANDS = {
-	Moderator = {"kick", "mute", "tempmute", "warn", "msg", "goto", "mutelist"},
-	-- :fly/:give held back from Admin - these are sandbox/testing
-	-- utilities (free flight, handing out items - including the
-	-- "btools" build-tools item, given out via :give like anything else
-	-- in ServerStorage.AdminGiveableItems) rather than moderation tools,
-	-- so they stay Developer+ only, same tier split the game already
-	-- draws elsewhere (Admin gets full moderation power, Developer gets
-	-- that plus everything else).
+	-- Moderator: the Punish commands except banning.
+	Moderator = { "kick", "mute", "tempmute", "warn", "warnlist", "mutelist" },
 	Admin = ADMIN_TIER_COMMANDS,
-	Developer = ALL_COMMANDS,
-	-- Everything Developer has, plus FOUNDER_ONLY_COMMANDS. Built as its
-	-- own list rather than pointing at ALL_COMMANDS: the two tiers used
-	-- to share that exact table, so appending to it for Founder would
-	-- silently hand the same command to Developer as well.
+	-- Developer: every command, except the owner's own (staff ranks, gifted passes, wiping logs).
+	Developer = (function()
+		local list = table.clone(ALL_COMMANDS)
+		for _, name in ipairs(FOUNDER_ONLY_COMMANDS) do
+			table.insert(list, name)
+		end
+		return list
+	end)(),
+	-- The owner: everything.
 	Founder = (function()
 		local list = table.clone(ALL_COMMANDS)
 		for _, name in ipairs(FOUNDER_ONLY_COMMANDS) do
+			table.insert(list, name)
+		end
+		for _, name in ipairs({ "setadminrank", "stafflist", "wipelogs", "givegamepass", "removegamepass" }) do
 			table.insert(list, name)
 		end
 		return list
@@ -3170,6 +3166,57 @@ local TIER_COMMANDS = {
 local ALL_COMMANDS_SET = {}
 for _, name in ipairs(TIER_COMMANDS.Founder) do
 	ALL_COMMANDS_SET[name] = true
+end
+
+-- =====================================================================
+-- Staff ranks (Moderator / Admin / Developer), given by the owner with :setadminrank.
+-- Saved in one DataStore record (userId -&gt; { Tier, Name }), so they last, apply in every server,
+-- and can be taken away while the person is offline (:stafflist). A change is broadcast to every
+-- server (MessagingService), which applies it on the spot: no rejoin needed.
+-- =====================================================================
+local Staff = {
+	Map = {} :: { [string]: { Tier: string, Name: string } },
+	Store = getStore("RinseCycleStaffTiers"),
+	Key = "staff",
+	Topic = "RinseCycle_StaffChanged",
+	-- Tag shown before the name (chat and overhead): text and colour per tier.
+	Tags = { Moderator = "MOD", Admin = "ADMIN", Developer = "DEV", Founder = "OWNER" },
+}
+
+function Staff.Load()
+	local ok, value = pcall(function()
+		return Staff.Store:GetAsync(Staff.Key)
+	end)
+	if ok then
+		Staff.Map = if type(value) == "table" then value else {}
+	end
+	return ok
+end
+
+-- Sets (tier) or clears (nil) a user's staff rank in the saved record. Returns true once saved.
+function Staff.Save(userId, tier, name)
+	local newMap
+	local ok, err = pcall(function()
+		Staff.Store:UpdateAsync(Staff.Key, function(old)
+			local map = if type(old) == "table" then old else {}
+			map[tostring(userId)] = if tier then { Tier = tier, Name = name } else nil
+			newMap = map
+			return map
+		end)
+	end)
+	if ok and newMap then
+		Staff.Map = newMap
+	elseif not ok then
+		-- DataStores unavailable (Studio without API access): keep it for this session at least.
+		dsWarn("[AdminServer] couldn't save staff rank: " .. tostring(err))
+		Staff.Map[tostring(userId)] = if tier then { Tier = tier, Name = name } else nil
+	end
+	return ok
+end
+
+function Staff.TierOf(userId)
+	local entry = Staff.Map[tostring(userId)]
+	return if type(entry) == "table" and type(entry.Tier) == "string" then entry.Tier else nil
 end
 
 local function getPlayerTier(player)
@@ -3188,8 +3235,10 @@ local function getPlayerTier(player)
 		end
 	end
 
-	-- Only the owner, by UserId. Everyone else has no tier at all (so no panel and no commands).
+	-- The owner, by UserId; then anyone the owner made staff.
 	if isOwnerAccount(player) then return "Founder" end
+	local staffTier = Staff.TierOf(player.UserId)
+	if staffTier and TIER_COMMANDS[staffTier] then return staffTier end
 	-- In Studio every tester is treated as the owner - it's your own machine and place file.
 	if RunService:IsStudio() then return "Founder" end
 	return nil
@@ -3665,15 +3714,73 @@ Remote.AdminInfoChanged.Parent = ReplicatedStorage
 -- live game - and there the attribute was set, the rank label changed,
 -- and the client was never told, so the person was given a staff rank
 -- with no admin panel to go with it.
+-- Puts a player's current tier into effect right now: their panel (built, changed or taken away)
+-- and the [MOD] / [ADMIN] / [DEV] / [OWNER] tag (player attribute StaffTag, read by NameTags and
+-- ChatNames).
+function Staff.Apply(player)
+	local tier = getPlayerTier(player)
+	-- In Studio every tester counts as the owner for testing, but only the real owner wears [OWNER].
+	local tag = if tier == "Founder" and not isOwnerAccount(player) then nil else Staff.Tags[tier or ""]
+	player:SetAttribute("StaffTag", tag)
+	Remote.AdminInfoChanged:FireClient(player, tierInfo(tier, player))
+end
+
 local function watchOverride(player)
 	player:GetAttributeChangedSignal("AdminTierOverride"):Connect(function()
-		Remote.AdminInfoChanged:FireClient(player, tierInfo(getPlayerTier(player), player))
+		Staff.Apply(player)
 	end)
+	Staff.Apply(player)
 end
 for _, player in ipairs(Players:GetPlayers()) do
 	watchOverride(player)
 end
 Players.PlayerAdded:Connect(watchOverride)
+
+-- The saved staff ranks: read at start and every 2 minutes; another server's change is heard at once.
+task.spawn(function()
+	while true do
+		if Staff.Load() then
+			for _, player in ipairs(Players:GetPlayers()) do
+				Staff.Apply(player)
+			end
+		end
+		task.wait(120)
+	end
+end)
+task.spawn(function()
+	pcall(function()
+		MessagingService:SubscribeAsync(Staff.Topic, function(message)
+			local data = message.Data
+			local userId = type(data) == "table" and tonumber(data.UserId)
+			if not userId then
+				return
+			end
+			if type(data.Tier) == "string" then
+				Staff.Map[tostring(userId)] = { Tier = data.Tier, Name = tostring(data.Name or "") }
+			else
+				Staff.Map[tostring(userId)] = nil
+			end
+			local player = Players:GetPlayerByUserId(userId)
+			if player then
+				Staff.Apply(player)
+			end
+		end)
+	end)
+end)
+
+-- Gives (tier) or takes away (nil) a staff rank: saved, applied here now, and told to every server.
+function Staff.Set(userId, tier, name)
+	Staff.Save(userId, tier, name)
+	local player = Players:GetPlayerByUserId(userId)
+	if player then
+		Staff.Apply(player)
+	end
+	task.spawn(function()
+		pcall(function()
+			MessagingService:PublishAsync(Staff.Topic, { UserId = userId, Tier = tier, Name = name })
+		end)
+	end)
+end
 
 log("[AdminServer] Remotes ready")
 
@@ -5983,38 +6090,60 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 	-- This is a testing tool: stop the playtest and you are whatever you
 	-- really are again, with nothing left behind on the account.
 	if commandName == "setadminrank" then
-		local wanted = string.lower(extraText:match("^%s*(%S*)") or "")
-		if targetName == "" or wanted == "" then
-			sendFeedback(admin, "Usage: :setadminrank [player] [Moderator/Admin/Developer/Founder, or clear]", true)
+		if not isOwner(admin) then
+			sendFeedback(admin, "Unknown command: :" .. commandName, true)
 			return
 		end
-
+		local wanted = string.lower(extraText:match("^%s*(%S*)") or "")
+		local usage = "Usage: :setadminrank [player] [Moderator/Admin/Developer, or clear]"
+		if targetName == "" or wanted == "" then
+			sendFeedback(admin, usage, true)
+			return
+		end
 		local target, matchError = findTargetPlayer(targetName)
 		if matchError then
 			sendFeedback(admin, matchError, true)
 			return
 		end
 		if not target then
-			sendFeedback(admin, "Player not found: " .. targetName, true)
+			sendFeedback(admin, "Player not found: " .. targetName .. " (to remove someone who's offline, use Staff list)", true)
 			return
 		end
-
-		if wanted == "clear" or wanted == "none" then
-			target:SetAttribute("AdminTierOverride", nil)
-			sendFeedback(admin, target.Name .. " reset - back to their real rank on next rejoin", false)
+		if isOwnerAccount(target) then
+			sendFeedback(admin, "That's the owner account", true)
 			return
 		end
-
-		for _, value in ipairs(STUDIO_TIER_VALUES) do
-			if string.lower(value) == wanted then
-				target:SetAttribute("AdminTierOverride", value)
-				sendFeedback(admin, target.Name .. " is now " .. value .. " (this session only)", false)
-				log("[AdminServer] " .. admin.Name .. " set " .. target.Name .. " to " .. value .. " (Studio, session only)")
+		local newTier = nil
+		if wanted ~= "clear" and wanted ~= "none" then
+			for _, value in ipairs(STUDIO_TIER_VALUES) do
+				if string.lower(value) == wanted or string.lower(value):sub(1, 3) == wanted:sub(1, 3) then
+					newTier = value
+				end
+			end
+			if not newTier then
+				sendFeedback(admin, usage, true)
 				return
 			end
 		end
+		task.spawn(function()
+			Staff.Set(target.UserId, newTier, target.Name)
+			if newTier then
+				celebrate(target, "You're staff!", "You've been made " .. newTier .. " by the owner. Your admin panel is on the left.", "🛡️")
+			end
+		end)
+		logCommand(admin, "setadminrank", target.Name, newTier or "cleared",
+			admin.Name .. (if newTier then " made " .. target.Name .. " " .. newTier else " removed " .. target.Name .. "'s staff rank"))
+		sendFeedback(admin, if newTier then (target.Name .. " is now " .. newTier) else (target.Name .. " is no longer staff"), false)
+		return
+	end
 
-		sendFeedback(admin, "Usage: :setadminrank [player] [Moderator/Admin/Developer/Founder, or clear]", true)
+	-- :stafflist - every staff member (online or not), with Remove.
+	if commandName == "stafflist" then
+		if not isOwner(admin) then
+			sendFeedback(admin, "Unknown command: :" .. commandName, true)
+			return
+		end
+		Staff.SendList(admin)
 		return
 	end
 
@@ -6478,6 +6607,16 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 	if not target then
 		sendFeedback(admin, "Player not found: " .. tostring(targetName), true)
 		return
+	end
+	-- Staff can't use commands on staff at or above their own rank (a Moderator can't kick an Admin
+	-- or the owner). The owner can use anything on anyone.
+	if target ~= admin and tier ~= "Founder" then
+		local order = { Moderator = 1, Admin = 2, Developer = 3, Founder = 4 }
+		local targetTier = getPlayerTier(target)
+		if targetTier and (order[targetTier] or 0) &gt;= (order[tier] or 0) then
+			sendFeedback(admin, "You can't use that on " .. target.Name .. " (staff at or above your rank)", true)
+			return
+		end
 	end
 	-- Self-targeting rules. :kick/:ban are locked out for the obvious
 	-- reason. :spectate/:controlplayer are locked out because both park
@@ -7248,6 +7387,48 @@ task.spawn(function()
 				TeleportService:TeleportAsync(game.PlaceId, { player }, options)
 			end)
 		end)
+	end)
+end)
+
+-- =====================================================================
+-- Staff list (:stafflist): everyone with a staff rank, Remove works even when they're offline
+-- =====================================================================
+Remote.AdminStaffList = Instance.new("RemoteEvent")
+Remote.AdminStaffList.Name = "AdminStaffList"
+Remote.AdminStaffList.Parent = ReplicatedStorage
+Remote.AdminStaffAction = Instance.new("RemoteEvent")
+Remote.AdminStaffAction.Name = "AdminStaffAction"
+Remote.AdminStaffAction.Parent = ReplicatedStorage
+
+function Staff.SendList(admin)
+	local rows = {}
+	for id, entry in pairs(Staff.Map) do
+		if type(entry) == "table" then
+			local online = Players:GetPlayerByUserId(tonumber(id) or 0) ~= nil
+			table.insert(rows, {
+				Id = tonumber(id),
+				Line1 = tostring(entry.Name or id) .. "  [" .. tostring(Staff.Tags[entry.Tier] or entry.Tier) .. "]",
+				Line2 = tostring(entry.Tier) .. "  ·  UserId " .. id .. (if online then "  ·  online" else ""),
+			})
+		end
+	end
+	table.sort(rows, function(a, b)
+		return a.Line1 &lt; b.Line1
+	end)
+	Remote.AdminStaffList:FireClient(admin, "🛡️ Staff (" .. #rows .. ")", rows)
+end
+
+Remote.AdminStaffAction.OnServerEvent:Connect(function(admin, action, userId)
+	if not isOwner(admin) or action ~= "Remove" or type(userId) ~= "number" then
+		return
+	end
+	local entry = Staff.Map[tostring(userId)]
+	local name = if type(entry) == "table" then tostring(entry.Name) else tostring(userId)
+	task.spawn(function()
+		Staff.Set(userId, nil, nil)
+		logCommand(admin, "setadminrank", name, "cleared", admin.Name .. " removed " .. name .. "'s staff rank")
+		sendFeedback(admin, name .. " is no longer staff", false)
+		Staff.SendList(admin)
 	end)
 end)</ProtectedString></Properties></Item>
 </Item>
@@ -15196,6 +15377,14 @@ local function updateLeaderstats(player: Player)
 	;(value :: IntValue).Value = (profile and tonumber(profile.Rebirths)) or 0
 end
 
+-- Staff wear their rank's tag instead of [VIP] (player attribute StaffTag, set by AdminServer).
+local STAFF_COLORS = {
+	MOD = Color3.fromRGB(80, 220, 100),
+	ADMIN = Color3.fromRGB(255, 75, 75),
+	DEV = Color3.fromRGB(80, 160, 255),
+	OWNER = Color3.fromRGB(185, 100, 255),
+}
+
 local function refresh(player: Player)
 	pcall(updateLeaderstats, player)
 	local character = player.Character
@@ -15214,7 +15403,15 @@ local function refresh(player: Player)
 		-- display names can't contain markup characters, but escape anyway: the label is rich text
 		local safe = string.gsub(string.gsub(string.gsub(nameText, "&amp;", "&amp;amp;"), "&lt;", "&amp;lt;"), "&gt;", "&amp;gt;")
 		nameLabel.RichText = true
-		nameLabel.Text = if vip then string.format('&lt;font color="#%s"&gt;[VIP]&lt;/font&gt; %s', GOLD:ToHex(), safe) else safe
+		local staff = player:GetAttribute("StaffTag")
+		local staffColor = type(staff) == "string" and STAFF_COLORS[staff]
+		if staffColor then
+			nameLabel.Text = string.format('&lt;font color="#%s"&gt;[%s]&lt;/font&gt; %s', staffColor:ToHex(), staff, safe)
+		elseif vip then
+			nameLabel.Text = string.format('&lt;font color="#%s"&gt;[VIP]&lt;/font&gt; %s', GOLD:ToHex(), safe)
+		else
+			nameLabel.Text = safe
+		end
 		nameLabel.TextColor3 = Color3.new(1, 1, 1)
 		-- without a rank line the name sits in the middle of the tag
 		nameLabel.Position = UDim2.fromScale(0, if hasRank then 0 else 0.3)
@@ -15261,6 +15458,9 @@ local function watch(player: Player)
 		task.spawn(attach, player, player.Character)
 	end
 	player:GetPropertyChangedSignal("DisplayName"):Connect(function()
+		refresh(player)
+	end)
+	player:GetAttributeChangedSignal("StaffTag"):Connect(function()
 		refresh(player)
 	end)
 end
@@ -21415,7 +21615,8 @@ end
 return Celebrate</ProtectedString></Properties></Item>
 <Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">ChatNames</string><ProtectedString name="Source">--[[
 	ChatNames - VIPs get a gold [VIP] tag before their name in the chat, "[VIP] Klushy: hi" (their
-	overhead name has the same tag; see NameTags).
+	overhead name has the same tag; see NameTags). Staff get [MOD] / [ADMIN] / [DEV] / [OWNER]
+	instead (player attribute StaffTag, set by AdminServer).
 
 	The server sets Player.VIP (attribute) from the VIP game pass; this client adds the tag to the
 	prefix of every message from a VIP. TextChatService.OnIncomingMessage is a single callback, so
@@ -21428,6 +21629,8 @@ local TextChatService = game:GetService("TextChatService")
 local ChatNames = {}
 
 local GOLD_HEX = "#FFD24A"
+-- Staff get their rank's tag instead: [MOD] green, [ADMIN] red, [DEV] blue, [OWNER] purple.
+local STAFF_HEX = { MOD = "#50DC64", ADMIN = "#FF4B4B", DEV = "#50A0FF", OWNER = "#B964FF" }
 local initialized = false
 
 function ChatNames.Init()
@@ -21439,7 +21642,11 @@ function ChatNames.Init()
 		local props = Instance.new("TextChatMessageProperties")
 		local source = message.TextSource
 		local player = source and Players:GetPlayerByUserId(source.UserId)
-		if player and player:GetAttribute("VIP") == true and message.PrefixText ~= "" then
+		local staff = player and player:GetAttribute("StaffTag")
+		local staffHex = type(staff) == "string" and STAFF_HEX[staff]
+		if staffHex and message.PrefixText ~= "" then
+			props.PrefixText = string.format('&lt;font color="%s"&gt;&lt;b&gt;[%s]&lt;/b&gt;&lt;/font&gt; %s', staffHex, staff, message.PrefixText)
+		elseif player and player:GetAttribute("VIP") == true and message.PrefixText ~= "" then
 			props.PrefixText = string.format('&lt;font color="%s"&gt;&lt;b&gt;[VIP]&lt;/b&gt;&lt;/font&gt; %s', GOLD_HEX, message.PrefixText)
 		end
 		return props
@@ -23309,12 +23516,22 @@ local LocalPlayer = Players.LocalPlayer
 
 local HUD = {}
 
--- The owner-only Admin button (AdminClient asks for it once the server confirms the owner). It
--- sits at the bottom of the right column (the left column's spot under Free is Trade's now) and
--- stays there in runs too.
+-- The staff Admin button (AdminClient asks for it once the server confirms a staff tier). It sits
+-- under Trade in the left column and stays there in runs too (alone, away from the timer).
 local adminClick: (() -&gt; ())? = nil
 local addAdminButton: (() -&gt; ())? = nil
 local adminButton: TextButton? = nil
+
+-- Shows or hides the Admin button (a staff rank given or taken away while playing).
+function HUD.SetAdminButtonVisible(visible: boolean)
+	if adminButton then
+		adminButton.Visible = visible
+		local column = adminButton.Parent
+		if column and column:IsA("GuiObject") and visible then
+			column.Visible = true
+		end
+	end
+end
 
 function HUD.AddAdminButton(onClick: () -&gt; ())
 	adminClick = onClick
@@ -23544,9 +23761,9 @@ function HUD.Init()
 			Icon = "🛡️",
 			Label = "Admin",
 			Color = Colors.PanelLight,
-			Size = UDim2.fromOffset(100, 100),
-			LayoutOrder = 99, -- the bottom of the right column, under Shop / Pets / Ranks
-			Parent = rightColumn,
+			Size = UDim2.fromOffset(80, 80),
+			LayoutOrder = 5, -- under Trade in the left column (and alone there in a run, clear of the timer)
+			Parent = leftColumn,
 			OnClick = function()
 				if adminClick then
 					adminClick()
@@ -23558,6 +23775,7 @@ function HUD.Init()
 		codesButton.Visible = not inRun
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
+		leftColumn.Visible = true
 	end
 	addAdminButton = makeAdminButton
 	makeAdminButton()
@@ -24417,7 +24635,7 @@ function HUD.Init()
 		codesButton.Visible = not inRun
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
-		leftColumn.Visible = not inRun
+		leftColumn.Visible = not inRun or (adminButton ~= nil and adminButton.Visible)
 		upgradesButton.LayoutOrder = 1
 		shopButton.LayoutOrder = 2
 		petsButton.LayoutOrder = 3
@@ -36879,7 +37097,7 @@ return WaterFX</ProtectedString></Properties></Item>
 	  * The full-screen cover that hides admin teleports (jail, spectate, control).
 
 	The owner only (the server's GetAdminInfo decides; nobody else gets any of the panel):
-	  * A 🛡️ Admin button at the bottom of the right column (HUD.AddAdminButton). It opens the Admin window,
+	  * A 🛡️ Admin button under Trade in the left column (HUD.AddAdminButton). It opens the Admin window,
 	    built with the game's own UIKit window style.
 	  * Left: every player in the server (search, tap to pick). Top: command groups. Middle: that
 	    group's commands. Bottom: the picked command's options (reason, amount, duration, rank, pet,
@@ -36962,6 +37180,8 @@ end
 local AdminLeaderboard = laterRemote("AdminLeaderboard")
 local AdminPetList = laterRemote("AdminPetList")
 local AdminPetAction = laterRemote("AdminPetAction")
+local AdminStaffList = laterRemote("AdminStaffList")
+local AdminStaffAction = laterRemote("AdminStaffAction")
 
 ----------------------------------------------------------------------------------------------------
 -- Small helpers
@@ -37565,7 +37785,8 @@ local COMMANDS: { Command } = ({
 	{ Name = "cmdlogs", Icon = "📜", Label = "Command log", Desc = "Every admin command used.", Group = "Server", Target = "none" },
 	{ Name = "playerlogs", Icon = "🔎", Label = "Logs by admin", Desc = "Commands used by one admin (type their username).", Group = "Server", Target = "text", Inputs = { { Kind = "text", Placeholder = "Admin username", Required = true } } },
 	{ Name = "wipelogs", Icon = "🧹", Label = "Wipe logs", Desc = "Deletes the whole command log.", Group = "Server", Target = "none", Danger = true },
-	{ Name = "setadminrank", Icon = "🛡️", Label = "Staff tier", Desc = "Studio testing: give someone a staff tier this session.", Group = "Server", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = opts({ "Moderator", "Admin", "Developer", "Founder", "clear" }) } } },
+	{ Name = "setadminrank", Icon = "🛡️", Label = "Staff tier", Desc = "Make them Moderator, Admin or Developer (saved, works straight away), or clear it.", Group = "Server", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = opts({ "Moderator", "Admin", "Developer", "clear" }) } } },
+	{ Name = "stafflist", Icon = "📋", Label = "Staff list", Desc = "Everyone with a staff rank, online or not. Remove anyone.", Group = "Server", Target = "none" },
 }) :: any
 local GROUPS = {
 	{ Name = "Punish", Icon = "🔨" },
@@ -37588,7 +37809,19 @@ local allowed: { [string]: boolean } = {}
 local canRemoveLogs = false
 
 local function buildPanel(info: any)
-	if type(info) ~= "table" or not info.Tier then
+	if type(info) ~= "table" then
+		return
+	end
+	local HUD = require(Client:WaitForChild("HUD")) :: any
+	if not info.Tier then
+		-- Not staff (any more): the panel and its button go away straight away.
+		table.clear(allowed)
+		if panelBuilt then
+			if UIKit.IsWindowOpen("Admin") then
+				UIKit.CloseWindow("Admin")
+			end
+			HUD.SetAdminButtonVisible(false)
+		end
 		return
 	end
 	allowed = {}
@@ -37597,7 +37830,14 @@ local function buildPanel(info: any)
 	end
 	canRemoveLogs = info.CanRemoveLogs == true
 	if panelBuilt then
-		return -- already built; the refreshed allow-list is picked up next time a group is drawn
+		-- Already built (a new or changed rank): the button comes back and the commands are the
+		-- new rank's the next time the window opens.
+		HUD.SetAdminButtonVisible(true)
+		if UIKit.IsWindowOpen("Admin") then
+			UIKit.CloseWindow("Admin")
+			UIKit.OpenWindow("Admin")
+		end
+		return
 	end
 	panelBuilt = true
 
@@ -37611,12 +37851,9 @@ local function buildPanel(info: any)
 	})
 
 	-- The HUD button first, so it's there even if anything below goes wrong.
-	do
-		local HUD = require(Client:WaitForChild("HUD")) :: any
-		HUD.AddAdminButton(function()
-			UIKit.ToggleWindow("Admin")
-		end)
-	end
+	HUD.AddAdminButton(function()
+		UIKit.ToggleWindow("Admin")
+	end)
 
 	local selectedPlayer: Player? = nil
 	local selectedGroup = GROUPS[1].Name
@@ -38386,6 +38623,12 @@ local function buildPanel(info: any)
 			})
 		end
 	end
+	AdminStaffList.OnClientEvent:Connect(function(title, entries)
+		showList(tostring(title), entries, "Remove", function(entry)
+			AdminStaffAction:FireServer("Remove", entry.Id)
+		end)
+	end)
+
 	AdminPetList.OnClientEvent:Connect(function(targetUserId, title, entries)
 		petTarget = tonumber(targetUserId)
 		local keepDetail = detail.Visible
@@ -38633,7 +38876,8 @@ AdminControlPlayer.OnClientEvent:Connect(function(target: Player?)
 end)
 
 ----------------------------------------------------------------------------------------------------
--- Start: ask the server who we are. Only the owner gets a tier (and so a panel).
+-- Start: ask the server who we are. The owner and staff get a tier (and so a panel); a rank given or
+-- taken away later arrives through AdminInfoChanged.
 ----------------------------------------------------------------------------------------------------
 local ok, info = pcall(function()
 	return GetAdminInfo:InvokeServer()

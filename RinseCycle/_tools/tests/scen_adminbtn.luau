@@ -1,5 +1,5 @@
 local hud = G.find(G.playerGui, "HUD")
-local col = G.find(hud, "RightColumn")
+local col = G.find(hud, "LeftColumn")
 pump(1, G.frame)
 for _, c in G.methods.GetChildren(col) do
 	if c.ClassName == "TextButton" then

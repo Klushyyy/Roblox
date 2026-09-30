@@ -8,7 +8,7 @@
 	  * The full-screen cover that hides admin teleports (jail, spectate, control).
 
 	The owner only (the server's GetAdminInfo decides; nobody else gets any of the panel):
-	  * A 🛡️ Admin button at the bottom of the right column (HUD.AddAdminButton). It opens the Admin window,
+	  * A 🛡️ Admin button under Trade in the left column (HUD.AddAdminButton). It opens the Admin window,
 	    built with the game's own UIKit window style.
 	  * Left: every player in the server (search, tap to pick). Top: command groups. Middle: that
 	    group's commands. Bottom: the picked command's options (reason, amount, duration, rank, pet,
@@ -91,6 +91,8 @@ end
 local AdminLeaderboard = laterRemote("AdminLeaderboard")
 local AdminPetList = laterRemote("AdminPetList")
 local AdminPetAction = laterRemote("AdminPetAction")
+local AdminStaffList = laterRemote("AdminStaffList")
+local AdminStaffAction = laterRemote("AdminStaffAction")
 
 ----------------------------------------------------------------------------------------------------
 -- Small helpers
@@ -694,7 +696,8 @@ local COMMANDS: { Command } = ({
 	{ Name = "cmdlogs", Icon = "📜", Label = "Command log", Desc = "Every admin command used.", Group = "Server", Target = "none" },
 	{ Name = "playerlogs", Icon = "🔎", Label = "Logs by admin", Desc = "Commands used by one admin (type their username).", Group = "Server", Target = "text", Inputs = { { Kind = "text", Placeholder = "Admin username", Required = true } } },
 	{ Name = "wipelogs", Icon = "🧹", Label = "Wipe logs", Desc = "Deletes the whole command log.", Group = "Server", Target = "none", Danger = true },
-	{ Name = "setadminrank", Icon = "🛡️", Label = "Staff tier", Desc = "Studio testing: give someone a staff tier this session.", Group = "Server", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = opts({ "Moderator", "Admin", "Developer", "Founder", "clear" }) } } },
+	{ Name = "setadminrank", Icon = "🛡️", Label = "Staff tier", Desc = "Make them Moderator, Admin or Developer (saved, works straight away), or clear it.", Group = "Server", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = opts({ "Moderator", "Admin", "Developer", "clear" }) } } },
+	{ Name = "stafflist", Icon = "📋", Label = "Staff list", Desc = "Everyone with a staff rank, online or not. Remove anyone.", Group = "Server", Target = "none" },
 }) :: any
 local GROUPS = {
 	{ Name = "Punish", Icon = "🔨" },
@@ -717,7 +720,19 @@ local allowed: { [string]: boolean } = {}
 local canRemoveLogs = false
 
 local function buildPanel(info: any)
-	if type(info) ~= "table" or not info.Tier then
+	if type(info) ~= "table" then
+		return
+	end
+	local HUD = require(Client:WaitForChild("HUD")) :: any
+	if not info.Tier then
+		-- Not staff (any more): the panel and its button go away straight away.
+		table.clear(allowed)
+		if panelBuilt then
+			if UIKit.IsWindowOpen("Admin") then
+				UIKit.CloseWindow("Admin")
+			end
+			HUD.SetAdminButtonVisible(false)
+		end
 		return
 	end
 	allowed = {}
@@ -726,7 +741,14 @@ local function buildPanel(info: any)
 	end
 	canRemoveLogs = info.CanRemoveLogs == true
 	if panelBuilt then
-		return -- already built; the refreshed allow-list is picked up next time a group is drawn
+		-- Already built (a new or changed rank): the button comes back and the commands are the
+		-- new rank's the next time the window opens.
+		HUD.SetAdminButtonVisible(true)
+		if UIKit.IsWindowOpen("Admin") then
+			UIKit.CloseWindow("Admin")
+			UIKit.OpenWindow("Admin")
+		end
+		return
 	end
 	panelBuilt = true
 
@@ -740,12 +762,9 @@ local function buildPanel(info: any)
 	})
 
 	-- The HUD button first, so it's there even if anything below goes wrong.
-	do
-		local HUD = require(Client:WaitForChild("HUD")) :: any
-		HUD.AddAdminButton(function()
-			UIKit.ToggleWindow("Admin")
-		end)
-	end
+	HUD.AddAdminButton(function()
+		UIKit.ToggleWindow("Admin")
+	end)
 
 	local selectedPlayer: Player? = nil
 	local selectedGroup = GROUPS[1].Name
@@ -1515,6 +1534,12 @@ local function buildPanel(info: any)
 			})
 		end
 	end
+	AdminStaffList.OnClientEvent:Connect(function(title, entries)
+		showList(tostring(title), entries, "Remove", function(entry)
+			AdminStaffAction:FireServer("Remove", entry.Id)
+		end)
+	end)
+
 	AdminPetList.OnClientEvent:Connect(function(targetUserId, title, entries)
 		petTarget = tonumber(targetUserId)
 		local keepDetail = detail.Visible
@@ -1762,7 +1787,8 @@ AdminControlPlayer.OnClientEvent:Connect(function(target: Player?)
 end)
 
 ----------------------------------------------------------------------------------------------------
--- Start: ask the server who we are. Only the owner gets a tier (and so a panel).
+-- Start: ask the server who we are. The owner and staff get a tier (and so a panel); a rank given or
+-- taken away later arrives through AdminInfoChanged.
 ----------------------------------------------------------------------------------------------------
 local ok, info = pcall(function()
 	return GetAdminInfo:InvokeServer()
