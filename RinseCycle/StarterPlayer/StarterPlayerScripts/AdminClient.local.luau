@@ -66,6 +66,8 @@ local AdminControlTargetStatus = remote("AdminControlTargetStatus")
 local AdminInventoryList = remote("AdminInventoryList")
 local AdminInventoryRemoveItem = remote("AdminInventoryRemoveItem")
 local AdminLeaderboard = remote("AdminLeaderboard")
+local AdminPetList = remote("AdminPetList")
+local AdminPetAction = remote("AdminPetAction")
 
 ----------------------------------------------------------------------------------------------------
 -- Small helpers
@@ -602,8 +604,9 @@ local COMMANDS: { Command } = ({
 	{ Name = "bring", Icon = "⬅️", Label = "Bring", Desc = "Teleports them to you.", Group = "Move", Target = "player" },
 	{ Name = "spectate", Icon = "👁️", Label = "Spectate", Desc = "Watch them. Stop from the bar at the bottom.", Group = "Move", Target = "player" },
 	{ Name = "controlplayer", Icon = "🎮", Label = "Control", Desc = "Move their character with your controls.", Group = "Move", Target = "player" },
-	{ Name = "viewinv", Icon = "🎒", Label = "Inventory", Desc = "See (and remove) the tools they carry.", Group = "Move", Target = "player" },
-	{ Name = "clearinv", Icon = "🗑️", Label = "Clear inventory", Desc = "Removes every tool they carry.", Group = "Move", Target = "player" },
+	{ Name = "joinserver", Icon = "🛰️", Label = "Join server", Desc = "Teleport to that player's server, wherever they are (type their username).", Group = "Move", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
+	{ Name = "bringserver", Icon = "🧲", Label = "Bring (any server)", Desc = "Pull that player from their server into yours (type their username).", Group = "Move", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
+	{ Name = "viewpets", Icon = "🐾", Label = "Pets", Desc = "See their pets. Remove any, or add new ones.", Group = "Game", Target = "player" },
 	-- Game
 	{ Name = "givecoins", Icon = "💰", Label = "Give coins", Desc = "Coins for their current run.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
 	{ Name = "setbubbles", Icon = "🧼", Label = "Set bubbles", Desc = "Sets their Bubbles to an amount.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
@@ -1171,6 +1174,22 @@ local function buildPanel(info: any)
 	})
 	navPrev.Visible = false
 	navNext.Visible = false
+	-- An extra button in the list's header (the Pets view's "Add pet").
+	local headerAction: (() -> ())? = nil
+	local headerButton = UIKit.Button({
+		Text = "",
+		Color = Colors.Good,
+		Size = UDim2.fromOffset(140, 40),
+		TextSize = 18,
+		Position = UDim2.new(1, -420, 0, 6),
+		Parent = overlay,
+		OnClick = function()
+			if headerAction then
+				headerAction()
+			end
+		end,
+	})
+	headerButton.Visible = false
 	local listScroll = scroller(overlay, UDim2.new(1, -8, 1, -60), UDim2.fromOffset(4, 56))
 	listLayout(listScroll, 6)
 
@@ -1230,11 +1249,16 @@ local function buildPanel(info: any)
 	end
 	listSearch:GetPropertyChangedSignal("Text"):Connect(drawRows)
 
-	local function showList(title: string, rows: { Row }, action: string?, onAction: ((Row) -> ())?, nav: { Prev: () -> (), Next: () -> () }?)
+	local function showList(title: string, rows: { Row }, action: string?, onAction: ((Row) -> ())?, nav: { Prev: () -> (), Next: () -> () }?, extra: { Text: string, OnClick: () -> () }?)
 		listNav = nav
 		navPrev.Visible = nav ~= nil
 		navNext.Visible = nav ~= nil
-		overlayTitle.Size = if nav then UDim2.new(1, -550, 0, 44) else UDim2.new(1, -440, 0, 44)
+		headerAction = if extra then extra.OnClick else nil
+		headerButton.Visible = extra ~= nil
+		if extra then
+			headerButton.Text = extra.Text
+		end
+		overlayTitle.Size = if nav or extra then UDim2.new(1, -580, 0, 44) else UDim2.new(1, -440, 0, 44)
 		overlayTitle.Text = title
 		currentRows = if type(rows) == "table" then rows else {}
 		currentAction = action
@@ -1399,6 +1423,79 @@ local function buildPanel(info: any)
 	end)
 	AdminLogsList.OnClientEvent:Connect(function(title, entries)
 		showList(title, entries, "View", logDetail)
+	end)
+
+	-- Pets: every pet a player owns, Remove on each, "Add pet" to give one (pick pet + tier).
+	local petTarget: number? = nil
+	local function addPetPage()
+		local body = detailPage("🐾 Add a pet")
+		local tier = 1
+		local tierRow = Instance.new("Frame")
+		tierRow.BackgroundTransparency = 1
+		tierRow.Size = UDim2.new(1, 0, 0, 48)
+		tierRow.Parent = body
+		listLayout(tierRow, 8, true)
+		local tierButtons = {}
+		local function paintTiers()
+			for t, b in tierButtons do
+				UIKit.SetButtonColor(b, if t == tier then Colors.Primary else Colors.PanelLight)
+			end
+		end
+		for t, label in { "Normal", "Golden", "Rainbow" } do
+			tierButtons[t] = UIKit.Button({
+				Text = label,
+				Color = Colors.PanelLight,
+				Size = UDim2.fromOffset(150, 44),
+				TextSize = 18,
+				LayoutOrder = t,
+				Parent = tierRow,
+				OnClick = function()
+					tier = t
+					paintTiers()
+				end,
+			})
+		end
+		paintTiers()
+		local list = scroller(body, UDim2.new(1, 0, 1, -60), UDim2.fromOffset(0, 58))
+		local grid = Instance.new("UIGridLayout")
+		grid.CellSize = UDim2.fromOffset(200, 50)
+		grid.CellPadding = UDim2.fromOffset(8, 8)
+		grid.SortOrder = Enum.SortOrder.LayoutOrder
+		grid.Parent = list
+		local ids = {}
+		for id in Config.Pets do
+			table.insert(ids, id)
+		end
+		table.sort(ids, function(a, b)
+			return Config.Pets[a].Name < Config.Pets[b].Name
+		end)
+		for i, id in ids do
+			UIKit.Button({
+				Text = Config.Pets[id].Name,
+				Color = Colors.Good,
+				TextSize = 16,
+				LayoutOrder = i,
+				Parent = list,
+				OnClick = function()
+					if petTarget then
+						AdminPetAction:FireServer("Add", petTarget, id, tier)
+					end
+				end,
+			})
+		end
+	end
+	AdminPetList.OnClientEvent:Connect(function(targetUserId, title, entries)
+		petTarget = tonumber(targetUserId)
+		local keepDetail = detail.Visible
+		showList(tostring(title), entries, "Remove", function(entry)
+			if petTarget then
+				AdminPetAction:FireServer("Remove", petTarget, entry.Id)
+			end
+		end, nil, { Text = "+ Add pet", OnClick = addPetPage })
+		-- Adding several pets in a row: stay on the picker.
+		if keepDetail then
+			detail.Visible = true
+		end
 	end)
 
 	-- Leaderboards: one board at a time, ◀ ▶ to flip, Reset on each row (with a confirm step).

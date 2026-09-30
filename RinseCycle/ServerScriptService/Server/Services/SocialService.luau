@@ -1,12 +1,14 @@
--- SocialService: settles the Follow / Like rewards (Config.Social) when a player joins.
+-- SocialService: the Follow / Favorite rewards (Config.Social). Nothing is paid without a check.
 --
 -- The Free Rewards window's buttons check straight away (CheckNow). A follow Roblox can't show us
 -- yet stays pending and is checked again automatically on the next join:
 --   * Follow: the player's public following list is read (friends API, through Config.Social.
---     ProxyDomain because games can't call roblox.com directly). The dev on it = reward. Not on it =
---     the pending mark is cleared and they're told to follow first. The check failing (HTTP off,
---     proxy down) pays it anyway, on trust like a Like.
---   * Like: Roblox has no API for likes, so it's paid on trust.
+--     ProxyDomain because games can't call roblox.com directly; needs "Allow HTTP Requests" on in
+--     Game Settings > Security). The dev on it = reward. Not on it, or the check can't run = no
+--     reward (they're told why).
+--   * Favorite: checked on the player's own device with AvatarEditorService (the game's place is
+--     favorited), which is the only way Roblox offers. Likes can't be checked by any game, so
+--     there is no Like reward any more. (Saves keep the old "Like" field names for this reward.)
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
@@ -59,19 +61,16 @@ local function settle(player: Player)
 	if not profile or player.Parent ~= Players then
 		return
 	end
-	if profile.LikePending and not profile.LikeReward and Config.Social.LikeReward then
-		if DataService.GrantSocialReward(player, "Like") then
-			DataService.Notice(player, "Thanks for liking the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!", "Good")
-		end
-	end
 	if profile.FollowPending and not profile.FollowReward then
 		local result = follows(player.UserId, Config.Social.CreatorUserId)
 		if player.Parent ~= Players then
 			return
 		end
-		-- Checked and following, or the check can't run at all (HTTP off, proxy down): pay it, the
-		-- same trust a Like gets, rather than leave a real follower without their reward.
-		if result ~= false then
+		-- Only a follow we can actually see is paid. Can't check right now: stay pending.
+		if result == nil then
+			return
+		end
+		if result == true then
 			if DataService.GrantSocialReward(player, "Follow") then
 				DataService.Notice(player, "Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!", "Good")
 			end
@@ -90,7 +89,8 @@ function SocialService.CheckNow(player: Player, kind: string): (boolean, string)
 	if not profile then
 		return false, "Your data is still loading."
 	end
-	if kind == "Like" then
+	if kind == "Favorite" then
+		-- The client only sends this after AvatarEditorService confirmed the favorite.
 		if not Config.Social.LikeReward then
 			return false, "That reward isn't available."
 		end
@@ -98,15 +98,16 @@ function SocialService.CheckNow(player: Player, kind: string): (boolean, string)
 			return false, "You already got this reward. Thank you!"
 		end
 		DataService.GrantSocialReward(player, "Like")
-		return true, "Thanks for liking the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!"
+		return true, "Thanks for favoriting the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!"
 	elseif kind == "Follow" then
 		if profile.FollowReward then
 			return false, "You already got this reward. Thank you!"
 		end
 		local result = follows(player.UserId, Config.Social.CreatorUserId)
-		-- Following, or the list can't be read at all (HTTP off, proxy down): pay it, the same trust a
-		-- Like gets, so a real follower is never stuck without their reward.
-		if result ~= false then
+		if result == nil then
+			return false, "We couldn't check your follow right now. Try again in a minute!"
+		end
+		if result == true then
 			DataService.GrantSocialReward(player, "Follow")
 			return true, "Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!"
 		end

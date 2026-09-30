@@ -81,8 +81,8 @@ local function play(_levelIndex: number)
 	if black.BackgroundTransparency > 0.05 then
 		tweenBlack(0, 0.2)
 	end
-	-- give the teleport and the room a moment to settle behind the black
-	task.wait(0.5)
+	-- give the room a moment to settle behind the black
+	task.wait(0.2)
 	local camera = Workspace.CurrentCamera
 	local character = LocalPlayer.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")

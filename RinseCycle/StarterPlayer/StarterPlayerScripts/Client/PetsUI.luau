@@ -538,7 +538,7 @@ local function buildPetsWindow()
 	mergePanel.Parent = details
 	UIKit.Label({ Text = "Merge Pets", Size = UDim2.new(1, -16, 0, 34), Position = UDim2.new(0.5, 0, 0, 14), AnchorPoint = Vector2.new(0.5, 0), TextSize = 26, Parent = mergePanel })
 	UIKit.Label({
-		Text = string.format("%d of the same pet become 1 Golden one; %d Golden make a Rainbow. Better speed, bigger bag, more coins.", MERGE_COUNT, MERGE_COUNT),
+		Text = string.format("%d of the same pet become 1 Golden one; %d Golden make a Rainbow. Faster cleaning, more coins.", MERGE_COUNT, MERGE_COUNT),
 		Size = UDim2.new(1, -24, 0, 48),
 		Position = UDim2.new(0.5, 0, 0, 56),
 		AnchorPoint = Vector2.new(0.5, 0),

@@ -1231,7 +1231,8 @@ end
 
 local function buildBoard(parent: Instance, x: number, z: number, titleText: string, faceX: number, faceZ: number, pageCount: number?): BoardInfo
 	local boardPart = boardShell(parent, x, z, 22, 15, "Board", faceX, faceZ)
-	local gui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(700, 480), LightInfluence = 0 }, boardPart)
+	-- MaxDistance: readable from anywhere in the lobby, not only up close.
+	local gui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(700, 480), LightInfluence = 0, MaxDistance = 5000 }, boardPart)
 	mk("UIPadding", {
 		PaddingTop = UDim.new(0, 10),
 		PaddingBottom = UDim.new(0, 10),

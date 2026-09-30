@@ -35,9 +35,9 @@ local LeaderboardService = {}
 -- Tunables
 ----------------------------------------------------------------------------------------------------
 
-local REFRESH_INTERVAL = 120
+local REFRESH_INTERVAL = 60
 local OFFLINE_REFRESH_INTERVAL = 10 -- offline boards are free to rebuild, so keep them fresh
-local FIRST_REFRESH_DELAY = 8 -- give the first players' profiles a moment to load
+local FIRST_REFRESH_DELAY = 6 -- the first WRITE waits for the first players' profiles to load
 local TOP_N = 10
 local KEY_PREFIX = "u_"
 local ROW_HEIGHT = 34
@@ -421,32 +421,70 @@ local function readTop(store: OrderedDataStore, ascending: boolean): { Row }?
 	if not ok or type(entries) ~= "table" then
 		return nil
 	end
-	local rows: { Row } = {}
+	local found: { { UserId: number, Value: number } } = {}
 	for _, entry in entries do
 		local userId = tonumber((string.match(tostring(entry.key), "^" .. KEY_PREFIX .. "(%d+)$")))
 		local value = tonumber(entry.value)
 		if userId and value and value > 0 then
-			table.insert(rows, { Name = nameFor(userId), Value = value })
+			table.insert(found, { UserId = userId, Value = value })
 		end
+	end
+	-- Look every name up at once (each is a web call), not one after another.
+	local names: { [number]: string } = {}
+	local left = #found
+	for i, f in found do
+		task.spawn(function()
+			names[i] = nameFor(f.UserId)
+			left -= 1
+		end)
+	end
+	local deadline = os.clock() + 10
+	while left > 0 and os.clock() < deadline do
+		task.wait()
+	end
+	local rows: { Row } = {}
+	for i, f in found do
+		table.insert(rows, { Name = names[i] or ("Player " .. f.UserId), Value = f.Value })
 	end
 	return rows
 end
 
-local function refreshOnline()
-	writeOnline()
-	for i = 1, levelCount do
-		local store = timeStores[i]
-		local rows = store and readTop(store, true)
-		if rows then
-			timesTop[i] = rows
+-- Reads every board's top 10 (no writes), all boards at once. Also run the moment the server
+-- starts, so the boards are filled before anyone looks at them.
+local function readAll()
+	local left = 0
+	local function read(store: OrderedDataStore?, ascending: boolean, apply: ({ Row }) -> ())
+		if not store then
+			return
 		end
+		left += 1
+		task.spawn(function()
+			local rows = readTop(store, ascending)
+			if rows then
+				apply(rows)
+			end
+			left -= 1
+		end)
+	end
+	for i = 1, levelCount do
+		read(timeStores[i], true, function(rows)
+			timesTop[i] = rows
+		end)
 	end
 	for _, stat in STATS do
-		local rows = stat.DS and readTop(stat.DS, false)
-		if rows then
+		read(stat.DS, false, function(rows)
 			stat.Top = rows
-		end
+		end)
 	end
+	local deadline = os.clock() + 20
+	while left > 0 and os.clock() < deadline do
+		task.wait()
+	end
+end
+
+local function refreshOnline()
+	writeOnline()
+	readAll()
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -681,6 +719,12 @@ function LeaderboardService.Start()
 	drawDishes()
 
 	task.spawn(function()
+		-- Straight away: show what's already on the boards (reads only, in parallel per board).
+		if not DataService.IsOffline() and openStores() then
+			pcall(readAll)
+			drawTimes()
+			drawDishes()
+		end
 		task.wait(FIRST_REFRESH_DELAY)
 		while true do
 			local offline = DataService.IsOffline() or not openStores()

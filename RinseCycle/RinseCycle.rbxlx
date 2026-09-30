@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.6.0"
+Config.Version = "1.6.1"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -2970,7 +2970,9 @@ local DataService = require(GameServices:WaitForChild("DataService"))
 local RoundService = require(GameServices:WaitForChild("RoundService"))
 local PetService = require(GameServices:WaitForChild("PetService"))
 local LeaderboardService = require(GameServices:WaitForChild("LeaderboardService"))
+local RunServers = require(GameServices:WaitForChild("RunServers"))
 local MessagingService = game:GetService("MessagingService")
+local TeleportService = game:GetService("TeleportService")
 
 -- The big "congrats" popup with confetti (Celebrate on the client).
 local function celebrate(player, title, text, icon)
@@ -3043,9 +3045,9 @@ local ALL_COMMANDS = {
 	"setrank", "promote", "demote", "announce", "cmdlogs", "playerlogs",
 	"kill", "jail", "god", "respawn",
 	"spectate", "controlplayer", "invis",
-	"viewinv", "clearinv",
+	"viewpets", "givepet",
 	"fly",
-	"leaderboards", "globalannounce",
+	"leaderboards", "globalannounce", "joinserver", "bringserver",
 }
 
 -- =====================================================================
@@ -3065,7 +3067,7 @@ local ALL_COMMANDS = {
 -- enough" - a Developer or a Founder still gets nothing.
 local STUDIO_ONLY_COMMANDS = {
 	"setadminrank", "wipelogs", "givegamepass", "removegamepass", "daily",
-	"finishrun", "givecoins", "givepet", "unlockall", "setrebirths",
+	"finishrun", "givecoins", "unlockall", "setrebirths",
 }
 
 -- Commands FOUNDER alone gets, on top of everything Developer has.
@@ -3135,7 +3137,7 @@ local ADMIN_TIER_COMMANDS = {
 	"setrank", "promote", "demote", "announce", "cmdlogs", "playerlogs",
 	"kill", "jail", "god", "respawn",
 	"spectate", "controlplayer", "invis",
-	"viewinv", "clearinv",
+	"viewpets",
 }
 local TIER_COMMANDS = {
 	Moderator = {"kick", "mute", "tempmute", "warn", "msg", "goto", "mutelist"},
@@ -3488,6 +3490,16 @@ AdminModifyPunishment.Parent = ReplicatedStorage
 local AdminLogsList = Instance.new("RemoteEvent")
 AdminLogsList.Name = "AdminLogsList"
 AdminLogsList.Parent = ReplicatedStorage
+
+-- The Pets view (:viewpets). S-&gt;C (targetUserId, title, rows); C-&gt;S ("Remove", targetUserId, uid)
+-- / ("Add", targetUserId, petId, tier).
+local AdminPetList = Instance.new("RemoteEvent")
+AdminPetList.Name = "AdminPetList"
+AdminPetList.Parent = ReplicatedStorage
+local AdminPetAction = Instance.new("RemoteEvent")
+AdminPetAction.Name = "AdminPetAction"
+AdminPetAction.Parent = ReplicatedStorage
+local sendPetList -- assigned at the bottom of this file
 
 -- The Leaderboards view. C-&gt;S ("View", boardIndex) / ("Reset", boardIndex, userId);
 -- S-&gt;C (boardIndex, boardCount, title, rows).
@@ -6313,6 +6325,76 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 	-- No player target at all - the whole rest of the input (targetName
 	-- + extraText, which the client only split apart because every other
 	-- command has a target as its first word) is the announcement text.
+	-- :joinserver [username] - go to that player's server, wherever it is (runs included).
+	-- :bringserver [username] - pull that player from their server into yours.
+	if commandName == "joinserver" or commandName == "bringserver" then
+		local joining = commandName == "joinserver"
+		local name = targetName:gsub("^%s+", ""):gsub("%s+$", "")
+		if name == "" then
+			sendFeedback(admin, "Usage: :" .. commandName .. " [username]", true)
+			return
+		end
+		-- Already here: the normal goto / bring.
+		local here = findTargetPlayer(name)
+		if here and here ~= admin then
+			if joining then
+				gotoPlayer(admin, here)
+				sendFeedback(admin, here.Name .. " is in this server - teleported to them", false)
+			else
+				bringPlayer(admin, here)
+				sendFeedback(admin, here.Name .. " is in this server - brought them", false)
+			end
+			return
+		end
+		task.spawn(function()
+			local okId, userId = pcall(function()
+				return Players:GetUserIdFromNameAsync(name)
+			end)
+			if not okId or type(userId) ~= "number" then
+				sendFeedback(admin, "No Roblox user called " .. name, true)
+				return
+			end
+			if not joining then
+				local ok = pcall(function()
+					MessagingService:PublishAsync("RinseCycle_AdminBring", {
+						UserId = userId,
+						JobId = game.JobId,
+						Code = RunServers.AccessCodeForJob(game.JobId),
+						AdminId = admin.UserId,
+					})
+				end)
+				sendFeedback(admin, if ok then ("Asked " .. name .. "'s server to send them here...") else "Couldn't reach other servers", not ok)
+				if ok then
+					logCommand(admin, "bringserver", name, nil, admin.Name .. " brought " .. name .. " from another server")
+				end
+				return
+			end
+			local ok, _current, _err, _placeId, jobId = pcall(function()
+				return TeleportService:GetPlayerPlaceInstanceAsync(userId)
+			end)
+			if not ok or type(jobId) ~= "string" or jobId == "" then
+				sendFeedback(admin, "Couldn't find " .. name .. " in any server (offline, or their joins are turned off)", true)
+				return
+			end
+			local code = RunServers.AccessCodeForJob(jobId)
+			local sent = pcall(function()
+				local options = Instance.new("TeleportOptions")
+				if code then
+					options.ReservedServerAccessCode = code
+				else
+					options.ServerInstanceId = jobId
+				end
+				options:SetTeleportData({ Mode = "AdminJoin", FollowUserId = userId, AdminInvis = RunServers.InvisList({ admin }) })
+				TeleportService:TeleportAsync(game.PlaceId, { admin }, options)
+			end)
+			sendFeedback(admin, if sent then ("Teleporting to " .. name .. "'s server...") else "That teleport couldn't start", not sent)
+			if sent then
+				logCommand(admin, "joinserver", name, nil, admin.Name .. " joined " .. name .. "'s server")
+			end
+		end)
+		return
+	end
+
 	if commandName == "leaderboards" then
 		task.spawn(function()
 			local rows = LeaderboardService.ListBoard(1, 100)
@@ -6658,12 +6740,18 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 	elseif commandName == "invis" then
 		local nowInvisible = not invisibleUserIds[target.UserId]
 		if setInvisible(target, nowInvisible) then
+			-- Kept on the player: a respawn or a server hop (runs, :joinserver) keeps them invisible.
+			target:SetAttribute("AdminInvis", if nowInvisible then true else nil)
 			logCommand(admin, "invis", target.Name, nowInvisible and "hidden" or "shown",
 				admin.Name .. " made " .. target.Name .. (nowInvisible and " invisible" or " visible again"))
 			sendFeedback(admin, "Made " .. target.Name .. (nowInvisible and " invisible" or " visible again"), false)
 		else
 			sendFeedback(admin, "Could not toggle invisibility - character not found", true)
 		end
+
+	elseif commandName == "viewpets" then
+		sendPetList(admin, target)
+		sendFeedback(admin, "Showing " .. target.Name .. "'s pets", false)
 
 	elseif commandName == "viewinv" then
 		sendInventoryList(admin, target)
@@ -7004,6 +7092,151 @@ task.spawn(function()
 			end
 		end)
 	end)
+end)
+
+-- =====================================================================
+-- Pets view (:viewpets): see a player's pets, remove one, or add one
+-- =====================================================================
+local PET_TIER_NAMES = { "", "Golden ", "Rainbow " }
+sendPetList = function(admin, target)
+	local profile = DataService.Get(target)
+	local rows = {}
+	if profile then
+		local equipped = {}
+		for _, uid in ipairs(profile.Equipped or {}) do
+			equipped[uid] = true
+		end
+		for _, pet in ipairs(profile.Pets or {}) do
+			local def = Config.Pets[pet.Id]
+			if def then
+				local tier = math.clamp(tonumber(pet.Tier) or 1, 1, 3)
+				table.insert(rows, {
+					Id = pet.Uid,
+					Line1 = PET_TIER_NAMES[tier] .. def.Name .. (if equipped[pet.Uid] then "  (equipped)" else ""),
+					Line2 = def.Rarity .. "  ·  Power " .. tostring(Config.PetPower(pet.Id, tier)),
+				})
+			end
+		end
+	end
+	AdminPetList:FireClient(admin, target.UserId, "🐾 " .. target.Name .. "'s pets (" .. #rows .. ")", rows)
+end
+
+AdminPetAction.OnServerEvent:Connect(function(admin, action, targetUserId, a, b)
+	if not tierHasCommand(getPlayerTier(admin), "viewpets") then
+		return
+	end
+	local target = type(targetUserId) == "number" and Players:GetPlayerByUserId(targetUserId) or nil
+	if not target then
+		sendFeedback(admin, "They're not in this server any more", true)
+		return
+	end
+	if action == "Remove" and type(a) == "string" then
+		local result = PetService.Delete(target, a)
+		if result and result.Ok then
+			logCommand(admin, "viewpets", target.Name, "removed pet " .. a, admin.Name .. " removed a pet from " .. target.Name)
+			sendFeedback(admin, "Removed that pet from " .. target.Name, false)
+		else
+			sendFeedback(admin, (result and result.Error) or "Couldn't remove that pet", true)
+		end
+	elseif action == "Add" and type(a) == "string" and Config.Pets[a] then
+		local tier = math.clamp(math.floor(tonumber(b) or 1), 1, 3)
+		local ok, err = PetService.GivePet(target, a, tier)
+		if ok then
+			local label = PET_TIER_NAMES[tier] .. Config.Pets[a].Name
+			logCommand(admin, "givepet", target.Name, label, admin.Name .. " gave " .. target.Name .. " a " .. label)
+			sendFeedback(admin, "Gave " .. target.Name .. " a " .. label, false)
+		else
+			sendFeedback(admin, err or "Couldn't add that pet", true)
+		end
+	else
+		return
+	end
+	sendPetList(admin, target)
+end)
+
+-- =====================================================================
+-- Server hops: invisibility carries over, and :joinserver / :bringserver land you next to them
+-- =====================================================================
+local function afterArrival(player)
+	local data
+	pcall(function()
+		data = player:GetJoinData().TeleportData
+	end)
+	if type(data) ~= "table" then
+		return
+	end
+	if type(data.AdminInvis) == "table" and table.find(data.AdminInvis, player.UserId) then
+		player:SetAttribute("AdminInvis", true)
+	end
+	local followId = tonumber(data.FollowUserId)
+	if followId and (data.Mode == "AdminJoin" or data.Mode == "AdminBring") then
+		task.spawn(function()
+			local character = player.Character or player.CharacterAdded:Wait()
+			local root = character:WaitForChild("HumanoidRootPart", 10)
+			task.wait(1)
+			local other = Players:GetPlayerByUserId(followId)
+			local otherRoot = other and other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+			if root and otherRoot then
+				root.CFrame = otherRoot.CFrame * CFrame.new(0, 0, 4)
+			end
+		end)
+	end
+end
+
+-- Keeps an :invis'd player invisible on every new character (respawns, and after a server hop).
+local function watchInvis(player)
+	player.CharacterAdded:Connect(function(character)
+		if player:GetAttribute("AdminInvis") ~= true then
+			return
+		end
+		invisibleUserIds[player.UserId] = nil -- the old character's saved looks don't apply any more
+		character:WaitForChild("HumanoidRootPart", 10)
+		task.wait(0.5)
+		if player:GetAttribute("AdminInvis") == true and player.Character == character then
+			setInvisible(player, true)
+		end
+	end)
+	if player:GetAttribute("AdminInvis") == true and player.Character then
+		invisibleUserIds[player.UserId] = nil
+		setInvisible(player, true)
+	end
+end
+
+Players.PlayerAdded:Connect(function(player)
+	afterArrival(player)
+	watchInvis(player)
+end)
+for _, player in ipairs(Players:GetPlayers()) do
+	task.spawn(function()
+		afterArrival(player)
+		watchInvis(player)
+	end)
+end
+
+-- :bringserver from another server: if they're here, send them over.
+task.spawn(function()
+	pcall(function()
+		MessagingService:SubscribeAsync("RinseCycle_AdminBring", function(message)
+			local data = message.Data
+			if type(data) ~= "table" or type(data.UserId) ~= "number" or type(data.JobId) ~= "string" then
+				return
+			end
+			local player = Players:GetPlayerByUserId(data.UserId)
+			if not player or data.JobId == game.JobId then
+				return
+			end
+			pcall(function()
+				local options = Instance.new("TeleportOptions")
+				if type(data.Code) == "string" and data.Code ~= "" then
+					options.ReservedServerAccessCode = data.Code
+				else
+					options.ServerInstanceId = data.JobId
+				end
+				options:SetTeleportData({ Mode = "AdminBring", FollowUserId = data.AdminId, AdminInvis = RunServers.InvisList({ player }) })
+				TeleportService:TeleportAsync(game.PlaceId, { player }, options)
+			end)
+		end)
+	end)
 end)</ProtectedString></Properties></Item>
 </Item>
 <Item class="Folder" referent="RBX0000000F"><Properties><string name="Name">Server</string></Properties>
@@ -7098,7 +7331,9 @@ local LIFTS = {
 local SHOP_X = -49
 local SHOP_Z = { -112, -60 }
 
-local YIELD_EVERY = 200
+-- In a party's own run server nobody else is playing (and the party is behind a loading screen),
+-- so build in far bigger steps there: the dishwasher is ready sooner.
+local YIELD_EVERY = if game.PrivateServerId ~= "" and game.PrivateServerOwnerId == 0 then 3000 else 200
 
 -- Kitchen palette (theme-independent: every level is the same family kitchen).
 local K = {
@@ -11661,9 +11896,9 @@ local LeaderboardService = {}
 -- Tunables
 ----------------------------------------------------------------------------------------------------
 
-local REFRESH_INTERVAL = 120
+local REFRESH_INTERVAL = 60
 local OFFLINE_REFRESH_INTERVAL = 10 -- offline boards are free to rebuild, so keep them fresh
-local FIRST_REFRESH_DELAY = 8 -- give the first players' profiles a moment to load
+local FIRST_REFRESH_DELAY = 6 -- the first WRITE waits for the first players' profiles to load
 local TOP_N = 10
 local KEY_PREFIX = "u_"
 local ROW_HEIGHT = 34
@@ -12047,32 +12282,70 @@ local function readTop(store: OrderedDataStore, ascending: boolean): { Row }?
 	if not ok or type(entries) ~= "table" then
 		return nil
 	end
-	local rows: { Row } = {}
+	local found: { { UserId: number, Value: number } } = {}
 	for _, entry in entries do
 		local userId = tonumber((string.match(tostring(entry.key), "^" .. KEY_PREFIX .. "(%d+)$")))
 		local value = tonumber(entry.value)
 		if userId and value and value &gt; 0 then
-			table.insert(rows, { Name = nameFor(userId), Value = value })
+			table.insert(found, { UserId = userId, Value = value })
 		end
+	end
+	-- Look every name up at once (each is a web call), not one after another.
+	local names: { [number]: string } = {}
+	local left = #found
+	for i, f in found do
+		task.spawn(function()
+			names[i] = nameFor(f.UserId)
+			left -= 1
+		end)
+	end
+	local deadline = os.clock() + 10
+	while left &gt; 0 and os.clock() &lt; deadline do
+		task.wait()
+	end
+	local rows: { Row } = {}
+	for i, f in found do
+		table.insert(rows, { Name = names[i] or ("Player " .. f.UserId), Value = f.Value })
 	end
 	return rows
 end
 
-local function refreshOnline()
-	writeOnline()
-	for i = 1, levelCount do
-		local store = timeStores[i]
-		local rows = store and readTop(store, true)
-		if rows then
-			timesTop[i] = rows
+-- Reads every board's top 10 (no writes), all boards at once. Also run the moment the server
+-- starts, so the boards are filled before anyone looks at them.
+local function readAll()
+	local left = 0
+	local function read(store: OrderedDataStore?, ascending: boolean, apply: ({ Row }) -&gt; ())
+		if not store then
+			return
 		end
+		left += 1
+		task.spawn(function()
+			local rows = readTop(store, ascending)
+			if rows then
+				apply(rows)
+			end
+			left -= 1
+		end)
+	end
+	for i = 1, levelCount do
+		read(timeStores[i], true, function(rows)
+			timesTop[i] = rows
+		end)
 	end
 	for _, stat in STATS do
-		local rows = stat.DS and readTop(stat.DS, false)
-		if rows then
+		read(stat.DS, false, function(rows)
 			stat.Top = rows
-		end
+		end)
 	end
+	local deadline = os.clock() + 20
+	while left &gt; 0 and os.clock() &lt; deadline do
+		task.wait()
+	end
+end
+
+local function refreshOnline()
+	writeOnline()
+	readAll()
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -12307,6 +12580,12 @@ function LeaderboardService.Start()
 	drawDishes()
 
 	task.spawn(function()
+		-- Straight away: show what's already on the boards (reads only, in parallel per board).
+		if not DataService.IsOffline() and openStores() then
+			pcall(readAll)
+			drawTimes()
+			drawDishes()
+		end
 		task.wait(FIRST_REFRESH_DELAY)
 		while true do
 			local offline = DataService.IsOffline() or not openStores()
@@ -13555,7 +13834,8 @@ end
 
 local function buildBoard(parent: Instance, x: number, z: number, titleText: string, faceX: number, faceZ: number, pageCount: number?): BoardInfo
 	local boardPart = boardShell(parent, x, z, 22, 15, "Board", faceX, faceZ)
-	local gui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(700, 480), LightInfluence = 0 }, boardPart)
+	-- MaxDistance: readable from anywhere in the lobby, not only up close.
+	local gui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(700, 480), LightInfluence = 0, MaxDistance = 5000 }, boardPart)
 	mk("UIPadding", {
 		PaddingTop = UDim.new(0, 10),
 		PaddingBottom = UDim.new(0, 10),
@@ -15737,7 +16017,7 @@ local function launch(party: Party)
 	task.spawn(function()
 		-- Give every member's screen time to fade to black (Cutscene.Cover on "Launching") before
 		-- anyone is moved, so the teleport into the dishwasher is never seen.
-		task.wait(0.4)
+		task.wait(0.25)
 		-- In the live game the party plays in its own private server; otherwise (Studio, or the
 		-- teleport can't start) StartRound builds the dishwasher here. It yields while it builds.
 		-- Pass a copy: it's RoundService's now.
@@ -16152,6 +16432,7 @@ local PetService = {}
 
 local RULES = Config.PetRules
 local FOLDER_NAME = "EquippedPets"
+local PAY_INTERVAL = 1 -- seconds: a pet's cleaning is paid out this often
 local MAX_HIT_DT = RULES.ThinkInterval * 2 -- a server hitch can't turn into one giant pet hit
 local QUERY_MAX_PARTS = 250 -- grime parts considered per owner per think
 local SLOT_WATCH_INTERVAL = 1 -- seconds between slot-count checks (perks / passes / late profiles)
@@ -16185,8 +16466,8 @@ type Slot = {
 	Share: number, -- Config.PetStats Speed (share of the owner's pet power per second)
 	Tier: number,
 	Capacity: number, -- bag size in dirt units, before the level multiplier
-	Bag: number, -- units cleaned and not yet sold
-	SellUntil: number?, -- set while the pet is off selling at the drain (os.clock() it's back)
+	Bag: number, -- units cleaned and not yet paid out (paid every PAY_INTERVAL)
+	LastPay: number?, -- os.clock() of the last payout
 	Value: StringValue, -- EquippedPets["&lt;index&gt;"], Value = pet id; attributes Uid, Tier, Bag (0..1)
 	TargetValue: ObjectValue, -- its "Target" child
 	Target: BasePart?, -- the grime part this pet is cleaning (mirrors TargetValue.Value)
@@ -16452,7 +16733,6 @@ local function newSlot(folder: Folder, index: number, entry: ActiveEntry): Slot
 	value.Value = entry.Id
 	value:SetAttribute("Uid", entry.Uid)
 	value:SetAttribute("Tier", entry.Tier)
-	value:SetAttribute("Bag", 0)
 
 	local target = Instance.new("ObjectValue")
 	target.Name = "Target"
@@ -16466,7 +16746,7 @@ local function newSlot(folder: Folder, index: number, entry: ActiveEntry): Slot
 		Tier = entry.Tier,
 		Capacity = entry.Capacity,
 		Bag = 0,
-		SellUntil = nil,
+		LastPay = nil,
 		Value = value,
 		TargetValue = target,
 		Target = nil,
@@ -16560,13 +16840,6 @@ local function damageGrime(owner: Player, part: BasePart, amount: number): (bool
 	return alive == true, tonumber(units) or 0
 end
 
-local function setBag(slot: Slot, fraction: number)
-	local shown = math.floor(math.clamp(fraction, 0, 1) * 20 + 0.5) / 20
-	if slot.Value:GetAttribute("Bag") ~= shown then
-		slot.Value:SetAttribute("Bag", shown)
-	end
-end
-
 local function grimeFolderOf(player: Player): Folder?
 	local ok, folder = safe(RoundService.GetGrimeFolder, player)
 	if ok and typeof(folder) == "Instance" and folder:IsA("Folder") then
@@ -16617,24 +16890,12 @@ local function think(player: Player, state: OwnerState, now: number)
 	end
 	local root = getRoot(player)
 	local grimeFolder = grimeFolderOf(player)
-	if not root or not grimeFolder then
+	-- An admin who is hidden (invisible, spectating, controlling someone) has their pets put away.
+	local character = player.Character
+	local hidden = character ~= nil and character:GetAttribute("AdminHidden") == true
+	if not root or not grimeFolder or hidden then
 		clearTargets(state)
 		return
-	end
-	-- Pets don't use the owner's tank: each has its own bag (see below).
-	local levelMult = 1
-	do
-		local ok, m = safe(RoundService.GetLevelMult, player)
-		if ok and type(m) == "number" and m &gt; 0 then
-			levelMult = m
-		end
-	end
-	local drain: BasePart? = nil
-	do
-		local ok, d = safe(RoundService.GetDrainPart, player)
-		if ok and typeof(d) == "Instance" and d:IsA("BasePart") then
-			drain = d
-		end
 	end
 
 	-- Parts already spoken for this tick, so two slots of the same owner never chase the same spot.
@@ -16648,30 +16909,13 @@ local function think(player: Player, state: OwnerState, now: number)
 	local power = runPower(player)
 
 	for _, slot in state.Slots do
-		-- Selling: the pet flew to the drain with a full bag; when it's back, pay the owner.
-		if slot.SellUntil then
-			if now &gt;= slot.SellUntil then
-				local units = slot.Bag
-				slot.Bag = 0
-				slot.SellUntil = nil
-				setBag(slot, 0)
-				setTarget(slot, nil)
-				slot.From = if drain then drain.Position else nil
-				if units &gt; 0 then
-					safe(RoundService.PayPetCoins, player, units)
-				end
-			end
-			continue
-		end
-		local capacity = slot.Capacity * levelMult
-		if slot.Bag &gt;= capacity and drain then
-			local from = if slot.Target then slot.Target.Position else root.Position
-			slot.SellUntil = now + (drain.Position - from).Magnitude / RULES.Speed + 0.8
-			if slot.Target then
-				claimed[slot.Target] = nil
-			end
-			setTarget(slot, drain)
-			continue
+		-- No bag any more: what a pet cleans is paid straight to the owner's coins, gathered up
+		-- and paid about once a second (PAY_INTERVAL) so the coin pop-ups don't spam.
+		if slot.Bag &gt; 0 and now - (slot.LastPay or 0) &gt;= PAY_INTERVAL then
+			local units = slot.Bag
+			slot.Bag = 0
+			slot.LastPay = now
+			safe(RoundService.PayPetCoins, player, units)
 		end
 
 		local target = slot.Target
@@ -16711,7 +16955,6 @@ local function think(player: Player, state: OwnerState, now: number)
 					local alive, units = damageGrime(player, target, amount)
 					if units &gt; 0 then
 						slot.Bag += units
-						setBag(slot, slot.Bag / capacity)
 					end
 					if not alive then
 						if target.Parent then
@@ -19079,6 +19322,7 @@ return RoundService</ProtectedString></Properties></Item>
 	keeps a player's screen black while a teleport is in progress.
 ]]
 
+local MemoryStoreService = game:GetService("MemoryStoreService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -19095,15 +19339,57 @@ local Characters = require(script.Parent:WaitForChild("Characters"))
 
 local RunServers = {}
 
-local ARRIVE_WAIT = 25 -- seconds to wait for the rest of the party before starting without them
+local ARRIVE_WAIT = 12 -- seconds to wait for the rest of the party (anyone later joins the run already going)
 local PROFILE_WAIT = 20 -- seconds to wait for an arriving player's save to load
 local CHARACTER_WAIT = 15 -- seconds to wait for an arriving player's character
-local HANDOFF_WAIT = 6 -- seconds the handoff saves may take before teleporting anyway
+local HANDOFF_WAIT = 3 -- seconds the handoff saves may take before teleporting anyway
 local TELEPORT_TIMEOUT = 45 -- a teleport still not done after this long counts as failed
 local TELEPORT_RETRIES = 3 -- tries per teleport (the first one included)
 
 -- A reserved server (made by TeleportOptions.ShouldReserveServer) has a PrivateServerId but no owner.
 RunServers.IsRunServer = game.PrivateServerId ~= "" and game.PrivateServerOwnerId == 0
+
+-- So the admin can teleport into a run server (a reserved server needs its access code): the lobby
+-- that reserves one remembers "psid_&lt;PrivateServerId&gt;" = code, and the run server, once it starts,
+-- files it under its own JobId ("job_&lt;JobId&gt;"). Kept for a few hours in a MemoryStore map.
+local CODE_TTL = 4 * 3600
+local codeMap: MemoryStoreHashMap? = nil
+local function getCodeMap(): MemoryStoreHashMap?
+	if not codeMap then
+		pcall(function()
+			codeMap = MemoryStoreService:GetHashMap("RinseCycle_RunServerCodes")
+		end)
+	end
+	return codeMap
+end
+local function putCode(key: string, code: string)
+	local map = getCodeMap()
+	if map then
+		pcall(function()
+			(map :: MemoryStoreHashMap):SetAsync(key, code, CODE_TTL)
+		end)
+	end
+end
+local function getCode(key: string): string?
+	local map = getCodeMap()
+	if not map then
+		return nil
+	end
+	local ok, value = pcall(function()
+		return (map :: MemoryStoreHashMap):GetAsync(key)
+	end)
+	return if ok and type(value) == "string" and value ~= "" then value else nil
+end
+
+RunServers.AccessCode = nil :: string? -- this run server's own access code, once known
+
+-- The access code of the run server with this JobId, or nil for a normal (public) server.
+function RunServers.AccessCodeForJob(jobId: string): string?
+	if jobId == game.JobId then
+		return RunServers.AccessCode
+	end
+	return getCode("job_" .. jobId)
+end
 
 local function canTeleport(): boolean
 	return game.PlaceId ~= 0 and not RunService:IsStudio()
@@ -19256,7 +19542,7 @@ function RunServers.Launch(players: { Player }, level: number, onFail: ((Player)
 			table.insert(going, p)
 		end
 	end
-	local data: { [string]: any } = { Mode = "Run", Level = level, Party = userIds }
+	local data: { [string]: any } = { Mode = "Run", Level = level, Party = userIds, AdminInvis = RunServers.InvisList(players) }
 	local ok, result = pcall(function()
 		local options = Instance.new("TeleportOptions")
 		options.ShouldReserveServer = true
@@ -19276,10 +19562,14 @@ function RunServers.Launch(players: { Player }, level: number, onFail: ((Player)
 		end
 		return false
 	end
-	local accessCode = nil
+	local accessCode, privateId = nil, nil
 	pcall(function()
 		accessCode = (result :: any).ReservedServerAccessCode
+		privateId = (result :: any).PrivateServerId
 	end)
+	if type(accessCode) == "string" and type(privateId) == "string" and privateId ~= "" then
+		task.spawn(putCode, "psid_" .. privateId, accessCode)
+	end
 	for _, p in going do
 		watch(p, {
 			Kind = "Run",
@@ -19313,7 +19603,7 @@ function RunServers.SendHome(player: Player)
 	if not isHere(player) then
 		return
 	end
-	local p: Pending = { Kind = "Home", Tries = 1, Token = 0, Data = { Mode = "Lobby" } }
+	local p: Pending = { Kind = "Home", Tries = 1, Token = 0, Data = { Mode = "Lobby", AdminInvis = RunServers.InvisList({ player }) } }
 	watch(player, p)
 	if not sendOne(player, p) then
 		task.spawn(retry, player, p)
@@ -19398,6 +19688,10 @@ local function onArrive(player: Player)
 	pcall(function()
 		data = player:GetJoinData().TeleportData
 	end)
+	-- An admin (or someone they pulled over) dropping in: not part of the run, leave them be.
+	if type(data) == "table" and (data.Mode == "AdminJoin" or data.Mode == "AdminBring") then
+		return
+	end
 	if not plan and type(data) == "table" and data.Mode == "Run" then
 		local party = {}
 		if type(data.Party) == "table" then
@@ -19430,6 +19724,18 @@ local function onArrive(player: Player)
 	task.spawn(startRun)
 end
 
+-- UserIds of these players who are invisible by the admin :invis command, so the server they
+-- arrive in makes them invisible again (AdminServer reads TeleportData.AdminInvis).
+function RunServers.InvisList(players: { Player }): { number }
+	local list = {}
+	for _, p in players do
+		if p:GetAttribute("AdminInvis") == true then
+			table.insert(list, p.UserId)
+		end
+	end
+	return list
+end
+
 function RunServers.Init()
 	TeleportService.TeleportInitFailed:Connect(onTeleportInitFailed)
 	Players.PlayerRemoving:Connect(function(player)
@@ -19441,6 +19747,18 @@ function RunServers.Init()
 	end
 	Workspace:SetAttribute("RunServer", true)
 	RoundService.SendHomeHook = RunServers.SendHome
+	-- Look up our own access code (the lobby stored it) and file it under our JobId.
+	task.spawn(function()
+		for _ = 1, 5 do
+			local code = getCode("psid_" .. game.PrivateServerId)
+			if code then
+				RunServers.AccessCode = code
+				putCode("job_" .. game.JobId, code)
+				return
+			end
+			task.wait(3)
+		end
+	end)
 end
 
 function RunServers.Start()
@@ -19902,15 +20220,17 @@ function ShopService.Start()
 end
 
 return ShopService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">SocialService</string><ProtectedString name="Source">-- SocialService: settles the Follow / Like rewards (Config.Social) when a player joins.
+<Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">SocialService</string><ProtectedString name="Source">-- SocialService: the Follow / Favorite rewards (Config.Social). Nothing is paid without a check.
 --
 -- The Free Rewards window's buttons check straight away (CheckNow). A follow Roblox can't show us
 -- yet stays pending and is checked again automatically on the next join:
 --   * Follow: the player's public following list is read (friends API, through Config.Social.
---     ProxyDomain because games can't call roblox.com directly). The dev on it = reward. Not on it =
---     the pending mark is cleared and they're told to follow first. The check failing (HTTP off,
---     proxy down) pays it anyway, on trust like a Like.
---   * Like: Roblox has no API for likes, so it's paid on trust.
+--     ProxyDomain because games can't call roblox.com directly; needs "Allow HTTP Requests" on in
+--     Game Settings &gt; Security). The dev on it = reward. Not on it, or the check can't run = no
+--     reward (they're told why).
+--   * Favorite: checked on the player's own device with AvatarEditorService (the game's place is
+--     favorited), which is the only way Roblox offers. Likes can't be checked by any game, so
+--     there is no Like reward any more. (Saves keep the old "Like" field names for this reward.)
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
@@ -19963,19 +20283,16 @@ local function settle(player: Player)
 	if not profile or player.Parent ~= Players then
 		return
 	end
-	if profile.LikePending and not profile.LikeReward and Config.Social.LikeReward then
-		if DataService.GrantSocialReward(player, "Like") then
-			DataService.Notice(player, "Thanks for liking the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!", "Good")
-		end
-	end
 	if profile.FollowPending and not profile.FollowReward then
 		local result = follows(player.UserId, Config.Social.CreatorUserId)
 		if player.Parent ~= Players then
 			return
 		end
-		-- Checked and following, or the check can't run at all (HTTP off, proxy down): pay it, the
-		-- same trust a Like gets, rather than leave a real follower without their reward.
-		if result ~= false then
+		-- Only a follow we can actually see is paid. Can't check right now: stay pending.
+		if result == nil then
+			return
+		end
+		if result == true then
 			if DataService.GrantSocialReward(player, "Follow") then
 				DataService.Notice(player, "Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!", "Good")
 			end
@@ -19994,7 +20311,8 @@ function SocialService.CheckNow(player: Player, kind: string): (boolean, string)
 	if not profile then
 		return false, "Your data is still loading."
 	end
-	if kind == "Like" then
+	if kind == "Favorite" then
+		-- The client only sends this after AvatarEditorService confirmed the favorite.
 		if not Config.Social.LikeReward then
 			return false, "That reward isn't available."
 		end
@@ -20002,15 +20320,16 @@ function SocialService.CheckNow(player: Player, kind: string): (boolean, string)
 			return false, "You already got this reward. Thank you!"
 		end
 		DataService.GrantSocialReward(player, "Like")
-		return true, "Thanks for liking the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!"
+		return true, "Thanks for favoriting the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!"
 	elseif kind == "Follow" then
 		if profile.FollowReward then
 			return false, "You already got this reward. Thank you!"
 		end
 		local result = follows(player.UserId, Config.Social.CreatorUserId)
-		-- Following, or the list can't be read at all (HTTP off, proxy down): pay it, the same trust a
-		-- Like gets, so a real follower is never stuck without their reward.
-		if result ~= false then
+		if result == nil then
+			return false, "We couldn't check your follow right now. Try again in a minute!"
+		end
+		if result == true then
 			DataService.GrantSocialReward(player, "Follow")
 			return true, "Thanks for following! You got " .. Config.RewardText(Config.Social.FollowReward) .. "!"
 		end
@@ -21313,8 +21632,8 @@ local function play(_levelIndex: number)
 	if black.BackgroundTransparency &gt; 0.05 then
 		tweenBlack(0, 0.2)
 	end
-	-- give the teleport and the room a moment to settle behind the black
-	task.wait(0.5)
+	-- give the room a moment to settle behind the black
+	task.wait(0.2)
 	local camera = Workspace.CurrentCamera
 	local character = LocalPlayer.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -22904,7 +23223,8 @@ local LocalPlayer = Players.LocalPlayer
 local HUD = {}
 
 -- The owner-only Admin button (AdminClient asks for it once the server confirms the owner). It
--- sits under Free in the left column and, unlike Daily / Codes / Free, stays there in runs too.
+-- sits at the bottom of the right column (the left column's spot under Free is Trade's now) and
+-- stays there in runs too.
 local adminClick: (() -&gt; ())? = nil
 local addAdminButton: (() -&gt; ())? = nil
 local adminButton: TextButton? = nil
@@ -23137,9 +23457,9 @@ function HUD.Init()
 			Icon = "🛡️",
 			Label = "Admin",
 			Color = Colors.PanelLight,
-			Size = UDim2.fromOffset(80, 80),
-			LayoutOrder = 5,
-			Parent = leftColumn,
+			Size = UDim2.fromOffset(100, 100),
+			LayoutOrder = 99, -- the bottom of the right column, under Shop / Pets / Ranks
+			Parent = rightColumn,
 			OnClick = function()
 				if adminClick then
 					adminClick()
@@ -23151,7 +23471,6 @@ function HUD.Init()
 		codesButton.Visible = not inRun
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
-		leftColumn.Visible = true
 	end
 	addAdminButton = makeAdminButton
 	makeAdminButton()
@@ -24011,7 +24330,7 @@ function HUD.Init()
 		codesButton.Visible = not inRun
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
-		leftColumn.Visible = not inRun or adminButton ~= nil
+		leftColumn.Visible = not inRun
 		upgradesButton.LayoutOrder = 1
 		shopButton.LayoutOrder = 2
 		petsButton.LayoutOrder = 3
@@ -28032,7 +28351,6 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local PetModels = require(Shared:WaitForChild("PetModels"))
-local ClientState = require(script.Parent:WaitForChild("ClientState"))
 
 local PetRenderer = {}
 
@@ -28141,64 +28459,6 @@ local function destroySlot(slot: Slot)
 	end
 end
 
--- A little bag meter over each of YOUR pets: how full its dirt bag is before it goes to sell.
-local function addBagMeter(slot: Slot, model: Model)
-	local owner = slot.Value.Parent and slot.Value.Parent.Parent
-	if owner ~= Players.LocalPlayer then
-		return
-	end
-	local anchor = model.PrimaryPart
-	if not anchor then
-		return
-	end
-	local gui = Instance.new("BillboardGui")
-	gui.Name = "BagMeter"
-	gui.Size = UDim2.fromScale(2.4, 0.32) -- studs, so it scales like the pet itself
-	-- A 🎒 at the left says what the bar is: the dirt the pet is carrying to the drain.
-	local icon = Instance.new("TextLabel")
-	icon.BackgroundTransparency = 1
-	icon.Size = UDim2.fromScale(0.3, 2)
-	icon.Position = UDim2.fromScale(-0.32, -0.5)
-	icon.Text = "🎒"
-	icon.TextScaled = true
-	icon.Parent = gui
-	gui.StudsOffsetWorldSpace = Vector3.new(0, 2.2, 0)
-	gui.MaxDistance = 60
-	gui.LightInfluence = 0
-	local back = Instance.new("Frame")
-	back.Size = UDim2.fromScale(1, 1)
-	back.BackgroundColor3 = Color3.fromRGB(20, 30, 50)
-	back.BackgroundTransparency = 0.25
-	back.BorderSizePixel = 0
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(1, 0)
-	corner.Parent = back
-	back.Parent = gui
-	local fill = Instance.new("Frame")
-	fill.Name = "Fill"
-	fill.BorderSizePixel = 0
-	fill.BackgroundColor3 = Color3.fromRGB(255, 205, 70)
-	fill.Size = UDim2.fromScale(0, 1)
-	local fillCorner = corner:Clone()
-	fillCorner.Parent = fill
-	fill.Parent = back
-	gui.Parent = anchor
-	local function update()
-		local f = math.clamp(tonumber(slot.Value:GetAttribute("Bag")) or 0, 0, 1)
-		fill.Size = UDim2.fromScale(f, 1)
-		fill.BackgroundColor3 = if f &gt;= 1 then Color3.fromRGB(110, 230, 120) else Color3.fromRGB(255, 205, 70)
-		-- Only while cleaning: in the lobby the bag means nothing.
-		gui.Enabled = f &gt; 0 and ClientState.InRun()
-	end
-	update()
-	table.insert(slot.Conns, slot.Value:GetAttributeChangedSignal("Bag"):Connect(update))
-	table.insert(slot.Conns, ClientState.Changed:Connect(function(kind)
-		if kind == "Run" then
-			update()
-		end
-	end))
-end
-
 local function buildModel(slot: Slot, petId: string)
 	if slot.Model then
 		slot.Model:Destroy()
@@ -28221,7 +28481,6 @@ local function buildModel(slot: Slot, petId: string)
 	model.Parent = ensureClientPetsFolder()
 	slot.Model = model
 	slot.Size = model:GetExtentsSize()
-	addBagMeter(slot, model)
 	slot.Hidden = nil -- force the next setHidden call to actually apply
 	slot.LastPos = nil
 	slot.BasePivot = nil
@@ -28410,7 +28669,9 @@ local function updateOwner(ownerState: OwnerState, dt: number, camPos: Vector3)
 	if ownerAlive then
 		farAway = (camPos - (ownerRoot :: BasePart).Position).Magnitude &gt; HIDE_DISTANCE
 	end
-	local hideAll = (not ownerAlive) or farAway
+	-- An admin who is hidden (invisible, spectating, controlling someone): their pets hide too.
+	local adminHidden = character ~= nil and character:GetAttribute("AdminHidden") == true
+	local hideAll = (not ownerAlive) or farAway or adminHidden
 
 	table.clear(orderScratch)
 	for _, slot in ownerState.Slots do
@@ -29056,7 +29317,7 @@ local function buildPetsWindow()
 	mergePanel.Parent = details
 	UIKit.Label({ Text = "Merge Pets", Size = UDim2.new(1, -16, 0, 34), Position = UDim2.new(0.5, 0, 0, 14), AnchorPoint = Vector2.new(0.5, 0), TextSize = 26, Parent = mergePanel })
 	UIKit.Label({
-		Text = string.format("%d of the same pet become 1 Golden one; %d Golden make a Rainbow. Better speed, bigger bag, more coins.", MERGE_COUNT, MERGE_COUNT),
+		Text = string.format("%d of the same pet become 1 Golden one; %d Golden make a Rainbow. Faster cleaning, more coins.", MERGE_COUNT, MERGE_COUNT),
 		Size = UDim2.new(1, -24, 0, 48),
 		Position = UDim2.new(0.5, 0, 0, 56),
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -30783,10 +31044,11 @@ return RebirthUI</ProtectedString></Properties></Item>
 	      - Join the community: JOIN opens Roblox's own join prompt in game
 	        (GroupService:PromptJoinAsync); as soon as it closes, the server checks membership live
 	        and pays out. No rejoin needed.
-	      - Follow the dev / Like the game: the button checks straight away (SocialService). A
+	      - Follow the dev / Favorite the game: the button checks straight away (SocialService). A
 	        follow Roblox can't show yet says to leave and rejoin (it's re-checked on join).
 ]]
 
+local AvatarEditorService = game:GetService("AvatarEditorService")
 local GroupService = game:GetService("GroupService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -30919,11 +31181,43 @@ local function refreshSocial()
 			UIKit.SetButtonColor(rowParts.Button, Colors.Warning)
 			rowParts.Status.Text = "Not working? Leave and rejoin."
 		else
-			rowParts.Button.Text = if kind == "Follow" then "I followed!" else "I liked it!"
+			rowParts.Button.Text = if kind == "Follow" then "I followed!" else "Favorite"
 			UIKit.SetButtonColor(rowParts.Button, Colors.Good)
 			rowParts.Status.Text = "Reward: " .. Config.RewardText(reward :: any)
 		end
 	end
+end
+
+-- Favorite: is the game favorited on this account? If not, Roblox's own favorite prompt, then
+-- check again. Returns true only when Roblox says it's favorited.
+local function favoriteGame(): boolean
+	local placeId = game.PlaceId
+	if placeId == 0 then
+		return false
+	end
+	local function isFavorited(): boolean
+		local ok, result = pcall(function()
+			return AvatarEditorService:GetFavorite(placeId, Enum.AvatarItemType.Asset)
+		end)
+		return ok and result == true
+	end
+	if isFavorited() then
+		return true
+	end
+	local done = false
+	local conn = AvatarEditorService.PromptSetFavoriteCompleted:Connect(function()
+		done = true
+	end)
+	local ok = pcall(function()
+		AvatarEditorService:PromptSetFavorite(placeId, Enum.AvatarItemType.Asset, true)
+	end)
+	local waited = 0
+	while ok and not done and waited &lt; 60 do
+		waited += task.wait(0.2)
+	end
+	conn:Disconnect()
+	task.wait(0.5)
+	return isFavorited()
 end
 
 local function markDone(kind: string)
@@ -30936,6 +31230,12 @@ local function markDone(kind: string)
 	local row = socialRows[kind]
 	if row then
 		row.Button.Text = "Checking..."
+	end
+	if kind == "Favorite" and not favoriteGame() then
+		busy = false
+		UIKit.Toast("Favorite the game (the ⭐ on its page or the prompt) to get this reward!", "Info")
+		refreshSocial()
+		return
 	end
 	local result = ClientState.MetaRequest("SocialDone", kind)
 	busy = false
@@ -31044,10 +31344,10 @@ local function buildFree(screenRoot: Instance)
 	})
 	groupStatus = UIKit.Label({ Text = "", TextSize = 15, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(230, 20), Position = UDim2.new(1, -4, 1, -8), AnchorPoint = Vector2.new(1, 1), Parent = group })
 
-	-- Like the game: press 👍 on the game page, then the button, then rejoin.
+	-- Favorite the game (checked on this device; likes can't be checked by any game).
 	if Config.Social.LikeReward then
-		local like = card(list, 2, "👍", "Like the game", "Press the thumbs-up on the game page, then tap the button.")
-		socialButton(like, "Like")
+		local fav = card(list, 2, "⭐", "Favorite the game", "Tap Favorite and confirm. We check it straight away.")
+		socialButton(fav, "Favorite")
 	end
 
 	-- Follow the dev (their headshot and name): follow, tap the button, rejoin (checked on join).
@@ -36473,6 +36773,8 @@ local AdminControlTargetStatus = remote("AdminControlTargetStatus")
 local AdminInventoryList = remote("AdminInventoryList")
 local AdminInventoryRemoveItem = remote("AdminInventoryRemoveItem")
 local AdminLeaderboard = remote("AdminLeaderboard")
+local AdminPetList = remote("AdminPetList")
+local AdminPetAction = remote("AdminPetAction")
 
 ----------------------------------------------------------------------------------------------------
 -- Small helpers
@@ -37009,8 +37311,9 @@ local COMMANDS: { Command } = ({
 	{ Name = "bring", Icon = "⬅️", Label = "Bring", Desc = "Teleports them to you.", Group = "Move", Target = "player" },
 	{ Name = "spectate", Icon = "👁️", Label = "Spectate", Desc = "Watch them. Stop from the bar at the bottom.", Group = "Move", Target = "player" },
 	{ Name = "controlplayer", Icon = "🎮", Label = "Control", Desc = "Move their character with your controls.", Group = "Move", Target = "player" },
-	{ Name = "viewinv", Icon = "🎒", Label = "Inventory", Desc = "See (and remove) the tools they carry.", Group = "Move", Target = "player" },
-	{ Name = "clearinv", Icon = "🗑️", Label = "Clear inventory", Desc = "Removes every tool they carry.", Group = "Move", Target = "player" },
+	{ Name = "joinserver", Icon = "🛰️", Label = "Join server", Desc = "Teleport to that player's server, wherever they are (type their username).", Group = "Move", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
+	{ Name = "bringserver", Icon = "🧲", Label = "Bring (any server)", Desc = "Pull that player from their server into yours (type their username).", Group = "Move", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
+	{ Name = "viewpets", Icon = "🐾", Label = "Pets", Desc = "See their pets. Remove any, or add new ones.", Group = "Game", Target = "player" },
 	-- Game
 	{ Name = "givecoins", Icon = "💰", Label = "Give coins", Desc = "Coins for their current run.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
 	{ Name = "setbubbles", Icon = "🧼", Label = "Set bubbles", Desc = "Sets their Bubbles to an amount.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
@@ -37578,6 +37881,22 @@ local function buildPanel(info: any)
 	})
 	navPrev.Visible = false
 	navNext.Visible = false
+	-- An extra button in the list's header (the Pets view's "Add pet").
+	local headerAction: (() -&gt; ())? = nil
+	local headerButton = UIKit.Button({
+		Text = "",
+		Color = Colors.Good,
+		Size = UDim2.fromOffset(140, 40),
+		TextSize = 18,
+		Position = UDim2.new(1, -420, 0, 6),
+		Parent = overlay,
+		OnClick = function()
+			if headerAction then
+				headerAction()
+			end
+		end,
+	})
+	headerButton.Visible = false
 	local listScroll = scroller(overlay, UDim2.new(1, -8, 1, -60), UDim2.fromOffset(4, 56))
 	listLayout(listScroll, 6)
 
@@ -37637,11 +37956,16 @@ local function buildPanel(info: any)
 	end
 	listSearch:GetPropertyChangedSignal("Text"):Connect(drawRows)
 
-	local function showList(title: string, rows: { Row }, action: string?, onAction: ((Row) -&gt; ())?, nav: { Prev: () -&gt; (), Next: () -&gt; () }?)
+	local function showList(title: string, rows: { Row }, action: string?, onAction: ((Row) -&gt; ())?, nav: { Prev: () -&gt; (), Next: () -&gt; () }?, extra: { Text: string, OnClick: () -&gt; () }?)
 		listNav = nav
 		navPrev.Visible = nav ~= nil
 		navNext.Visible = nav ~= nil
-		overlayTitle.Size = if nav then UDim2.new(1, -550, 0, 44) else UDim2.new(1, -440, 0, 44)
+		headerAction = if extra then extra.OnClick else nil
+		headerButton.Visible = extra ~= nil
+		if extra then
+			headerButton.Text = extra.Text
+		end
+		overlayTitle.Size = if nav or extra then UDim2.new(1, -580, 0, 44) else UDim2.new(1, -440, 0, 44)
 		overlayTitle.Text = title
 		currentRows = if type(rows) == "table" then rows else {}
 		currentAction = action
@@ -37806,6 +38130,79 @@ local function buildPanel(info: any)
 	end)
 	AdminLogsList.OnClientEvent:Connect(function(title, entries)
 		showList(title, entries, "View", logDetail)
+	end)
+
+	-- Pets: every pet a player owns, Remove on each, "Add pet" to give one (pick pet + tier).
+	local petTarget: number? = nil
+	local function addPetPage()
+		local body = detailPage("🐾 Add a pet")
+		local tier = 1
+		local tierRow = Instance.new("Frame")
+		tierRow.BackgroundTransparency = 1
+		tierRow.Size = UDim2.new(1, 0, 0, 48)
+		tierRow.Parent = body
+		listLayout(tierRow, 8, true)
+		local tierButtons = {}
+		local function paintTiers()
+			for t, b in tierButtons do
+				UIKit.SetButtonColor(b, if t == tier then Colors.Primary else Colors.PanelLight)
+			end
+		end
+		for t, label in { "Normal", "Golden", "Rainbow" } do
+			tierButtons[t] = UIKit.Button({
+				Text = label,
+				Color = Colors.PanelLight,
+				Size = UDim2.fromOffset(150, 44),
+				TextSize = 18,
+				LayoutOrder = t,
+				Parent = tierRow,
+				OnClick = function()
+					tier = t
+					paintTiers()
+				end,
+			})
+		end
+		paintTiers()
+		local list = scroller(body, UDim2.new(1, 0, 1, -60), UDim2.fromOffset(0, 58))
+		local grid = Instance.new("UIGridLayout")
+		grid.CellSize = UDim2.fromOffset(200, 50)
+		grid.CellPadding = UDim2.fromOffset(8, 8)
+		grid.SortOrder = Enum.SortOrder.LayoutOrder
+		grid.Parent = list
+		local ids = {}
+		for id in Config.Pets do
+			table.insert(ids, id)
+		end
+		table.sort(ids, function(a, b)
+			return Config.Pets[a].Name &lt; Config.Pets[b].Name
+		end)
+		for i, id in ids do
+			UIKit.Button({
+				Text = Config.Pets[id].Name,
+				Color = Colors.Good,
+				TextSize = 16,
+				LayoutOrder = i,
+				Parent = list,
+				OnClick = function()
+					if petTarget then
+						AdminPetAction:FireServer("Add", petTarget, id, tier)
+					end
+				end,
+			})
+		end
+	end
+	AdminPetList.OnClientEvent:Connect(function(targetUserId, title, entries)
+		petTarget = tonumber(targetUserId)
+		local keepDetail = detail.Visible
+		showList(tostring(title), entries, "Remove", function(entry)
+			if petTarget then
+				AdminPetAction:FireServer("Remove", petTarget, entry.Id)
+			end
+		end, nil, { Text = "+ Add pet", OnClick = addPetPage })
+		-- Adding several pets in a row: stay on the picker.
+		if keepDetail then
+			detail.Visible = true
+		end
 	end)
 
 	-- Leaderboards: one board at a time, ◀ ▶ to flip, Reset on each row (with a confirm step).

@@ -731,7 +731,7 @@ local function launch(party: Party)
 	task.spawn(function()
 		-- Give every member's screen time to fade to black (Cutscene.Cover on "Launching") before
 		-- anyone is moved, so the teleport into the dishwasher is never seen.
-		task.wait(0.4)
+		task.wait(0.25)
 		-- In the live game the party plays in its own private server; otherwise (Studio, or the
 		-- teleport can't start) StartRound builds the dishwasher here. It yields while it builds.
 		-- Pass a copy: it's RoundService's now.

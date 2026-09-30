@@ -35,6 +35,7 @@ local PetService = {}
 
 local RULES = Config.PetRules
 local FOLDER_NAME = "EquippedPets"
+local PAY_INTERVAL = 1 -- seconds: a pet's cleaning is paid out this often
 local MAX_HIT_DT = RULES.ThinkInterval * 2 -- a server hitch can't turn into one giant pet hit
 local QUERY_MAX_PARTS = 250 -- grime parts considered per owner per think
 local SLOT_WATCH_INTERVAL = 1 -- seconds between slot-count checks (perks / passes / late profiles)
@@ -68,8 +69,8 @@ type Slot = {
 	Share: number, -- Config.PetStats Speed (share of the owner's pet power per second)
 	Tier: number,
 	Capacity: number, -- bag size in dirt units, before the level multiplier
-	Bag: number, -- units cleaned and not yet sold
-	SellUntil: number?, -- set while the pet is off selling at the drain (os.clock() it's back)
+	Bag: number, -- units cleaned and not yet paid out (paid every PAY_INTERVAL)
+	LastPay: number?, -- os.clock() of the last payout
 	Value: StringValue, -- EquippedPets["<index>"], Value = pet id; attributes Uid, Tier, Bag (0..1)
 	TargetValue: ObjectValue, -- its "Target" child
 	Target: BasePart?, -- the grime part this pet is cleaning (mirrors TargetValue.Value)
@@ -335,7 +336,6 @@ local function newSlot(folder: Folder, index: number, entry: ActiveEntry): Slot
 	value.Value = entry.Id
 	value:SetAttribute("Uid", entry.Uid)
 	value:SetAttribute("Tier", entry.Tier)
-	value:SetAttribute("Bag", 0)
 
 	local target = Instance.new("ObjectValue")
 	target.Name = "Target"
@@ -349,7 +349,7 @@ local function newSlot(folder: Folder, index: number, entry: ActiveEntry): Slot
 		Tier = entry.Tier,
 		Capacity = entry.Capacity,
 		Bag = 0,
-		SellUntil = nil,
+		LastPay = nil,
 		Value = value,
 		TargetValue = target,
 		Target = nil,
@@ -443,13 +443,6 @@ local function damageGrime(owner: Player, part: BasePart, amount: number): (bool
 	return alive == true, tonumber(units) or 0
 end
 
-local function setBag(slot: Slot, fraction: number)
-	local shown = math.floor(math.clamp(fraction, 0, 1) * 20 + 0.5) / 20
-	if slot.Value:GetAttribute("Bag") ~= shown then
-		slot.Value:SetAttribute("Bag", shown)
-	end
-end
-
 local function grimeFolderOf(player: Player): Folder?
 	local ok, folder = safe(RoundService.GetGrimeFolder, player)
 	if ok and typeof(folder) == "Instance" and folder:IsA("Folder") then
@@ -500,24 +493,12 @@ local function think(player: Player, state: OwnerState, now: number)
 	end
 	local root = getRoot(player)
 	local grimeFolder = grimeFolderOf(player)
-	if not root or not grimeFolder then
+	-- An admin who is hidden (invisible, spectating, controlling someone) has their pets put away.
+	local character = player.Character
+	local hidden = character ~= nil and character:GetAttribute("AdminHidden") == true
+	if not root or not grimeFolder or hidden then
 		clearTargets(state)
 		return
-	end
-	-- Pets don't use the owner's tank: each has its own bag (see below).
-	local levelMult = 1
-	do
-		local ok, m = safe(RoundService.GetLevelMult, player)
-		if ok and type(m) == "number" and m > 0 then
-			levelMult = m
-		end
-	end
-	local drain: BasePart? = nil
-	do
-		local ok, d = safe(RoundService.GetDrainPart, player)
-		if ok and typeof(d) == "Instance" and d:IsA("BasePart") then
-			drain = d
-		end
 	end
 
 	-- Parts already spoken for this tick, so two slots of the same owner never chase the same spot.
@@ -531,30 +512,13 @@ local function think(player: Player, state: OwnerState, now: number)
 	local power = runPower(player)
 
 	for _, slot in state.Slots do
-		-- Selling: the pet flew to the drain with a full bag; when it's back, pay the owner.
-		if slot.SellUntil then
-			if now >= slot.SellUntil then
-				local units = slot.Bag
-				slot.Bag = 0
-				slot.SellUntil = nil
-				setBag(slot, 0)
-				setTarget(slot, nil)
-				slot.From = if drain then drain.Position else nil
-				if units > 0 then
-					safe(RoundService.PayPetCoins, player, units)
-				end
-			end
-			continue
-		end
-		local capacity = slot.Capacity * levelMult
-		if slot.Bag >= capacity and drain then
-			local from = if slot.Target then slot.Target.Position else root.Position
-			slot.SellUntil = now + (drain.Position - from).Magnitude / RULES.Speed + 0.8
-			if slot.Target then
-				claimed[slot.Target] = nil
-			end
-			setTarget(slot, drain)
-			continue
+		-- No bag any more: what a pet cleans is paid straight to the owner's coins, gathered up
+		-- and paid about once a second (PAY_INTERVAL) so the coin pop-ups don't spam.
+		if slot.Bag > 0 and now - (slot.LastPay or 0) >= PAY_INTERVAL then
+			local units = slot.Bag
+			slot.Bag = 0
+			slot.LastPay = now
+			safe(RoundService.PayPetCoins, player, units)
 		end
 
 		local target = slot.Target
@@ -594,7 +558,6 @@ local function think(player: Player, state: OwnerState, now: number)
 					local alive, units = damageGrime(player, target, amount)
 					if units > 0 then
 						slot.Bag += units
-						setBag(slot, slot.Bag / capacity)
 					end
 					if not alive then
 						if target.Parent then

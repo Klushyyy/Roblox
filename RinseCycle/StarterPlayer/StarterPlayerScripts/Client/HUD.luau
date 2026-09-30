@@ -30,7 +30,8 @@ local LocalPlayer = Players.LocalPlayer
 local HUD = {}
 
 -- The owner-only Admin button (AdminClient asks for it once the server confirms the owner). It
--- sits under Free in the left column and, unlike Daily / Codes / Free, stays there in runs too.
+-- sits at the bottom of the right column (the left column's spot under Free is Trade's now) and
+-- stays there in runs too.
 local adminClick: (() -> ())? = nil
 local addAdminButton: (() -> ())? = nil
 local adminButton: TextButton? = nil
@@ -263,9 +264,9 @@ function HUD.Init()
 			Icon = "🛡️",
 			Label = "Admin",
 			Color = Colors.PanelLight,
-			Size = UDim2.fromOffset(80, 80),
-			LayoutOrder = 5,
-			Parent = leftColumn,
+			Size = UDim2.fromOffset(100, 100),
+			LayoutOrder = 99, -- the bottom of the right column, under Shop / Pets / Ranks
+			Parent = rightColumn,
 			OnClick = function()
 				if adminClick then
 					adminClick()
@@ -277,7 +278,6 @@ function HUD.Init()
 		codesButton.Visible = not inRun
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
-		leftColumn.Visible = true
 	end
 	addAdminButton = makeAdminButton
 	makeAdminButton()
@@ -1137,7 +1137,7 @@ function HUD.Init()
 		codesButton.Visible = not inRun
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
-		leftColumn.Visible = not inRun or adminButton ~= nil
+		leftColumn.Visible = not inRun
 		upgradesButton.LayoutOrder = 1
 		shopButton.LayoutOrder = 2
 		petsButton.LayoutOrder = 3

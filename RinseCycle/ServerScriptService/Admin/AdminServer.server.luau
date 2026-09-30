@@ -37,7 +37,9 @@ local DataService = require(GameServices:WaitForChild("DataService"))
 local RoundService = require(GameServices:WaitForChild("RoundService"))
 local PetService = require(GameServices:WaitForChild("PetService"))
 local LeaderboardService = require(GameServices:WaitForChild("LeaderboardService"))
+local RunServers = require(GameServices:WaitForChild("RunServers"))
 local MessagingService = game:GetService("MessagingService")
+local TeleportService = game:GetService("TeleportService")
 
 -- The big "congrats" popup with confetti (Celebrate on the client).
 local function celebrate(player, title, text, icon)
@@ -110,9 +112,9 @@ local ALL_COMMANDS = {
 	"setrank", "promote", "demote", "announce", "cmdlogs", "playerlogs",
 	"kill", "jail", "god", "respawn",
 	"spectate", "controlplayer", "invis",
-	"viewinv", "clearinv",
+	"viewpets", "givepet",
 	"fly",
-	"leaderboards", "globalannounce",
+	"leaderboards", "globalannounce", "joinserver", "bringserver",
 }
 
 -- =====================================================================
@@ -132,7 +134,7 @@ local ALL_COMMANDS = {
 -- enough" - a Developer or a Founder still gets nothing.
 local STUDIO_ONLY_COMMANDS = {
 	"setadminrank", "wipelogs", "givegamepass", "removegamepass", "daily",
-	"finishrun", "givecoins", "givepet", "unlockall", "setrebirths",
+	"finishrun", "givecoins", "unlockall", "setrebirths",
 }
 
 -- Commands FOUNDER alone gets, on top of everything Developer has.
@@ -202,7 +204,7 @@ local ADMIN_TIER_COMMANDS = {
 	"setrank", "promote", "demote", "announce", "cmdlogs", "playerlogs",
 	"kill", "jail", "god", "respawn",
 	"spectate", "controlplayer", "invis",
-	"viewinv", "clearinv",
+	"viewpets",
 }
 local TIER_COMMANDS = {
 	Moderator = {"kick", "mute", "tempmute", "warn", "msg", "goto", "mutelist"},
@@ -555,6 +557,16 @@ AdminModifyPunishment.Parent = ReplicatedStorage
 local AdminLogsList = Instance.new("RemoteEvent")
 AdminLogsList.Name = "AdminLogsList"
 AdminLogsList.Parent = ReplicatedStorage
+
+-- The Pets view (:viewpets). S->C (targetUserId, title, rows); C->S ("Remove", targetUserId, uid)
+-- / ("Add", targetUserId, petId, tier).
+local AdminPetList = Instance.new("RemoteEvent")
+AdminPetList.Name = "AdminPetList"
+AdminPetList.Parent = ReplicatedStorage
+local AdminPetAction = Instance.new("RemoteEvent")
+AdminPetAction.Name = "AdminPetAction"
+AdminPetAction.Parent = ReplicatedStorage
+local sendPetList -- assigned at the bottom of this file
 
 -- The Leaderboards view. C->S ("View", boardIndex) / ("Reset", boardIndex, userId);
 -- S->C (boardIndex, boardCount, title, rows).
@@ -3380,6 +3392,76 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 	-- No player target at all - the whole rest of the input (targetName
 	-- + extraText, which the client only split apart because every other
 	-- command has a target as its first word) is the announcement text.
+	-- :joinserver [username] - go to that player's server, wherever it is (runs included).
+	-- :bringserver [username] - pull that player from their server into yours.
+	if commandName == "joinserver" or commandName == "bringserver" then
+		local joining = commandName == "joinserver"
+		local name = targetName:gsub("^%s+", ""):gsub("%s+$", "")
+		if name == "" then
+			sendFeedback(admin, "Usage: :" .. commandName .. " [username]", true)
+			return
+		end
+		-- Already here: the normal goto / bring.
+		local here = findTargetPlayer(name)
+		if here and here ~= admin then
+			if joining then
+				gotoPlayer(admin, here)
+				sendFeedback(admin, here.Name .. " is in this server - teleported to them", false)
+			else
+				bringPlayer(admin, here)
+				sendFeedback(admin, here.Name .. " is in this server - brought them", false)
+			end
+			return
+		end
+		task.spawn(function()
+			local okId, userId = pcall(function()
+				return Players:GetUserIdFromNameAsync(name)
+			end)
+			if not okId or type(userId) ~= "number" then
+				sendFeedback(admin, "No Roblox user called " .. name, true)
+				return
+			end
+			if not joining then
+				local ok = pcall(function()
+					MessagingService:PublishAsync("RinseCycle_AdminBring", {
+						UserId = userId,
+						JobId = game.JobId,
+						Code = RunServers.AccessCodeForJob(game.JobId),
+						AdminId = admin.UserId,
+					})
+				end)
+				sendFeedback(admin, if ok then ("Asked " .. name .. "'s server to send them here...") else "Couldn't reach other servers", not ok)
+				if ok then
+					logCommand(admin, "bringserver", name, nil, admin.Name .. " brought " .. name .. " from another server")
+				end
+				return
+			end
+			local ok, _current, _err, _placeId, jobId = pcall(function()
+				return TeleportService:GetPlayerPlaceInstanceAsync(userId)
+			end)
+			if not ok or type(jobId) ~= "string" or jobId == "" then
+				sendFeedback(admin, "Couldn't find " .. name .. " in any server (offline, or their joins are turned off)", true)
+				return
+			end
+			local code = RunServers.AccessCodeForJob(jobId)
+			local sent = pcall(function()
+				local options = Instance.new("TeleportOptions")
+				if code then
+					options.ReservedServerAccessCode = code
+				else
+					options.ServerInstanceId = jobId
+				end
+				options:SetTeleportData({ Mode = "AdminJoin", FollowUserId = userId, AdminInvis = RunServers.InvisList({ admin }) })
+				TeleportService:TeleportAsync(game.PlaceId, { admin }, options)
+			end)
+			sendFeedback(admin, if sent then ("Teleporting to " .. name .. "'s server...") else "That teleport couldn't start", not sent)
+			if sent then
+				logCommand(admin, "joinserver", name, nil, admin.Name .. " joined " .. name .. "'s server")
+			end
+		end)
+		return
+	end
+
 	if commandName == "leaderboards" then
 		task.spawn(function()
 			local rows = LeaderboardService.ListBoard(1, 100)
@@ -3725,12 +3807,18 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 	elseif commandName == "invis" then
 		local nowInvisible = not invisibleUserIds[target.UserId]
 		if setInvisible(target, nowInvisible) then
+			-- Kept on the player: a respawn or a server hop (runs, :joinserver) keeps them invisible.
+			target:SetAttribute("AdminInvis", if nowInvisible then true else nil)
 			logCommand(admin, "invis", target.Name, nowInvisible and "hidden" or "shown",
 				admin.Name .. " made " .. target.Name .. (nowInvisible and " invisible" or " visible again"))
 			sendFeedback(admin, "Made " .. target.Name .. (nowInvisible and " invisible" or " visible again"), false)
 		else
 			sendFeedback(admin, "Could not toggle invisibility - character not found", true)
 		end
+
+	elseif commandName == "viewpets" then
+		sendPetList(admin, target)
+		sendFeedback(admin, "Showing " .. target.Name .. "'s pets", false)
 
 	elseif commandName == "viewinv" then
 		sendInventoryList(admin, target)
@@ -4069,6 +4157,151 @@ task.spawn(function()
 					AdminAnnouncement:FireClient(plr, string.sub(text, 1, 200))
 				end
 			end
+		end)
+	end)
+end)
+
+-- =====================================================================
+-- Pets view (:viewpets): see a player's pets, remove one, or add one
+-- =====================================================================
+local PET_TIER_NAMES = { "", "Golden ", "Rainbow " }
+sendPetList = function(admin, target)
+	local profile = DataService.Get(target)
+	local rows = {}
+	if profile then
+		local equipped = {}
+		for _, uid in ipairs(profile.Equipped or {}) do
+			equipped[uid] = true
+		end
+		for _, pet in ipairs(profile.Pets or {}) do
+			local def = Config.Pets[pet.Id]
+			if def then
+				local tier = math.clamp(tonumber(pet.Tier) or 1, 1, 3)
+				table.insert(rows, {
+					Id = pet.Uid,
+					Line1 = PET_TIER_NAMES[tier] .. def.Name .. (if equipped[pet.Uid] then "  (equipped)" else ""),
+					Line2 = def.Rarity .. "  ·  Power " .. tostring(Config.PetPower(pet.Id, tier)),
+				})
+			end
+		end
+	end
+	AdminPetList:FireClient(admin, target.UserId, "🐾 " .. target.Name .. "'s pets (" .. #rows .. ")", rows)
+end
+
+AdminPetAction.OnServerEvent:Connect(function(admin, action, targetUserId, a, b)
+	if not tierHasCommand(getPlayerTier(admin), "viewpets") then
+		return
+	end
+	local target = type(targetUserId) == "number" and Players:GetPlayerByUserId(targetUserId) or nil
+	if not target then
+		sendFeedback(admin, "They're not in this server any more", true)
+		return
+	end
+	if action == "Remove" and type(a) == "string" then
+		local result = PetService.Delete(target, a)
+		if result and result.Ok then
+			logCommand(admin, "viewpets", target.Name, "removed pet " .. a, admin.Name .. " removed a pet from " .. target.Name)
+			sendFeedback(admin, "Removed that pet from " .. target.Name, false)
+		else
+			sendFeedback(admin, (result and result.Error) or "Couldn't remove that pet", true)
+		end
+	elseif action == "Add" and type(a) == "string" and Config.Pets[a] then
+		local tier = math.clamp(math.floor(tonumber(b) or 1), 1, 3)
+		local ok, err = PetService.GivePet(target, a, tier)
+		if ok then
+			local label = PET_TIER_NAMES[tier] .. Config.Pets[a].Name
+			logCommand(admin, "givepet", target.Name, label, admin.Name .. " gave " .. target.Name .. " a " .. label)
+			sendFeedback(admin, "Gave " .. target.Name .. " a " .. label, false)
+		else
+			sendFeedback(admin, err or "Couldn't add that pet", true)
+		end
+	else
+		return
+	end
+	sendPetList(admin, target)
+end)
+
+-- =====================================================================
+-- Server hops: invisibility carries over, and :joinserver / :bringserver land you next to them
+-- =====================================================================
+local function afterArrival(player)
+	local data
+	pcall(function()
+		data = player:GetJoinData().TeleportData
+	end)
+	if type(data) ~= "table" then
+		return
+	end
+	if type(data.AdminInvis) == "table" and table.find(data.AdminInvis, player.UserId) then
+		player:SetAttribute("AdminInvis", true)
+	end
+	local followId = tonumber(data.FollowUserId)
+	if followId and (data.Mode == "AdminJoin" or data.Mode == "AdminBring") then
+		task.spawn(function()
+			local character = player.Character or player.CharacterAdded:Wait()
+			local root = character:WaitForChild("HumanoidRootPart", 10)
+			task.wait(1)
+			local other = Players:GetPlayerByUserId(followId)
+			local otherRoot = other and other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+			if root and otherRoot then
+				root.CFrame = otherRoot.CFrame * CFrame.new(0, 0, 4)
+			end
+		end)
+	end
+end
+
+-- Keeps an :invis'd player invisible on every new character (respawns, and after a server hop).
+local function watchInvis(player)
+	player.CharacterAdded:Connect(function(character)
+		if player:GetAttribute("AdminInvis") ~= true then
+			return
+		end
+		invisibleUserIds[player.UserId] = nil -- the old character's saved looks don't apply any more
+		character:WaitForChild("HumanoidRootPart", 10)
+		task.wait(0.5)
+		if player:GetAttribute("AdminInvis") == true and player.Character == character then
+			setInvisible(player, true)
+		end
+	end)
+	if player:GetAttribute("AdminInvis") == true and player.Character then
+		invisibleUserIds[player.UserId] = nil
+		setInvisible(player, true)
+	end
+end
+
+Players.PlayerAdded:Connect(function(player)
+	afterArrival(player)
+	watchInvis(player)
+end)
+for _, player in ipairs(Players:GetPlayers()) do
+	task.spawn(function()
+		afterArrival(player)
+		watchInvis(player)
+	end)
+end
+
+-- :bringserver from another server: if they're here, send them over.
+task.spawn(function()
+	pcall(function()
+		MessagingService:SubscribeAsync("RinseCycle_AdminBring", function(message)
+			local data = message.Data
+			if type(data) ~= "table" or type(data.UserId) ~= "number" or type(data.JobId) ~= "string" then
+				return
+			end
+			local player = Players:GetPlayerByUserId(data.UserId)
+			if not player or data.JobId == game.JobId then
+				return
+			end
+			pcall(function()
+				local options = Instance.new("TeleportOptions")
+				if type(data.Code) == "string" and data.Code ~= "" then
+					options.ReservedServerAccessCode = data.Code
+				else
+					options.ServerInstanceId = data.JobId
+				end
+				options:SetTeleportData({ Mode = "AdminBring", FollowUserId = data.AdminId, AdminInvis = RunServers.InvisList({ player }) })
+				TeleportService:TeleportAsync(game.PlaceId, { player }, options)
+			end)
 		end)
 	end)
 end)

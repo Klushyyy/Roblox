@@ -7,10 +7,11 @@
 	      - Join the community: JOIN opens Roblox's own join prompt in game
 	        (GroupService:PromptJoinAsync); as soon as it closes, the server checks membership live
 	        and pays out. No rejoin needed.
-	      - Follow the dev / Like the game: the button checks straight away (SocialService). A
+	      - Follow the dev / Favorite the game: the button checks straight away (SocialService). A
 	        follow Roblox can't show yet says to leave and rejoin (it's re-checked on join).
 ]]
 
+local AvatarEditorService = game:GetService("AvatarEditorService")
 local GroupService = game:GetService("GroupService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -143,11 +144,43 @@ local function refreshSocial()
 			UIKit.SetButtonColor(rowParts.Button, Colors.Warning)
 			rowParts.Status.Text = "Not working? Leave and rejoin."
 		else
-			rowParts.Button.Text = if kind == "Follow" then "I followed!" else "I liked it!"
+			rowParts.Button.Text = if kind == "Follow" then "I followed!" else "Favorite"
 			UIKit.SetButtonColor(rowParts.Button, Colors.Good)
 			rowParts.Status.Text = "Reward: " .. Config.RewardText(reward :: any)
 		end
 	end
+end
+
+-- Favorite: is the game favorited on this account? If not, Roblox's own favorite prompt, then
+-- check again. Returns true only when Roblox says it's favorited.
+local function favoriteGame(): boolean
+	local placeId = game.PlaceId
+	if placeId == 0 then
+		return false
+	end
+	local function isFavorited(): boolean
+		local ok, result = pcall(function()
+			return AvatarEditorService:GetFavorite(placeId, Enum.AvatarItemType.Asset)
+		end)
+		return ok and result == true
+	end
+	if isFavorited() then
+		return true
+	end
+	local done = false
+	local conn = AvatarEditorService.PromptSetFavoriteCompleted:Connect(function()
+		done = true
+	end)
+	local ok = pcall(function()
+		AvatarEditorService:PromptSetFavorite(placeId, Enum.AvatarItemType.Asset, true)
+	end)
+	local waited = 0
+	while ok and not done and waited < 60 do
+		waited += task.wait(0.2)
+	end
+	conn:Disconnect()
+	task.wait(0.5)
+	return isFavorited()
 end
 
 local function markDone(kind: string)
@@ -160,6 +193,12 @@ local function markDone(kind: string)
 	local row = socialRows[kind]
 	if row then
 		row.Button.Text = "Checking..."
+	end
+	if kind == "Favorite" and not favoriteGame() then
+		busy = false
+		UIKit.Toast("Favorite the game (the ⭐ on its page or the prompt) to get this reward!", "Info")
+		refreshSocial()
+		return
 	end
 	local result = ClientState.MetaRequest("SocialDone", kind)
 	busy = false
@@ -268,10 +307,10 @@ local function buildFree(screenRoot: Instance)
 	})
 	groupStatus = UIKit.Label({ Text = "", TextSize = 15, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(230, 20), Position = UDim2.new(1, -4, 1, -8), AnchorPoint = Vector2.new(1, 1), Parent = group })
 
-	-- Like the game: press 👍 on the game page, then the button, then rejoin.
+	-- Favorite the game (checked on this device; likes can't be checked by any game).
 	if Config.Social.LikeReward then
-		local like = card(list, 2, "👍", "Like the game", "Press the thumbs-up on the game page, then tap the button.")
-		socialButton(like, "Like")
+		local fav = card(list, 2, "⭐", "Favorite the game", "Tap Favorite and confirm. We check it straight away.")
+		socialButton(fav, "Favorite")
 	end
 
 	-- Follow the dev (their headshot and name): follow, tap the button, rejoin (checked on join).

@@ -1248,6 +1248,27 @@ walls instead of clipping through. All gameplay queries use Include filters.
   once they beat their old time.
 - Admin :globalannounce: the announcement banner in every server (MessagingService).
 
+## 6r. Pets pay as they clean, admin across servers, checked free rewards (v1.6.1)
+- Pets have no bag any more: what a pet cleans is paid straight to its owner's coins, about once a
+  second (PetService PAY_INTERVAL). No capacity meter over pets.
+- A hidden admin (invisible, spectating, controlling someone; character attribute AdminHidden) has
+  their pets hidden on every screen and not cleaning.
+- :invis is remembered on the player (attribute AdminInvis): it survives respawns and every server
+  hop (run servers, going home, :joinserver / :bringserver pass it in TeleportData.AdminInvis).
+- :joinserver [username] goes to that player's server anywhere (GetPlayerPlaceInstanceAsync; run
+  servers through their access code, kept in the "RinseCycle_RunServerCodes" MemoryStore map).
+  :bringserver [username] asks the player's server (MessagingService) to send them to yours.
+- :viewpets replaces :viewinv / :clearinv: every pet a player owns, Remove per pet, "+ Add pet"
+  (pet + Normal / Golden / Rainbow). :givepet works in live servers too.
+- The Admin button sits at the bottom of the right column (Trade took its old spot on the left).
+- Leaderboards read every board the moment the server starts (all boards and names at once),
+  refresh every 60 s, and the board SurfaceGuis draw from 5000 studs.
+- Free rewards: Follow is only paid when the follow is actually seen (needs "Allow HTTP Requests");
+  "Like the game" became "Favorite the game", checked with AvatarEditorService (likes can't be
+  checked by any game).
+- Faster hops: 3 s handoff cap, 12 s party arrival wait (late members join the run going),
+  bigger build steps in run servers, shorter fade-in.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

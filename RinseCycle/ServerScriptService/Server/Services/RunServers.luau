@@ -19,6 +19,7 @@
 	keeps a player's screen black while a teleport is in progress.
 ]]
 
+local MemoryStoreService = game:GetService("MemoryStoreService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -35,15 +36,57 @@ local Characters = require(script.Parent:WaitForChild("Characters"))
 
 local RunServers = {}
 
-local ARRIVE_WAIT = 25 -- seconds to wait for the rest of the party before starting without them
+local ARRIVE_WAIT = 12 -- seconds to wait for the rest of the party (anyone later joins the run already going)
 local PROFILE_WAIT = 20 -- seconds to wait for an arriving player's save to load
 local CHARACTER_WAIT = 15 -- seconds to wait for an arriving player's character
-local HANDOFF_WAIT = 6 -- seconds the handoff saves may take before teleporting anyway
+local HANDOFF_WAIT = 3 -- seconds the handoff saves may take before teleporting anyway
 local TELEPORT_TIMEOUT = 45 -- a teleport still not done after this long counts as failed
 local TELEPORT_RETRIES = 3 -- tries per teleport (the first one included)
 
 -- A reserved server (made by TeleportOptions.ShouldReserveServer) has a PrivateServerId but no owner.
 RunServers.IsRunServer = game.PrivateServerId ~= "" and game.PrivateServerOwnerId == 0
+
+-- So the admin can teleport into a run server (a reserved server needs its access code): the lobby
+-- that reserves one remembers "psid_<PrivateServerId>" = code, and the run server, once it starts,
+-- files it under its own JobId ("job_<JobId>"). Kept for a few hours in a MemoryStore map.
+local CODE_TTL = 4 * 3600
+local codeMap: MemoryStoreHashMap? = nil
+local function getCodeMap(): MemoryStoreHashMap?
+	if not codeMap then
+		pcall(function()
+			codeMap = MemoryStoreService:GetHashMap("RinseCycle_RunServerCodes")
+		end)
+	end
+	return codeMap
+end
+local function putCode(key: string, code: string)
+	local map = getCodeMap()
+	if map then
+		pcall(function()
+			(map :: MemoryStoreHashMap):SetAsync(key, code, CODE_TTL)
+		end)
+	end
+end
+local function getCode(key: string): string?
+	local map = getCodeMap()
+	if not map then
+		return nil
+	end
+	local ok, value = pcall(function()
+		return (map :: MemoryStoreHashMap):GetAsync(key)
+	end)
+	return if ok and type(value) == "string" and value ~= "" then value else nil
+end
+
+RunServers.AccessCode = nil :: string? -- this run server's own access code, once known
+
+-- The access code of the run server with this JobId, or nil for a normal (public) server.
+function RunServers.AccessCodeForJob(jobId: string): string?
+	if jobId == game.JobId then
+		return RunServers.AccessCode
+	end
+	return getCode("job_" .. jobId)
+end
 
 local function canTeleport(): boolean
 	return game.PlaceId ~= 0 and not RunService:IsStudio()
@@ -196,7 +239,7 @@ function RunServers.Launch(players: { Player }, level: number, onFail: ((Player)
 			table.insert(going, p)
 		end
 	end
-	local data: { [string]: any } = { Mode = "Run", Level = level, Party = userIds }
+	local data: { [string]: any } = { Mode = "Run", Level = level, Party = userIds, AdminInvis = RunServers.InvisList(players) }
 	local ok, result = pcall(function()
 		local options = Instance.new("TeleportOptions")
 		options.ShouldReserveServer = true
@@ -216,10 +259,14 @@ function RunServers.Launch(players: { Player }, level: number, onFail: ((Player)
 		end
 		return false
 	end
-	local accessCode = nil
+	local accessCode, privateId = nil, nil
 	pcall(function()
 		accessCode = (result :: any).ReservedServerAccessCode
+		privateId = (result :: any).PrivateServerId
 	end)
+	if type(accessCode) == "string" and type(privateId) == "string" and privateId ~= "" then
+		task.spawn(putCode, "psid_" .. privateId, accessCode)
+	end
 	for _, p in going do
 		watch(p, {
 			Kind = "Run",
@@ -253,7 +300,7 @@ function RunServers.SendHome(player: Player)
 	if not isHere(player) then
 		return
 	end
-	local p: Pending = { Kind = "Home", Tries = 1, Token = 0, Data = { Mode = "Lobby" } }
+	local p: Pending = { Kind = "Home", Tries = 1, Token = 0, Data = { Mode = "Lobby", AdminInvis = RunServers.InvisList({ player }) } }
 	watch(player, p)
 	if not sendOne(player, p) then
 		task.spawn(retry, player, p)
@@ -338,6 +385,10 @@ local function onArrive(player: Player)
 	pcall(function()
 		data = player:GetJoinData().TeleportData
 	end)
+	-- An admin (or someone they pulled over) dropping in: not part of the run, leave them be.
+	if type(data) == "table" and (data.Mode == "AdminJoin" or data.Mode == "AdminBring") then
+		return
+	end
 	if not plan and type(data) == "table" and data.Mode == "Run" then
 		local party = {}
 		if type(data.Party) == "table" then
@@ -370,6 +421,18 @@ local function onArrive(player: Player)
 	task.spawn(startRun)
 end
 
+-- UserIds of these players who are invisible by the admin :invis command, so the server they
+-- arrive in makes them invisible again (AdminServer reads TeleportData.AdminInvis).
+function RunServers.InvisList(players: { Player }): { number }
+	local list = {}
+	for _, p in players do
+		if p:GetAttribute("AdminInvis") == true then
+			table.insert(list, p.UserId)
+		end
+	end
+	return list
+end
+
 function RunServers.Init()
 	TeleportService.TeleportInitFailed:Connect(onTeleportInitFailed)
 	Players.PlayerRemoving:Connect(function(player)
@@ -381,6 +444,18 @@ function RunServers.Init()
 	end
 	Workspace:SetAttribute("RunServer", true)
 	RoundService.SendHomeHook = RunServers.SendHome
+	-- Look up our own access code (the lobby stored it) and file it under our JobId.
+	task.spawn(function()
+		for _ = 1, 5 do
+			local code = getCode("psid_" .. game.PrivateServerId)
+			if code then
+				RunServers.AccessCode = code
+				putCode("job_" .. game.JobId, code)
+				return
+			end
+			task.wait(3)
+		end
+	end)
 end
 
 function RunServers.Start()

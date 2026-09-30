@@ -88,7 +88,9 @@ local LIFTS = {
 local SHOP_X = -49
 local SHOP_Z = { -112, -60 }
 
-local YIELD_EVERY = 200
+-- In a party's own run server nobody else is playing (and the party is behind a loading screen),
+-- so build in far bigger steps there: the dishwasher is ready sooner.
+local YIELD_EVERY = if game.PrivateServerId ~= "" and game.PrivateServerOwnerId == 0 then 3000 else 200
 
 -- Kitchen palette (theme-independent: every level is the same family kitchen).
 local K = {

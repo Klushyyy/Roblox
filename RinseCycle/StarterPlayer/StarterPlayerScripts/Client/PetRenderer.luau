@@ -17,7 +17,6 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local PetModels = require(Shared:WaitForChild("PetModels"))
-local ClientState = require(script.Parent:WaitForChild("ClientState"))
 
 local PetRenderer = {}
 
@@ -126,64 +125,6 @@ local function destroySlot(slot: Slot)
 	end
 end
 
--- A little bag meter over each of YOUR pets: how full its dirt bag is before it goes to sell.
-local function addBagMeter(slot: Slot, model: Model)
-	local owner = slot.Value.Parent and slot.Value.Parent.Parent
-	if owner ~= Players.LocalPlayer then
-		return
-	end
-	local anchor = model.PrimaryPart
-	if not anchor then
-		return
-	end
-	local gui = Instance.new("BillboardGui")
-	gui.Name = "BagMeter"
-	gui.Size = UDim2.fromScale(2.4, 0.32) -- studs, so it scales like the pet itself
-	-- A 🎒 at the left says what the bar is: the dirt the pet is carrying to the drain.
-	local icon = Instance.new("TextLabel")
-	icon.BackgroundTransparency = 1
-	icon.Size = UDim2.fromScale(0.3, 2)
-	icon.Position = UDim2.fromScale(-0.32, -0.5)
-	icon.Text = "🎒"
-	icon.TextScaled = true
-	icon.Parent = gui
-	gui.StudsOffsetWorldSpace = Vector3.new(0, 2.2, 0)
-	gui.MaxDistance = 60
-	gui.LightInfluence = 0
-	local back = Instance.new("Frame")
-	back.Size = UDim2.fromScale(1, 1)
-	back.BackgroundColor3 = Color3.fromRGB(20, 30, 50)
-	back.BackgroundTransparency = 0.25
-	back.BorderSizePixel = 0
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(1, 0)
-	corner.Parent = back
-	back.Parent = gui
-	local fill = Instance.new("Frame")
-	fill.Name = "Fill"
-	fill.BorderSizePixel = 0
-	fill.BackgroundColor3 = Color3.fromRGB(255, 205, 70)
-	fill.Size = UDim2.fromScale(0, 1)
-	local fillCorner = corner:Clone()
-	fillCorner.Parent = fill
-	fill.Parent = back
-	gui.Parent = anchor
-	local function update()
-		local f = math.clamp(tonumber(slot.Value:GetAttribute("Bag")) or 0, 0, 1)
-		fill.Size = UDim2.fromScale(f, 1)
-		fill.BackgroundColor3 = if f >= 1 then Color3.fromRGB(110, 230, 120) else Color3.fromRGB(255, 205, 70)
-		-- Only while cleaning: in the lobby the bag means nothing.
-		gui.Enabled = f > 0 and ClientState.InRun()
-	end
-	update()
-	table.insert(slot.Conns, slot.Value:GetAttributeChangedSignal("Bag"):Connect(update))
-	table.insert(slot.Conns, ClientState.Changed:Connect(function(kind)
-		if kind == "Run" then
-			update()
-		end
-	end))
-end
-
 local function buildModel(slot: Slot, petId: string)
 	if slot.Model then
 		slot.Model:Destroy()
@@ -206,7 +147,6 @@ local function buildModel(slot: Slot, petId: string)
 	model.Parent = ensureClientPetsFolder()
 	slot.Model = model
 	slot.Size = model:GetExtentsSize()
-	addBagMeter(slot, model)
 	slot.Hidden = nil -- force the next setHidden call to actually apply
 	slot.LastPos = nil
 	slot.BasePivot = nil
@@ -395,7 +335,9 @@ local function updateOwner(ownerState: OwnerState, dt: number, camPos: Vector3)
 	if ownerAlive then
 		farAway = (camPos - (ownerRoot :: BasePart).Position).Magnitude > HIDE_DISTANCE
 	end
-	local hideAll = (not ownerAlive) or farAway
+	-- An admin who is hidden (invisible, spectating, controlling someone): their pets hide too.
+	local adminHidden = character ~= nil and character:GetAttribute("AdminHidden") == true
+	local hideAll = (not ownerAlive) or farAway or adminHidden
 
 	table.clear(orderScratch)
 	for _, slot in ownerState.Slots do
