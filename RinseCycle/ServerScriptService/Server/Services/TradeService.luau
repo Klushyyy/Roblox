@@ -2,7 +2,10 @@
 	TradeService - pet trading between two players, in the lobby only.
 
 	  1. "Request" (userId): asks another player in the lobby to trade. They get an invite with
-	     Accept / Decline (it expires after INVITE_TTL).
+	     Accept / Decline (it expires after INVITE_TTL). The sender can take it back
+	     ("CancelRequest"). A request to the same player can only be sent again after
+	     REQUEST_COOLDOWN, whatever their answer; once they've accepted one, there's no wait
+	     between the two of them any more. The sender is kept up to date with ("Outgoing", map).
 	  2. "Accept" (fromUserId) opens the trade for both. Each side adds / removes its own pets
 	     ("Add" / "Remove" uid, up to MAX_OFFER each).
 	  3. Both press "Ready". Any change to either offer un-readies both. When both are ready a short
@@ -31,9 +34,10 @@ local PetService = require(script.Parent:WaitForChild("PetService"))
 local TradeService = {}
 
 local INVITE_TTL = 30
-local REQUEST_COOLDOWN = 3
+local REQUEST_SPAM = 2 -- seconds between any two requests from one player
+local REQUEST_COOLDOWN = 120 -- seconds before the same player can be asked again
 local MAX_OFFER = 8
-local CONFIRM_SECONDS = 4
+local CONFIRM_SECONDS = 3 -- "3, 2, 1" after both press Ready
 local ACTIONS_PER_SECOND = 10
 local CHECK_INTERVAL = 0.5
 
@@ -50,6 +54,12 @@ type Trade = {
 local tradeOf: { [Player]: Trade } = {}
 local invites: { [Player]: { [number]: number } } = {} -- invites[target][fromUserId] = os.clock() sent
 local lastRequest: { [Player]: number } = {}
+local sentTo: { [Player]: { [number]: number } } = {} -- sentTo[sender][targetUserId] = os.clock() sent
+local trusted: { [string]: boolean } = {} -- pairs that have accepted a trade: no cooldown between them
+
+local function pairKey(a: number, b: number): string
+	return if a < b then a .. ":" .. b else b .. ":" .. a
+end
 local actionWindow: { [Player]: { Start: number, Count: number } } = {}
 
 local stateRemote: RemoteEvent
@@ -134,6 +144,32 @@ local function push(trade: Trade)
 			})
 		end
 	end
+end
+
+-- Tells a sender, per player they've asked: until when the request is still open (PendingUntil)
+-- and until when they must wait before asking again (WaitUntil). Server time (Util.Now()).
+local function pushOutgoing(sender: Player)
+	if not isHere(sender) then
+		return
+	end
+	local out = {}
+	local now = os.clock()
+	local sent: { [number]: number } = sentTo[sender] or {}
+	for userId, at in sent do
+		local entry: { [string]: number } = {}
+		local target = Players:GetPlayerByUserId(userId)
+		local list = target and invites[target]
+		if list and list[sender.UserId] and now - list[sender.UserId] < INVITE_TTL then
+			entry.PendingUntil = Util.Now() + (INVITE_TTL - (now - list[sender.UserId]))
+		end
+		if not trusted[pairKey(sender.UserId, userId)] and now - at < REQUEST_COOLDOWN then
+			entry.WaitUntil = Util.Now() + (REQUEST_COOLDOWN - (now - at))
+		end
+		if next(entry) then
+			out[tostring(userId)] = entry
+		end
+	end
+	stateRemote:FireClient(sender, "Outgoing", out)
 end
 
 local function finish(trade: Trade, message: string?, kind: string?)
@@ -238,8 +274,16 @@ local function onAction(player: Player, action: any, value: any)
 			return
 		end
 		local now = os.clock()
-		if lastRequest[player] and now - lastRequest[player] < REQUEST_COOLDOWN then
-			notify(player, "Wait a moment before sending another request.")
+		if lastRequest[player] and now - lastRequest[player] < REQUEST_SPAM then
+			return
+		end
+		local sent = sentTo[player] or {}
+		sentTo[player] = sent
+		local at = sent[target.UserId]
+		if at and not trusted[pairKey(player.UserId, target.UserId)] and now - at < REQUEST_COOLDOWN then
+			local left = math.ceil(REQUEST_COOLDOWN - (now - at))
+			notify(player, string.format("You've already sent %s a request. Please wait %d:%02d before sending another.", target.DisplayName, left // 60, left % 60), "Bad")
+			pushOutgoing(player)
 			return
 		end
 		local ok, why = canTrade(player)
@@ -253,11 +297,30 @@ local function onAction(player: Player, action: any, value: any)
 			return
 		end
 		lastRequest[player] = now
+		sent[target.UserId] = now
 		local list = invites[target] or {}
 		invites[target] = list
 		list[player.UserId] = now
 		stateRemote:FireClient(target, "Invite", { UserId = player.UserId, Name = player.DisplayName })
 		notify(player, "Trade request sent to " .. target.DisplayName .. "!", "Good")
+		pushOutgoing(player)
+		-- When it runs out unanswered, the sender's list updates by itself.
+		task.delay(INVITE_TTL + 0.5, function()
+			pushOutgoing(player)
+		end)
+		return
+	end
+
+	-- The sender takes their request back before it's answered.
+	if action == "CancelRequest" then
+		local target = type(value) == "number" and Players:GetPlayerByUserId(value) or nil
+		local list = target and invites[target]
+		if target and list and list[player.UserId] then
+			list[player.UserId] = nil
+			stateRemote:FireClient(target, "InviteCancelled", { UserId = player.UserId })
+			notify(player, "Request to " .. target.DisplayName .. " cancelled.")
+		end
+		pushOutgoing(player)
 		return
 	end
 
@@ -279,6 +342,7 @@ local function onAction(player: Player, action: any, value: any)
 		end
 		if action == "Decline" then
 			notify(from, player.DisplayName .. " declined your trade.")
+			pushOutgoing(from)
 			return
 		end
 		if tradeOf[from] then
@@ -292,7 +356,9 @@ local function onAction(player: Player, action: any, value: any)
 				return
 			end
 		end
+		trusted[pairKey(from.UserId, player.UserId)] = true
 		startTrade(from, player)
+		pushOutgoing(from)
 		return
 	end
 
@@ -354,6 +420,15 @@ function TradeService.Init()
 		end
 		invites[player] = nil
 		lastRequest[player] = nil
+		sentTo[player] = nil
+		-- Their open requests to others disappear from those players' screens.
+		for _, other in Players:GetPlayers() do
+			local list = invites[other]
+			if list and list[player.UserId] then
+				list[player.UserId] = nil
+				stateRemote:FireClient(other, "InviteCancelled", { UserId = player.UserId })
+			end
+		end
 		actionWindow[player] = nil
 	end)
 end

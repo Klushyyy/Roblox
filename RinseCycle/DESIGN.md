@@ -1269,6 +1269,13 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - Faster hops: 3 s handoff cap, 12 s party arrival wait (late members join the run going),
   bigger build steps in run servers, shorter fade-in.
 
+## 6s. Trade requests (v1.6.2)
+- The Trade window lists everyone with a Request button ("Click someone to request to trade with
+  them"). A sent request shows "Requested..." with a Cancel button; the receiver's invite popup
+  closes if it's cancelled. The same player can be asked again only after 2 minutes, whatever they
+  answered ("Wait m:ss" on the button); after one accepted trade the two can ask each other freely.
+- Both press Ready, then "Trading in 3... 2... 1..."; either can un-ready or cancel meanwhile.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

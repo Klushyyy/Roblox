@@ -1,12 +1,14 @@
 --[[
 	TradeUI - pet trading (lobby only; TradeService on the server checks everything).
 
-	  * The 🤝 Trade button (HUD) opens the Trade window: pick someone in the server and send a
-	    request.
-	  * A request you receive pops up at the top of the screen with Accept / Decline.
+	  * The 🤝 Trade button (HUD) opens the Trade window: everyone in the server with a Request
+	    button. A sent request can be cancelled while it's open; the same player can only be asked
+	    again after a wait (shown on the button), unless they've accepted one before.
+	  * A request you receive pops up at the top of the screen with Accept / Decline (it goes away
+	    if the sender cancels).
 	  * During a trade the window shows both offers, and your pets below: tap a pet to offer it,
-	    tap it in your offer to take it back. Both press Ready; after a short countdown the pets
-	    swap. Any change un-readies both sides. Closing the window cancels the trade.
+	    tap it in your offer to take it back. Both press Ready; after a "3, 2, 1" countdown the pets
+	    swap (either side can still cancel or un-ready during it). Any change un-readies both sides. Closing the window cancels the trade.
 ]]
 
 local Players = game:GetService("Players")
@@ -31,6 +33,10 @@ local CELL = Vector2.new(96, 112)
 
 local initialized = false
 local state: any = nil -- the current TradeState, nil when not trading
+-- Requests I've sent: [tostring(userId)] = { PendingUntil?, WaitUntil? } (server time).
+local outgoing: { [string]: { PendingUntil: number?, WaitUntil: number? } } = {}
+local pickerRows: { { Button: TextButton, Cancel: TextButton, UserId: number } } = {}
+local inviteCards: { [number]: Frame } = {}
 local content: Frame
 local body: Frame
 local actionRemote: RemoteEvent
@@ -129,10 +135,31 @@ end
 -- Pages
 ----------------------------------------------------------------------------------------------------
 
+-- The button on a player's row: Request / Requested (+ Cancel) / Wait m:ss.
+local function paintPickerRow(row: { Button: TextButton, Cancel: TextButton, UserId: number })
+	local info = outgoing[tostring(row.UserId)]
+	local now = Workspace:GetServerTimeNow()
+	local pending = info and info.PendingUntil and info.PendingUntil > now
+	local wait = info and info.WaitUntil and info.WaitUntil > now and info.WaitUntil - now
+	row.Cancel.Visible = pending == true
+	if pending then
+		row.Button.Text = "Requested..."
+		UIKit.SetButtonColor(row.Button, Colors.Disabled)
+	elseif wait then
+		local left = math.ceil(wait :: number)
+		row.Button.Text = string.format("Wait %d:%02d", left // 60, left % 60)
+		UIKit.SetButtonColor(row.Button, Colors.Disabled)
+	else
+		row.Button.Text = "Request"
+		UIKit.SetButtonColor(row.Button, Colors.Good)
+	end
+end
+
 local function drawPicker()
 	clear(body)
+	table.clear(pickerRows)
 	UIKit.Label({
-		Text = "Pick someone to trade pets with",
+		Text = "Click someone to request to trade with them",
 		TextSize = 22,
 		Size = UDim2.new(1, 0, 0, 30),
 		Parent = body,
@@ -156,33 +183,49 @@ local function drawPicker()
 			continue
 		end
 		count += 1
-		local row = UIKit.Card({ Size = UDim2.new(1, -12, 0, 60), Color = Colors.PanelLight, Parent = list })
-		row.LayoutOrder = i
+		local card = UIKit.Card({ Size = UDim2.new(1, -12, 0, 60), Color = Colors.PanelLight, Parent = list })
+		card.LayoutOrder = i
 		UIKit.Label({
 			Text = plr.DisplayName .. "  @" .. plr.Name,
 			TextSize = 20,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			TextTruncate = Enum.TextTruncate.AtEnd,
 			Position = UDim2.fromOffset(16, 0),
-			Size = UDim2.new(1, -200, 1, 0),
-			Parent = row,
+			Size = UDim2.new(1, -330, 1, 0),
+			Parent = card,
 		})
-		UIKit.Button({
-			Text = "Send request",
+		local userId = plr.UserId
+		local button = UIKit.Button({
+			Text = "Request",
 			Color = Colors.Good,
 			TextSize = 18,
-			Size = UDim2.fromOffset(170, 44),
+			Size = UDim2.fromOffset(160, 44),
 			AnchorPoint = Vector2.new(1, 0.5),
 			Position = UDim2.new(1, -10, 0.5, 0),
-			Parent = row,
+			Parent = card,
 			OnClick = function()
-				send("Request", plr.UserId)
+				send("Request", userId)
 			end,
 		})
+		local cancel = UIKit.Button({
+			Text = "Cancel",
+			Color = Colors.Bad,
+			TextSize = 18,
+			Size = UDim2.fromOffset(120, 44),
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -178, 0.5, 0),
+			Parent = card,
+			OnClick = function()
+				send("CancelRequest", userId)
+			end,
+		})
+		local row = { Button = button, Cancel = cancel, UserId = userId }
+		table.insert(pickerRows, row)
+		paintPickerRow(row)
 	end
 	if count == 0 then
 		UIKit.Label({
-			Text = "Nobody else is in this server yet.",
+			Text = "No one else is here to trade with yet.",
 			TextSize = 20,
 			TextColor3 = Colors.TextDim,
 			Size = UDim2.new(1, 0, 0, 60),
@@ -239,7 +282,7 @@ local function drawTrade()
 	-- Right column: status, Ready, Cancel.
 	local status = "Add pets, then both press Ready."
 	if s.ConfirmAt then
-		status = "Both ready! Swapping..."
+		status = "Trading in 3..."
 	elseif s.MyReady then
 		status = "Waiting for " .. tostring(s.Partner.Name) .. "..."
 	elseif s.TheirReady then
@@ -287,10 +330,10 @@ local function drawTrade()
 			while state == s and statusLabel.Parent do
 				local left = math.ceil(at - Workspace:GetServerTimeNow())
 				if left <= 0 then
-					statusLabel.Text = "Swapping..."
+					statusLabel.Text = "Trading!"
 					break
 				end
-				statusLabel.Text = "Both ready! Swapping in " .. left .. "..."
+				statusLabel.Text = "Trading in " .. left .. "..."
 				task.wait(0.2)
 			end
 		end)
@@ -331,9 +374,17 @@ local function showInvite(from: { UserId: number, Name: string })
 		Size = UDim2.new(1, -24, 0, 34),
 		Parent = card,
 	})
+	local old = inviteCards[from.UserId]
+	if old and old.Parent then
+		old:Destroy()
+	end
+	inviteCards[from.UserId] = card
 	local function close()
 		if card.Parent then
 			card:Destroy()
+		end
+		if inviteCards[from.UserId] == card then
+			inviteCards[from.UserId] = nil
 		end
 	end
 	UIKit.Button({
@@ -410,6 +461,19 @@ function TradeUI.Init()
 				showInvite(second)
 			end
 			return
+		elseif first == "InviteCancelled" then
+			local card = type(second) == "table" and inviteCards[tonumber(second.UserId) or 0]
+			if card then
+				card:Destroy()
+				inviteCards[second.UserId] = nil
+			end
+			return
+		elseif first == "Outgoing" then
+			outgoing = if type(second) == "table" then second else {}
+			for _, row in pickerRows do
+				paintPickerRow(row)
+			end
+			return
 		end
 		local was = state
 		state = first
@@ -424,6 +488,19 @@ function TradeUI.Init()
 	ClientState.Changed:Connect(function(kind)
 		if kind == "Meta" and state and UIKit.IsWindowOpen("Trade") then
 			redraw()
+		end
+	end)
+	-- The Wait m:ss / Requested timers tick down while the picker is open.
+	task.spawn(function()
+		while true do
+			task.wait(1)
+			if not state and UIKit.IsWindowOpen("Trade") then
+				for _, row in pickerRows do
+					if row.Button.Parent then
+						paintPickerRow(row)
+					end
+				end
+			end
 		end
 	end)
 	Players.PlayerAdded:Connect(function()
