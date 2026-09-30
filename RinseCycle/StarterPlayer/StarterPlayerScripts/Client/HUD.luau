@@ -1161,9 +1161,9 @@ function HUD.Init()
 			lastHotbarKey = key
 			refreshHotbar()
 		end
-		-- In a run Tab opens the Upgrade Book, so the player list (also on Tab) steps aside.
+		-- Roblox's own player list stays off: PlayerListUI replaces it (it can leave hidden admins out).
 		pcall(function()
-			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not inRun)
+			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
 		end)
 
 		if playing and run then

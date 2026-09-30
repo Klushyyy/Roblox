@@ -114,7 +114,7 @@ local ALL_COMMANDS = {
 	"spectate", "controlplayer", "invis",
 	"viewpets", "givepet",
 	"fly",
-	"leaderboards", "globalannounce", "joinserver", "bringserver",
+	"leaderboards", "globalannounce", "joinserver", "bringserver", "serverlist",
 }
 
 -- =====================================================================
@@ -199,7 +199,7 @@ local STUDIO_TIER_VALUES = { "Moderator", "Admin", "Developer" }
 -- and Control Player.
 local ADMIN_TIER_COMMANDS = {
 	"kick", "mute", "tempmute", "warn", "ban", "tempban", "warnlist", "banlist", "mutelist",
-	"goto", "joinserver", "spectate",
+	"goto", "joinserver", "spectate", "serverlist",
 }
 local TIER_COMMANDS = {
 	-- Moderator: the Punish commands except banning.
@@ -285,6 +285,9 @@ function Staff.TierOf(userId)
 	local entry = Staff.Map[tostring(userId)]
 	return if type(entry) == "table" and type(entry.Tier) == "string" then entry.Tier else nil
 end
+
+-- Every server of the game, for the admin's "All servers" list (filled in at the bottom).
+local ServerList = {}
 
 local function getPlayerTier(player)
 	-- Studio-only testing override, set via Studio's Command Bar (View >
@@ -3586,7 +3589,8 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 				else
 					options.ServerInstanceId = jobId
 				end
-				options:SetTeleportData({ Mode = "AdminJoin", FollowUserId = userId, AdminInvis = RunServers.InvisList({ admin }) })
+				-- Always arrive invisible (and off the player list): nobody sees you join.
+				options:SetTeleportData({ Mode = "AdminJoin", FollowUserId = userId, AdminInvis = { admin.UserId } })
 				TeleportService:TeleportAsync(game.PlaceId, { admin }, options)
 			end)
 			sendFeedback(admin, if sent then ("Teleporting to " .. name .. "'s server...") else "That teleport couldn't start", not sent)
@@ -3594,6 +3598,13 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 				logCommand(admin, "joinserver", name, nil, admin.Name .. " joined " .. name .. "'s server")
 			end
 		end)
+		return
+	end
+
+	-- :serverlist - every player in every server of the game, with Join / Bring on each.
+	if commandName == "serverlist" then
+		task.spawn(ServerList.Send, admin)
+		sendFeedback(admin, "Loading every server...", false)
 		return
 	end
 
@@ -4497,4 +4508,158 @@ Remote.AdminStaffAction.OnServerEvent:Connect(function(admin, action, userId)
 		sendFeedback(admin, name .. " is no longer staff", false)
 		Staff.SendList(admin)
 	end)
+end)
+
+-- =====================================================================
+-- All servers (:serverlist): each server lists its players in a shared MemoryStore map every
+-- 30 s; the admin sees everyone everywhere and can join (arriving invisible) or bring anyone.
+-- =====================================================================
+Remote.AdminServerList = Instance.new("RemoteEvent")
+Remote.AdminServerList.Name = "AdminServerList"
+Remote.AdminServerList.Parent = ReplicatedStorage
+Remote.AdminServerAction = Instance.new("RemoteEvent")
+Remote.AdminServerAction.Name = "AdminServerAction"
+Remote.AdminServerAction.Parent = ReplicatedStorage
+
+ServerList.TTL = 90
+ServerList.Map = nil
+pcall(function()
+	ServerList.Map = game:GetService("MemoryStoreService"):GetSortedMap("RinseCycle_ServerList")
+end)
+
+function ServerList.Snapshot()
+	local list = {}
+	for _, plr in ipairs(Players:GetPlayers()) do
+		table.insert(list, { UserId = plr.UserId, Name = plr.Name, Display = plr.DisplayName, Hidden = plr:GetAttribute("AdminInvis") == true })
+	end
+	return { Players = list, Run = RunServers.IsRunServer, Updated = os.time() }
+end
+
+function ServerList.Publish()
+	local map = ServerList.Map
+	if not map then
+		return
+	end
+	pcall(function()
+		if #Players:GetPlayers() == 0 then
+			map:RemoveAsync(game.JobId)
+		else
+			map:SetAsync(game.JobId, ServerList.Snapshot(), ServerList.TTL)
+		end
+	end)
+end
+
+-- Every server (this one included), as { JobId, Run, Players }.
+function ServerList.Read()
+	local servers = {}
+	local map = ServerList.Map
+	if map then
+		pcall(function()
+			for _, item in ipairs(map:GetRangeAsync(Enum.SortDirection.Ascending, 200)) do
+				if type(item.value) == "table" and item.key ~= game.JobId then
+					table.insert(servers, { JobId = item.key, Run = item.value.Run == true, Players = item.value.Players or {} })
+				end
+			end
+		end)
+	end
+	local here = ServerList.Snapshot()
+	table.insert(servers, 1, { JobId = game.JobId, Run = here.Run, Players = here.Players, Here = true })
+	return servers
+end
+
+function ServerList.Send(admin)
+	local rows = {}
+	local busiest, busiestCount = nil, 0
+	for i, server in ipairs(ServerList.Read()) do
+		local count = #server.Players
+		if not server.Here and not server.Run and count > busiestCount then
+			busiest, busiestCount = server.JobId, count
+		end
+		local where = (if server.Run then "Run" else "Lobby") .. " server " .. i .. " · " .. count .. " player" .. (if count == 1 then "" else "s")
+			.. (if server.Here then " (you're here)" else "")
+		for _, p in ipairs(server.Players) do
+			if p.UserId ~= admin.UserId then
+				table.insert(rows, {
+					Id = p.UserId,
+					JobId = server.JobId,
+					Here = server.Here == true,
+					Line1 = tostring(p.Display) .. "  @" .. tostring(p.Name) .. (if p.Hidden then "  (hidden)" else ""),
+					Line2 = where,
+				})
+			end
+		end
+	end
+	Remote.AdminServerList:FireClient(admin, "🌍 Every server (" .. #rows .. " players)", rows, busiest)
+end
+
+-- Teleports the admin into a server, invisible (they arrive hidden: nobody sees them join).
+function ServerList.Join(admin, jobId, followUserId)
+	if jobId == game.JobId then
+		local target = followUserId and Players:GetPlayerByUserId(followUserId)
+		if target then
+			gotoPlayer(admin, target)
+		end
+		return true
+	end
+	local code = RunServers.AccessCodeForJob(jobId)
+	return pcall(function()
+		local options = Instance.new("TeleportOptions")
+		if code then
+			options.ReservedServerAccessCode = code
+		else
+			options.ServerInstanceId = jobId
+		end
+		options:SetTeleportData({ Mode = "AdminJoin", FollowUserId = followUserId, AdminInvis = { admin.UserId } })
+		TeleportService:TeleportAsync(game.PlaceId, { admin }, options)
+	end)
+end
+
+Remote.AdminServerAction.OnServerEvent:Connect(function(admin, action, jobId, userId)
+	local tier = getPlayerTier(admin)
+	if type(jobId) ~= "string" or jobId == "" then
+		return
+	end
+	if action == "Join" and tierHasCommand(tier, "joinserver") then
+		local ok = ServerList.Join(admin, jobId, tonumber(userId))
+		sendFeedback(admin, if ok then "Joining that server (you'll arrive invisible)..." else "That teleport couldn't start", not ok)
+		if ok then
+			logCommand(admin, "joinserver", tostring(userId or jobId), nil, admin.Name .. " joined another server from the server list")
+		end
+	elseif action == "Bring" and tierHasCommand(tier, "bringserver") and type(userId) == "number" then
+		local here = Players:GetPlayerByUserId(userId)
+		if here then
+			bringPlayer(admin, here)
+			sendFeedback(admin, "Brought " .. here.Name, false)
+			return
+		end
+		local ok = pcall(function()
+			MessagingService:PublishAsync("RinseCycle_AdminBring", {
+				UserId = userId,
+				JobId = game.JobId,
+				Code = RunServers.AccessCodeForJob(game.JobId),
+				AdminId = admin.UserId,
+			})
+		end)
+		sendFeedback(admin, if ok then "Asked their server to send them here..." else "Couldn't reach other servers", not ok)
+	end
+end)
+
+task.spawn(function()
+	while true do
+		ServerList.Publish()
+		task.wait(30)
+	end
+end)
+Players.PlayerAdded:Connect(function()
+	task.delay(2, ServerList.Publish)
+end)
+Players.PlayerRemoving:Connect(function()
+	task.delay(1, ServerList.Publish)
+end)
+game:BindToClose(function()
+	if ServerList.Map then
+		pcall(function()
+			ServerList.Map:RemoveAsync(game.JobId)
+		end)
+	end
 end)

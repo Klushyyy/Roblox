@@ -207,7 +207,8 @@ local function drawPicker()
 	layout.Parent = list
 	local count = 0
 	for i, plr in Players:GetPlayers() do
-		if plr == LocalPlayer then
+		-- Invisible admins aren't there as far as everyone else is concerned.
+		if plr == LocalPlayer or plr:GetAttribute("AdminInvis") == true then
 			continue
 		end
 		count += 1

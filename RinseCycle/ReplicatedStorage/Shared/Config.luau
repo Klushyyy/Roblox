@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.6.4"
+Config.Version = "1.6.5"
 
 ----------------------------------------------------------------------------------------------------
 -- World

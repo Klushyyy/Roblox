@@ -93,6 +93,8 @@ local AdminPetList = laterRemote("AdminPetList")
 local AdminPetAction = laterRemote("AdminPetAction")
 local AdminStaffList = laterRemote("AdminStaffList")
 local AdminStaffAction = laterRemote("AdminStaffAction")
+local AdminServerList = laterRemote("AdminServerList")
+local AdminServerAction = laterRemote("AdminServerAction")
 
 ----------------------------------------------------------------------------------------------------
 -- Small helpers
@@ -663,6 +665,7 @@ local COMMANDS: { Command } = ({
 	{ Name = "bring", Icon = "⬅️", Label = "Bring", Desc = "Teleports them to you.", Group = "Move", Target = "player" },
 	{ Name = "spectate", Icon = "👁️", Label = "Spectate", Desc = "Watch them. Stop from the bar at the bottom.", Group = "Move", Target = "player" },
 	{ Name = "controlplayer", Icon = "🎮", Label = "Control", Desc = "Move their character with your controls.", Group = "Move", Target = "player" },
+	{ Name = "serverlist", Icon = "🌍", Label = "All servers", Desc = "Everyone in every server: Join them (you arrive invisible) or Bring them here.", Group = "Move", Target = "none" },
 	{ Name = "joinserver", Icon = "🛰️", Label = "Join server", Desc = "Teleport to that player's server, wherever they are (type their username).", Group = "Move", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
 	{ Name = "bringserver", Icon = "🧲", Label = "Bring (any server)", Desc = "Pull that player from their server into yours (type their username).", Group = "Move", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
 	{ Name = "viewpets", Icon = "🐾", Label = "Pets", Desc = "See their pets. Remove any, or add new ones.", Group = "Game", Target = "player" },
@@ -1292,6 +1295,9 @@ local function buildPanel(info: any)
 	local currentRows: { Row } = {}
 	local currentAction: string? = nil
 	local currentOnAction: ((Row) -> ())? = nil
+	-- An optional second button on each row (the All servers list: Join + Bring).
+	local currentAction2: string? = nil
+	local currentOnAction2: ((Row) -> ())? = nil
 
 	local function drawRows()
 		clear(listScroll)
@@ -1309,8 +1315,24 @@ local function buildPanel(info: any)
 			end
 			local row = UIKit.Card({ Size = UDim2.new(1, -10, 0, 64), Color = Colors.PanelLight, Parent = listScroll })
 			row.LayoutOrder = i
-			UIKit.Label({ Text = line1, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Size = UDim2.new(1, -170, 0, 26), Position = UDim2.fromOffset(14, 6), Parent = row })
-			UIKit.Label({ Text = line2, TextSize = 14, TextColor3 = Colors.TextDim, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Size = UDim2.new(1, -170, 0, 22), Position = UDim2.fromOffset(14, 34), Parent = row })
+			local textRoom = if currentAction2 then -310 else -170
+			UIKit.Label({ Text = line1, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Size = UDim2.new(1, textRoom, 0, 26), Position = UDim2.fromOffset(14, 6), Parent = row })
+			UIKit.Label({ Text = line2, TextSize = 14, TextColor3 = Colors.TextDim, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Size = UDim2.new(1, textRoom, 0, 22), Position = UDim2.fromOffset(14, 34), Parent = row })
+			if currentAction2 and currentOnAction2 then
+				local onAction2 = currentOnAction2
+				UIKit.Button({
+					Text = currentAction2,
+					Color = Colors.Warning,
+					Size = UDim2.fromOffset(130, 44),
+					TextSize = 18,
+					Position = UDim2.new(1, -152, 0.5, 0),
+					AnchorPoint = Vector2.new(1, 0.5),
+					Parent = row,
+					OnClick = function()
+						onAction2(entry)
+					end,
+				})
+			end
 			if currentAction and currentOnAction then
 				local onAction = currentOnAction
 				UIKit.Button({
@@ -1337,6 +1359,8 @@ local function buildPanel(info: any)
 		listNav = nav
 		navPrev.Visible = nav ~= nil
 		navNext.Visible = nav ~= nil
+		currentAction2 = nil
+		currentOnAction2 = nil
 		headerAction = if extra then extra.OnClick else nil
 		headerButton.Visible = extra ~= nil
 		if extra then
@@ -1568,6 +1592,29 @@ local function buildPanel(info: any)
 			})
 		end
 	end
+	-- All servers: every player everywhere, Join (arrive invisible) and, if allowed, Bring.
+	AdminServerList.OnClientEvent:Connect(function(title, entries, busiestJobId)
+		local extra = nil
+		if type(busiestJobId) == "string" then
+			extra = {
+				Text = "Busiest server",
+				OnClick = function()
+					AdminServerAction:FireServer("Join", busiestJobId)
+				end,
+			}
+		end
+		showList(tostring(title), entries, "Join", function(entry)
+			AdminServerAction:FireServer("Join", entry.JobId, entry.Id)
+		end, nil, extra)
+		if allowed["bringserver"] then
+			currentAction2 = "Bring"
+			currentOnAction2 = function(entry)
+				AdminServerAction:FireServer("Bring", entry.JobId, entry.Id)
+			end
+			drawRows()
+		end
+	end)
+
 	AdminStaffList.OnClientEvent:Connect(function(title, entries)
 		showList(tostring(title), entries, "Remove", function(entry)
 			AdminStaffAction:FireServer("Remove", entry.Id)
