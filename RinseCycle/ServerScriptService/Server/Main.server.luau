@@ -10,28 +10,103 @@ local StarterPlayer = game:GetService("StarterPlayer")
 Players.CharacterAutoLoads = false
 Players.RespawnTime = 3
 
+-- Spawning must NEVER stay off. Whatever happens below (a service erroring or hanging while the
+-- server starts), players get their characters: the normal path turns spawning on once the lobby
+-- is built; this safety net does it after SPAWN_FAILSAFE seconds no matter what, and a watchdog
+-- keeps spawning anyone still without a character after that (it logs why it had to).
+local SPAWN_FAILSAFE = 15
+local spawnsReleased = false
+local function spawnMissing(reason: string)
+	for _, player in Players:GetPlayers() do
+		if not player.Character and player.Parent == Players then
+			warn(string.format("[Rinse Cycle] spawning %s (%s)", player.Name, reason))
+			task.spawn(function()
+				local ok = pcall(function()
+					player:LoadCharacterAsync()
+				end)
+				if not ok then
+					pcall(function()
+						player:LoadCharacter()
+					end)
+				end
+			end)
+		end
+	end
+end
+local function releaseSpawns(reason: string)
+	if spawnsReleased then
+		return
+	end
+	spawnsReleased = true
+	Players.CharacterAutoLoads = true
+	spawnMissing(reason)
+end
+task.delay(SPAWN_FAILSAFE, function()
+	if not spawnsReleased then
+		warn("[Rinse Cycle] server start took too long: spawning players anyway")
+		releaseSpawns("start-up failsafe")
+	end
+end)
+local joinedAt: { [Player]: number } = {}
+Players.PlayerAdded:Connect(function(player)
+	joinedAt[player] = os.clock()
+end)
+Players.PlayerRemoving:Connect(function(player)
+	joinedAt[player] = nil
+end)
+task.spawn(function()
+	while true do
+		task.wait(5)
+		if spawnsReleased then
+			for _, player in Players:GetPlayers() do
+				local at = joinedAt[player] or 0
+				if not player.Character and os.clock() - at > SPAWN_FAILSAFE then
+					spawnMissing("had no character after joining")
+					break
+				end
+			end
+		end
+	end
+end)
+
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local Config = require(Shared:WaitForChild("Config"))
 
 local ServicesFolder = script.Parent:WaitForChild("Services")
-local Characters = require(ServicesFolder:WaitForChild("Characters"))
-local DataService = require(ServicesFolder:WaitForChild("DataService"))
-local MarketService = require(ServicesFolder:WaitForChild("MarketService"))
-local LobbyBuilder = require(ServicesFolder:WaitForChild("LobbyBuilder"))
-local DishFactory = require(ServicesFolder:WaitForChild("DishFactory"))
-local ArenaBuilder = require(ServicesFolder:WaitForChild("ArenaBuilder"))
-local RoundService = require(ServicesFolder:WaitForChild("RoundService"))
-local PetService = require(ServicesFolder:WaitForChild("PetService"))
-local ShopService = require(ServicesFolder:WaitForChild("ShopService"))
-local PartyService = require(ServicesFolder:WaitForChild("PartyService"))
-local LeaderboardService = require(ServicesFolder:WaitForChild("LeaderboardService"))
-local NameTags = require(ServicesFolder:WaitForChild("NameTags"))
-local SocialService = require(ServicesFolder:WaitForChild("SocialService"))
-local LobbyFun = require(ServicesFolder:WaitForChild("LobbyFun"))
-local RunServers = require(ServicesFolder:WaitForChild("RunServers"))
-local GiftService = require(ServicesFolder:WaitForChild("GiftService"))
-local TradeService = require(ServicesFolder:WaitForChild("TradeService"))
+
+-- Loads one service. A missing or broken one is reported and skipped (an empty table) instead of
+-- stopping this whole script - which would leave everything after it, spawning included, undone.
+local function need(name: string): any
+	local module = ServicesFolder:WaitForChild(name, 10)
+	if not module or not module:IsA("ModuleScript") then
+		warn(string.format("[Rinse Cycle] service %s is missing (it must be a ModuleScript in Server > Services)", name))
+		return {}
+	end
+	local ok, result = pcall(require, module)
+	if not ok then
+		warn(string.format("[Rinse Cycle] service %s failed to load: %s", name, tostring(result)))
+		return {}
+	end
+	return result
+end
+local Characters = need("Characters")
+local DataService = need("DataService")
+local MarketService = need("MarketService")
+local LobbyBuilder = need("LobbyBuilder")
+local DishFactory = need("DishFactory")
+local ArenaBuilder = need("ArenaBuilder")
+local RoundService = need("RoundService")
+local PetService = need("PetService")
+local ShopService = need("ShopService")
+local PartyService = need("PartyService")
+local LeaderboardService = need("LeaderboardService")
+local NameTags = need("NameTags")
+local SocialService = need("SocialService")
+local LobbyFun = need("LobbyFun")
+local RunServers = need("RunServers")
+local GiftService = need("GiftService")
+local TradeService = need("TradeService")
 
 local function step(name: string, fn: () -> ())
 	local started = os.clock()
@@ -64,21 +139,7 @@ step("LobbyBuilder.Build", function()
 end)
 
 -- Players can spawn now that the lobby exists.
-Players.CharacterAutoLoads = true
-for _, player in Players:GetPlayers() do
-	if not player.Character then
-		task.spawn(function()
-			local ok = pcall(function()
-				player:LoadCharacterAsync()
-			end)
-			if not ok then
-				pcall(function()
-					player:LoadCharacter()
-				end)
-			end
-		end)
-	end
-end
+releaseSpawns("lobby ready")
 
 local services = {
 	{ "DishFactory", DishFactory },

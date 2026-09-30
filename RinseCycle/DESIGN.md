@@ -1289,6 +1289,12 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - The Admin button is back under Trade in the left column (in a run it's alone there, clear of
   the timer).
 
+## 6u. Spawning can't get stuck; chat above name tags (v1.6.4)
+- Main turns spawning off only until the lobby is built. A missing / broken service is warned about
+  and skipped (need()), a 15 s failsafe turns spawning on whatever happens, and a watchdog spawns
+  anyone still without a character (and logs "[Rinse Cycle] spawning X (...)" so the cause shows).
+- Chat bubbles sit 2.8 studs higher (BubbleChatConfiguration.VerticalStudsOffset), above the tag.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

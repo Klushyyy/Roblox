@@ -23,6 +23,15 @@ function ChatNames.Init()
 		return
 	end
 	initialized = true
+	-- Chat bubbles float above the overhead name tag (NameTags: 2.1 studs up, 1.9 tall) instead of
+	-- covering it.
+	pcall(function()
+		local bubbles = TextChatService:FindFirstChildOfClass("BubbleChatConfiguration")
+			or TextChatService:WaitForChild("BubbleChatConfiguration", 10)
+		if bubbles then
+			(bubbles :: any).VerticalStudsOffset = 2.8
+		end
+	end)
 	TextChatService.OnIncomingMessage = function(message: TextChatMessage)
 		local props = Instance.new("TextChatMessageProperties")
 		local source = message.TextSource
