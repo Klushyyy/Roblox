@@ -588,7 +588,11 @@ function HUD.Init()
 			centerY = math.min(centerY, canvas.Y - 300 - colH / 2)
 		end
 		centerY = math.max(centerY, inset + 80 + colH / 2)
-		rightColumn.Position = UDim2.new(1, -(16 + safe.Right), 0, math.floor(centerY))
+		-- The side columns only keep half of the notch / rounded-corner inset: close to the edges on
+		-- phones, still clear of the notch itself.
+		local sideLeft = 12 + math.floor(safe.Left * 0.5)
+		local sideRight = 12 + math.floor(safe.Right * 0.5)
+		rightColumn.Position = UDim2.new(1, -sideRight, 0, math.floor(centerY))
 		-- Left column: mirrors the right one (above the thumbstick on touch).
 		local leftH = leftColumn.AbsoluteSize.Y / UIKit.GetScale()
 		local leftY = canvas.Y / 2
@@ -603,7 +607,7 @@ function HUD.Init()
 			leftY = math.min(leftY, bottom - moneyBlock.Size.Y.Offset - 16 - leftH / 2)
 		end
 		leftY = math.max(leftY, inset + 80 + leftH / 2)
-		leftColumn.Position = UDim2.new(0, 16 + safe.Left, 0, math.floor(leftY))
+		leftColumn.Position = UDim2.new(0, sideLeft, 0, math.floor(leftY))
 
 		-- Timer: bottom-right on desktop/console; top-right under the topbar on touch.
 		if touch then

@@ -24,13 +24,17 @@ local PlayerListUI = {}
 local Colors = UIKit.Theme.Colors
 local LocalPlayer = Players.LocalPlayer
 
-local WIDTH = 250
-local HEADER = 30
-local TITLES = 16
-local ROW = 24
+-- Phones draw the whole UI smaller, so the list is bigger there to stay readable.
+local TOUCH = UIKit.IsTouch()
+local WIDTH = if TOUCH then 330 else 260
+local HEADER = if TOUCH then 38 else 30
+local TITLES = if TOUCH then 24 else 20
+local ROW = if TOUCH then 34 else 26
 local GAP = 2
 local STATS = { "Bubbles", "Dishes", "Rebirths" }
-local NAME_SHARE = 0.49 -- of the row's width; the three numbers share the rest
+-- Column titles are icons: they fit however narrow the columns get.
+local STAT_ICONS = { Bubbles = "🫧", Dishes = "🍽️", Rebirths = "🔁" }
+local NAME_SHARE = 0.52 -- of the row's width; the three numbers share the rest
 local STAT_SHARE = (1 - NAME_SHARE) / #STATS
 local TAG_COLORS = {
 	MOD = Color3.fromRGB(80, 220, 100),
@@ -78,12 +82,11 @@ end
 local function cell(parent: Instance, text: string, x: number, w: number, color: Color3?, align: Enum.TextXAlignment?): TextLabel
 	return UIKit.Label({
 		Text = text,
-		TextSize = 14,
-		TextScaled = true,
+		TextSize = if TOUCH then 20 else 15,
+		TextScaled = true, -- shrinks to fit (never cut off)
 		RichText = true,
 		TextColor3 = color or Colors.Text,
 		TextXAlignment = align or Enum.TextXAlignment.Center,
-		TextTruncate = Enum.TextTruncate.AtEnd,
 		Position = UDim2.new(x, 4, 0, 3),
 		Size = UDim2.new(w, -8, 1, -6),
 		Parent = parent,
@@ -155,7 +158,7 @@ local function redraw()
 	titles.LayoutOrder = 0
 	titles.Parent = list
 	for c, stat in STATS do
-		cell(titles, stat, NAME_SHARE + (c - 1) * STAT_SHARE, STAT_SHARE, Colors.TextDim)
+		cell(titles, STAT_ICONS[stat] or stat, NAME_SHARE + (c - 1) * STAT_SHARE, STAT_SHARE, Colors.TextDim)
 	end
 	for i, player in shown do
 		local row = Instance.new("Frame")
@@ -225,7 +228,7 @@ function PlayerListUI.Init()
 	header.BackgroundTransparency = 1
 	header.Size = UDim2.new(1, 0, 0, HEADER)
 	header.Font = UIKit.Theme.Fonts.Title
-	header.TextSize = 16
+	header.TextSize = if TOUCH then 20 else 16
 	header.TextColor3 = Colors.Text
 	header.TextXAlignment = Enum.TextXAlignment.Left
 	header.Text = "  Players"
