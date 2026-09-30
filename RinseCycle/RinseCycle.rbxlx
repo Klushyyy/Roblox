@@ -30655,13 +30655,16 @@ end
 
 return PetsUI</ProtectedString></Properties></Item>
 <Item class="ModuleScript" referent="RBX00000036"><Properties><string name="Name">PlayerListUI</string><ProtectedString name="Source">--[[
-	PlayerListUI - the game's own player list (top right, Tab to show / hide in the lobby).
+	PlayerListUI - the game's own player list (top right, Tab or tap the header to fold it).
 
 	Roblox's built-in list can't hide one player, so it's switched off (HUD) and this one is used
 	instead. Anyone the admin :invis command made invisible (player attribute AdminInvis) isn't
 	listed at all; staff still see them, greyed out and marked (hidden). Each row: the staff / VIP
 	tag, the display name, and their Bubbles, Dishes and Rebirths (leaderstats).
-	In a run the list steps aside (Tab opens the Upgrade Book there).
+
+	Placement: top right under Roblox's top bar, inside the screen's safe area, and never lower
+	than just above the HUD's right-hand buttons (Shop / Pets / Ranks); more players than fit
+	scroll. In a run the list steps aside (Tab opens the Upgrade Book there).
 ]]
 
 local Players = game:GetService("Players")
@@ -30677,9 +30680,14 @@ local PlayerListUI = {}
 local Colors = UIKit.Theme.Colors
 local LocalPlayer = Players.LocalPlayer
 
-local WIDTH = 330
-local ROW = 30
+local WIDTH = 250
+local HEADER = 30
+local TITLES = 16
+local ROW = 24
+local GAP = 2
 local STATS = { "Bubbles", "Dishes", "Rebirths" }
+local NAME_SHARE = 0.49 -- of the row's width; the three numbers share the rest
+local STAT_SHARE = (1 - NAME_SHARE) / #STATS
 local TAG_COLORS = {
 	MOD = Color3.fromRGB(80, 220, 100),
 	ADMIN = Color3.fromRGB(255, 75, 75),
@@ -30691,11 +30699,16 @@ local TAG_COLORS = {
 local initialized = false
 local open = true
 local panel: Frame
-local list: Frame
+local list: ScrollingFrame
 local header: TextButton
+local rightColumn: GuiObject? = nil
 
 local function isStaffViewer(): boolean
 	return type(LocalPlayer:GetAttribute("StaffTag")) == "string"
+end
+
+local function inRun(): boolean
+	return ClientState.Run ~= nil
 end
 
 local function statText(player: Player, name: string): string
@@ -30718,19 +30731,47 @@ local function tagOf(player: Player): string?
 	return nil
 end
 
-local function cell(parent: Instance, text: string, x: UDim, w: UDim, color: Color3?, align: Enum.TextXAlignment?): TextLabel
-	local label = UIKit.Label({
+local function cell(parent: Instance, text: string, x: number, w: number, color: Color3?, align: Enum.TextXAlignment?): TextLabel
+	return UIKit.Label({
 		Text = text,
-		TextSize = 15,
+		TextSize = 14,
 		TextScaled = true,
 		RichText = true,
 		TextColor3 = color or Colors.Text,
 		TextXAlignment = align or Enum.TextXAlignment.Center,
-		Position = UDim2.new(x, UDim.new(0, 4)),
-		Size = UDim2.new(w, UDim.new(1, -8)),
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Position = UDim2.new(x, 4, 0, 3),
+		Size = UDim2.new(w, -8, 1, -6),
 		Parent = parent,
 	})
-	return label
+end
+
+-- Where the panel goes and how tall it may get (canvas units). Normally top right, reaching down
+-- to just above the right-hand buttons. If that leaves room for less than MIN_ROOM (short
+-- screens), it moves to the left of those buttons instead and may use the full height. Measured
+-- from the frames' on-screen positions (both live in same-style full-screen canvases).
+local MIN_ROOM = HEADER + TITLES + 3 * (ROW + GAP) + 10
+
+local function place(height: number)
+	local scale = UIKit.GetScale()
+	local safe = UIKit.SafeInsets()
+	local top = UIKit.TopInset() + 8
+	local right = 16 + safe.Right
+	local room = UIKit.CanvasSize().Y - 16 - top
+	local column = rightColumn
+	if column and column.Parent and column.Visible and column.AbsoluteSize.Y &gt; 0 then
+		local columnTop = column.AbsolutePosition.Y / scale
+		local panelTop = if panel.AbsoluteSize.Y &gt; 0 then panel.AbsolutePosition.Y / scale else top
+		local above = columnTop - panelTop - 10
+		if above &gt;= MIN_ROOM or height &lt;= above then
+			room = math.min(room, above)
+		else
+			right += column.AbsoluteSize.X / scale + 12 -- beside the buttons, not above them
+		end
+	end
+	panel.Position = UDim2.new(1, -right, 0, top)
+	panel.Size = UDim2.fromOffset(WIDTH, math.max(HEADER, math.min(height, room)))
+	panel.Visible = not inRun()
 end
 
 local function redraw()
@@ -30758,21 +30799,20 @@ local function redraw()
 		end
 		return a.DisplayName:lower() &lt; b.DisplayName:lower()
 	end)
-	header.Text = string.format("  Players (%d)   %s", #shown, if open then "▲" else "▼")
+	header.Text = string.format("  Players (%d)  %s", #shown, if open then "▲" else "▼")
 	list.Visible = open
 	if not open then
-		panel.Size = UDim2.fromOffset(WIDTH, 34)
+		place(HEADER)
 		return
 	end
-	-- Column titles.
 	local titles = Instance.new("Frame")
 	titles.BackgroundTransparency = 1
-	titles.Size = UDim2.new(1, 0, 0, 22)
+	titles.Size = UDim2.new(1, 0, 0, TITLES)
 	titles.LayoutOrder = 0
 	titles.Parent = list
-	cell(titles, "Bubbles", UDim.new(0.52, 0), UDim.new(0.16, 0), Colors.TextDim)
-	cell(titles, "Dishes", UDim.new(0.68, 0), UDim.new(0.16, 0), Colors.TextDim)
-	cell(titles, "Rebirths", UDim.new(0.84, 0), UDim.new(0.16, 0), Colors.TextDim)
+	for c, stat in STATS do
+		cell(titles, stat, NAME_SHARE + (c - 1) * STAT_SHARE, STAT_SHARE, Colors.TextDim)
+	end
 	for i, player in shown do
 		local row = Instance.new("Frame")
 		row.Size = UDim2.new(1, 0, 0, ROW)
@@ -30780,31 +30820,30 @@ local function redraw()
 		row.BackgroundTransparency = if player == LocalPlayer then 0.5 else 0.7
 		row.BorderSizePixel = 0
 		row.LayoutOrder = i
-		UIKit.Corner(row, 8)
+		UIKit.Corner(row, 6)
 		row.Parent = list
 		local hidden = player:GetAttribute("AdminInvis") == true
 		local tag = tagOf(player)
-		local name = player.DisplayName:gsub("&amp;", "&amp;amp;"):gsub("&lt;", "&amp;lt;"):gsub("&gt;", "&amp;gt;")
+		local name = (player.DisplayName:gsub("&amp;", "&amp;amp;"):gsub("&lt;", "&amp;lt;"):gsub("&gt;", "&amp;gt;"))
 		local text = if tag then string.format('&lt;font color="#%s"&gt;[%s]&lt;/font&gt; %s', TAG_COLORS[tag]:ToHex(), tag, name) else name
 		if hidden then
 			text ..= ' &lt;font color="#9AA4B2"&gt;(hidden)&lt;/font&gt;'
 		end
-		local nameLabel = cell(row, text, UDim.new(0, 6), UDim.new(0.52, -6), if hidden then Colors.TextDim else Colors.Text, Enum.TextXAlignment.Left)
+		local nameLabel = cell(row, text, 0, NAME_SHARE, if hidden then Colors.TextDim else Colors.Text, Enum.TextXAlignment.Left)
+		nameLabel.Position = UDim2.new(0, 6, 0, 3)
 		nameLabel.TextTransparency = if hidden then 0.3 else 0
 		for c, stat in STATS do
-			cell(row, statText(player, stat), UDim.new(0.52 + (c - 1) * 0.16, 0), UDim.new(0.16, 0))
+			cell(row, statText(player, stat), NAME_SHARE + (c - 1) * STAT_SHARE, STAT_SHARE)
 		end
 	end
-	panel.Size = UDim2.fromOffset(WIDTH, 34 + 4 + 22 + #shown * (ROW + 3) + 8)
+	local contentHeight = TITLES + GAP + #shown * (ROW + GAP)
+	list.CanvasSize = UDim2.fromOffset(0, contentHeight)
+	place(HEADER + 4 + contentHeight + 6)
 end
 
 local function setOpen(value: boolean)
 	open = value
 	redraw()
-end
-
-local function inRun(): boolean
-	return ClientState.Run ~= nil
 end
 
 function PlayerListUI.Init()
@@ -30830,19 +30869,19 @@ function PlayerListUI.Init()
 	panel.Name = "Panel"
 	panel.AnchorPoint = Vector2.new(1, 0)
 	panel.BackgroundColor3 = Colors.PanelDark
-	panel.BackgroundTransparency = 0.25
+	panel.BackgroundTransparency = 0.2
 	panel.BorderSizePixel = 0
-	panel.Size = UDim2.fromOffset(WIDTH, 34)
+	panel.Size = UDim2.fromOffset(WIDTH, HEADER)
 	panel.ClipsDescendants = true
-	UIKit.Corner(panel, 12)
+	UIKit.Corner(panel, 10)
 	panel.Parent = root
 
 	header = Instance.new("TextButton")
 	header.Name = "Header"
 	header.BackgroundTransparency = 1
-	header.Size = UDim2.new(1, 0, 0, 34)
+	header.Size = UDim2.new(1, 0, 0, HEADER)
 	header.Font = UIKit.Theme.Fonts.Title
-	header.TextSize = 18
+	header.TextSize = 16
 	header.TextColor3 = Colors.Text
 	header.TextXAlignment = Enum.TextXAlignment.Left
 	header.Text = "  Players"
@@ -30851,28 +30890,38 @@ function PlayerListUI.Init()
 		setOpen(not open)
 	end)
 
-	list = Instance.new("Frame")
+	list = Instance.new("ScrollingFrame")
 	list.Name = "List"
 	list.BackgroundTransparency = 1
-	list.Position = UDim2.fromOffset(6, 36)
-	list.Size = UDim2.new(1, -12, 1, -40)
+	list.BorderSizePixel = 0
+	list.Position = UDim2.fromOffset(5, HEADER + 2)
+	list.Size = UDim2.new(1, -10, 1, -(HEADER + 6))
+	list.ScrollBarThickness = 4
+	list.CanvasSize = UDim2.new()
 	list.Parent = panel
 	local layout = Instance.new("UIListLayout")
-	layout.Padding = UDim.new(0, 3)
+	layout.Padding = UDim.new(0, GAP)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = list
 
-	-- Open on computers, folded up on phones (tap the header to open).
+	-- Open on computers, folded up on phones and tablets (tap the header to open).
 	open = not UIKit.IsTouch()
 
-	local function place()
-		panel.Position = UDim2.new(1, -16, 0, UIKit.TopInset() + 8)
-		panel.Visible = not inRun()
-	end
-	place()
+	-- The HUD's right-hand buttons, so the list never reaches down over them.
+	task.spawn(function()
+		local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+		local hud = playerGui:WaitForChild("HUD", 30)
+		local column = hud and hud:FindFirstChild("RightColumn", true)
+		if column and column:IsA("GuiObject") then
+			rightColumn = column
+			column:GetPropertyChangedSignal("AbsolutePosition"):Connect(redraw)
+		end
+		redraw()
+	end)
+
 	ClientState.Changed:Connect(function(kind)
 		if kind == "Run" then
-			place()
+			redraw()
 		end
 	end)
 	UserInputService.InputBegan:Connect(function(input)
