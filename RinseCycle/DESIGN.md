@@ -1293,7 +1293,7 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - Main turns spawning off only until the lobby is built. A missing / broken service is warned about
   and skipped (need()), a 15 s failsafe turns spawning on whatever happens, and a watchdog spawns
   anyone still without a character (and logs "[Rinse Cycle] spawning X (...)" so the cause shows).
-- Chat bubbles sit 2.8 studs higher (BubbleChatConfiguration.VerticalStudsOffset), above the tag.
+- Chat bubbles sit 2.4 studs higher (BubbleChatConfiguration.VerticalStudsOffset), above the tag.
 
 ## 7. Balance knobs (all in Config)
 

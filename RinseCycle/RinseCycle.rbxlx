@@ -21705,7 +21705,7 @@ function ChatNames.Init()
 		local bubbles = TextChatService:FindFirstChildOfClass("BubbleChatConfiguration")
 			or TextChatService:WaitForChild("BubbleChatConfiguration", 10)
 		if bubbles then
-			(bubbles :: any).VerticalStudsOffset = 2.8
+			(bubbles :: any).VerticalStudsOffset = 2.4
 		end
 	end)
 	TextChatService.OnIncomingMessage = function(message: TextChatMessage)
