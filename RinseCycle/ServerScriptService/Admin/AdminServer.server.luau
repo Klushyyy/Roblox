@@ -275,9 +275,13 @@ end
 -- =====================================================================
 -- Remotes
 -- =====================================================================
-local GetAdminInfo = Instance.new("RemoteFunction")
-GetAdminInfo.Name = "GetAdminInfo"
-GetAdminInfo.Parent = ReplicatedStorage
+-- Every RemoteEvent / RemoteFunction this script makes, in one table (Luau allows at most 200
+-- top-level locals in a script, and this one is big).
+local Remote = {}
+
+Remote.GetAdminInfo = Instance.new("RemoteFunction")
+Remote.GetAdminInfo.Name = "GetAdminInfo"
+Remote.GetAdminInfo.Parent = ReplicatedStorage
 
 -- Turns a technical Tool name (lowercase, no spaces - "glock17", "btools")
 -- into a nicer autocomplete label ("Glock 17", "Btools") by inserting a
@@ -482,113 +486,113 @@ local function tierInfo(tier, player)
 	}
 end
 
-GetAdminInfo.OnServerInvoke = function(player)
+Remote.GetAdminInfo.OnServerInvoke = function(player)
 	local info = tierInfo(getPlayerTier(player), player)
 	-- Prints the name the server actually sees alongside the verdict, so
 	-- a missing Remove button can be diagnosed from the Output window
 	-- rather than guessed at - the usual cause is the test client not
 	-- being signed in under the owner's username at all.
 	log(string.format(
-		"[AdminServer] GetAdminInfo for '%s' -> tier %s, canRemoveLogs %s",
+		"[AdminServer] Remote.GetAdminInfo for '%s' -> tier %s, canRemoveLogs %s",
 		player.Name, tostring(info.Tier), tostring(info.CanRemoveLogs)
 	))
 	return info
 end
 
-local AdminCommand = Instance.new("RemoteEvent")
-AdminCommand.Name = "AdminCommand"
-AdminCommand.Parent = ReplicatedStorage
+Remote.AdminCommand = Instance.new("RemoteEvent")
+Remote.AdminCommand.Name = "AdminCommand"
+Remote.AdminCommand.Parent = ReplicatedStorage
 
 -- Generic "notice" popup - covers the warn popup, the mute popup, and
 -- the freeze popup, all rendered by the same one component client-side
 -- (title + body + optional footnote line + an OK button) rather than
 -- three near-identical UI builders.
-local AdminNotice = Instance.new("RemoteEvent")
-AdminNotice.Name = "AdminNotice"
-AdminNotice.Parent = ReplicatedStorage
+Remote.AdminNotice = Instance.new("RemoteEvent")
+Remote.AdminNotice.Name = "AdminNotice"
+Remote.AdminNotice.Parent = ReplicatedStorage
 
-local AdminFeedback = Instance.new("RemoteEvent")
-AdminFeedback.Name = "AdminFeedback"
-AdminFeedback.Parent = ReplicatedStorage
+Remote.AdminFeedback = Instance.new("RemoteEvent")
+Remote.AdminFeedback.Name = "AdminFeedback"
+Remote.AdminFeedback.Parent = ReplicatedStorage
 
 -- Per-user warnings detail (list of individual warnings + a Remove
 -- button per one) - reached either from :warnlist's master list
--- ("Modify" on a row fires AdminViewWarnings) or refreshed in place
+-- ("Modify" on a row fires Remote.AdminViewWarnings) or refreshed in place
 -- after a removal.
-local AdminWarningsList = Instance.new("RemoteEvent")
-AdminWarningsList.Name = "AdminWarningsList"
-AdminWarningsList.Parent = ReplicatedStorage
+Remote.AdminWarningsList = Instance.new("RemoteEvent")
+Remote.AdminWarningsList.Name = "AdminWarningsList"
+Remote.AdminWarningsList.Parent = ReplicatedStorage
 
-local AdminViewWarnings = Instance.new("RemoteEvent")
-AdminViewWarnings.Name = "AdminViewWarnings"
-AdminViewWarnings.Parent = ReplicatedStorage
+Remote.AdminViewWarnings = Instance.new("RemoteEvent")
+Remote.AdminViewWarnings.Name = "AdminViewWarnings"
+Remote.AdminViewWarnings.Parent = ReplicatedStorage
 
-local AdminRemoveWarning = Instance.new("RemoteEvent")
-AdminRemoveWarning.Name = "AdminRemoveWarning"
-AdminRemoveWarning.Parent = ReplicatedStorage
+Remote.AdminRemoveWarning = Instance.new("RemoteEvent")
+Remote.AdminRemoveWarning.Name = "AdminRemoveWarning"
+Remote.AdminRemoveWarning.Parent = ReplicatedStorage
 
 -- Master lists (:banlist/:mutelist/:warnlist) - every user ever
 -- punished, online or not, each row's "Modify" button opening either
 -- the ban/mute detail-edit popup or (for warnlist) the per-user
 -- warnings detail above.
-local AdminBanList = Instance.new("RemoteEvent")
-AdminBanList.Name = "AdminBanList"
-AdminBanList.Parent = ReplicatedStorage
+Remote.AdminBanList = Instance.new("RemoteEvent")
+Remote.AdminBanList.Name = "AdminBanList"
+Remote.AdminBanList.Parent = ReplicatedStorage
 
-local AdminMuteList = Instance.new("RemoteEvent")
-AdminMuteList.Name = "AdminMuteList"
-AdminMuteList.Parent = ReplicatedStorage
+Remote.AdminMuteList = Instance.new("RemoteEvent")
+Remote.AdminMuteList.Name = "AdminMuteList"
+Remote.AdminMuteList.Parent = ReplicatedStorage
 
-local AdminWarnList = Instance.new("RemoteEvent")
-AdminWarnList.Name = "AdminWarnList"
-AdminWarnList.Parent = ReplicatedStorage
+Remote.AdminWarnList = Instance.new("RemoteEvent")
+Remote.AdminWarnList.Name = "AdminWarnList"
+Remote.AdminWarnList.Parent = ReplicatedStorage
 
 -- Single unified remote for editing a ban or mute record - action is
 -- "remove" (unban/unmute), "reason" (value = new reason string), or
 -- "duration" (value = new duration in seconds, or nil for permanent).
 -- One remote for both punishment types and all three actions, rather
 -- than a growing pile of near-identical single-purpose ones.
-local AdminModifyPunishment = Instance.new("RemoteEvent")
-AdminModifyPunishment.Name = "AdminModifyPunishment"
-AdminModifyPunishment.Parent = ReplicatedStorage
+Remote.AdminModifyPunishment = Instance.new("RemoteEvent")
+Remote.AdminModifyPunishment.Name = "AdminModifyPunishment"
+Remote.AdminModifyPunishment.Parent = ReplicatedStorage
 
 -- Shared by :cmdlogs (every entry) and :playerlogs (filtered to one
 -- admin) - same list popup component, just different title/entries.
-local AdminLogsList = Instance.new("RemoteEvent")
-AdminLogsList.Name = "AdminLogsList"
-AdminLogsList.Parent = ReplicatedStorage
+Remote.AdminLogsList = Instance.new("RemoteEvent")
+Remote.AdminLogsList.Name = "AdminLogsList"
+Remote.AdminLogsList.Parent = ReplicatedStorage
 
 -- The Pets view (:viewpets). S->C (targetUserId, title, rows); C->S ("Remove", targetUserId, uid)
 -- / ("Add", targetUserId, petId, tier).
-local AdminPetList = Instance.new("RemoteEvent")
-AdminPetList.Name = "AdminPetList"
-AdminPetList.Parent = ReplicatedStorage
-local AdminPetAction = Instance.new("RemoteEvent")
-AdminPetAction.Name = "AdminPetAction"
-AdminPetAction.Parent = ReplicatedStorage
+Remote.AdminPetList = Instance.new("RemoteEvent")
+Remote.AdminPetList.Name = "AdminPetList"
+Remote.AdminPetList.Parent = ReplicatedStorage
+Remote.AdminPetAction = Instance.new("RemoteEvent")
+Remote.AdminPetAction.Name = "AdminPetAction"
+Remote.AdminPetAction.Parent = ReplicatedStorage
 local sendPetList -- assigned at the bottom of this file
 
 -- The Leaderboards view. C->S ("View", boardIndex) / ("Reset", boardIndex, userId);
 -- S->C (boardIndex, boardCount, title, rows).
-local AdminLeaderboard = Instance.new("RemoteEvent")
-AdminLeaderboard.Name = "AdminLeaderboard"
-AdminLeaderboard.Parent = ReplicatedStorage
+Remote.AdminLeaderboard = Instance.new("RemoteEvent")
+Remote.AdminLeaderboard.Name = "AdminLeaderboard"
+Remote.AdminLeaderboard.Parent = ReplicatedStorage
 
 -- Tells one client to black its screen out and fade back in. Fired at a
 -- player the server is teleporting a long way without them asking for it
 -- (:jail and the release from it), so the teleport itself and the
 -- lighting rebuild that follows it both happen behind a cover rather
--- than on screen. AdminClient.lua's AdminScreenFade handler has the
+-- than on screen. AdminClient.lua's Remote.AdminScreenFade handler has the
 -- full reasoning.
-local AdminScreenFade = Instance.new("RemoteEvent")
-AdminScreenFade.Name = "AdminScreenFade"
-AdminScreenFade.Parent = ReplicatedStorage
+Remote.AdminScreenFade = Instance.new("RemoteEvent")
+Remote.AdminScreenFade.Name = "AdminScreenFade"
+Remote.AdminScreenFade.Parent = ReplicatedStorage
 
 -- Owner-only deletion of a single command-log entry, fired from the log
 -- detail popup. See isOwner above for why this isn't tier-gated.
-local AdminRemoveLogEntry = Instance.new("RemoteEvent")
-AdminRemoveLogEntry.Name = "AdminRemoveLogEntry"
-AdminRemoveLogEntry.Parent = ReplicatedStorage
+Remote.AdminRemoveLogEntry = Instance.new("RemoteEvent")
+Remote.AdminRemoveLogEntry.Name = "AdminRemoveLogEntry"
+Remote.AdminRemoveLogEntry.Parent = ReplicatedStorage
 
 -- [userId] = which log view that admin currently has open, so removing
 -- an entry can refresh exactly what they were looking at instead of
@@ -602,60 +606,60 @@ AdminRemoveLogEntry.Parent = ReplicatedStorage
 -- this file before.
 local lastLogFilter = {}
 
--- Separate from AdminNotice - an announcement is a top-of-screen banner
+-- Separate from Remote.AdminNotice - an announcement is a top-of-screen banner
 -- to everyone, not the same centered/blurred single-recipient popup
 -- :warn/:mute/:freeze/:msg use.
-local AdminAnnouncement = Instance.new("RemoteEvent")
-AdminAnnouncement.Name = "AdminAnnouncement"
-AdminAnnouncement.Parent = ReplicatedStorage
+Remote.AdminAnnouncement = Instance.new("RemoteEvent")
+Remote.AdminAnnouncement.Name = "AdminAnnouncement"
+Remote.AdminAnnouncement.Parent = ReplicatedStorage
 
--- Separate from the one-shot AdminNotice popup above - that only tells a
+-- Separate from the one-shot Remote.AdminNotice popup above - that only tells a
 -- frozen player once, at the moment it happens. This instead carries the
 -- ongoing true/false frozen state itself, so the client can show a
 -- persistent "YOU ARE FROZEN" indicator for as long as it stays true,
 -- not just a popup that can be dismissed and forgotten while still
 -- actually frozen.
-local AdminFreezeStatus = Instance.new("RemoteEvent")
-AdminFreezeStatus.Name = "AdminFreezeStatus"
-AdminFreezeStatus.Parent = ReplicatedStorage
+Remote.AdminFreezeStatus = Instance.new("RemoteEvent")
+Remote.AdminFreezeStatus.Name = "AdminFreezeStatus"
+Remote.AdminFreezeStatus.Parent = ReplicatedStorage
 
--- Same idea as AdminFreezeStatus above, but for mutes - carries the
+-- Same idea as Remote.AdminFreezeStatus above, but for mutes - carries the
 -- ongoing muted/not-muted state (plus ExpiresAt, or nil for permanent) so
 -- the client can show a persistent "muted for/permanently muted" bottom
 -- indicator for as long as it's actually true, not just a one-shot popup
 -- at the moment :mute/:tempmute happens.
-local AdminMuteStatus = Instance.new("RemoteEvent")
-AdminMuteStatus.Name = "AdminMuteStatus"
-AdminMuteStatus.Parent = ReplicatedStorage
+Remote.AdminMuteStatus = Instance.new("RemoteEvent")
+Remote.AdminMuteStatus.Name = "AdminMuteStatus"
+Remote.AdminMuteStatus.Parent = ReplicatedStorage
 
 -- Fired to the TARGET's own client (not the admin's) with true/false -
 -- :fly can be aimed at anyone, not just staff, so this has to work for
 -- every player's client, not just inside the staff-only admin panel.
-local AdminSetFlying = Instance.new("RemoteEvent")
-AdminSetFlying.Name = "AdminSetFlying"
-AdminSetFlying.Parent = ReplicatedStorage
+Remote.AdminSetFlying = Instance.new("RemoteEvent")
+Remote.AdminSetFlying.Name = "AdminSetFlying"
+Remote.AdminSetFlying.Parent = ReplicatedStorage
 
 -- Fired to the ADMIN's own client with either a target Player (start
 -- spectating them) or nil (stop) - only ever changes the admin's OWN
 -- camera/character, never the target's. Stopping is no longer a typed
 -- :unspectate command - it's the client's own "Stop Spectating" button,
--- which fires AdminStopSpectating below instead.
-local AdminSpectate = Instance.new("RemoteEvent")
-AdminSpectate.Name = "AdminSpectate"
-AdminSpectate.Parent = ReplicatedStorage
+-- which fires Remote.AdminStopSpectating below instead.
+Remote.AdminSpectate = Instance.new("RemoteEvent")
+Remote.AdminSpectate.Name = "AdminSpectate"
+Remote.AdminSpectate.Parent = ReplicatedStorage
 
 -- Fired FROM the admin's own client - the "Stop Spectating" button shown
 -- alongside the "You are currently spectating: X" indicator.
-local AdminStopSpectating = Instance.new("RemoteEvent")
-AdminStopSpectating.Name = "AdminStopSpectating"
-AdminStopSpectating.Parent = ReplicatedStorage
+Remote.AdminStopSpectating = Instance.new("RemoteEvent")
+Remote.AdminStopSpectating.Name = "AdminStopSpectating"
+Remote.AdminStopSpectating.Parent = ReplicatedStorage
 
 -- Fired to the ADMIN's own client with either a target Player (start
 -- controlling them - camera lock + WASD forwarding) or nil (stop), same
--- shape as AdminSpectate above but for :controlplayer.
-local AdminControlPlayer = Instance.new("RemoteEvent")
-AdminControlPlayer.Name = "AdminControlPlayer"
-AdminControlPlayer.Parent = ReplicatedStorage
+-- shape as Remote.AdminSpectate above but for :controlplayer.
+Remote.AdminControlPlayer = Instance.new("RemoteEvent")
+Remote.AdminControlPlayer.Name = "AdminControlPlayer"
+Remote.AdminControlPlayer.Parent = ReplicatedStorage
 
 -- Fired FROM the admin's own client while controlling someone - a
 -- camera-relative movement direction (and a jump flag) captured from
@@ -673,30 +677,30 @@ AdminControlMove.Name = "AdminControlMove"
 AdminControlMove.Parent = ReplicatedStorage
 
 -- Fired FROM the admin's own client - the "Stop Controlling" button.
-local AdminStopControlling = Instance.new("RemoteEvent")
-AdminStopControlling.Name = "AdminStopControlling"
-AdminStopControlling.Parent = ReplicatedStorage
+Remote.AdminStopControlling = Instance.new("RemoteEvent")
+Remote.AdminStopControlling.Name = "AdminStopControlling"
+Remote.AdminStopControlling.Parent = ReplicatedStorage
 
 -- Fired to the TARGET's own client with true/false - drives their
 -- persistent "you are currently being controlled by staff" indicator,
--- same idea as AdminFreezeStatus/AdminMuteStatus but worded for this.
-local AdminControlTargetStatus = Instance.new("RemoteEvent")
-AdminControlTargetStatus.Name = "AdminControlTargetStatus"
-AdminControlTargetStatus.Parent = ReplicatedStorage
+-- same idea as Remote.AdminFreezeStatus/Remote.AdminMuteStatus but worded for this.
+Remote.AdminControlTargetStatus = Instance.new("RemoteEvent")
+Remote.AdminControlTargetStatus.Name = "AdminControlTargetStatus"
+Remote.AdminControlTargetStatus.Parent = ReplicatedStorage
 
 -- Shared by :viewinv - same list popup component every other master
 -- list uses, just showing one target's current Backpack/equipped Tool
 -- names instead of a punishment record.
-local AdminInventoryList = Instance.new("RemoteEvent")
-AdminInventoryList.Name = "AdminInventoryList"
-AdminInventoryList.Parent = ReplicatedStorage
+Remote.AdminInventoryList = Instance.new("RemoteEvent")
+Remote.AdminInventoryList.Name = "AdminInventoryList"
+Remote.AdminInventoryList.Parent = ReplicatedStorage
 
 -- Fired FROM the admin's own client - the per-row Remove button on the
 -- :viewinv popup, for removing one specific item rather than needing
 -- the separate all-or-nothing :clearinv.
-local AdminInventoryRemoveItem = Instance.new("RemoteEvent")
-AdminInventoryRemoveItem.Name = "AdminInventoryRemoveItem"
-AdminInventoryRemoveItem.Parent = ReplicatedStorage
+Remote.AdminInventoryRemoveItem = Instance.new("RemoteEvent")
+Remote.AdminInventoryRemoveItem.Name = "AdminInventoryRemoveItem"
+Remote.AdminInventoryRemoveItem.Parent = ReplicatedStorage
 
 -- Broadcast to EVERY connected client (including the invisible player's
 -- own) whenever :invis/:uninvis runs, so PlayerInfo.lua can hide/restore
@@ -704,21 +708,21 @@ AdminInventoryRemoveItem.Parent = ReplicatedStorage
 -- BasePart or Decal, so setInvisible's own Transparency sweep never
 -- touches it, and being invisible while still showing a nameplate
 -- floating in midair rather defeats the point.
-local AdminInvisStatus = Instance.new("RemoteEvent")
-AdminInvisStatus.Name = "AdminInvisStatus"
-AdminInvisStatus.Parent = ReplicatedStorage
+Remote.AdminInvisStatus = Instance.new("RemoteEvent")
+Remote.AdminInvisStatus.Name = "AdminInvisStatus"
+Remote.AdminInvisStatus.Parent = ReplicatedStorage
 
 -- Fired whenever a player's tier might have changed after their client
 -- already checked once - :setadminrank, in Studio or by the owner in a
 -- live game. Without
 -- this, setting the override attribute from the Command Bar after a
--- client's one-time GetAdminInfo check already ran (which is nearly
+-- client's one-time Remote.GetAdminInfo check already ran (which is nearly
 -- always the case in practice - it takes real time just to reach the
 -- Command Bar and type the line) had no visible effect until rejoining,
 -- which loses the attribute anyway since Play sessions don't persist it.
-local AdminInfoChanged = Instance.new("RemoteEvent")
-AdminInfoChanged.Name = "AdminInfoChanged"
-AdminInfoChanged.Parent = ReplicatedStorage
+Remote.AdminInfoChanged = Instance.new("RemoteEvent")
+Remote.AdminInfoChanged.Name = "AdminInfoChanged"
+Remote.AdminInfoChanged.Parent = ReplicatedStorage
 
 -- NOT Studio-only.
 --
@@ -730,7 +734,7 @@ AdminInfoChanged.Parent = ReplicatedStorage
 -- with no admin panel to go with it.
 local function watchOverride(player)
 	player:GetAttributeChangedSignal("AdminTierOverride"):Connect(function()
-		AdminInfoChanged:FireClient(player, tierInfo(getPlayerTier(player), player))
+		Remote.AdminInfoChanged:FireClient(player, tierInfo(getPlayerTier(player), player))
 	end)
 end
 for _, player in ipairs(Players:GetPlayers()) do
@@ -1039,7 +1043,7 @@ end
 -- Cache-first, background-persisted - see the comment above banUser for
 -- why (this is exactly what made "remove a warning takes a second to
 -- actually go away" happen: the old blocking SetAsync ran before
--- AdminWarningsList:FireClient below ever fired).
+-- Remote.AdminWarningsList:FireClient below ever fired).
 local function saveWarnings(userId, warnings)
 	warningRecordsCache[tostring(userId)] = warnings
 	task.spawn(function()
@@ -1219,7 +1223,7 @@ local function attachMuteFilter(channel)
 			if markMuteNotified(message.MessageId) then
 				local mutedPlayerObj = Players:GetPlayerByUserId(source.UserId)
 				if mutedPlayerObj then
-					AdminNotice:FireClient(mutedPlayerObj, "You are muted", MUTE_TYPING_REMINDER)
+					Remote.AdminNotice:FireClient(mutedPlayerObj, "You are muted", MUTE_TYPING_REMINDER)
 				end
 			end
 			return true
@@ -1243,8 +1247,8 @@ local function isMutedNow(userId)
 		removeMuteData(userId)
 		local plr = Players:GetPlayerByUserId(userId)
 		if plr then
-			AdminMuteStatus:FireClient(plr, false, nil)
-			AdminNotice:FireClient(plr, "You are no longer muted", "Your mute has ended. You can chat again.")
+			Remote.AdminMuteStatus:FireClient(plr, false, nil)
+			Remote.AdminNotice:FireClient(plr, "You are no longer muted", "Your mute has ended. You can chat again.")
 		end
 		return false
 	end
@@ -1326,11 +1330,11 @@ Players.PlayerAdded:Connect(function(player)
 	-- rejoin - without this, a still-muted player who leaves and comes
 	-- back would only ever see it again the next time an admin touches
 	-- their mute record.
-	AdminMuteStatus:FireClient(player, true, muteData.ExpiresAt)
+	Remote.AdminMuteStatus:FireClient(player, true, muteData.ExpiresAt)
 end)
 
 -- Returns (nowMuted, muteData) - muteData is the new record when nowMuted
--- is true, nil when unmuting - so callers can fire AdminMuteStatus with
+-- is true, nil when unmuting - so callers can fire Remote.AdminMuteStatus with
 -- the right ExpiresAt without a second lookup.
 local function toggleMute(target, admin, reason)
 	if mutedUserIds[target.UserId] then
@@ -1524,32 +1528,34 @@ local JAIL_CFRAME = CFrame.new(0, -300, 0)
 -- Roomier than it first looks on paper: a 12-stud ceiling felt like a
 -- crawlspace once a character was stood under it, and 14-deep cells left
 -- no floor once a bunk was in.
-local CELL_W, CELL_D, CELL_H = 18, 16, 16
-local CORRIDOR_D = 15
-local DIVIDER = 1
-local JAIL_WALL = 1
-local DOOR_WIDTH = 5
+-- The jail's sizes and colours, in one table (Luau allows at most 200 top-level locals, see Remote).
+local Jail = {}
+Jail.CELL_W, Jail.CELL_D, Jail.CELL_H = 18, 16, 16
+Jail.CORRIDOR_D = 15
+Jail.DIVIDER = 1
+Jail.JAIL_WALL = 1
+Jail.DOOR_WIDTH = 5
 
-local BLOCK_W = CELL_W * 3 + DIVIDER * 2
-local CELL_Z0, CELL_Z1 = -CELL_D - 1, -1
-local CORR_Z1 = CELL_Z1 + CORRIDOR_D
-local FLOOR_Y, CEIL_Y = -CELL_H / 2, CELL_H / 2
-local CELL_MID_Z = (CELL_Z0 + CELL_Z1) / 2
-local CORR_MID_Z = CELL_Z1 + CORRIDOR_D / 2
-local CELL_X = { -(CELL_W + DIVIDER), 0, CELL_W + DIVIDER }
+Jail.BLOCK_W = Jail.CELL_W * 3 + Jail.DIVIDER * 2
+Jail.CELL_Z0, Jail.CELL_Z1 = -Jail.CELL_D - 1, -1
+Jail.CORR_Z1 = Jail.CELL_Z1 + Jail.CORRIDOR_D
+Jail.FLOOR_Y, Jail.CEIL_Y = -Jail.CELL_H / 2, Jail.CELL_H / 2
+Jail.CELL_MID_Z = (Jail.CELL_Z0 + Jail.CELL_Z1) / 2
+Jail.CORR_MID_Z = Jail.CELL_Z1 + Jail.CORRIDOR_D / 2
+Jail.CELL_X = { -(Jail.CELL_W + Jail.DIVIDER), 0, Jail.CELL_W + Jail.DIVIDER }
 
-local JAIL_SPAWN_CFRAME = JAIL_CFRAME * CFrame.new(0, FLOOR_Y + 4, CELL_MID_Z)
+local JAIL_SPAWN_CFRAME = JAIL_CFRAME * CFrame.new(0, Jail.FLOOR_Y + 4, Jail.CELL_MID_Z)
 
 -- A narrow palette, and floor/walls deliberately different values so the
 -- room has some contrast instead of being one flat grey.
-local C_WALL = Color3.fromRGB(104, 104, 108)
-local C_WALL_LOW = Color3.fromRGB(74, 74, 79)
-local C_FLOOR = Color3.fromRGB(58, 58, 62)
-local C_STEEL = Color3.fromRGB(78, 82, 90)
-local C_ACCENT = Color3.fromRGB(196, 158, 46)
-local C_MATTRESS = Color3.fromRGB(72, 86, 108)
-local C_PORCELAIN = Color3.fromRGB(198, 201, 206)
-local C_WOOD = Color3.fromRGB(96, 72, 52)
+Jail.C_WALL = Color3.fromRGB(104, 104, 108)
+Jail.C_WALL_LOW = Color3.fromRGB(74, 74, 79)
+Jail.C_FLOOR = Color3.fromRGB(58, 58, 62)
+Jail.C_STEEL = Color3.fromRGB(78, 82, 90)
+Jail.C_ACCENT = Color3.fromRGB(196, 158, 46)
+Jail.C_MATTRESS = Color3.fromRGB(72, 86, 108)
+Jail.C_PORCELAIN = Color3.fromRGB(198, 201, 206)
+Jail.C_WOOD = Color3.fromRGB(96, 72, 52)
 
 local jailFolder = Instance.new("Folder")
 jailFolder.Name = "AdminJailCell"
@@ -1566,7 +1572,7 @@ local function jailPart(props)
 	part.Anchored = true
 	part.CanCollide = props.CanCollide ~= false
 	part.Material = props.Material or Enum.Material.Concrete
-	part.Color = props.Color or C_WALL
+	part.Color = props.Color or Jail.C_WALL
 	part.Size = props.Size
 	part.CFrame = JAIL_CFRAME * CFrame.new(props.X or 0, props.Y or 0, props.Z or 0) * (props.Rot or CFrame.new())
 	if props.Shape then part.Shape = props.Shape end
@@ -1577,45 +1583,45 @@ end
 local setCellDoorOpen
 
 do
-	local overlap = JAIL_WALL
-	local blockCentreZ = (CELL_Z0 + CORR_Z1) / 2
-	local blockDepth = CORR_Z1 - CELL_Z0
-	local halfW = BLOCK_W / 2
+	local overlap = Jail.JAIL_WALL
+	local blockCentreZ = (Jail.CELL_Z0 + Jail.CORR_Z1) / 2
+	local blockDepth = Jail.CORR_Z1 - Jail.CELL_Z0
+	local halfW = Jail.BLOCK_W / 2
 
 	-- Shell. Every piece OVERLAPS its neighbours at the seams rather than
 	-- butting edge-to-edge: parts that merely touch along a shared
 	-- boundary can flicker straight through when the camera clips into
 	-- the geometry, and overlapping solid material leaves no exact
 	-- coincident edge to slip through.
-	local shellW, shellD, shellH = BLOCK_W + overlap * 2, blockDepth + overlap * 2, CELL_H + overlap * 2
-	jailPart({Name = "Floor", Size = Vector3.new(shellW, JAIL_WALL, shellD), Y = FLOOR_Y - JAIL_WALL / 2, Z = blockCentreZ, Color = C_FLOOR})
+	local shellW, shellD, shellH = Jail.BLOCK_W + overlap * 2, blockDepth + overlap * 2, Jail.CELL_H + overlap * 2
+	jailPart({Name = "Floor", Size = Vector3.new(shellW, Jail.JAIL_WALL, shellD), Y = Jail.FLOOR_Y - Jail.JAIL_WALL / 2, Z = blockCentreZ, Color = Jail.C_FLOOR})
 	-- Not as dark as the wall band: at the first pass the ceiling read as
 	-- an open black void above the lights rather than as a surface.
-	jailPart({Name = "Ceiling", Size = Vector3.new(shellW, JAIL_WALL, shellD), Y = CEIL_Y + JAIL_WALL / 2, Z = blockCentreZ, Color = Color3.fromRGB(88, 88, 93)})
-	jailPart({Name = "WallBack", Size = Vector3.new(shellW, shellH, JAIL_WALL), Z = CELL_Z0 - JAIL_WALL / 2})
-	jailPart({Name = "WallFront", Size = Vector3.new(shellW, shellH, JAIL_WALL), Z = CORR_Z1 + JAIL_WALL / 2})
-	jailPart({Name = "WallLeft", Size = Vector3.new(JAIL_WALL, shellH, shellD), X = -halfW - JAIL_WALL / 2, Z = blockCentreZ})
-	jailPart({Name = "WallRight", Size = Vector3.new(JAIL_WALL, shellH, shellD), X = halfW + JAIL_WALL / 2, Z = blockCentreZ})
+	jailPart({Name = "Ceiling", Size = Vector3.new(shellW, Jail.JAIL_WALL, shellD), Y = Jail.CEIL_Y + Jail.JAIL_WALL / 2, Z = blockCentreZ, Color = Color3.fromRGB(88, 88, 93)})
+	jailPart({Name = "WallBack", Size = Vector3.new(shellW, shellH, Jail.JAIL_WALL), Z = Jail.CELL_Z0 - Jail.JAIL_WALL / 2})
+	jailPart({Name = "WallFront", Size = Vector3.new(shellW, shellH, Jail.JAIL_WALL), Z = Jail.CORR_Z1 + Jail.JAIL_WALL / 2})
+	jailPart({Name = "WallLeft", Size = Vector3.new(Jail.JAIL_WALL, shellH, shellD), X = -halfW - Jail.JAIL_WALL / 2, Z = blockCentreZ})
+	jailPart({Name = "WallRight", Size = Vector3.new(Jail.JAIL_WALL, shellH, shellD), X = halfW + Jail.JAIL_WALL / 2, Z = blockCentreZ})
 
 	-- A darker band around the lower third of the walls. One horizontal
 	-- line does more to stop a room reading as a flat grey box than any
 	-- number of small props, because it gives the eye a height reference.
-	local BAND_H = CELL_H * 0.34
-	jailPart({Name = "BandFront", Size = Vector3.new(shellW, BAND_H, 0.12), Y = FLOOR_Y + BAND_H / 2, Z = CORR_Z1 - 0.06, Material = Enum.Material.SmoothPlastic, Color = C_WALL_LOW, CanCollide = false})
+	local BAND_H = Jail.CELL_H * 0.34
+	jailPart({Name = "BandFront", Size = Vector3.new(shellW, BAND_H, 0.12), Y = Jail.FLOOR_Y + BAND_H / 2, Z = Jail.CORR_Z1 - 0.06, Material = Enum.Material.SmoothPlastic, Color = Jail.C_WALL_LOW, CanCollide = false})
 	for _, dir in ipairs({-1, 1}) do
-		jailPart({Name = "BandSide", Size = Vector3.new(0.12, BAND_H, shellD), X = dir * (halfW - 0.06), Y = FLOOR_Y + BAND_H / 2, Z = blockCentreZ, Material = Enum.Material.SmoothPlastic, Color = C_WALL_LOW, CanCollide = false})
+		jailPart({Name = "BandSide", Size = Vector3.new(0.12, BAND_H, shellD), X = dir * (halfW - 0.06), Y = Jail.FLOOR_Y + BAND_H / 2, Z = blockCentreZ, Material = Enum.Material.SmoothPlastic, Color = Jail.C_WALL_LOW, CanCollide = false})
 	end
-	jailPart({Name = "BandStripe", Size = Vector3.new(shellW, 0.18, 0.14), Y = FLOOR_Y + BAND_H, Z = CORR_Z1 - 0.07, Material = Enum.Material.SmoothPlastic, Color = C_ACCENT, CanCollide = false})
-	jailPart({Name = "FloorLine", Size = Vector3.new(BLOCK_W - 3, 0.06, 0.7), Y = FLOOR_Y + 0.04, Z = CORR_MID_Z, Material = Enum.Material.SmoothPlastic, Color = C_ACCENT, CanCollide = false})
+	jailPart({Name = "BandStripe", Size = Vector3.new(shellW, 0.18, 0.14), Y = Jail.FLOOR_Y + BAND_H, Z = Jail.CORR_Z1 - 0.07, Material = Enum.Material.SmoothPlastic, Color = Jail.C_ACCENT, CanCollide = false})
+	jailPart({Name = "FloorLine", Size = Vector3.new(Jail.BLOCK_W - 3, 0.06, 0.7), Y = Jail.FLOOR_Y + 0.04, Z = Jail.CORR_MID_Z, Material = Enum.Material.SmoothPlastic, Color = Jail.C_ACCENT, CanCollide = false})
 
 	for i = 1, 2 do
-		jailPart({Name = "CellDivider" .. i, Size = Vector3.new(DIVIDER, CELL_H, CELL_D + overlap), X = CELL_X[i] + CELL_W / 2 + DIVIDER / 2, Z = CELL_MID_Z})
+		jailPart({Name = "CellDivider" .. i, Size = Vector3.new(Jail.DIVIDER, Jail.CELL_H, Jail.CELL_D + overlap), X = Jail.CELL_X[i] + Jail.CELL_W / 2 + Jail.DIVIDER / 2, Z = Jail.CELL_MID_Z})
 	end
 
-	local barTop, barBottom = CEIL_Y - 0.5, FLOOR_Y + 0.5
+	local barTop, barBottom = Jail.CEIL_Y - 0.5, Jail.FLOOR_Y + 0.5
 	local barHeight = barTop - barBottom
 	local barMidY = (barTop + barBottom) / 2
-	local doorHalf = DOOR_WIDTH / 2
+	local doorHalf = Jail.DOOR_WIDTH / 2
 	local UPRIGHT = CFrame.Angles(0, 0, math.rad(90))
 
 	-- ROUND bars, not square ones. Square uprights were the single
@@ -1625,42 +1631,42 @@ do
 	local function bar(name, x, y, z, length, thickness, parent)
 		return jailPart({Name = name, Size = Vector3.new(length, thickness, thickness),
 			X = x, Y = y, Z = z, Rot = UPRIGHT, Shape = Enum.PartType.Cylinder,
-			Material = Enum.Material.Metal, Color = C_STEEL, Parent = parent})
+			Material = Enum.Material.Metal, Color = Jail.C_STEEL, Parent = parent})
 	end
 
 	local function buildCellFront(cellIndex)
-		local cx = CELL_X[cellIndex]
+		local cx = Jail.CELL_X[cellIndex]
 		local function barsBetween(x0, x1, tag)
 			local span = x1 - x0
 			local count = math.max(2, math.floor(span / 1.45))
 			for i = 0, count do
-				bar("Bar" .. cellIndex .. tag .. i, x0 + span * (i / count), barMidY, CELL_Z1, barHeight, 0.34)
+				bar("Bar" .. cellIndex .. tag .. i, x0 + span * (i / count), barMidY, Jail.CELL_Z1, barHeight, 0.34)
 			end
 		end
-		barsBetween(cx - CELL_W / 2 + 0.5, cx - doorHalf - 0.5, "L")
-		barsBetween(cx + doorHalf + 0.5, cx + CELL_W / 2 - 0.5, "R")
+		barsBetween(cx - Jail.CELL_W / 2 + 0.5, cx - doorHalf - 0.5, "L")
+		barsBetween(cx + doorHalf + 0.5, cx + Jail.CELL_W / 2 - 0.5, "R")
 
 		-- Rails stop short of the doorway on both sides so the opening is
 		-- genuinely open rather than crossed by a bar.
-		local sideSpan = CELL_W / 2 - doorHalf
+		local sideSpan = Jail.CELL_W / 2 - doorHalf
 		for _, y in ipairs({barBottom + 0.2, barMidY, barTop - 0.2}) do
 			for _, dir in ipairs({-1, 1}) do
 				jailPart({Name = "BarRail", Size = Vector3.new(sideSpan, 0.26, 0.26),
-					X = cx + dir * (doorHalf + sideSpan / 2), Y = y, Z = CELL_Z1,
-					Material = Enum.Material.Metal, Color = C_STEEL, CanCollide = false})
+					X = cx + dir * (doorHalf + sideSpan / 2), Y = y, Z = Jail.CELL_Z1,
+					Material = Enum.Material.Metal, Color = Jail.C_STEEL, CanCollide = false})
 			end
 		end
 		for _, dir in ipairs({-1, 1}) do
 			jailPart({Name = "DoorPost", Size = Vector3.new(0.6, barHeight + 0.8, 0.6),
-				X = cx + dir * doorHalf, Y = barMidY, Z = CELL_Z1,
-				Material = Enum.Material.Metal, Color = C_STEEL})
+				X = cx + dir * doorHalf, Y = barMidY, Z = Jail.CELL_Z1,
+				Material = Enum.Material.Metal, Color = Jail.C_STEEL})
 		end
-		jailPart({Name = "DoorLintel", Size = Vector3.new(DOOR_WIDTH + 1.2, 0.6, 0.55),
-			X = cx, Y = barTop + 0.55, Z = CELL_Z1, Material = Enum.Material.Metal, Color = C_STEEL})
+		jailPart({Name = "DoorLintel", Size = Vector3.new(Jail.DOOR_WIDTH + 1.2, 0.6, 0.55),
+			X = cx, Y = barTop + 0.55, Z = Jail.CELL_Z1, Material = Enum.Material.Metal, Color = Jail.C_STEEL})
 
 		local plate = jailPart({Name = "CellPlate", Size = Vector3.new(3, 1.3, 0.16),
-			X = cx, Y = barTop + 1.6, Z = CELL_Z1, Material = Enum.Material.SmoothPlastic,
-			Color = C_WALL_LOW, CanCollide = false})
+			X = cx, Y = barTop + 1.6, Z = Jail.CELL_Z1, Material = Enum.Material.SmoothPlastic,
+			Color = Jail.C_WALL_LOW, CanCollide = false})
 		local sign = Instance.new("SurfaceGui")
 		sign.Face = Enum.NormalId.Front
 		sign.CanvasSize = Vector2.new(300, 130)
@@ -1669,37 +1675,37 @@ do
 		label.Size = UDim2.new(1, 0, 1, 0)
 		label.BackgroundTransparency = 1
 		label.Font = Enum.Font.GothamBold
-		label.TextColor3 = C_ACCENT
+		label.TextColor3 = Jail.C_ACCENT
 		label.TextScaled = true
 		label.Text = "CELL " .. cellIndex
 		label.Parent = sign
 	end
 
 	local function buildCellDoor(cellIndex)
-		local cx = CELL_X[cellIndex]
+		local cx = Jail.CELL_X[cellIndex]
 		local door = Instance.new("Model")
 		door.Name = "CellDoor" .. cellIndex
 		door.Parent = jailFolder
 
-		local frame = jailPart({Name = "DoorFrame", Size = Vector3.new(DOOR_WIDTH - 0.4, barHeight - 0.3, 0.3),
-			X = cx, Y = barMidY, Z = CELL_Z1, Material = Enum.Material.Metal, Color = C_STEEL, Parent = door})
+		local frame = jailPart({Name = "DoorFrame", Size = Vector3.new(Jail.DOOR_WIDTH - 0.4, barHeight - 0.3, 0.3),
+			X = cx, Y = barMidY, Z = Jail.CELL_Z1, Material = Enum.Material.Metal, Color = Jail.C_STEEL, Parent = door})
 		frame.Transparency = 1
 		door.PrimaryPart = frame
 
 		for i = 1, 4 do
-			bar("DoorBar" .. i, cx - DOOR_WIDTH / 2 + DOOR_WIDTH * (i / 5), barMidY, CELL_Z1, barHeight - 0.5, 0.3, door)
+			bar("DoorBar" .. i, cx - Jail.DOOR_WIDTH / 2 + Jail.DOOR_WIDTH * (i / 5), barMidY, Jail.CELL_Z1, barHeight - 0.5, 0.3, door)
 		end
 		for _, y in ipairs({barMidY - barHeight / 2 + 0.5, barMidY, barMidY + barHeight / 2 - 0.5}) do
-			jailPart({Name = "DoorRail", Size = Vector3.new(DOOR_WIDTH - 0.4, 0.24, 0.24),
-				X = cx, Y = y, Z = CELL_Z1, Material = Enum.Material.Metal, Color = C_STEEL, Parent = door})
+			jailPart({Name = "DoorRail", Size = Vector3.new(Jail.DOOR_WIDTH - 0.4, 0.24, 0.24),
+				X = cx, Y = y, Z = Jail.CELL_Z1, Material = Enum.Material.Metal, Color = Jail.C_STEEL, Parent = door})
 		end
 		-- Slim and steel, kept close to the door plane. A chunky gold
 		-- block standing proud of the bars just read as a stray part.
 		jailPart({Name = "DoorHandle", Size = Vector3.new(0.18, 0.18, 0.95), X = cx + doorHalf - 0.75,
-			Y = barMidY, Z = CELL_Z1 + 0.28, Material = Enum.Material.Metal, Color = C_STEEL, Parent = door})
+			Y = barMidY, Z = Jail.CELL_Z1 + 0.28, Material = Enum.Material.Metal, Color = Jail.C_STEEL, Parent = door})
 
-		local hinge = JAIL_CFRAME * CFrame.new(cx - doorHalf, barMidY, CELL_Z1)
-		local closedPivot = JAIL_CFRAME * CFrame.new(cx, barMidY, CELL_Z1)
+		local hinge = JAIL_CFRAME * CFrame.new(cx - doorHalf, barMidY, Jail.CELL_Z1)
+		local closedPivot = JAIL_CFRAME * CFrame.new(cx, barMidY, Jail.CELL_Z1)
 		local openPivot = hinge * CFrame.Angles(0, math.rad(100), 0) * hinge:Inverse() * closedPivot
 
 		local isOpen, activeTween = false, nil
@@ -1747,35 +1753,35 @@ do
 	-- and a desktop hanging in mid-air, which is the fastest way to make
 	-- a build look broken.
 	local function furnishCell(cellIndex)
-		local cx = CELL_X[cellIndex]
-		local bunkX = cx - CELL_W / 2 + 2.6
-		local bunkY = FLOOR_Y + 2.1
+		local cx = Jail.CELL_X[cellIndex]
+		local bunkX = cx - Jail.CELL_W / 2 + 2.6
+		local bunkY = Jail.FLOOR_Y + 2.1
 
-		jailPart({Name = "BunkFrame", Size = Vector3.new(3.8, 0.35, 8), X = bunkX, Y = bunkY, Z = CELL_MID_Z, Material = Enum.Material.Metal, Color = C_STEEL})
-		jailPart({Name = "Mattress", Size = Vector3.new(3.5, 0.5, 7.6), X = bunkX, Y = bunkY + 0.42, Z = CELL_MID_Z, Material = Enum.Material.Fabric, Color = C_MATTRESS})
-		jailPart({Name = "Pillow", Size = Vector3.new(3.1, 0.35, 1.6), X = bunkX, Y = bunkY + 0.8, Z = CELL_MID_Z - 2.9, Material = Enum.Material.Fabric, Color = Color3.fromRGB(166, 170, 178)})
+		jailPart({Name = "BunkFrame", Size = Vector3.new(3.8, 0.35, 8), X = bunkX, Y = bunkY, Z = Jail.CELL_MID_Z, Material = Enum.Material.Metal, Color = Jail.C_STEEL})
+		jailPart({Name = "Mattress", Size = Vector3.new(3.5, 0.5, 7.6), X = bunkX, Y = bunkY + 0.42, Z = Jail.CELL_MID_Z, Material = Enum.Material.Fabric, Color = Jail.C_MATTRESS})
+		jailPart({Name = "Pillow", Size = Vector3.new(3.1, 0.35, 1.6), X = bunkX, Y = bunkY + 0.8, Z = Jail.CELL_MID_Z - 2.9, Material = Enum.Material.Fabric, Color = Color3.fromRGB(166, 170, 178)})
 		-- Braced into the wall rather than standing on legs, so there is
 		-- nothing to float: the slab runs into the divider behind it.
-		jailPart({Name = "BunkBrace", Size = Vector3.new(0.5, bunkY - FLOOR_Y, 8), X = bunkX - 1.9, Y = FLOOR_Y + (bunkY - FLOOR_Y) / 2, Z = CELL_MID_Z, Material = Enum.Material.Metal, Color = C_STEEL})
+		jailPart({Name = "BunkBrace", Size = Vector3.new(0.5, bunkY - Jail.FLOOR_Y, 8), X = bunkX - 1.9, Y = Jail.FLOOR_Y + (bunkY - Jail.FLOOR_Y) / 2, Z = Jail.CELL_MID_Z, Material = Enum.Material.Metal, Color = Jail.C_STEEL})
 
 		-- Sanitary fixtures, pushed FLUSH to the walls. Sitting them a
 		-- stud or two clear of the wall is what made the previous pass
 		-- read as white crates dumped in a corner rather than plumbing -
 		-- real fixtures touch something.
-		local wallX = cx + CELL_W / 2
-		local backZ = CELL_Z0
+		local wallX = cx + Jail.CELL_W / 2
+		local backZ = Jail.CELL_Z0
 
 		-- Bowl and seat as upright cylinders. A cube reads as a box no
 		-- matter what colour it is; the round profile is most of what
 		-- makes this legible as a toilet at a glance.
-		jailPart({Name = "ToiletBowl", Size = Vector3.new(1.7, 1.8, 1.8), X = wallX - 1.7, Y = FLOOR_Y + 0.85, Z = backZ + 1.6, Rot = UPRIGHT, Shape = Enum.PartType.Cylinder, Material = Enum.Material.SmoothPlastic, Color = C_PORCELAIN})
-		jailPart({Name = "ToiletSeat", Size = Vector3.new(0.22, 2.1, 2.1), X = wallX - 1.7, Y = FLOOR_Y + 1.81, Z = backZ + 1.6, Rot = UPRIGHT, Shape = Enum.PartType.Cylinder, Material = Enum.Material.SmoothPlastic, Color = C_WALL_LOW})
-		jailPart({Name = "Cistern", Size = Vector3.new(2.2, 2.6, 0.7), X = wallX - 1.7, Y = FLOOR_Y + 3.1, Z = backZ + 0.45, Material = Enum.Material.SmoothPlastic, Color = C_PORCELAIN})
+		jailPart({Name = "ToiletBowl", Size = Vector3.new(1.7, 1.8, 1.8), X = wallX - 1.7, Y = Jail.FLOOR_Y + 0.85, Z = backZ + 1.6, Rot = UPRIGHT, Shape = Enum.PartType.Cylinder, Material = Enum.Material.SmoothPlastic, Color = Jail.C_PORCELAIN})
+		jailPart({Name = "ToiletSeat", Size = Vector3.new(0.22, 2.1, 2.1), X = wallX - 1.7, Y = Jail.FLOOR_Y + 1.81, Z = backZ + 1.6, Rot = UPRIGHT, Shape = Enum.PartType.Cylinder, Material = Enum.Material.SmoothPlastic, Color = Jail.C_WALL_LOW})
+		jailPart({Name = "Cistern", Size = Vector3.new(2.2, 2.6, 0.7), X = wallX - 1.7, Y = Jail.FLOOR_Y + 3.1, Z = backZ + 0.45, Material = Enum.Material.SmoothPlastic, Color = Jail.C_PORCELAIN})
 
 		-- Basin against the side wall, on a bracket that visibly reaches
 		-- the floor so nothing appears to hang in mid-air.
-		jailPart({Name = "Basin", Size = Vector3.new(1.3, 0.8, 2.4), X = wallX - 0.7, Y = FLOOR_Y + 3.3, Z = backZ + 5.4, Material = Enum.Material.SmoothPlastic, Color = C_PORCELAIN})
-		jailPart({Name = "BasinStand", Size = Vector3.new(0.7, 2.9, 0.8), X = wallX - 0.45, Y = FLOOR_Y + 1.45, Z = backZ + 5.4, Material = Enum.Material.Metal, Color = C_STEEL})
+		jailPart({Name = "Basin", Size = Vector3.new(1.3, 0.8, 2.4), X = wallX - 0.7, Y = Jail.FLOOR_Y + 3.3, Z = backZ + 5.4, Material = Enum.Material.SmoothPlastic, Color = Jail.C_PORCELAIN})
+		jailPart({Name = "BasinStand", Size = Vector3.new(0.7, 2.9, 0.8), X = wallX - 0.45, Y = Jail.FLOOR_Y + 1.45, Z = backZ + 5.4, Material = Enum.Material.Metal, Color = Jail.C_STEEL})
 	end
 
 	for i = 1, 3 do
@@ -1791,20 +1797,20 @@ do
 
 	-- Guard desk, built as a solid block with a top rather than a
 	-- floating slab and a disconnected front panel.
-	local deskX, deskZ = -halfW + 5, CORR_Z1 - 3.5
-	jailPart({Name = "DeskBody", Size = Vector3.new(8, 3.2, 3), X = deskX, Y = FLOOR_Y + 1.6, Z = deskZ, Material = Enum.Material.WoodPlanks, Color = C_WOOD})
-	jailPart({Name = "DeskTop", Size = Vector3.new(9, 0.35, 3.8), X = deskX, Y = FLOOR_Y + 3.38, Z = deskZ, Material = Enum.Material.WoodPlanks, Color = C_WOOD})
-	jailPart({Name = "DeskChairSeat", Size = Vector3.new(2, 0.35, 2), X = deskX, Y = FLOOR_Y + 1.9, Z = deskZ + 3.4, Material = Enum.Material.SmoothPlastic, Color = C_WALL_LOW})
-	jailPart({Name = "DeskChairBack", Size = Vector3.new(2, 2.2, 0.35), X = deskX, Y = FLOOR_Y + 3, Z = deskZ + 4.3, Material = Enum.Material.SmoothPlastic, Color = C_WALL_LOW})
-	jailPart({Name = "DeskChairStem", Size = Vector3.new(0.5, 1.75, 0.5), X = deskX, Y = FLOOR_Y + 0.88, Z = deskZ + 3.4, Material = Enum.Material.Metal, Color = C_STEEL})
+	local deskX, deskZ = -halfW + 5, Jail.CORR_Z1 - 3.5
+	jailPart({Name = "DeskBody", Size = Vector3.new(8, 3.2, 3), X = deskX, Y = Jail.FLOOR_Y + 1.6, Z = deskZ, Material = Enum.Material.WoodPlanks, Color = Jail.C_WOOD})
+	jailPart({Name = "DeskTop", Size = Vector3.new(9, 0.35, 3.8), X = deskX, Y = Jail.FLOOR_Y + 3.38, Z = deskZ, Material = Enum.Material.WoodPlanks, Color = Jail.C_WOOD})
+	jailPart({Name = "DeskChairSeat", Size = Vector3.new(2, 0.35, 2), X = deskX, Y = Jail.FLOOR_Y + 1.9, Z = deskZ + 3.4, Material = Enum.Material.SmoothPlastic, Color = Jail.C_WALL_LOW})
+	jailPart({Name = "DeskChairBack", Size = Vector3.new(2, 2.2, 0.35), X = deskX, Y = Jail.FLOOR_Y + 3, Z = deskZ + 4.3, Material = Enum.Material.SmoothPlastic, Color = Jail.C_WALL_LOW})
+	jailPart({Name = "DeskChairStem", Size = Vector3.new(0.5, 1.75, 0.5), X = deskX, Y = Jail.FLOOR_Y + 0.88, Z = deskZ + 3.4, Material = Enum.Material.Metal, Color = Jail.C_STEEL})
 
 	-- Long recessed strip lights rather than bare points: a visible
 	-- fixture reads as a light, while an invisible source just makes the
 	-- room glow from nowhere. Dimmer and more numerous than before, which
 	-- is what stops the harsh single-source look.
 	local function stripLight(name, x, z, length)
-		jailPart({Name = name .. "Housing", Size = Vector3.new(length, 0.35, 1.1), X = x, Y = CEIL_Y - 0.5, Z = z, Material = Enum.Material.Metal, Color = C_STEEL, CanCollide = false})
-		local lens = jailPart({Name = name .. "Lens", Size = Vector3.new(length - 0.6, 0.12, 0.8), X = x, Y = CEIL_Y - 0.72, Z = z, Material = Enum.Material.Neon, Color = Color3.fromRGB(236, 242, 250), CanCollide = false})
+		jailPart({Name = name .. "Housing", Size = Vector3.new(length, 0.35, 1.1), X = x, Y = Jail.CEIL_Y - 0.5, Z = z, Material = Enum.Material.Metal, Color = Jail.C_STEEL, CanCollide = false})
+		local lens = jailPart({Name = name .. "Lens", Size = Vector3.new(length - 0.6, 0.12, 0.8), X = x, Y = Jail.CEIL_Y - 0.72, Z = z, Material = Enum.Material.Neon, Color = Color3.fromRGB(236, 242, 250), CanCollide = false})
 		local light = Instance.new("PointLight")
 		light.Brightness = 1.35
 		light.Range = 26
@@ -1813,9 +1819,9 @@ do
 		light.Parent = lens
 	end
 	for i = 1, 3 do
-		stripLight("CellLight" .. i, CELL_X[i], CELL_MID_Z, CELL_W * 0.45)
-		stripLight("CorridorLightA" .. i, CELL_X[i], CORR_MID_Z - 3.5, CELL_W * 0.5)
-		stripLight("CorridorLightB" .. i, CELL_X[i], CORR_MID_Z + 3.5, CELL_W * 0.5)
+		stripLight("CellLight" .. i, Jail.CELL_X[i], Jail.CELL_MID_Z, Jail.CELL_W * 0.45)
+		stripLight("CorridorLightA" .. i, Jail.CELL_X[i], Jail.CORR_MID_Z - 3.5, Jail.CELL_W * 0.5)
+		stripLight("CorridorLightB" .. i, Jail.CELL_X[i], Jail.CORR_MID_Z + 3.5, Jail.CELL_W * 0.5)
 	end
 
 	log("[AdminServer] Jail block built (3 cells)")
@@ -1842,7 +1848,7 @@ local function jailPlayer(target)
 	-- admin who ran :jail still gets their confirmation immediately
 	-- instead of waiting out the transition playing on someone else's
 	-- screen.
-	AdminScreenFade:FireClient(target)
+	Remote.AdminScreenFade:FireClient(target)
 	task.spawn(function()
 		task.wait(JAIL_COVER_TIME)
 		-- Re-checked after the wait: they may have been released, or
@@ -1886,7 +1892,7 @@ local function unjailPlayer(target)
 		-- used to land as "every shadow is far too dark" for a second or
 		-- two before snapping right. Same cover-then-move ordering as
 		-- jailPlayer above.
-		AdminScreenFade:FireClient(target)
+		Remote.AdminScreenFade:FireClient(target)
 		task.spawn(function()
 			task.wait(JAIL_COVER_TIME)
 			if target.Character ~= character or hrp.Parent == nil then return end
@@ -1964,11 +1970,11 @@ local function setInvisible(target, invisible)
 	end
 	-- Everyone currently connected (including the target's own client)
 	-- needs to know, so PlayerInfo.lua can hide/restore just this one
-	-- player's overhead tag - see the comment above AdminInvisStatus's
+	-- player's overhead tag - see the comment above Remote.AdminInvisStatus's
 	-- own declaration for why that can't just ride along with the
 	-- Transparency sweep above.
 	for _, plr in ipairs(Players:GetPlayers()) do
-		AdminInvisStatus:FireClient(plr, target, invisible)
+		Remote.AdminInvisStatus:FireClient(plr, target, invisible)
 	end
 	return true
 end
@@ -1988,7 +1994,7 @@ local flyingUserIds = {}
 
 local function setFlying(target, enabled)
 	flyingUserIds[target.UserId] = enabled or nil
-	AdminSetFlying:FireClient(target, enabled)
+	Remote.AdminSetFlying:FireClient(target, enabled)
 	return true
 end
 
@@ -1997,7 +2003,7 @@ end
 -- duration (so they can't be seen, and can't move/interact with anyone
 -- while just watching), restored to their exact previous position AND
 -- previous invis/frozen state the moment they stop. Ending only ever
--- happens via the admin's own "Stop Spectating" button (AdminStopSpectating)
+-- happens via the admin's own "Stop Spectating" button (Remote.AdminStopSpectating)
 -- now, not a separate typed :unspectate command.
 --
 -- On top of invis (which also drops CanCollide/CanTouch - see
@@ -2014,7 +2020,7 @@ local SPECTATE_LIMBO_CFRAME = CFrame.new(0, 5000, 0)
 local spectatingState = {} -- [adminUserId] = {Target=, PreCFrame=, PreInvis=, PreFrozen=}
 
 -- Bare-forward-declared (see the comment further down, above
--- AdminStopSpectating's own listener, for why this pattern is needed at
+-- Remote.AdminStopSpectating's own listener, for why this pattern is needed at
 -- all) - startSpectating below needs both to enforce "can't spectate and
 -- control at the same time", but neither is assigned/populated until
 -- further down in the file.
@@ -2042,7 +2048,7 @@ local function stopSpectatingServer(admin)
 		hrp.CFrame = state.PreCFrame
 	end
 
-	AdminSpectate:FireClient(admin, nil)
+	Remote.AdminSpectate:FireClient(admin, nil)
 end
 
 local function startSpectating(admin, target)
@@ -2064,7 +2070,7 @@ local function startSpectating(admin, target)
 	-- stop.
 	if spectatingState[admin.UserId] then
 		spectatingState[admin.UserId].Target = target
-		AdminSpectate:FireClient(admin, target)
+		Remote.AdminSpectate:FireClient(admin, target)
 		return true
 	end
 
@@ -2077,12 +2083,12 @@ local function startSpectating(admin, target)
 	hrp.CFrame = SPECTATE_LIMBO_CFRAME
 	setInvisible(admin, true)
 	setFrozen(admin, true)
-	AdminSpectate:FireClient(admin, target)
+	Remote.AdminSpectate:FireClient(admin, target)
 	return true
 end
 
--- AdminStopSpectating's own .OnServerEvent listener is registered much
--- further down (right alongside AdminStopControlling's), after
+-- Remote.AdminStopSpectating's own .OnServerEvent listener is registered much
+-- further down (right alongside Remote.AdminStopControlling's), after
 -- logCommand/sendFeedback are actually declared as locals - a reference
 -- to either from here, this early in the file, would resolve to a
 -- nonexistent GLOBAL of the same name instead of those locals (Lua only
@@ -2111,7 +2117,7 @@ end
 -- they can't be seen, walked into, or seen still wandering around while
 -- puppeting someone else - restored to their exact previous invis/frozen
 -- state when they stop. Ends only via the admin's own "Stop Controlling"
--- button (AdminStopControlling), matching :spectate's own design above.
+-- button (Remote.AdminStopControlling), matching :spectate's own design above.
 -- =====================================================================
 -- controllingUserIds itself was already bare-forward-declared above (see
 -- that comment) so startSpectating could reference it - this just
@@ -2174,8 +2180,8 @@ stopControlling = function(admin)
 		end
 	end
 
-	AdminControlTargetStatus:FireClient(target, false)
-	AdminControlPlayer:FireClient(admin, nil)
+	Remote.AdminControlTargetStatus:FireClient(target, false)
+	Remote.AdminControlPlayer:FireClient(admin, nil)
 end
 
 local function startControlling(admin, target)
@@ -2262,9 +2268,9 @@ local function startControlling(admin, target)
 	controllingUserIds[admin.UserId] = target
 	controlledByAdmin[target.UserId] = admin
 
-	AdminControlTargetStatus:FireClient(target, true)
-	AdminNotice:FireClient(target, "You are being controlled by staff", "Leaving the game is punishable.")
-	AdminControlPlayer:FireClient(admin, target)
+	Remote.AdminControlTargetStatus:FireClient(target, true)
+	Remote.AdminNotice:FireClient(target, "You are being controlled by staff", "Leaving the game is punishable.")
+	Remote.AdminControlPlayer:FireClient(admin, target)
 	return true
 end
 
@@ -2321,8 +2327,8 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
--- AdminStopControlling's own .OnServerEvent listener is registered
--- further down too, alongside AdminStopSpectating's - see the comment
+-- Remote.AdminStopControlling's own .OnServerEvent listener is registered
+-- further down too, alongside Remote.AdminStopSpectating's - see the comment
 -- above that one for why it can't live up here.
 
 -- Resetting/respawning mid-spectate or mid-control leaves nothing
@@ -2355,12 +2361,12 @@ local function watchAdminRespawnForSpectateAndControl(adminPlayer)
 			end)
 		elseif wasInvisible then
 			for _, plr in ipairs(Players:GetPlayers()) do
-				AdminInvisStatus:FireClient(plr, adminPlayer, false)
+				Remote.AdminInvisStatus:FireClient(plr, adminPlayer, false)
 			end
 		end
 		if spectatingState[adminPlayer.UserId] then
 			spectatingState[adminPlayer.UserId] = nil
-			AdminSpectate:FireClient(adminPlayer, nil)
+			Remote.AdminSpectate:FireClient(adminPlayer, nil)
 		end
 		if controllingUserIds[adminPlayer.UserId] then
 			local target = controllingUserIds[adminPlayer.UserId]
@@ -2377,8 +2383,8 @@ local function watchAdminRespawnForSpectateAndControl(adminPlayer)
 			controlledTargetPreFrozen[target.UserId] = nil
 			local humanoid = target.Character and target.Character:FindFirstChildOfClass("Humanoid")
 			if humanoid then humanoid:Move(Vector3.new(0, 0, 0), false) end
-			AdminControlTargetStatus:FireClient(target, false)
-			AdminControlPlayer:FireClient(adminPlayer, nil)
+			Remote.AdminControlTargetStatus:FireClient(target, false)
+			Remote.AdminControlPlayer:FireClient(adminPlayer, nil)
 		end
 	end)
 end
@@ -2410,7 +2416,7 @@ local function watchTargetRespawnForSpectateAndControl(targetPlayer)
 						-- this was waiting for the new Humanoid to exist.
 						local currentState = spectatingState[adminUserId]
 						if humanoid and currentState and currentState.Target == targetPlayer then
-							AdminSpectate:FireClient(adminPlayer, targetPlayer)
+							Remote.AdminSpectate:FireClient(adminPlayer, targetPlayer)
 						end
 					end)
 				end
@@ -2536,7 +2542,7 @@ end
 -- the ban/mute Modify popups already use).
 local function sendInventoryList(admin, target)
 	local entries = buildInventoryEntries(target)
-	AdminInventoryList:FireClient(admin, "Inventory - " .. target.Name .. " (" .. #entries .. ")", entries)
+	Remote.AdminInventoryList:FireClient(admin, "Inventory - " .. target.Name .. " (" .. #entries .. ")", entries)
 end
 
 -- Resolves which Player a given Tool currently belongs to, whether it's
@@ -2554,7 +2560,7 @@ end
 
 -- =====================================================================
 -- Give - clones a named Tool from a ServerStorage folder (looked up near
--- the top of this file, before tierInfo, since GetAdminInfo's response
+-- the top of this file, before tierInfo, since Remote.GetAdminInfo's response
 -- needs its contents too) into the target's Backpack. Populate
 -- ServerStorage.AdminGiveableItems with whatever Tools should be handed
 -- out this way - :give matches by name, case-insensitively, same
@@ -2657,7 +2663,7 @@ end
 -- often not staff at all.
 -- =====================================================================
 local function warnPlayer(target, reason, count)
-	AdminNotice:FireClient(
+	Remote.AdminNotice:FireClient(
 		target,
 		"You have been warned (#" .. count .. ")",
 		reason,
@@ -2886,7 +2892,7 @@ end
 -- Dispatcher
 -- =====================================================================
 local function sendFeedback(player, text, isError)
-	AdminFeedback:FireClient(player, text, isError == true)
+	Remote.AdminFeedback:FireClient(player, text, isError == true)
 end
 
 -- Owner-only, re-checked here rather than trusting the CanRemoveLogs
@@ -2894,7 +2900,7 @@ end
 -- that knows its name, whatever their panel chose to draw. A refusal is
 -- silent for everyone except the owner: someone probing this doesn't
 -- need to be told it exists and that they're not allowed.
-AdminRemoveLogEntry.OnServerEvent:Connect(function(player, entryId)
+Remote.AdminRemoveLogEntry.OnServerEvent:Connect(function(player, entryId)
 	if not isOwner(player) then
 		warn("[AdminServer] Rejected log-entry removal from " .. player.Name .. " - not the owner")
 		return
@@ -2921,7 +2927,7 @@ AdminRemoveLogEntry.OnServerEvent:Connect(function(player, entryId)
 	local entries = buildLogEntries(filter or nil)
 	local title = filter and ("Logs - " .. filter .. " (" .. #entries .. ")")
 		or ("Command Log (" .. #entries .. ")")
-	AdminLogsList:FireClient(player, title, entries)
+	Remote.AdminLogsList:FireClient(player, title, entries)
 
 	sendFeedback(player, "Removed log entry: :" .. tostring(removed.Command)
 		.. (removed.Target and (" - " .. removed.Target) or ""), false)
@@ -2965,7 +2971,7 @@ local function findTargetPlayer(partial)
 	return nil, nil
 end
 
-AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extraText)
+Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extraText)
 	if typeof(commandName) ~= "string" then return end
 	commandName = string.lower(commandName)
 
@@ -3005,21 +3011,21 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 	-- lookup at all.
 	if commandName == "banlist" then
 		local entries = buildBanListEntries()
-		AdminBanList:FireClient(admin, "Banned Players (" .. #entries .. ")", entries)
+		Remote.AdminBanList:FireClient(admin, "Banned Players (" .. #entries .. ")", entries)
 		sendFeedback(admin, #entries .. " active ban(s)", false)
 		return
 	end
 
 	if commandName == "mutelist" then
 		local entries = buildMuteListEntries()
-		AdminMuteList:FireClient(admin, "Muted Players (" .. #entries .. ")", entries)
+		Remote.AdminMuteList:FireClient(admin, "Muted Players (" .. #entries .. ")", entries)
 		sendFeedback(admin, #entries .. " player(s) currently muted", false)
 		return
 	end
 
 	if commandName == "warnlist" then
 		local entries = buildWarnListEntries()
-		AdminWarnList:FireClient(admin, "Warned Players (" .. #entries .. ")", entries)
+		Remote.AdminWarnList:FireClient(admin, "Warned Players (" .. #entries .. ")", entries)
 		sendFeedback(admin, #entries .. " player(s) with warnings", false)
 		return
 	end
@@ -3369,7 +3375,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 	if commandName == "cmdlogs" then
 		local entries = buildLogEntries(nil)
 		lastLogFilter[admin.UserId] = false
-		AdminLogsList:FireClient(admin, "Command Log (" .. #entries .. ")", entries)
+		Remote.AdminLogsList:FireClient(admin, "Command Log (" .. #entries .. ")", entries)
 		sendFeedback(admin, #entries .. " log entries", false)
 		return
 	end
@@ -3384,7 +3390,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 		end
 		local entries = buildLogEntries(targetName)
 		lastLogFilter[admin.UserId] = targetName
-		AdminLogsList:FireClient(admin, "Logs - " .. targetName .. " (" .. #entries .. ")", entries)
+		Remote.AdminLogsList:FireClient(admin, "Logs - " .. targetName .. " (" .. #entries .. ")", entries)
 		sendFeedback(admin, #entries .. " log entries for " .. targetName, false)
 		return
 	end
@@ -3465,7 +3471,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 	if commandName == "leaderboards" then
 		task.spawn(function()
 			local rows = LeaderboardService.ListBoard(1, 100)
-			AdminLeaderboard:FireClient(admin, 1, LeaderboardService.BoardCount(), LeaderboardService.BoardTitle(1), rows)
+			Remote.AdminLeaderboard:FireClient(admin, 1, LeaderboardService.BoardCount(), LeaderboardService.BoardTitle(1), rows)
 		end)
 		sendFeedback(admin, "Loading leaderboards...", false)
 		return
@@ -3485,7 +3491,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 		if not ok then
 			-- MessagingService isn't available (Studio): at least tell this server.
 			for _, plr in ipairs(Players:GetPlayers()) do
-				AdminAnnouncement:FireClient(plr, fullMessage)
+				Remote.AdminAnnouncement:FireClient(plr, fullMessage)
 			end
 		end
 		logCommand(admin, "globalannounce", nil, fullMessage, admin.Name .. " announced to every server: " .. fullMessage)
@@ -3502,7 +3508,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 		end
 		local players = Players:GetPlayers()
 		for _, plr in ipairs(players) do
-			AdminAnnouncement:FireClient(plr, fullMessage)
+			Remote.AdminAnnouncement:FireClient(plr, fullMessage)
 		end
 		logCommand(admin, "announce", nil, fullMessage, admin.Name .. " announced: " .. fullMessage)
 		sendFeedback(admin, "Announcement sent to " .. #players .. " player(s)", false)
@@ -3571,9 +3577,9 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 		end
 		logCommand(admin, "mute", target.Name, nowMuted and ("muted: " .. extraText) or "unmuted", muteDescription)
 		if nowMuted then
-			AdminNotice:FireClient(target, "You have been muted", muteNoticeBody(muteData))
+			Remote.AdminNotice:FireClient(target, "You have been muted", muteNoticeBody(muteData))
 		end
-		AdminMuteStatus:FireClient(target, nowMuted, nowMuted and muteData.ExpiresAt or nil)
+		Remote.AdminMuteStatus:FireClient(target, nowMuted, nowMuted and muteData.ExpiresAt or nil)
 		syncChatMutes()
 		sendFeedback(admin, (nowMuted and "Muted " or "Unmuted ") .. target.Name, false)
 
@@ -3588,8 +3594,8 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 		saveMuteData(target.UserId, data)
 		logCommand(admin, "tempmute", target.Name, formatDuration(durationSeconds) .. " - " .. reasonText,
 			admin.Name .. " muted " .. target.Name .. " for " .. formatDuration(durationSeconds) .. (reasonText ~= "" and (" - reason: " .. reasonText) or ""))
-		AdminNotice:FireClient(target, "You have been muted", muteNoticeBody(data))
-		AdminMuteStatus:FireClient(target, true, data.ExpiresAt)
+		Remote.AdminNotice:FireClient(target, "You have been muted", muteNoticeBody(data))
+		Remote.AdminMuteStatus:FireClient(target, true, data.ExpiresAt)
 		syncChatMutes()
 		sendFeedback(admin, "Muted " .. target.Name .. " for " .. formatDuration(durationSeconds), false)
 
@@ -3631,7 +3637,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 			sendFeedback(admin, "Usage: :msg [player] [message]", true)
 			return
 		end
-		AdminNotice:FireClient(target, "Message from staff", extraText, nil, "OKAY")
+		Remote.AdminNotice:FireClient(target, "Message from staff", extraText, nil, "OKAY")
 		logCommand(admin, "msg", target.Name, extraText, admin.Name .. " sent a message to " .. target.Name .. ": " .. extraText)
 		sendFeedback(admin, "Sent message to " .. target.Name, false)
 
@@ -3705,9 +3711,9 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 			logCommand(admin, "freeze", target.Name, nowFrozen and "frozen" or "unfrozen",
 				admin.Name .. (nowFrozen and " froze " or " unfroze ") .. target.Name)
 			if nowFrozen then
-				AdminNotice:FireClient(target, "You are frozen", "Leaving the game is punishable.")
+				Remote.AdminNotice:FireClient(target, "You are frozen", "Leaving the game is punishable.")
 			end
-			AdminFreezeStatus:FireClient(target, nowFrozen)
+			Remote.AdminFreezeStatus:FireClient(target, nowFrozen)
 			sendFeedback(admin, (nowFrozen and "Froze " or "Unfroze ") .. target.Name, false)
 		else
 			sendFeedback(admin, "Could not " .. (nowFrozen and "freeze" or "unfreeze") .. " - character not found", true)
@@ -3720,7 +3726,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 		end
 		if setFrozen(target, false) then
 			logCommand(admin, "unfreeze", target.Name, nil, admin.Name .. " unfroze " .. target.Name)
-			AdminFreezeStatus:FireClient(target, false)
+			Remote.AdminFreezeStatus:FireClient(target, false)
 			sendFeedback(admin, "Unfroze " .. target.Name, false)
 		else
 			sendFeedback(admin, "Could not unfreeze - character not found", true)
@@ -3851,7 +3857,7 @@ AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetName, extr
 	end
 end)
 
-AdminRemoveWarning.OnServerEvent:Connect(function(admin, targetUserId, warningIndex)
+Remote.AdminRemoveWarning.OnServerEvent:Connect(function(admin, targetUserId, warningIndex)
 	local tier = getPlayerTier(admin)
 	if not tierHasCommand(tier, "warnlist") then return end
 	if typeof(targetUserId) ~= "number" or typeof(warningIndex) ~= "number" then return end
@@ -3869,7 +3875,7 @@ AdminRemoveWarning.OnServerEvent:Connect(function(admin, targetUserId, warningIn
 	table.remove(warnings, warningIndex)
 	saveWarnings(targetUserId, warnings)
 	sendFeedback(admin, "Removed warning #" .. warningIndex, false)
-	AdminWarningsList:FireClient(admin, nil, targetUserId, warnings)
+	Remote.AdminWarningsList:FireClient(admin, nil, targetUserId, warnings)
 
 	-- Logged the same way every other command is - previously this
 	-- action wasn't logged at all, so removing a warning left no trace
@@ -3887,7 +3893,7 @@ AdminRemoveWarning.OnServerEvent:Connect(function(admin, targetUserId, warningIn
 	)
 end)
 
-AdminViewWarnings.OnServerEvent:Connect(function(admin, userIdStr)
+Remote.AdminViewWarnings.OnServerEvent:Connect(function(admin, userIdStr)
 	local tier = getPlayerTier(admin)
 	if not tierHasCommand(tier, "warnlist") then return end
 	local userId = tonumber(userIdStr)
@@ -3897,10 +3903,10 @@ AdminViewWarnings.OnServerEvent:Connect(function(admin, userIdStr)
 	local success, name = pcall(function()
 		return Players:GetNameFromUserIdAsync(userId)
 	end)
-	AdminWarningsList:FireClient(admin, success and name or ("UserId " .. userIdStr), userId, warnings)
+	Remote.AdminWarningsList:FireClient(admin, success and name or ("UserId " .. userIdStr), userId, warnings)
 end)
 
-AdminModifyPunishment.OnServerEvent:Connect(function(admin, kind, userIdStr, action, value)
+Remote.AdminModifyPunishment.OnServerEvent:Connect(function(admin, kind, userIdStr, action, value)
 	if kind ~= "ban" and kind ~= "mute" then return end
 	-- Gated on whoever can see the list this came from, rather than a
 	-- dedicated command - :unban no longer exists as its own typed
@@ -3981,7 +3987,7 @@ AdminModifyPunishment.OnServerEvent:Connect(function(admin, kind, userIdStr, act
 			end
 		end
 		local entries = buildBanListEntries()
-		AdminBanList:FireClient(admin, "Banned Players (" .. #entries .. ")", entries)
+		Remote.AdminBanList:FireClient(admin, "Banned Players (" .. #entries .. ")", entries)
 
 	elseif kind == "mute" then
 		if action == "remove" then
@@ -4005,7 +4011,7 @@ AdminModifyPunishment.OnServerEvent:Connect(function(admin, kind, userIdStr, act
 			)
 			local targetPlayerObj = Players:GetPlayerByUserId(userId)
 			if targetPlayerObj then
-				AdminMuteStatus:FireClient(targetPlayerObj, false, nil)
+				Remote.AdminMuteStatus:FireClient(targetPlayerObj, false, nil)
 			end
 			sendFeedback(admin, "Unmuted", false)
 		elseif action == "reason" and typeof(value) == "string" then
@@ -4043,18 +4049,18 @@ AdminModifyPunishment.OnServerEvent:Connect(function(admin, kind, userIdStr, act
 					admin.Name .. " changed " .. durationTargetName .. "'s mute duration from " .. oldDurationText .. " to " .. newDurationText)
 				local targetPlayerObj = Players:GetPlayerByUserId(userId)
 				if targetPlayerObj then
-					AdminMuteStatus:FireClient(targetPlayerObj, true, data.ExpiresAt)
+					Remote.AdminMuteStatus:FireClient(targetPlayerObj, true, data.ExpiresAt)
 				end
 				sendFeedback(admin, "Updated mute duration", false)
 			end
 		end
 		syncChatMutes()
 		local entries = buildMuteListEntries()
-		AdminMuteList:FireClient(admin, "Muted Players (" .. #entries .. ")", entries)
+		Remote.AdminMuteList:FireClient(admin, "Muted Players (" .. #entries .. ")", entries)
 	end
 end)
 
-AdminInventoryRemoveItem.OnServerEvent:Connect(function(admin, tool)
+Remote.AdminInventoryRemoveItem.OnServerEvent:Connect(function(admin, tool)
 	local tier = getPlayerTier(admin)
 	if not tierHasCommand(tier, "viewinv") and not tierHasCommand(tier, "clearinv") then return end
 	if typeof(tool) ~= "Instance" or not tool:IsA("Tool") then return end
@@ -4079,7 +4085,7 @@ end)
 -- declared as locals well after this point in the file - see the
 -- comment left in their place, right after startSpectating, for the
 -- full explanation.
-AdminStopSpectating.OnServerEvent:Connect(function(admin)
+Remote.AdminStopSpectating.OnServerEvent:Connect(function(admin)
 	local state = spectatingState[admin.UserId]
 	if not state then return end
 	logCommand(admin, "spectate", state.Target.Name, "stopped", admin.Name .. " stopped spectating " .. state.Target.Name)
@@ -4087,7 +4093,7 @@ AdminStopSpectating.OnServerEvent:Connect(function(admin)
 	sendFeedback(admin, "Stopped spectating", false)
 end)
 
-AdminStopControlling.OnServerEvent:Connect(function(admin)
+Remote.AdminStopControlling.OnServerEvent:Connect(function(admin)
 	local target = controllingUserIds[admin.UserId]
 	if not target then return end
 	logCommand(admin, "controlplayer", target.Name, "stopped", admin.Name .. " stopped controlling " .. target.Name)
@@ -4100,8 +4106,9 @@ print("[AdminServer] ready" .. (if storesOffline then " (Studio: bans, mutes, wa
 -- =====================================================================
 -- Leaderboards view (admin panel): every board, reset a player on one
 -- =====================================================================
+do
 local leaderboardBusy = {}
-AdminLeaderboard.OnServerEvent:Connect(function(admin, action, index, userId)
+Remote.AdminLeaderboard.OnServerEvent:Connect(function(admin, action, index, userId)
 	if not tierHasCommand(getPlayerTier(admin), "leaderboards") then
 		return
 	end
@@ -4134,7 +4141,7 @@ AdminLeaderboard.OnServerEvent:Connect(function(admin, action, index, userId)
 				end
 			end
 		end
-		AdminLeaderboard:FireClient(admin, index, count, LeaderboardService.BoardTitle(index), rows)
+		Remote.AdminLeaderboard:FireClient(admin, index, count, LeaderboardService.BoardTitle(index), rows)
 	end)
 	leaderboardBusy[admin] = nil
 	if not ok then
@@ -4145,6 +4152,7 @@ end)
 Players.PlayerRemoving:Connect(function(p)
 	leaderboardBusy[p] = nil
 end)
+end
 
 -- :globalannounce from any server shows here too.
 task.spawn(function()
@@ -4154,7 +4162,7 @@ task.spawn(function()
 			local text = type(data) == "table" and data.Text
 			if type(text) == "string" and text ~= "" then
 				for _, plr in ipairs(Players:GetPlayers()) do
-					AdminAnnouncement:FireClient(plr, string.sub(text, 1, 200))
+					Remote.AdminAnnouncement:FireClient(plr, string.sub(text, 1, 200))
 				end
 			end
 		end)
@@ -4164,6 +4172,7 @@ end)
 -- =====================================================================
 -- Pets view (:viewpets): see a player's pets, remove one, or add one
 -- =====================================================================
+do
 local PET_TIER_NAMES = { "", "Golden ", "Rainbow " }
 sendPetList = function(admin, target)
 	local profile = DataService.Get(target)
@@ -4185,10 +4194,10 @@ sendPetList = function(admin, target)
 			end
 		end
 	end
-	AdminPetList:FireClient(admin, target.UserId, "🐾 " .. target.Name .. "'s pets (" .. #rows .. ")", rows)
+	Remote.AdminPetList:FireClient(admin, target.UserId, "🐾 " .. target.Name .. "'s pets (" .. #rows .. ")", rows)
 end
 
-AdminPetAction.OnServerEvent:Connect(function(admin, action, targetUserId, a, b)
+Remote.AdminPetAction.OnServerEvent:Connect(function(admin, action, targetUserId, a, b)
 	if not tierHasCommand(getPlayerTier(admin), "viewpets") then
 		return
 	end
@@ -4220,10 +4229,12 @@ AdminPetAction.OnServerEvent:Connect(function(admin, action, targetUserId, a, b)
 	end
 	sendPetList(admin, target)
 end)
+end
 
 -- =====================================================================
 -- Server hops: invisibility carries over, and :joinserver / :bringserver land you next to them
 -- =====================================================================
+do
 local function afterArrival(player)
 	local data
 	pcall(function()
@@ -4278,6 +4289,7 @@ for _, player in ipairs(Players:GetPlayers()) do
 		afterArrival(player)
 		watchInvis(player)
 	end)
+end
 end
 
 -- :bringserver from another server: if they're here, send them over.
