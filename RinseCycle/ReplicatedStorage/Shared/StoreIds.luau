@@ -48,18 +48,18 @@ return {
 	-- Gift products: one DEVELOPER PRODUCT per pass (not a game pass!), named "Gift: <pass name>"
 	-- with the same price. Buying one gives that pass to the friend the buyer picked.
 	GiftPasses = {
-		DoubleCoins = 0,   -- Gift: 2x Coins (99 R$)
-		SuperScrub = 0,    -- Gift: Super Scrub (129 R$)
-		MegaTank = 0,      -- Gift: Mega Tank (149 R$)
-		LuckyCharm = 0,    -- Gift: Lucky Charm (99 R$)
-		PetSlots = 0,      -- Gift: +2 Pet Slots (149 R$)
-		AutoDrain = 0,     -- Gift: Auto Drain (149 R$)
-		DoubleBubbles = 0, -- Gift: 2x Bubbles (179 R$)
-		VIP = 0,           -- Gift: VIP (199 R$)
-		DoubleLuck = 0,    -- Gift: x2 Luck (149 R$)
-		InstaRoll = 0,     -- Gift: Insta Roll (39 R$)
-		ToolNozzle = 0,    -- Gift: Spray Nozzle (49 R$)
-		ToolWasher = 0,    -- Gift: Pressure Washer (99 R$)
-		ToolCannon = 0,    -- Gift: Foam Cannon (199 R$)
+		DoubleCoins = 3715577660,   -- Gift: 2x Coins (99 R$)
+		SuperScrub = 3715577703,    -- Gift: Super Scrub (129 R$)
+		MegaTank = 3715577729,      -- Gift: Mega Tank (149 R$)
+		LuckyCharm = 3715577776,    -- Gift: Lucky Charm (99 R$)
+		PetSlots = 3715577813,      -- Gift: +2 Pet Slots (149 R$)
+		AutoDrain = 3715577849,     -- Gift: Auto Drain (149 R$)
+		DoubleBubbles = 3715577887, -- Gift: 2x Bubbles (179 R$)
+		VIP = 3715577914,           -- Gift: VIP (199 R$)
+		DoubleLuck = 3715577947,    -- Gift: x2 Luck (149 R$)
+		InstaRoll = 3715578140,     -- Gift: Insta Roll (39 R$)
+		ToolNozzle = 3715578032,    -- Gift: Spray Nozzle (49 R$)
+		ToolWasher = 3715578073,    -- Gift: Pressure Washer (99 R$)
+		ToolCannon = 3715578099,    -- Gift: Foam Cannon (199 R$)
 	},
 }
