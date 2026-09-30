@@ -32,3 +32,4 @@ Paths assume the repo lives at /home/user/Roblox. The mock is permissive: a pass
   - `scen_social`: pet trade (with a mid-countdown change), gifting a pass, leaderboard reset.
   - `scen_petsadmin`: a hidden admin's pets stop, the admin Pets view (add / remove), :invis remembered.
   - `scen_tradereq`: trade requests (Request / Cancel / 2-minute wait, no wait after an accepted trade) and the 3-2-1 countdown.
+  - `scen_adminbtn`: the right column's buttons, including the owner's Admin button.

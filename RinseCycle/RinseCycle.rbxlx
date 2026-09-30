@@ -36867,7 +36867,7 @@ return WaterFX</ProtectedString></Properties></Item>
 	  * The full-screen cover that hides admin teleports (jail, spectate, control).
 
 	The owner only (the server's GetAdminInfo decides; nobody else gets any of the panel):
-	  * A 🛡️ Admin button under Free on the left (HUD.AddAdminButton). It opens the Admin window,
+	  * A 🛡️ Admin button at the bottom of the right column (HUD.AddAdminButton). It opens the Admin window,
 	    built with the game's own UIKit window style.
 	  * Left: every player in the server (search, tap to pick). Top: command groups. Middle: that
 	    group's commands. Bottom: the picked command's options (reason, amount, duration, rank, pet,
@@ -36924,9 +36924,32 @@ local AdminStopControlling = remote("AdminStopControlling")
 local AdminControlTargetStatus = remote("AdminControlTargetStatus")
 local AdminInventoryList = remote("AdminInventoryList")
 local AdminInventoryRemoveItem = remote("AdminInventoryRemoveItem")
-local AdminLeaderboard = remote("AdminLeaderboard")
-local AdminPetList = remote("AdminPetList")
-local AdminPetAction = remote("AdminPetAction")
+-- Remotes added in later versions of AdminServer. They're never waited on up front: if the server
+-- script is older (or hasn't made them yet) the panel and the Admin button still appear, and only
+-- that one feature does nothing until it exists.
+local function laterRemote(name: string): any
+	return {
+		FireServer = function(_, ...)
+			local r = ReplicatedStorage:FindFirstChild(name)
+			if r and r:IsA("RemoteEvent") then
+				r:FireServer(...)
+			end
+		end,
+		OnClientEvent = {
+			Connect = function(_, fn)
+				task.spawn(function()
+					local r = ReplicatedStorage:WaitForChild(name)
+					if r:IsA("RemoteEvent") then
+						r.OnClientEvent:Connect(fn)
+					end
+				end)
+			end,
+		},
+	}
+end
+local AdminLeaderboard = laterRemote("AdminLeaderboard")
+local AdminPetList = laterRemote("AdminPetList")
+local AdminPetAction = laterRemote("AdminPetAction")
 
 ----------------------------------------------------------------------------------------------------
 -- Small helpers
@@ -37574,6 +37597,14 @@ local function buildPanel(info: any)
 		Size = Vector2.new(1000, 620),
 		Parent = panelRoot,
 	})
+
+	-- The HUD button first, so it's there even if anything below goes wrong.
+	do
+		local HUD = require(Client:WaitForChild("HUD")) :: any
+		HUD.AddAdminButton(function()
+			UIKit.ToggleWindow("Admin")
+		end)
+	end
 
 	local selectedPlayer: Player? = nil
 	local selectedGroup = GROUPS[1].Name
@@ -38465,11 +38496,6 @@ local function buildPanel(info: any)
 				refreshForm()
 			end
 		end)
-	end)
-
-	local HUD = require(Client:WaitForChild("HUD")) :: any
-	HUD.AddAdminButton(function()
-		UIKit.ToggleWindow("Admin")
 	end)
 
 end
