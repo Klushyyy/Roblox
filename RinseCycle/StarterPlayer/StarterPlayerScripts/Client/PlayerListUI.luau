@@ -6,9 +6,9 @@
 	listed at all; staff still see them, greyed out and marked (hidden). Each row: the staff / VIP
 	tag, the display name, and their Bubbles, Dishes and Rebirths (leaderstats).
 
-	Placement: top right under Roblox's top bar, inside the screen's safe area, and never lower
-	than just above the HUD's right-hand buttons (Shop / Pets / Ranks); more players than fit
-	scroll. In a run the list steps aside (Tab opens the Upgrade Book there).
+	Placement: the top-right corner, like Roblox's own list. The HUD moves Shop / Pets / Ranks
+	down below it; more players than fit scroll. In a run the list steps aside (Tab opens the
+	Upgrade Book there).
 ]]
 
 local Players = game:GetService("Players")
@@ -24,17 +24,16 @@ local PlayerListUI = {}
 local Colors = UIKit.Theme.Colors
 local LocalPlayer = Players.LocalPlayer
 
--- Phones draw the whole UI smaller, so the list is bigger there to stay readable.
+-- Wide enough that every name and number reads in full (phones draw the UI smaller, so a bit
+-- bigger there).
 local TOUCH = UIKit.IsTouch()
-local WIDTH = if TOUCH then 330 else 260
+local WIDTH = if TOUCH then 360 else 340
 local HEADER = if TOUCH then 38 else 30
 local TITLES = if TOUCH then 24 else 20
 local ROW = if TOUCH then 34 else 26
 local GAP = 2
 local STATS = { "Bubbles", "Dishes", "Rebirths" }
--- Column titles are icons: they fit however narrow the columns get.
-local STAT_ICONS = { Bubbles = "🫧", Dishes = "🍽️", Rebirths = "🔁" }
-local NAME_SHARE = 0.52 -- of the row's width; the three numbers share the rest
+local NAME_SHARE = 0.46 -- of the row's width; the three numbers share the rest
 local STAT_SHARE = (1 - NAME_SHARE) / #STATS
 local TAG_COLORS = {
 	MOD = Color3.fromRGB(80, 220, 100),
@@ -93,28 +92,20 @@ local function cell(parent: Instance, text: string, x: number, w: number, color:
 	})
 end
 
--- Where the panel goes and how tall it may get (canvas units). Normally top right, reaching down
--- to just above the right-hand buttons. If that leaves room for less than MIN_ROOM (short
--- screens), it moves to the left of those buttons instead and may use the full height. Measured
--- from the frames' on-screen positions (both live in same-style full-screen canvases).
-local MIN_ROOM = HEADER + TITLES + 3 * (ROW + GAP) + 10
-
+-- Where the panel goes: the top-right corner, like Roblox's own list. The HUD moves its right-hand
+-- buttons (Shop / Pets / Ranks) down below it; the list may use the room down to where those
+-- buttons can go lowest (on phones they stay above the jump button), and scrolls past that.
 local function place(height: number)
-	local scale = UIKit.GetScale()
+	local canvas = UIKit.CanvasSize()
 	local safe = UIKit.SafeInsets()
-	local top = UIKit.TopInset() + 8
-	local right = 16 + safe.Right
-	local room = UIKit.CanvasSize().Y - 16 - top
+	local top = UIKit.TopInset() + 4
+	local right = 8 + math.floor(safe.Right * 0.5)
+	local room = canvas.Y * (if TOUCH then 0.45 else 0.5) - top
 	local column = rightColumn
-	if column and column.Parent and column.Visible and column.AbsoluteSize.Y > 0 then
-		local columnTop = column.AbsolutePosition.Y / scale
-		local panelTop = if panel.AbsoluteSize.Y > 0 then panel.AbsolutePosition.Y / scale else top
-		local above = columnTop - panelTop - 10
-		if above >= MIN_ROOM or height <= above then
-			room = math.min(room, above)
-		else
-			right += column.AbsoluteSize.X / scale + 12 -- beside the buttons, not above them
-		end
+	if column and column.Parent and column.AbsoluteSize.Y > 0 then
+		local colH = column.AbsoluteSize.Y / UIKit.GetScale()
+		local lowestColumnTop = if TOUCH then canvas.Y - 300 - colH else canvas.Y - 16 - colH
+		room = math.min(room, lowestColumnTop - 12 - top)
 	end
 	panel.Position = UDim2.new(1, -right, 0, top)
 	panel.Size = UDim2.fromOffset(WIDTH, math.max(HEADER, math.min(height, room)))
@@ -158,7 +149,7 @@ local function redraw()
 	titles.LayoutOrder = 0
 	titles.Parent = list
 	for c, stat in STATS do
-		cell(titles, STAT_ICONS[stat] or stat, NAME_SHARE + (c - 1) * STAT_SHARE, STAT_SHARE, Colors.TextDim)
+		cell(titles, stat, NAME_SHARE + (c - 1) * STAT_SHARE, STAT_SHARE, Colors.TextDim)
 	end
 	for i, player in shown do
 		local row = Instance.new("Frame")
@@ -261,7 +252,7 @@ function PlayerListUI.Init()
 		local column = hud and hud:FindFirstChild("RightColumn", true)
 		if column and column:IsA("GuiObject") then
 			rightColumn = column
-			column:GetPropertyChangedSignal("AbsolutePosition"):Connect(redraw)
+			column:GetPropertyChangedSignal("AbsoluteSize"):Connect(redraw)
 		end
 		redraw()
 	end)
