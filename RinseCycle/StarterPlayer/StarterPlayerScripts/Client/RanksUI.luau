@@ -40,6 +40,7 @@ local reel: TextLabel
 local rollButton: TextButton
 local gemsLabel: TextLabel
 local luckButton: TextButton
+local luckActive: Frame? = nil
 
 local function rarityColor(rarity: string): Color3
 	local r = Config.RankRarities[rarity]
@@ -94,8 +95,11 @@ local function renderGems()
 	local meta = ClientState.Meta :: Types.MetaState?
 	local gems = if meta then meta.Gems or 0 else 0
 	local luck = meta ~= nil and meta.Passes.DoubleLuck == true
-	gemsLabel.Text = string.format("You have %s Gems%s", UIKit.Commas(gems), if luck then "   •   x2 Luck on" else "")
+	gemsLabel.Text = string.format("You have %s Gems", UIKit.Commas(gems))
 	UIKit.SetDisabled(rollButton, rolling) -- short of gems, Roll opens the Gems shop instead
+	if luckActive then
+		luckActive.Visible = luck
+	end
 	if luckButton then
 		local pass = Config.GetPass("DoubleLuck")
 		luckButton.Visible = not luck
@@ -112,11 +116,18 @@ end
 -- Right panel: odds list
 ----------------------------------------------------------------------------------------------------
 
+local function pct(chance: number): string
+	return if chance < 1 then string.format("%.2f%%", chance) else string.format("%.1f%%", chance)
+end
+
 local function renderList()
 	clear(list)
 	local meta = ClientState.Meta :: Types.MetaState?
 	local luck = meta ~= nil and meta.Passes.DoubleLuck == true
 	local weights, total = Config.RankWeights(luck)
+	-- The chances both ways, so a boosted rank can show what it was / what it would be.
+	local plain, plainTotal = Config.RankWeights(false)
+	local lucky, luckyTotal = Config.RankWeights(true)
 	for i, entry in weights do
 		local rank = entry.Rank
 		local equipped = meta ~= nil and meta.Rank == rank.Id
@@ -144,15 +155,42 @@ local function renderList()
 			TextWrapped = true,
 			Parent = row,
 		})
+		local boosted = Config.RankRarities[rank.Rarity].Order >= 3
+		local chance = entry.Weight / total * 100
 		UIKit.Label({
-			Text = string.format("%s\n%.1f%%", rank.Rarity, entry.Weight / total * 100),
+			Text = string.format("%s\n%s", rank.Rarity, pct(chance)),
 			TextSize = 15,
 			TextColor3 = color,
-			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -112, 0.5, 0),
-			Size = UDim2.fromOffset(84, 44),
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -112, 0, if boosted then 4 else 12),
+			Size = UDim2.fromOffset(96, 40),
 			Parent = row,
 		})
+		if boosted then
+			-- With x2 Luck: a green "x2" on the row and what the chance was without it. Without:
+			-- what it would be with the pass.
+			local other = if luck then plain[i].Weight / plainTotal * 100 else lucky[i].Weight / luckyTotal * 100
+			UIKit.Label({
+				Text = if luck then "was " .. pct(other) else "x2 Luck: " .. pct(other),
+				TextSize = 12,
+				TextColor3 = if luck then Colors.TextDim else Colors.Good,
+				AnchorPoint = Vector2.new(1, 0),
+				Position = UDim2.new(1, -112, 0, 46),
+				Size = UDim2.fromOffset(96, 16),
+				Parent = row,
+			})
+			if luck then
+				local tag = Instance.new("Frame")
+				tag.Name = "LuckTag"
+				tag.Position = UDim2.fromOffset(4, 4)
+				tag.Size = UDim2.fromOffset(30, 18)
+				tag.BackgroundColor3 = Colors.Good
+				tag.ZIndex = 3
+				UIKit.Corner(tag, 9)
+				UIKit.Label({ Text = "x2", TextSize = 13, Size = UDim2.fromScale(1, 1), ZIndex = 4, Parent = tag })
+				tag.Parent = row
+			end
+		end
 		if equipped then
 			UIKit.Label({ Text = "Yours", TextSize = 18, TextColor3 = Colors.Good, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(96, 36), Parent = row })
 		end
@@ -715,8 +753,20 @@ function RanksUI.Init()
 			ShopUI.BuyPass("DoubleLuck")
 		end,
 	})
+	-- When you own x2 Luck: a clear green badge where the buy button was.
+	local active = Instance.new("Frame")
+	active.Name = "LuckActive"
+	active.Size = UDim2.new(1, 0, 0, 46)
+	active.Position = UDim2.fromOffset(0, 330)
+	active.BackgroundColor3 = Colors.Good
+	active.Visible = false
+	UIKit.Corner(active, 12)
+	UIKit.Stroke(active, Color3.fromRGB(220, 255, 230), 3, 0)
+	UIKit.Label({ Text = "x2 LUCK ACTIVE", TextSize = 24, Size = UDim2.fromScale(1, 1), Parent = active })
+	active.Parent = leftPanel
+	luckActive = active
 	UIKit.Label({
-		Text = "A roll replaces your current rank! Rare+ ranks are twice as likely with x2 Luck.",
+		Text = "A roll replaces your current rank! Rare ranks and higher are 2x as likely with x2 Luck.",
 		TextSize = 14,
 		TextColor3 = Colors.Warning,
 		TextWrapped = true,

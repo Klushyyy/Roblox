@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.7.8"
+Config.Version = "1.7.9"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -457,12 +457,27 @@ function Config.GetRank(rankId: string?)
 end
 
 -- Roll weights, with the x2 Luck pass applied. Returns { { Rank = def, Weight = n } }, total.
+-- With x2 Luck, Rare and better are truly LuckMult times as likely (Mythic 0.5% -> 1%): the
+-- extra chance is taken from Common and Uncommon, so the total stays the same.
 function Config.RankWeights(doubleLuck: boolean?)
 	local list, total = {}, 0
+	local boosted, rest = 0, 0
+	for _, r in Config.Ranks do
+		if Config.RankRarities[r.Rarity].Order >= 3 then
+			boosted += r.Chance
+		else
+			rest += r.Chance
+		end
+	end
+	local mult = Config.RankRoll.LuckMult
+	local restScale = 1
+	if doubleLuck and rest > 0 then
+		restScale = math.max(0, (boosted + rest - boosted * mult) / rest)
+	end
 	for _, r in Config.Ranks do
 		local w = r.Chance
-		if doubleLuck and Config.RankRarities[r.Rarity].Order >= 3 then
-			w *= Config.RankRoll.LuckMult
+		if doubleLuck then
+			w *= if Config.RankRarities[r.Rarity].Order >= 3 then mult else restScale
 		end
 		table.insert(list, { Rank = r, Weight = w })
 		total += w

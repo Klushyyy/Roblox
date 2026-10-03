@@ -1382,6 +1382,12 @@ walls instead of clipping through. All gameplay queries use Include filters.
   Merge mode hides pets you can't merge (fewer than 3 of that pet and tier, or Rainbow already);
   after the first pick only that pet shows. Nothing to merge: "You don't have 3 of the same pet
   yet..." over the grid; the merge panel notes "Only pets you have 3 or more of are shown."
+- v1.7.9: x2 Luck now truly doubles Rare+ odds (Mythic 0.5% -> 1%, Legendary 2.5% -> 5%; Rare+
+  25% -> 50% in all), taking the extra from Common / Uncommon (x2/3) so the total stays 100%.
+  Before, doubling only their weights made them about 1.6x. Ranks panel: a green "x2 LUCK ACTIVE"
+  badge in place of the buy button; boosted rows get an "x2" tag and "was 0.50%" under the
+  chance; without the pass they show "x2 Luck: 1.00%". Footer: "Rare ranks and higher are 2x as
+  likely with x2 Luck."
 
 ## 7. Balance knobs (all in Config)
 
