@@ -13,7 +13,6 @@
 --   * Models are built at the origin (Root.CFrame = identity), so "model space" = world space while
 --     building. Each id is built once into a template; every call returns a fresh Clone.
 
-local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
@@ -1002,83 +1001,69 @@ end
 
 -- A cute pet model for Config.Pets[petId] (a placeholder for unknown ids). Unparented; the caller
 -- parents it and moves it with PivotTo. Facing -Z, PrimaryPart "Root" at the centre.
--- Tier looks (Config.PetTiers): Golden turns the body gold and glinting. Rainbow gives the whole
--- pet one smooth rainbow fade from bottom to top that slowly cycles through every colour (on the
--- client: PetModels.StartRainbow). Both get a sparkle. Eyes and shines keep their colours.
-local KEEP = { Eye = true, EyeShine = true, Shine = true }
-local RAINBOW_SPREAD = 0.3 -- how much of the rainbow one pet shows at once, bottom to top
-local RAINBOW_SPEED = 0.12 -- full colour cycles per second
-
--- Client only: keeps every Rainbow pet (in the world and in menus) slowly cycling its colours.
-local rainbowStarted = false
-function PetModels.StartRainbow()
-	if rainbowStarted then
-		return
-	end
-	rainbowStarted = true
-	task.spawn(function()
-		while true do
-			local shift = (os.clock() * RAINBOW_SPEED) % 1
-			for _, model in CollectionService:GetTagged("RainbowPet") do
-				for _, part in model:GetDescendants() do
-					local y = part:GetAttribute("RainbowY")
-					if y and part:IsA("BasePart") then
-						part.Color = Color3.fromHSV((shift + y * RAINBOW_SPREAD) % 1, 0.5, part:GetAttribute("RainbowV") or 1)
-					end
-				end
-			end
-			task.wait(1 / 20)
-		end
-	end)
-end
-
+-- Tier looks (Config.PetTiers): the pet keeps its own colours. Golden gets a gold glow, halo and
+-- sparkles; Rainbow the same in rainbow colours. (Menus add a GOLD / RAINBOW tag and edge.)
+local GOLD_GLOW = Color3.fromRGB(255, 210, 80)
+local RAINBOW_GLOW = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 90, 90)),
+	ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 200, 70)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(110, 235, 110)),
+	ColorSequenceKeypoint.new(0.75, Color3.fromRGB(80, 190, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 120, 255)),
+})
 local function applyTier(model: Model, tier: number)
 	if tier <= 1 then
 		return
 	end
-	local parts = {}
-	for _, d in model:GetDescendants() do
-		if d:IsA("BasePart") and not KEEP[d.Name] and d.Transparency < 1 then
-			table.insert(parts, d)
+	-- The pet keeps its own colours; Golden / Rainbow show as a glow and sparkles around it.
+	local root = model.PrimaryPart
+	if not root then
+		for _, d in model:GetDescendants() do
+			if d:IsA("BasePart") then
+				root = d
+				break
+			end
 		end
 	end
-	local minY, maxY = math.huge, -math.huge
-	for _, part in parts do
-		minY = math.min(minY, part.Position.Y)
-		maxY = math.max(maxY, part.Position.Y)
+	if not root then
+		return
 	end
-	for _, part in parts do
-		if tier == 2 then
-			local h, _, v = part.Color:ToHSV()
-			part.Color = Color3.fromHSV(0.12 + (h - 0.12) * 0.1, 0.75, math.max(v, 0.85))
-			part.Reflectance = 0.15
-		else
-			-- Where this part sits on the pet (0 = bottom, 1 = top), and how bright it was, so the
-			-- fade keeps the pet's light and dark parts.
-			local _, _, v = part.Color:ToHSV()
-			local y = if maxY > minY then (part.Position.Y - minY) / (maxY - minY) else 0.5
-			part:SetAttribute("RainbowY", y)
-			part:SetAttribute("RainbowV", math.max(v, 0.95))
-			part.Color = Color3.fromHSV((0.55 + y * RAINBOW_SPREAD) % 1, 0.5, math.max(v, 0.95))
-		end
-	end
-	if tier >= 3 then
-		CollectionService:AddTag(model, "RainbowPet")
-	end
-	local root = model.PrimaryPart or parts[1]
-	if root then
-		local sparkle = Instance.new("ParticleEmitter")
-		sparkle.Name = "TierSparkle"
-		sparkle.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-		sparkle.Color = ColorSequence.new(if tier == 2 then Color3.fromRGB(255, 220, 110) else Color3.fromRGB(255, 170, 240))
-		sparkle.LightEmission = 0.6
-		sparkle.Size = NumberSequence.new(0.35, 0)
-		sparkle.Lifetime = NumberRange.new(0.6, 1)
-		sparkle.Rate = if tier == 2 then 4 else 7
-		sparkle.Speed = NumberRange.new(0.5, 1.5)
-		sparkle.SpreadAngle = Vector2.new(180, 180)
-		sparkle.Parent = root
-	end
+	local golden = tier == 2
+	local colors = if golden then ColorSequence.new(GOLD_GLOW) else RAINBOW_GLOW
+	-- A soft halo that stays on the pet.
+	local aura = Instance.new("ParticleEmitter")
+	aura.Name = "TierAura"
+	aura.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	aura.Color = colors
+	aura.LightEmission = 1
+	aura.LockedToPart = true
+	aura.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 2.6), NumberSequenceKeypoint.new(1, 3.2) })
+	aura.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0.82), NumberSequenceKeypoint.new(1, 1) })
+	aura.Lifetime = NumberRange.new(1.2, 1.6)
+	aura.Rate = 3
+	aura.Speed = NumberRange.new(0)
+	aura.Rotation = NumberRange.new(0, 360)
+	aura.RotSpeed = NumberRange.new(-30, 30)
+	aura.Parent = root
+	-- Little sparkles drifting off it.
+	local sparkle = Instance.new("ParticleEmitter")
+	sparkle.Name = "TierSparkle"
+	sparkle.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	sparkle.Color = colors
+	sparkle.LightEmission = 0.8
+	sparkle.Size = NumberSequence.new(0.4, 0)
+	sparkle.Lifetime = NumberRange.new(0.7, 1.2)
+	sparkle.Rate = if golden then 6 else 10
+	sparkle.Speed = NumberRange.new(0.6, 1.6)
+	sparkle.SpreadAngle = Vector2.new(180, 180)
+	sparkle.Parent = root
+	-- And a real glow on whatever's around it.
+	local light = Instance.new("PointLight")
+	light.Name = "TierGlow"
+	light.Color = if golden then GOLD_GLOW else Color3.fromRGB(230, 170, 255)
+	light.Brightness = 1.2
+	light.Range = 7
+	light.Parent = root
 end
 
 function PetModels.Build(petId: string, tier: number?): Model

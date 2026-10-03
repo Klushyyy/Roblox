@@ -1370,6 +1370,10 @@ walls instead of clipping through. All gameplay queries use Include filters.
   (Config.PetCoinMult); the header shows the equipped pets' total ("Coins x1.34"). Coin bonuses
   were trimmed at the top: Rubber Duck x1.04 ... Kraken King x1.38 (Rainbow x1.67). Three starter
   ducks give x1.12, five Rainbow Krakens x4.3 (was x6.25, more than the paid x2 Coins pass).
+- v1.7.6: Golden / Rainbow pets keep their normal colours. In the world they get a soft halo
+  (locked particle), drifting sparkles and a PointLight, gold or rainbow. In menus the card keeps
+  its normal colour with a gold (or turning rainbow) edge and a small GOLD / RAINBOW tag under the
+  pet; the detail panel says "Rainbow • Epic". The colour-cycling rainbow (v1.7.4) is gone.
 
 ## 7. Balance knobs (all in Config)
 

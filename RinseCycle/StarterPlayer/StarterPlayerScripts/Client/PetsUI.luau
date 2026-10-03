@@ -185,27 +185,48 @@ task.spawn(function()
 	end
 end)
 
--- Paints a card (or any frame with a UIStroke) for a pet's tier.
-local function paintTier(card: Frame, stroke: UIStroke?, tier: number)
-	if tier == 2 then
-		card.BackgroundColor3 = Color3.fromRGB(150, 110, 25)
-		UIKit.Gradient(card, Color3.fromRGB(205, 160, 45), Color3.fromRGB(105, 72, 12))
-		if stroke then
-			stroke.Color = GOLD_EDGE
-			stroke.Thickness = 4
-		end
-	elseif tier >= 3 then
-		card.BackgroundColor3 = Color3.fromRGB(70, 45, 120)
-		UIKit.Gradient(card, Color3.fromRGB(110, 70, 170), Color3.fromRGB(45, 30, 90))
-		if stroke then
-			stroke.Color = Color3.new(1, 1, 1)
-			stroke.Thickness = 4
-			local g = Instance.new("UIGradient")
-			g.Color = RAINBOW
-			g.Parent = stroke
-			spinning[g] = true
-		end
+-- A card's edge for a pet's tier: a gold glow, or a slowly turning rainbow one. The card itself
+-- (and the pet) keep their normal colours; the GOLD / RAINBOW tag says which.
+local function paintTier(_card: Frame, stroke: UIStroke?, tier: number)
+	if not stroke then
+		return
 	end
+	if tier == 2 then
+		stroke.Color = GOLD_EDGE
+		stroke.Thickness = 4
+	elseif tier >= 3 then
+		stroke.Color = Color3.new(1, 1, 1)
+		stroke.Thickness = 4
+		local g = Instance.new("UIGradient")
+		g.Color = RAINBOW
+		g.Parent = stroke
+		spinning[g] = true
+	end
+end
+
+-- The small GOLD / RAINBOW tag on a card.
+local function tierTag(card: Frame, tier: number)
+	if tier <= 1 then
+		return
+	end
+	local rainbow = tier >= 3
+	local text = if rainbow then "RAINBOW" else "GOLD"
+	local tag = Instance.new("Frame")
+	tag.Name = "TierTag"
+	-- Centred just under the pet, above its name (the corners hold SELECTED / merge badges).
+	tag.AnchorPoint = Vector2.new(0.5, 0)
+	tag.Position = UDim2.new(0.5, 0, 0, 76)
+	tag.Size = UDim2.fromOffset(#text * 7 + 12, 18)
+	tag.BackgroundColor3 = if rainbow then Color3.new(1, 1, 1) else GOLD_EDGE
+	tag.ZIndex = 7
+	UIKit.Corner(tag, 9)
+	if rainbow then
+		local g = Instance.new("UIGradient")
+		g.Color = RAINBOW
+		g.Parent = tag
+	end
+	UIKit.Label({ Text = text, TextSize = 12, Size = UDim2.fromScale(1, 1), Parent = tag, ZIndex = 8 })
+	tag.Parent = card
 end
 
 -- A text label coloured like the tier (gold, or rainbow).
@@ -278,6 +299,7 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 		stroke.Transparency = 0
 	end
 	paintTier(card, stroke, tier)
+	tierTag(card, tier)
 
 	-- Invisible hit surface. Not a UIKit.Button: we want the plain card look, not the chunky style.
 	local hit = Instance.new("TextButton")
@@ -298,7 +320,7 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 	})
 	viewport.ZIndex = 1
 
-	local nameLabel = UIKit.Label({
+	UIKit.Label({
 		Text = entry.Def.Name,
 		Size = UDim2.new(1, -10, 0, 20),
 		Position = UDim2.new(0.5, 0, 0, 96),
@@ -308,14 +330,13 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 		Parent = card,
 		ZIndex = 2,
 	})
-	paintTierText(nameLabel, tier)
 	UIKit.Label({
 		Text = entry.Def.Rarity .. "  •  " .. speedText(entry.Id, entry.Tier),
 		Size = UDim2.new(1, -10, 0, 16),
 		Position = UDim2.new(0.5, 0, 0, 118),
 		AnchorPoint = Vector2.new(0.5, 0),
 		TextSize = 13,
-		TextColor3 = if tier > 1 then C.Text else UIKit.RarityColor(entry.Def.Rarity),
+		TextColor3 = UIKit.RarityColor(entry.Def.Rarity),
 		Parent = card,
 		ZIndex = 2,
 	})
@@ -332,7 +353,8 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 			local badge = Instance.new("Frame")
 			badge.Name = "MergeBadge"
 			badge.Size = UDim2.fromOffset(30, 30)
-			badge.Position = UDim2.fromOffset(4, 4)
+			badge.AnchorPoint = Vector2.new(1, 0)
+			badge.Position = UDim2.new(1, -4, 0, 4)
 			badge.BackgroundColor3 = C.Good
 			badge.ZIndex = 7
 			UIKit.Corner(badge, 15)
@@ -349,7 +371,7 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 			shade.Parent = card
 		elseif (copies or 0) >= MERGE_COUNT and tier < #Config.PetTiers then
 			-- You have enough of this one to merge.
-			pill(card, "x" .. tostring(copies), Color3.fromRGB(170, 110, 255), UDim2.fromOffset(4, 4), Vector2.new(0, 0), "CopiesTag")
+			pill(card, "x" .. tostring(copies), Color3.fromRGB(170, 110, 255), UDim2.new(1, -4, 0, 4), Vector2.new(1, 0), "CopiesTag")
 		end
 	elseif selectedUid == entry.Uid then
 		outerRing(card, C.Primary)
@@ -385,10 +407,14 @@ local function refreshDetailPanel(meta: Types.MetaState?)
 
 	UIKit.SetViewportModel(detailViewport, PetModels.Build(entry.Id, entry.Tier), true)
 	detailName.Text = entry.Def.Name
-	paintTierText(detailName, entry.Tier or 1)
 	local tierDef = Config.PetTier(entry.Tier)
 	detailRarity.Text = if tierDef.Name ~= "" then tierDef.Name .. "  •  " .. entry.Def.Rarity else entry.Def.Rarity
-	detailRarity.TextColor3 = UIKit.RarityColor(entry.Def.Rarity)
+	if (entry.Tier or 1) > 1 then
+		paintTierText(detailRarity, entry.Tier or 1)
+	else
+		paintTierText(detailRarity, 1)
+		detailRarity.TextColor3 = UIKit.RarityColor(entry.Def.Rarity)
+	end
 	local rating = Config.PetSpeedRating(entry.Id, entry.Tier)
 	detailPower.Text = "Cleaning speed  " .. rating .. "/100"
 	speedFill.Size = UDim2.fromScale(rating / 100, 1)
@@ -404,7 +430,7 @@ local function refreshMergePanel()
 	mergeInfo.Text = string.format("Picked %d/%d", #mergeSel, MERGE_COUNT)
 	-- The preview card: repainted from scratch each time.
 	for _, child in mergePreview:GetChildren() do
-		if child:IsA("UIGradient") then
+		if child:IsA("UIGradient") or child.Name == "TierTag" then
 			child:Destroy()
 		end
 	end
@@ -420,6 +446,7 @@ local function refreshMergePanel()
 	if first then
 		local nextTier = (first.Tier or 1) + 1
 		paintTier(mergePreview, previewStroke, nextTier)
+		tierTag(mergePreview, nextTier)
 		UIKit.SetViewportModel(mergeViewport, PetModels.Build(first.Id, nextTier), true)
 		mergeResult.Text = "Makes: " .. petTitle(first.Id, nextTier)
 		paintTierText(mergeResult, nextTier)
