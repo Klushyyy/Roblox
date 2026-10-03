@@ -1393,6 +1393,9 @@ walls instead of clipping through. All gameplay queries use Include filters.
   six single-colour emitters (red, orange, yellow, green, blue, purple; 4/s each).
 - v1.8.1: the Shop's Coins tab only shows in a dishwasher (coins only exist there); in the lobby
   it's hidden and a request for it opens Perks.
+- v1.8.2: Golden / Rainbow pets also leave a small solid Trail while they move (two attachments
+  behind the body, ~0.5-1.6 studs tall, 0.5 s, faces the camera): gold, or a red-to-purple
+  rainbow ribbon. Particles alone were hard to tell apart.
 
 ## 7. Balance knobs (all in Config)
 

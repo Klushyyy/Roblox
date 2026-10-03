@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.8.1"
+Config.Version = "1.8.2"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -2057,7 +2057,8 @@ end
 -- A cute pet model for Config.Pets[petId] (a placeholder for unknown ids). Unparented; the caller
 -- parents it and moves it with PivotTo. Facing -Z, PrimaryPart "Root" at the centre.
 -- Tier looks (Config.PetTiers): the pet keeps its own colours. Golden gets a soft gold halo and gold
--- sparkles; Rainbow a rainbow halo and sparkles in six separate colours. No light (it bleached
+-- sparkles and a small gold trail; Rainbow a rainbow halo, sparkles in six separate colours and a
+-- rainbow trail. No light (it bleached
 -- pets and floor to yellow). Menus add a GOLD / RAINBOW tag and edge.
 local GOLD_GLOW = Color3.fromRGB(255, 210, 80)
 local RAINBOW_SPARKS = {
@@ -2125,6 +2126,34 @@ local function applyTier(model: Model, tier: number)
 	aura.Rotation = NumberRange.new(0, 360)
 	aura.RotSpeed = NumberRange.new(-40, 40)
 	aura.Parent = root
+	-- A small solid trail behind it while it moves (gold, or a full rainbow ribbon): the clearest
+	-- way to tell the tiers apart at a glance. Two attachments behind the body, top and bottom.
+	local _, extents = model:GetBoundingBox()
+	local half = math.clamp(extents.Y * 0.22, 0.25, 0.8)
+	local back = math.clamp(extents.Z * 0.35, 0.3, 1.5)
+	local a0 = Instance.new("Attachment")
+	a0.Name = "TrailTop"
+	a0.Position = Vector3.new(0, half, back)
+	a0.Parent = root
+	local a1 = Instance.new("Attachment")
+	a1.Name = "TrailBottom"
+	a1.Position = Vector3.new(0, -half, back)
+	a1.Parent = root
+	local trail = Instance.new("Trail")
+	trail.Name = "TierTrail"
+	trail.Attachment0 = a0
+	trail.Attachment1 = a1
+	trail.Color = if golden
+		then ColorSequence.new(Color3.fromRGB(255, 225, 90), Color3.fromRGB(255, 170, 30))
+		else RAINBOW_GLOW
+	trail.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(1, 1) })
+	trail.WidthScale = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.2) })
+	trail.Lifetime = 0.5
+	trail.MinLength = 0.05
+	trail.LightEmission = 0.4
+	trail.FaceCamera = true
+	trail.Parent = root
+
 	if golden then
 		emitter("TierSparkle", ColorSequence.new(GOLD_GLOW), 18, 0.7, 0.5)
 	else
