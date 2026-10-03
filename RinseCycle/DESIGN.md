@@ -1358,6 +1358,8 @@ walls instead of clipping through. All gameplay queries use Include filters.
   pets you have 3+ of show "xN", and the panel previews the pet you'll make. "Auto-pick 3" picks
   the first set of 3 identical pets, unequipped ones first.
 - Boost badges are all one width with left-aligned text, so they line up.
+- v1.7.2: in a run the left column keeps Daily and Music (plus Admin for staff); Codes, Free and
+  Trade are lobby-only.
 
 ## 7. Balance knobs (all in Config)
 

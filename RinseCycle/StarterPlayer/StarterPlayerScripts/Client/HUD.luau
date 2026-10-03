@@ -296,7 +296,7 @@ function HUD.Init()
 			Label = "Admin",
 			Color = Colors.PanelLight,
 			Size = UDim2.fromOffset(80, 80),
-			LayoutOrder = 6, -- under Trade / Music in the left column (and alone there in a run, clear of the timer)
+			LayoutOrder = 6, -- under Trade / Music in the left column (under Daily / Music in a run)
 			Parent = leftColumn,
 			OnClick = function()
 				if adminClick then
@@ -305,11 +305,11 @@ function HUD.Init()
 			end,
 		})
 		local inRun = ClientState.Run ~= nil
-		dailyButton.Visible = not inRun
+		dailyButton.Visible = true
 		codesButton.Visible = not inRun
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
-		musicButton.Visible = not inRun
+		musicButton.Visible = true
 		leftColumn.Visible = true
 	end
 	addAdminButton = makeAdminButton
@@ -1182,12 +1182,13 @@ function HUD.Init()
 		upgradesButton.Visible = inRun
 		leaveButton.Visible = inRun
 		ranksButton.Visible = not inRun
-		dailyButton.Visible = not inRun
+		-- In a run the left column keeps Daily (its "!" shows when a reward is ready) and Music.
+		dailyButton.Visible = true
 		codesButton.Visible = not inRun
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
-		musicButton.Visible = not inRun
-		leftColumn.Visible = not inRun or (adminButton ~= nil and adminButton.Visible)
+		musicButton.Visible = true
+		leftColumn.Visible = true
 		upgradesButton.LayoutOrder = 1
 		shopButton.LayoutOrder = 2
 		petsButton.LayoutOrder = 3
