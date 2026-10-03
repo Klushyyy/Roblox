@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.7.4"
+Config.Version = "1.7.5"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -262,7 +262,9 @@ Config.Perks = {
 
 ----------------------------------------------------------------------------------------------------
 -- Pets. Pets clean grime near you during runs. Their cleaning speed is PowerShare times YOUR current
--- run power (so they stay useful as you upgrade), and CoinBonus adds to your drain payouts.
+-- run power (so they stay useful as you upgrade), and CoinBonus adds to your coin multiplier (equipped
+-- pets add up). Coin bonuses top out at x1.67 for a Rainbow Kraken King: five of those is x4.3,
+-- three common Rubber Ducks x1.12. Shown in the menu as "Coins x1.04".
 -- Model = which builder PetModels uses; Colors are passed to it.
 ----------------------------------------------------------------------------------------------------
 Config.Rarities = {
@@ -284,23 +286,23 @@ Config.PetRules = {
 
 Config.Pets = {
 	-- Bubble Egg
-	RubberDuck = { Name = "Rubber Duck", Rarity = "Common", PowerShare = 0.12, Capacity = 12, CoinBonus = 0.05, Model = "Duck", Colors = { Body = Color3.fromRGB(255, 220, 60), Accent = Color3.fromRGB(255, 140, 30) } },
-	SoapSlime = { Name = "Soap Slime", Rarity = "Uncommon", PowerShare = 0.18, Capacity = 18, CoinBonus = 0.08, Model = "Slime", Colors = { Body = Color3.fromRGB(150, 230, 255), Accent = Color3.fromRGB(255, 255, 255) } },
-	SpongePup = { Name = "Sponge Pup", Rarity = "Rare", PowerShare = 0.27, Capacity = 26, CoinBonus = 0.12, Model = "Pup", Colors = { Body = Color3.fromRGB(255, 225, 90), Accent = Color3.fromRGB(90, 190, 90) } },
-	BubbleFish = { Name = "Bubble Fish", Rarity = "Epic", PowerShare = 0.42, Capacity = 38, CoinBonus = 0.18, Model = "Fish", Colors = { Body = Color3.fromRGB(120, 180, 255), Accent = Color3.fromRGB(255, 255, 255) } },
-	GoldenDuck = { Name = "Golden Duck", Rarity = "Legendary", PowerShare = 0.66, Capacity = 55, CoinBonus = 0.30, Model = "Duck", Colors = { Body = Color3.fromRGB(255, 200, 40), Accent = Color3.fromRGB(255, 240, 150) }, Shiny = true },
+	RubberDuck = { Name = "Rubber Duck", Rarity = "Common", PowerShare = 0.12, Capacity = 12, CoinBonus = 0.04, Model = "Duck", Colors = { Body = Color3.fromRGB(255, 220, 60), Accent = Color3.fromRGB(255, 140, 30) } },
+	SoapSlime = { Name = "Soap Slime", Rarity = "Uncommon", PowerShare = 0.18, Capacity = 18, CoinBonus = 0.06, Model = "Slime", Colors = { Body = Color3.fromRGB(150, 230, 255), Accent = Color3.fromRGB(255, 255, 255) } },
+	SpongePup = { Name = "Sponge Pup", Rarity = "Rare", PowerShare = 0.27, Capacity = 26, CoinBonus = 0.09, Model = "Pup", Colors = { Body = Color3.fromRGB(255, 225, 90), Accent = Color3.fromRGB(90, 190, 90) } },
+	BubbleFish = { Name = "Bubble Fish", Rarity = "Epic", PowerShare = 0.42, Capacity = 38, CoinBonus = 0.13, Model = "Fish", Colors = { Body = Color3.fromRGB(120, 180, 255), Accent = Color3.fromRGB(255, 255, 255) } },
+	GoldenDuck = { Name = "Golden Duck", Rarity = "Legendary", PowerShare = 0.66, Capacity = 55, CoinBonus = 0.2, Model = "Duck", Colors = { Body = Color3.fromRGB(255, 200, 40), Accent = Color3.fromRGB(255, 240, 150) }, Shiny = true },
 	-- Suds Egg
-	ScrubBunny = { Name = "Scrub Bunny", Rarity = "Common", PowerShare = 0.21, Capacity = 18, CoinBonus = 0.08, Model = "Bunny", Colors = { Body = Color3.fromRGB(245, 245, 250), Accent = Color3.fromRGB(255, 170, 200) } },
-	SudsCrab = { Name = "Suds Crab", Rarity = "Uncommon", PowerShare = 0.30, Capacity = 27, CoinBonus = 0.12, Model = "Crab", Colors = { Body = Color3.fromRGB(255, 110, 90), Accent = Color3.fromRGB(255, 255, 255) } },
-	MopCat = { Name = "Mop Cat", Rarity = "Rare", PowerShare = 0.42, Capacity = 39, CoinBonus = 0.16, Model = "Cat", Colors = { Body = Color3.fromRGB(170, 170, 185), Accent = Color3.fromRGB(240, 240, 240) } },
-	OctoScrubber = { Name = "Octo-Scrubber", Rarity = "Epic", PowerShare = 0.60, Capacity = 57, CoinBonus = 0.24, Model = "Octopus", Colors = { Body = Color3.fromRGB(200, 110, 255), Accent = Color3.fromRGB(255, 200, 255) } },
-	RainbowJelly = { Name = "Rainbow Jelly", Rarity = "Legendary", PowerShare = 0.96, Capacity = 82, CoinBonus = 0.40, Model = "Jelly", Colors = { Body = Color3.fromRGB(255, 120, 200), Accent = Color3.fromRGB(120, 255, 230) }, Shiny = true },
+	ScrubBunny = { Name = "Scrub Bunny", Rarity = "Common", PowerShare = 0.21, Capacity = 18, CoinBonus = 0.06, Model = "Bunny", Colors = { Body = Color3.fromRGB(245, 245, 250), Accent = Color3.fromRGB(255, 170, 200) } },
+	SudsCrab = { Name = "Suds Crab", Rarity = "Uncommon", PowerShare = 0.30, Capacity = 27, CoinBonus = 0.09, Model = "Crab", Colors = { Body = Color3.fromRGB(255, 110, 90), Accent = Color3.fromRGB(255, 255, 255) } },
+	MopCat = { Name = "Mop Cat", Rarity = "Rare", PowerShare = 0.42, Capacity = 39, CoinBonus = 0.12, Model = "Cat", Colors = { Body = Color3.fromRGB(170, 170, 185), Accent = Color3.fromRGB(240, 240, 240) } },
+	OctoScrubber = { Name = "Octo-Scrubber", Rarity = "Epic", PowerShare = 0.60, Capacity = 57, CoinBonus = 0.17, Model = "Octopus", Colors = { Body = Color3.fromRGB(200, 110, 255), Accent = Color3.fromRGB(255, 200, 255) } },
+	RainbowJelly = { Name = "Rainbow Jelly", Rarity = "Legendary", PowerShare = 0.96, Capacity = 82, CoinBonus = 0.26, Model = "Jelly", Colors = { Body = Color3.fromRGB(255, 120, 200), Accent = Color3.fromRGB(120, 255, 230) }, Shiny = true },
 	-- Sparkle Egg
-	FoamFox = { Name = "Foam Fox", Rarity = "Common", PowerShare = 0.36, Capacity = 26, CoinBonus = 0.12, Model = "Fox", Colors = { Body = Color3.fromRGB(255, 150, 70), Accent = Color3.fromRGB(255, 255, 255) } },
-	SteamOwl = { Name = "Steam Owl", Rarity = "Uncommon", PowerShare = 0.51, Capacity = 40, CoinBonus = 0.18, Model = "Owl", Colors = { Body = Color3.fromRGB(150, 130, 110), Accent = Color3.fromRGB(255, 230, 150) } },
-	CrystalTurtle = { Name = "Crystal Turtle", Rarity = "Rare", PowerShare = 0.72, Capacity = 57, CoinBonus = 0.25, Model = "Turtle", Colors = { Body = Color3.fromRGB(120, 230, 200), Accent = Color3.fromRGB(200, 255, 255) } },
-	TidalDragon = { Name = "Tidal Dragon", Rarity = "Epic", PowerShare = 1.02, Capacity = 84, CoinBonus = 0.35, Model = "Dragon", Colors = { Body = Color3.fromRGB(60, 150, 255), Accent = Color3.fromRGB(180, 240, 255) } },
-	KrakenKing = { Name = "Kraken King", Rarity = "Legendary", PowerShare = 1.56, Capacity = 121, CoinBonus = 0.60, Model = "Kraken", Colors = { Body = Color3.fromRGB(120, 40, 160), Accent = Color3.fromRGB(255, 210, 60) }, Shiny = true },
+	FoamFox = { Name = "Foam Fox", Rarity = "Common", PowerShare = 0.36, Capacity = 26, CoinBonus = 0.09, Model = "Fox", Colors = { Body = Color3.fromRGB(255, 150, 70), Accent = Color3.fromRGB(255, 255, 255) } },
+	SteamOwl = { Name = "Steam Owl", Rarity = "Uncommon", PowerShare = 0.51, Capacity = 40, CoinBonus = 0.13, Model = "Owl", Colors = { Body = Color3.fromRGB(150, 130, 110), Accent = Color3.fromRGB(255, 230, 150) } },
+	CrystalTurtle = { Name = "Crystal Turtle", Rarity = "Rare", PowerShare = 0.72, Capacity = 57, CoinBonus = 0.18, Model = "Turtle", Colors = { Body = Color3.fromRGB(120, 230, 200), Accent = Color3.fromRGB(200, 255, 255) } },
+	TidalDragon = { Name = "Tidal Dragon", Rarity = "Epic", PowerShare = 1.02, Capacity = 84, CoinBonus = 0.25, Model = "Dragon", Colors = { Body = Color3.fromRGB(60, 150, 255), Accent = Color3.fromRGB(180, 240, 255) } },
+	KrakenKing = { Name = "Kraken King", Rarity = "Legendary", PowerShare = 1.56, Capacity = 121, CoinBonus = 0.38, Model = "Kraken", Colors = { Body = Color3.fromRGB(120, 40, 160), Accent = Color3.fromRGB(255, 210, 60) }, Shiny = true },
 }
 
 -- Eggs cost Bubbles. Bubbles can never be bought with Robux, so eggs are not "paid random items";
@@ -600,11 +602,33 @@ function Config.PetStats(petId: string, tier: number?)
 	return { Speed = def.PowerShare * mult, Capacity = math.floor((def.Capacity or 12) * mult + 0.5), CoinBonus = def.CoinBonus * mult }
 end
 
--- One easy number for the UI: a pet's Power. Speed, bag size and coin bonus all rise together, so
--- a single score (bigger = cleans faster, carries more and earns more) says everything.
+-- Kept for older callers: a pet's raw speed x100.
 function Config.PetPower(petId: string, tier: number?): number
 	local stats = Config.PetStats(petId, tier)
 	return if stats then math.floor(stats.Speed * 100 + 0.5) else 0
+end
+
+-- What the pets menu shows. Cleaning speed out of 100, where 100 is the best pet there is (a
+-- Rainbow one of the fastest pet), so players can compare at a glance.
+local bestPetSpeed = 0
+function Config.PetSpeedRating(petId: string, tier: number?): number
+	if bestPetSpeed == 0 then
+		for id in Config.Pets do
+			local top = Config.PetStats(id, #Config.PetTiers)
+			bestPetSpeed = math.max(bestPetSpeed, if top then top.Speed else 0)
+		end
+	end
+	local stats = Config.PetStats(petId, tier)
+	if not stats or bestPetSpeed <= 0 then
+		return 0
+	end
+	return math.clamp(math.floor(stats.Speed / bestPetSpeed * 100 + 0.5), 1, 100)
+end
+
+-- A pet's coin multiplier while it's out ("x1.06"). Equipped pets add up: three x1.06 pets = x1.18.
+function Config.PetCoinMult(petId: string, tier: number?): number
+	local stats = Config.PetStats(petId, tier)
+	return 1 + (if stats then stats.CoinBonus else 0)
 end
 
 function Config.PetCoinBonus(pets, equipped): number

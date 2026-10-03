@@ -1365,6 +1365,11 @@ walls instead of clipping through. All gameplay queries use Include filters.
   pets keep one smooth rainbow fade (bottom to top, 0.3 of the wheel) that slowly cycles
   (PetModels.StartRainbow, tag "RainbowPet", started by PetRenderer) instead of a patchwork of
   part colours.
+- v1.7.5: pets show "Cleaning speed N/100" (Config.PetSpeedRating: speed / the fastest Rainbow
+  pet's speed, so Rainbow Kraken King = 100) with a bar, and "Coin multiplier x1.NN"
+  (Config.PetCoinMult); the header shows the equipped pets' total ("Coins x1.34"). Coin bonuses
+  were trimmed at the top: Rubber Duck x1.04 ... Kraken King x1.38 (Rainbow x1.67). Three starter
+  ducks give x1.12, five Rainbow Krakens x4.3 (was x6.25, more than the paid x2 Coins pass).
 
 ## 7. Balance knobs (all in Config)
 

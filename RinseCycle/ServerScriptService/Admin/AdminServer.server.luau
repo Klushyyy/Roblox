@@ -4344,7 +4344,7 @@ sendPetList = function(admin, target)
 				table.insert(rows, {
 					Id = pet.Uid,
 					Line1 = PET_TIER_NAMES[tier] .. def.Name .. (if equipped[pet.Uid] then "  (equipped)" else ""),
-					Line2 = def.Rarity .. "  ·  Power " .. tostring(Config.PetPower(pet.Id, tier)),
+					Line2 = def.Rarity .. "  ·  Speed " .. tostring(Config.PetSpeedRating(pet.Id, tier)) .. "/100",
 				})
 			end
 		end

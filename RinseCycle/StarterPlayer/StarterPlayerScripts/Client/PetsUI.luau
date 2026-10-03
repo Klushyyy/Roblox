@@ -71,9 +71,13 @@ local function isEquipped(meta: Types.MetaState, uid: string): boolean
 	return table.find(meta.Equipped, uid) ~= nil
 end
 
--- Pets show one number, Power (Config.PetPower): bigger cleans faster, carries more, earns more.
-local function powerText(id: string, tier: number?): string
-	return "Power " .. Config.PetPower(id, tier)
+-- Pets show two numbers: cleaning speed out of 100 (100 = the best pet in the game) and the coin
+-- multiplier they add while equipped.
+local function speedText(id: string, tier: number?): string
+	return Config.PetSpeedRating(id, tier) .. "/100"
+end
+local function coinText(mult: number): string
+	return string.format("x%.2f", mult)
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -96,6 +100,7 @@ local detailViewport: ViewportFrame
 local detailName: TextLabel
 local detailRarity: TextLabel
 local detailPower: TextLabel
+local speedFill: Frame
 local detailCoin: TextLabel
 local equipButton: TextButton
 local deleteConfirmFrame: Frame
@@ -305,7 +310,7 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 	})
 	paintTierText(nameLabel, tier)
 	UIKit.Label({
-		Text = entry.Def.Rarity .. "  •  " .. Config.PetPower(entry.Id, entry.Tier),
+		Text = entry.Def.Rarity .. "  •  " .. speedText(entry.Id, entry.Tier),
 		Size = UDim2.new(1, -10, 0, 16),
 		Position = UDim2.new(0.5, 0, 0, 118),
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -384,8 +389,10 @@ local function refreshDetailPanel(meta: Types.MetaState?)
 	local tierDef = Config.PetTier(entry.Tier)
 	detailRarity.Text = if tierDef.Name ~= "" then tierDef.Name .. "  •  " .. entry.Def.Rarity else entry.Def.Rarity
 	detailRarity.TextColor3 = UIKit.RarityColor(entry.Def.Rarity)
-	detailPower.Text = powerText(entry.Id, entry.Tier)
-	detailCoin.Text = "Higher = cleans faster, earns more"
+	local rating = Config.PetSpeedRating(entry.Id, entry.Tier)
+	detailPower.Text = "Cleaning speed  " .. rating .. "/100"
+	speedFill.Size = UDim2.fromScale(rating / 100, 1)
+	detailCoin.Text = "Coin multiplier  " .. coinText(Config.PetCoinMult(entry.Id, entry.Tier))
 
 	local equipped = isEquipped(meta :: Types.MetaState, entry.Uid)
 	equipButton.Text = if equipped then "Unequip" else "Equip"
@@ -592,7 +599,7 @@ function PetsUI._refreshGrid()
 		buildPetCard(gridScroll, entry, isEquipped(meta, entry.Uid), selectPet, copies[entry.Id .. "#" .. (entry.Tier or 1)])
 	end
 	local equippedCount = math.min(#meta.Equipped, meta.PetSlots)
-	equippedLabel.Text = string.format("Equipped %d/%d", equippedCount, meta.PetSlots)
+	equippedLabel.Text = string.format("Equipped %d/%d   Coins %s", equippedCount, meta.PetSlots, coinText(1 + Config.PetCoinBonus(meta.Pets, meta.Equipped)))
 	countLabel.Text = string.format("%d/%d", #meta.Pets, meta.MaxPets)
 	refreshDetailPanel(meta)
 end
@@ -615,7 +622,7 @@ local function buildPetsWindow()
 
 	equippedLabel = UIKit.Label({
 		Text = "Equipped 0/0",
-		Size = UDim2.new(0.3, 0, 1, 0),
+		Size = UDim2.new(0.45, 0, 1, 0),
 		TextSize = 22,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = header,
@@ -623,7 +630,7 @@ local function buildPetsWindow()
 	countLabel = UIKit.Label({
 		Text = "0/0",
 		Size = UDim2.new(0.12, 0, 1, 0),
-		Position = UDim2.new(0.3, 0, 0, 0),
+		Position = UDim2.new(0.45, 0, 0, 0),
 		TextSize = 22,
 		TextColor3 = C.TextDim,
 		Parent = header,
@@ -810,19 +817,34 @@ local function buildPetsWindow()
 	})
 	detailPower = UIKit.Label({
 		Text = "",
-		Size = UDim2.new(1, -24, 0, 40),
-		Position = UDim2.new(0.5, 0, 0, 212),
+		Size = UDim2.new(1, -24, 0, 22),
+		Position = UDim2.new(0.5, 0, 0, 208),
 		AnchorPoint = Vector2.new(0.5, 0),
-		TextSize = 16,
-		TextWrapped = true,
-		TextColor3 = C.TextDim,
+		TextSize = 17,
 		Parent = detailFilled,
 	})
+	-- Cleaning speed as a bar: full = the best pet in the game.
+	local speedBar = Instance.new("Frame")
+	speedBar.Name = "SpeedBar"
+	speedBar.AnchorPoint = Vector2.new(0.5, 0)
+	speedBar.Position = UDim2.new(0.5, 0, 0, 234)
+	speedBar.Size = UDim2.new(1, -40, 0, 12)
+	speedBar.BackgroundColor3 = C.PanelLight
+	speedBar.BorderSizePixel = 0
+	UIKit.Corner(speedBar, 6)
+	speedBar.Parent = detailFilled
+	speedFill = Instance.new("Frame")
+	speedFill.Name = "Fill"
+	speedFill.Size = UDim2.fromScale(0, 1)
+	speedFill.BackgroundColor3 = C.Primary
+	speedFill.BorderSizePixel = 0
+	UIKit.Corner(speedFill, 6)
+	speedFill.Parent = speedBar
 	detailCoin = UIKit.Label({
 		Text = "",
 		TextScaled = true, -- always fits the panel
 		Size = UDim2.new(1, -24, 0, 22),
-		Position = UDim2.new(0.5, 0, 0, 252),
+		Position = UDim2.new(0.5, 0, 0, 256),
 		AnchorPoint = Vector2.new(0.5, 0),
 		TextSize = 16,
 		TextColor3 = C.Coin,
@@ -937,7 +959,7 @@ local function buildOddsRow(parent: Instance, entry, layoutOrder: number)
 		Parent = row,
 	})
 	UIKit.Label({
-		Text = def.Rarity .. "   " .. powerText(entry.Pet),
+		Text = def.Rarity .. "   Speed " .. speedText(entry.Pet) .. "   Coins " .. coinText(Config.PetCoinMult(entry.Pet)),
 		Size = UDim2.new(1, -170, 0, 18),
 		Position = UDim2.new(0, 66, 0, 32),
 		TextSize = 14,
