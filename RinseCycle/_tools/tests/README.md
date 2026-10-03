@@ -37,4 +37,3 @@ Paths assume the repo lives at /home/user/Roblox. The mock is permissive: a pass
 Also run `python3 _tools/check_locals.py` before sending scripts: Roblox refuses a script with more
 than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch that.
   - `scen_staff`: staff tiers (Moderator / Admin / Developer / clear), their tags, the staff list, and staff can't target higher ranks.
-  - `scen_playerlist`: the game's player list hides invisible admins (staff see them marked), and :serverlist.

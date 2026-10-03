@@ -1295,10 +1295,10 @@ walls instead of clipping through. All gameplay queries use Include filters.
   anyone still without a character (and logs "[Rinse Cycle] spawning X (...)" so the cause shows).
 - Chat bubbles sit 2.4 studs higher (BubbleChatConfiguration.VerticalStudsOffset), above the tag.
 
-## 6v. Own player list, all-servers list, stealth joins (v1.6.5)
-- PlayerListUI replaces Roblox's player list (switched off): top right, Tab / tap the header to
-  fold. Rows: staff / VIP tag, name, Bubbles, Dishes, Rebirths. Players with AdminInvis are left
-  out (staff see them greyed, "(hidden)"); the Trade and Gift pickers leave them out too.
+## 6v. All-servers list, stealth joins (v1.6.5)
+- Roblox's own Tab player list is used (a custom one that could leave invisible admins out was
+  tried and taken back out), so an invisible admin does show on it. The Trade and Gift pickers
+  leave players with AdminInvis out.
 - :serverlist ("All servers"): each server writes its players to the "RinseCycle_ServerList"
   MemoryStore sorted map every 30 s (90 s expiry). The admin sees everyone everywhere with Join
   (and Bring for ranks that have it), plus "Busiest server".

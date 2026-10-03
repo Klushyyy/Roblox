@@ -568,8 +568,6 @@ function HUD.Init()
 	--------------------------------------------------------------------------------------------------
 	-- Layout: keeps everything inside the safe area and clear of the touch thumbstick/jump zones.
 	--------------------------------------------------------------------------------------------------
-	-- The player list (PlayerListUI) in the top-right corner: the right column moves down below it.
-	local listPanel: GuiObject? = nil
 	local function relayoutHud()
 		local canvas = UIKit.CanvasSize()
 		local inset = UIKit.TopInset()
@@ -588,14 +586,6 @@ function HUD.Init()
 		local centerY = canvas.Y / 2
 		if touch then
 			centerY = math.min(centerY, canvas.Y - 300 - colH / 2)
-		end
-		-- Below the player list when it's open (as far as the screen / jump button allows; the list
-		-- scrolls if it's still too long). Its Position / Size are in canvas units.
-		local panelFrame = listPanel
-		if panelFrame and panelFrame.Visible and panelFrame.Parent then
-			local listBottom = panelFrame.Position.Y.Offset + panelFrame.Size.Y.Offset
-			local lowest = if touch then canvas.Y - 300 - colH / 2 else canvas.Y - 16 - colH / 2
-			centerY = math.max(centerY, math.min(listBottom + 12 + colH / 2, lowest))
 		end
 		centerY = math.max(centerY, inset + 80 + colH / 2)
 		-- The side columns only keep half of the notch / rounded-corner inset: close to the edges on
@@ -634,17 +624,6 @@ function HUD.Init()
 	rightColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 	leftColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 	moneyBlock:GetPropertyChangedSignal("Visible"):Connect(relayoutHud)
-	task.spawn(function()
-		local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
-		local listGui = playerGui:WaitForChild("PlayerList", 30)
-		local panel = listGui and listGui:FindFirstChild("Panel", true)
-		if panel and panel:IsA("GuiObject") then
-			listPanel = panel
-			panel:GetPropertyChangedSignal("Size"):Connect(relayoutHud)
-			panel:GetPropertyChangedSignal("Visible"):Connect(relayoutHud)
-			relayoutHud()
-		end
-	end)
 
 	local function relayoutTopBar()
 		relayoutHud()
@@ -1186,9 +1165,9 @@ function HUD.Init()
 			lastHotbarKey = key
 			refreshHotbar()
 		end
-		-- Roblox's own player list stays off: PlayerListUI replaces it (it can leave hidden admins out).
+		-- In a run Tab opens the Upgrade Book, so Roblox's player list (also on Tab) steps aside.
 		pcall(function()
-			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not inRun)
 		end)
 
 		if playing and run then

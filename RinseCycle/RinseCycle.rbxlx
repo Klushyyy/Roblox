@@ -21920,7 +21920,6 @@ local LevelNPCs = require(Client:WaitForChild("LevelNPCs"))
 local ChatNames = require(Client:WaitForChild("ChatNames"))
 local Celebrate = require(Client:WaitForChild("Celebrate"))
 local TradeUI = require(Client:WaitForChild("TradeUI"))
-local PlayerListUI = require(Client:WaitForChild("PlayerListUI"))
 
 local function step(name: string, fn: () -&gt; ())
 	local ok, err = xpcall(fn, debug.traceback)
@@ -21956,8 +21955,7 @@ step("WaterFX", WaterFX.Init)
 step("LevelNPCs", LevelNPCs.Init)
 step("ChatNames", ChatNames.Init)
 step("Celebrate", Celebrate.Init)
-step("TradeUI", TradeUI.Init)
-step("PlayerListUI", PlayerListUI.Init)</ProtectedString></Properties></Item>
+step("TradeUI", TradeUI.Init)</ProtectedString></Properties></Item>
 <Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
 -- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
 -- Changed instead of each hooking the remotes themselves.
@@ -24292,8 +24290,6 @@ function HUD.Init()
 	--------------------------------------------------------------------------------------------------
 	-- Layout: keeps everything inside the safe area and clear of the touch thumbstick/jump zones.
 	--------------------------------------------------------------------------------------------------
-	-- The player list (PlayerListUI) in the top-right corner: the right column moves down below it.
-	local listPanel: GuiObject? = nil
 	local function relayoutHud()
 		local canvas = UIKit.CanvasSize()
 		local inset = UIKit.TopInset()
@@ -24312,14 +24308,6 @@ function HUD.Init()
 		local centerY = canvas.Y / 2
 		if touch then
 			centerY = math.min(centerY, canvas.Y - 300 - colH / 2)
-		end
-		-- Below the player list when it's open (as far as the screen / jump button allows; the list
-		-- scrolls if it's still too long). Its Position / Size are in canvas units.
-		local panelFrame = listPanel
-		if panelFrame and panelFrame.Visible and panelFrame.Parent then
-			local listBottom = panelFrame.Position.Y.Offset + panelFrame.Size.Y.Offset
-			local lowest = if touch then canvas.Y - 300 - colH / 2 else canvas.Y - 16 - colH / 2
-			centerY = math.max(centerY, math.min(listBottom + 12 + colH / 2, lowest))
 		end
 		centerY = math.max(centerY, inset + 80 + colH / 2)
 		-- The side columns only keep half of the notch / rounded-corner inset: close to the edges on
@@ -24358,17 +24346,6 @@ function HUD.Init()
 	rightColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 	leftColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 	moneyBlock:GetPropertyChangedSignal("Visible"):Connect(relayoutHud)
-	task.spawn(function()
-		local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
-		local listGui = playerGui:WaitForChild("PlayerList", 30)
-		local panel = listGui and listGui:FindFirstChild("Panel", true)
-		if panel and panel:IsA("GuiObject") then
-			listPanel = panel
-			panel:GetPropertyChangedSignal("Size"):Connect(relayoutHud)
-			panel:GetPropertyChangedSignal("Visible"):Connect(relayoutHud)
-			relayoutHud()
-		end
-	end)
 
 	local function relayoutTopBar()
 		relayoutHud()
@@ -24910,9 +24887,9 @@ function HUD.Init()
 			lastHotbarKey = key
 			refreshHotbar()
 		end
-		-- Roblox's own player list stays off: PlayerListUI replaces it (it can leave hidden admins out).
+		-- In a run Tab opens the Upgrade Book, so Roblox's player list (also on Tab) steps aside.
 		pcall(function()
-			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not inRun)
 		end)
 
 		if playing and run then
@@ -30679,293 +30656,7 @@ function PetsUI.Init()
 end
 
 return PetsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000036"><Properties><string name="Name">PlayerListUI</string><ProtectedString name="Source">--[[
-	PlayerListUI - the game's own player list (top right, Tab or tap the header to fold it).
-
-	Roblox's built-in list can't hide one player, so it's switched off (HUD) and this one is used
-	instead. Anyone the admin :invis command made invisible (player attribute AdminInvis) isn't
-	listed at all; staff still see them, greyed out and marked (hidden). Each row: the staff / VIP
-	tag, the display name, and their Bubbles, Dishes and Rebirths (leaderstats).
-
-	Placement: the top-right corner, like Roblox's own list. The HUD moves Shop / Pets / Ranks
-	down below it; more players than fit scroll. In a run the list steps aside (Tab opens the
-	Upgrade Book there).
-]]
-
-local Players = game:GetService("Players")
-local StarterGui = game:GetService("StarterGui")
-local UserInputService = game:GetService("UserInputService")
-
-local Client = script.Parent
-local UIKit = require(Client:WaitForChild("UIKit"))
-local ClientState = require(Client:WaitForChild("ClientState"))
-
-local PlayerListUI = {}
-
-local Colors = UIKit.Theme.Colors
-local LocalPlayer = Players.LocalPlayer
-
--- Wide enough that every name and number reads in full (phones draw the UI smaller, so a bit
--- bigger there).
-local TOUCH = UIKit.IsTouch()
-local WIDTH = if TOUCH then 360 else 340
-local HEADER = if TOUCH then 38 else 30
-local TITLES = if TOUCH then 24 else 20
-local ROW = if TOUCH then 34 else 26
-local GAP = 2
-local STATS = { "Bubbles", "Dishes", "Rebirths" }
-local NAME_SHARE = 0.46 -- of the row's width; the three numbers share the rest
-local STAT_SHARE = (1 - NAME_SHARE) / #STATS
-local TAG_COLORS = {
-	MOD = Color3.fromRGB(80, 220, 100),
-	ADMIN = Color3.fromRGB(255, 75, 75),
-	DEV = Color3.fromRGB(80, 160, 255),
-	OWNER = Color3.fromRGB(185, 100, 255),
-	VIP = Color3.fromRGB(255, 210, 74),
-}
-
-local initialized = false
-local open = true
-local panel: Frame
-local list: ScrollingFrame
-local header: TextButton
-local rightColumn: GuiObject? = nil
-
-local function isStaffViewer(): boolean
-	return type(LocalPlayer:GetAttribute("StaffTag")) == "string"
-end
-
-local function inRun(): boolean
-	return ClientState.Run ~= nil
-end
-
-local function statText(player: Player, name: string): string
-	local stats = player:FindFirstChild("leaderstats")
-	local value = stats and stats:FindFirstChild(name)
-	if value and (value:IsA("IntValue") or value:IsA("NumberValue")) then
-		return UIKit.Short(value.Value)
-	end
-	return "-"
-end
-
-local function tagOf(player: Player): string?
-	local staff = player:GetAttribute("StaffTag")
-	if type(staff) == "string" and TAG_COLORS[staff] then
-		return staff
-	end
-	if player:GetAttribute("VIP") == true then
-		return "VIP"
-	end
-	return nil
-end
-
-local function cell(parent: Instance, text: string, x: number, w: number, color: Color3?, align: Enum.TextXAlignment?): TextLabel
-	return UIKit.Label({
-		Text = text,
-		TextSize = if TOUCH then 20 else 15,
-		TextScaled = true, -- shrinks to fit (never cut off)
-		RichText = true,
-		TextColor3 = color or Colors.Text,
-		TextXAlignment = align or Enum.TextXAlignment.Center,
-		Position = UDim2.new(x, 4, 0, 3),
-		Size = UDim2.new(w, -8, 1, -6),
-		Parent = parent,
-	})
-end
-
--- Where the panel goes: the top-right corner, like Roblox's own list. The HUD moves its right-hand
--- buttons (Shop / Pets / Ranks) down below it; the list may use the room down to where those
--- buttons can go lowest (on phones they stay above the jump button), and scrolls past that.
-local function place(height: number)
-	local canvas = UIKit.CanvasSize()
-	local safe = UIKit.SafeInsets()
-	local top = UIKit.TopInset() + 4
-	local right = 8 + math.floor(safe.Right * 0.5)
-	local room = canvas.Y * (if TOUCH then 0.45 else 0.5) - top
-	local column = rightColumn
-	if column and column.Parent and column.AbsoluteSize.Y &gt; 0 then
-		local colH = column.AbsoluteSize.Y / UIKit.GetScale()
-		local lowestColumnTop = if TOUCH then canvas.Y - 300 - colH else canvas.Y - 16 - colH
-		room = math.min(room, lowestColumnTop - 12 - top)
-	end
-	panel.Position = UDim2.new(1, -right, 0, top)
-	panel.Size = UDim2.fromOffset(WIDTH, math.max(HEADER, math.min(height, room)))
-	panel.Visible = not inRun()
-end
-
-local function redraw()
-	if not panel then
-		return
-	end
-	for _, child in list:GetChildren() do
-		if child:IsA("GuiObject") then
-			child:Destroy()
-		end
-	end
-	local staffView = isStaffViewer()
-	local shown = {}
-	for _, player in Players:GetPlayers() do
-		local hidden = player:GetAttribute("AdminInvis") == true
-		if not hidden or staffView or player == LocalPlayer then
-			table.insert(shown, player)
-		end
-	end
-	table.sort(shown, function(a, b)
-		if a == LocalPlayer then
-			return true
-		elseif b == LocalPlayer then
-			return false
-		end
-		return a.DisplayName:lower() &lt; b.DisplayName:lower()
-	end)
-	header.Text = string.format("  Players (%d)  %s", #shown, if open then "▲" else "▼")
-	list.Visible = open
-	if not open then
-		place(HEADER)
-		return
-	end
-	local titles = Instance.new("Frame")
-	titles.BackgroundTransparency = 1
-	titles.Size = UDim2.new(1, 0, 0, TITLES)
-	titles.LayoutOrder = 0
-	titles.Parent = list
-	for c, stat in STATS do
-		cell(titles, stat, NAME_SHARE + (c - 1) * STAT_SHARE, STAT_SHARE, Colors.TextDim)
-	end
-	for i, player in shown do
-		local row = Instance.new("Frame")
-		row.Size = UDim2.new(1, 0, 0, ROW)
-		row.BackgroundColor3 = if player == LocalPlayer then Colors.Primary else Colors.PanelLight
-		row.BackgroundTransparency = if player == LocalPlayer then 0.5 else 0.7
-		row.BorderSizePixel = 0
-		row.LayoutOrder = i
-		UIKit.Corner(row, 6)
-		row.Parent = list
-		local hidden = player:GetAttribute("AdminInvis") == true
-		local tag = tagOf(player)
-		local name = (player.DisplayName:gsub("&amp;", "&amp;amp;"):gsub("&lt;", "&amp;lt;"):gsub("&gt;", "&amp;gt;"))
-		local text = if tag then string.format('&lt;font color="#%s"&gt;[%s]&lt;/font&gt; %s', TAG_COLORS[tag]:ToHex(), tag, name) else name
-		if hidden then
-			text ..= ' &lt;font color="#9AA4B2"&gt;(hidden)&lt;/font&gt;'
-		end
-		local nameLabel = cell(row, text, 0, NAME_SHARE, if hidden then Colors.TextDim else Colors.Text, Enum.TextXAlignment.Left)
-		nameLabel.Position = UDim2.new(0, 6, 0, 3)
-		nameLabel.TextTransparency = if hidden then 0.3 else 0
-		for c, stat in STATS do
-			cell(row, statText(player, stat), NAME_SHARE + (c - 1) * STAT_SHARE, STAT_SHARE)
-		end
-	end
-	local contentHeight = TITLES + GAP + #shown * (ROW + GAP)
-	list.CanvasSize = UDim2.fromOffset(0, contentHeight)
-	place(HEADER + 4 + contentHeight + 6)
-end
-
-local function setOpen(value: boolean)
-	open = value
-	redraw()
-end
-
-function PlayerListUI.Init()
-	if initialized then
-		return
-	end
-	initialized = true
-	-- Roblox's own list can't leave anyone out, so ours replaces it.
-	task.spawn(function()
-		for _ = 1, 10 do
-			local ok = pcall(function()
-				StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
-			end)
-			if ok then
-				break
-			end
-			task.wait(1)
-		end
-	end)
-
-	local _gui, root = UIKit.CreateScreen("PlayerList", 4)
-	panel = Instance.new("Frame")
-	panel.Name = "Panel"
-	panel.AnchorPoint = Vector2.new(1, 0)
-	panel.BackgroundColor3 = Colors.PanelDark
-	panel.BackgroundTransparency = 0.2
-	panel.BorderSizePixel = 0
-	panel.Size = UDim2.fromOffset(WIDTH, HEADER)
-	panel.ClipsDescendants = true
-	UIKit.Corner(panel, 10)
-	panel.Parent = root
-
-	header = Instance.new("TextButton")
-	header.Name = "Header"
-	header.BackgroundTransparency = 1
-	header.Size = UDim2.new(1, 0, 0, HEADER)
-	header.Font = UIKit.Theme.Fonts.Title
-	header.TextSize = if TOUCH then 20 else 16
-	header.TextColor3 = Colors.Text
-	header.TextXAlignment = Enum.TextXAlignment.Left
-	header.Text = "  Players"
-	header.Parent = panel
-	header.MouseButton1Click:Connect(function()
-		setOpen(not open)
-	end)
-
-	list = Instance.new("ScrollingFrame")
-	list.Name = "List"
-	list.BackgroundTransparency = 1
-	list.BorderSizePixel = 0
-	list.Position = UDim2.fromOffset(5, HEADER + 2)
-	list.Size = UDim2.new(1, -10, 1, -(HEADER + 6))
-	list.ScrollBarThickness = 4
-	list.CanvasSize = UDim2.new()
-	list.Parent = panel
-	local layout = Instance.new("UIListLayout")
-	layout.Padding = UDim.new(0, GAP)
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = list
-
-	-- Open on computers, folded up on phones and tablets (tap the header to open).
-	open = not UIKit.IsTouch()
-
-	-- The HUD's right-hand buttons, so the list never reaches down over them.
-	task.spawn(function()
-		local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-		local hud = playerGui:WaitForChild("HUD", 30)
-		local column = hud and hud:FindFirstChild("RightColumn", true)
-		if column and column:IsA("GuiObject") then
-			rightColumn = column
-			column:GetPropertyChangedSignal("AbsoluteSize"):Connect(redraw)
-		end
-		redraw()
-	end)
-
-	ClientState.Changed:Connect(function(kind)
-		if kind == "Run" then
-			redraw()
-		end
-	end)
-	UserInputService.InputBegan:Connect(function(input)
-		-- (not "processed": Tab can arrive marked as used by Roblox; only skip it while typing)
-		if input.KeyCode ~= Enum.KeyCode.Tab or inRun() or UserInputService:GetFocusedTextBox() then
-			return
-		end
-		setOpen(not open)
-	end)
-
-	-- Refresh: players coming and going, tags / hidden changing, and the numbers once a second.
-	Players.PlayerAdded:Connect(redraw)
-	Players.PlayerRemoving:Connect(function()
-		task.defer(redraw)
-	end)
-	task.spawn(function()
-		while true do
-			redraw()
-			task.wait(1)
-		end
-	end)
-end
-
-return PlayerListUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000037"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000036"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
 	RanksUI - the "Ranks" window (Rank Shrine in the lobby, the HUD's Ranks button, R / gamepad RB).
 
 	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
@@ -31735,7 +31426,7 @@ function RanksUI.Init()
 end
 
 return RanksUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000038"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000037"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
 	RebirthUI - the "Rebirth" window (the Rebirth Fountain in the lobby).
 
 	The endgame loop: once you've cleaned the last dishwasher, trade your Bubbles, unlocked
@@ -31888,7 +31579,7 @@ function RebirthUI.Init()
 end
 
 return RebirthUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000039"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000038"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
 	RewardsUI - two small windows opened from the buttons on the left of the lobby HUD.
 
 	  * "Codes" (🎟️): type a code (Config.Codes) and redeem it. "Look out for codes in the game's
@@ -32252,7 +31943,7 @@ function RewardsUI.Init()
 end
 
 return RewardsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003A"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000039"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
 	ShopUI - the lobby "Shop" window: Perks (bought with Bubbles, permanent) and Robux (game passes).
 	Opened from the Soap Shop ProximityPrompt (routed by Effects via OpenWindow="Shop"), the HUD [🛒 Shop]
 	button, or the G key - all outside our scope, they just call UIKit.OpenWindow("Shop").
@@ -32965,7 +32656,7 @@ function ShopUI.Init()
 end
 
 return ShopUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003B"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
+<Item class="ModuleScript" referent="RBX0000003A"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
 -- Aim comes from the mouse on PC, or the screen centre (with a crosshair) on touch/gamepad, cast
@@ -33889,7 +33580,7 @@ function SprayController.Init()
 end
 
 return SprayController</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003C"><Properties><string name="Name">TradeUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003B"><Properties><string name="Name">TradeUI</string><ProtectedString name="Source">--[[
 	TradeUI - pet trading (lobby only; TradeService on the server checks everything).
 
 	  * The 🤝 Trade button (HUD) opens the Trade window: everyone in the server with a Request
@@ -34429,7 +34120,7 @@ function TradeUI.Init()
 end
 
 return TradeUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003D"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003C"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -36941,7 +36632,7 @@ function UIKit.Init()
 end
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003E"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003D"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button
@@ -37417,7 +37108,7 @@ function UpgradesUI.Init()
 end
 
 return UpgradesUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003F"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003E"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
 	WaterFX - the water coming out of your own hose and pressure washer, built from real parts so
 	it looks solid from every angle (a camera-facing Beam flattens to nothing when you look straight
 	down it, which is exactly the first-person view).
@@ -37657,7 +37348,7 @@ end
 
 return WaterFX</ProtectedString></Properties></Item>
 </Item>
-<Item class="LocalScript" referent="RBX00000040"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
+<Item class="LocalScript" referent="RBX0000003F"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
 	AdminClient - Rinse Cycle's admin panel and the admin effects every player can see.
 
 	Everyone:
@@ -39544,5 +39235,5 @@ task.spawn(function()
 end)</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="TextChatService" referent="RBX00000041"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
+<Item class="TextChatService" referent="RBX00000040"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
 </roblox>
