@@ -409,9 +409,15 @@ end
 ----------------------------------------------------------------------------------------------------
 
 local function render()
+	-- Coins only exist inside a dishwasher, so the Coins tab only shows there.
+	local inRun = ClientState.Run ~= nil
+	if activeTab == "Coins" and not inRun then
+		activeTab = "Perks"
+	end
 	for _, tab in TABS do
 		local button = tabButtons[tab.Key]
 		if button then
+			button.Visible = tab.Key ~= "Coins" or inRun
 			UIKit.SetButtonColor(button, if activeTab == tab.Key then tab.Color else Colors.PanelLight)
 		end
 	end

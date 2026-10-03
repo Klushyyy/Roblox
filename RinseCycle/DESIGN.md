@@ -1391,6 +1391,8 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - v1.8.0: tier effects toned so the two read differently: no PointLight (it bleached pets and floor
   yellow), a softer halo (LightEmission 0.35, size 3.4-4.2), Golden = 18 gold sparkles/s, Rainbow =
   six single-colour emitters (red, orange, yellow, green, blue, purple; 4/s each).
+- v1.8.1: the Shop's Coins tab only shows in a dishwasher (coins only exist there); in the lobby
+  it's hidden and a request for it opens Perks.
 
 ## 7. Balance knobs (all in Config)
 
