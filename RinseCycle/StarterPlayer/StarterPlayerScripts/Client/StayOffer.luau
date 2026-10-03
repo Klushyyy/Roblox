@@ -66,11 +66,13 @@ local function pulse(gui: GuiObject, amount: number, period: number)
 	tween:Play()
 end
 
+local BADGE_WIDTH = 170 -- fits the longest, "x2 Cleaning 14:59"
+
 local function badge(parent: GuiObject, text: string, color: Color3, order: number, width: number?): (Frame, TextLabel)
 	local chip = Instance.new("Frame")
 	chip.Name = "Badge"
 	chip.LayoutOrder = order
-	chip.Size = UDim2.fromOffset(width or (#text * 10 + 20), 26)
+	chip.Size = UDim2.fromOffset(width or BADGE_WIDTH, 26) -- all one width, so they line up
 	chip.BackgroundColor3 = color
 	chip.BorderSizePixel = 0
 	chip.Visible = false
@@ -79,7 +81,9 @@ local function badge(parent: GuiObject, text: string, color: Color3, order: numb
 	local label = UIKit.Label({
 		Text = text,
 		TextSize = 16,
-		Size = UDim2.fromScale(1, 1),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Position = UDim2.fromOffset(10, 0),
+		Size = UDim2.new(1, -14, 1, 0),
 		Parent = chip,
 	})
 	chip.Parent = parent
@@ -184,7 +188,7 @@ function StayOffer.Init()
 			row.Position = UDim2.fromOffset(16 + math.floor(safe.Left * 0.5), math.floor(UIKit.TopInset() + 90))
 		end
 	end
-	local boostChip, boostLabel = badge(row, "", Colors.Good, 0, 170)
+	local boostChip, boostLabel = badge(row, "", Colors.Good, 0)
 	local passChips = {}
 	for i, def in PASS_BADGES do
 		passChips[def.Key] = badge(row, def.Text, def.Color, i)

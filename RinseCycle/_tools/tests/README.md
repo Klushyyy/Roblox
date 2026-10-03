@@ -40,3 +40,4 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
     the daily streak (24 h continues, over 48 h restarts) and the boost/pass badges.
   - `scen_boards`: the lobby boards in PlayerGui (scrollable), each "you" row, your own row lit up,
     and the admin viewer answering from the cache.
+  - `scen_back`: sub-menu Back buttons (PassBuy -> Shop, Gems shop -> Ranks) and Roll with too few gems.

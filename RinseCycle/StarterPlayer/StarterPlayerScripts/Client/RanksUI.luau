@@ -95,7 +95,7 @@ local function renderGems()
 	local gems = if meta then meta.Gems or 0 else 0
 	local luck = meta ~= nil and meta.Passes.DoubleLuck == true
 	gemsLabel.Text = string.format("You have %s Gems%s", UIKit.Commas(gems), if luck then "   •   x2 Luck on" else "")
-	UIKit.SetDisabled(rollButton, rolling or gems < Config.RankRoll.Cost)
+	UIKit.SetDisabled(rollButton, rolling) -- short of gems, Roll opens the Gems shop instead
 	if luckButton then
 		local pass = Config.GetPass("DoubleLuck")
 		luckButton.Visible = not luck
@@ -544,9 +544,7 @@ local function finishPopup(ok: boolean)
 	local pp = ensurePopup()
 	pp.Insta.Visible = false
 	pp.Buttons.Visible = true
-	local meta = ClientState.Meta :: Types.MetaState?
-	local gems = if meta then meta.Gems or 0 else 0
-	UIKit.SetDisabled(pp.Again, gems < Config.RankRoll.Cost)
+	UIKit.SetDisabled(pp.Again, false) -- short of gems, it opens the Gems shop
 	if not ok then
 		pp.Title.Text = "Couldn't roll"
 		pp.Title.TextColor3 = Colors.Bad
@@ -556,6 +554,16 @@ end
 local queued = false -- an Insta Roll click that came in while the last answer was on its way
 
 local function roll_()
+	-- Not enough gems: straight to the Gems shop (its Back button returns here).
+	local metaNow = ClientState.Meta :: Types.MetaState?
+	if not rolling and (if metaNow then metaNow.Gems or 0 else 0) < Config.RankRoll.Cost then
+		if popupGui then
+			popupGui.Enabled = false
+		end
+		UIKit.Toast(string.format("You need %d Gems to roll. Get more here!", Config.RankRoll.Cost), "Info")
+		UIKit.OpenSubWindow("Shop", "Gems", "Ranks")
+		return
+	end
 	if rolling then
 		local meta = ClientState.Meta :: Types.MetaState?
 		if meta ~= nil and meta.Passes.InstaRoll == true then
@@ -696,21 +704,10 @@ function RanksUI.Init()
 		Parent = leftPanel,
 	})
 
-	UIKit.Button({
-		Text = "Get more Gems",
-		Size = UDim2.new(1, 0, 0, 42),
-		Position = UDim2.fromOffset(0, 326),
-		Color = Colors.Good,
-		TextSize = 22,
-		Parent = leftPanel,
-		OnClick = function()
-			UIKit.OpenWindow("Shop", "Gems")
-		end,
-	})
 	luckButton = UIKit.Button({
 		Text = "x2 Luck pass",
-		Size = UDim2.new(1, 0, 0, 40),
-		Position = UDim2.fromOffset(0, 374),
+		Size = UDim2.new(1, 0, 0, 46),
+		Position = UDim2.fromOffset(0, 330),
 		Color = Color3.fromRGB(90, 190, 110),
 		TextSize = 20,
 		Parent = leftPanel,
@@ -724,7 +721,7 @@ function RanksUI.Init()
 		TextColor3 = Colors.Warning,
 		TextWrapped = true,
 		TextScaled = true,
-		Position = UDim2.fromOffset(0, 418),
+		Position = UDim2.fromOffset(0, 386),
 		Size = UDim2.new(1, 0, 0, 38),
 		Parent = leftPanel,
 	})

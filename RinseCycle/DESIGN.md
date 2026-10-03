@@ -1345,6 +1345,20 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - Shop passes: an owned pass keeps the green R$ price button, with a small "Owned" above it. Its
   buy window shows a grey "Game Pass already owned" and "Gift it to a friend".
 
+## 6y. Back buttons, Roll to the Gems shop, a clearer pets window (v1.7.1)
+- UIKit.OpenSubWindow(name, arg, parent, parentArg): the window's X becomes a blue "<" Back, and
+  Back / Escape / B reopen the parent (UIKit.GoBack). Used for PassBuy (back to Shop > Passes) and
+  for the Gems shop opened from Ranks (back to Ranks).
+- Ranks: "Get more Gems" is gone. ROLL with too few gems opens the Gems shop (a sub-menu of
+  Ranks); "Roll again" in the popup does the same.
+- Pets: Golden and Rainbow pets are shown by their card (gold card and gold name; rainbow edge
+  that slowly turns and a rainbow name), not by a word in the name. The selected card gets an
+  aqua ring outside it, a tint and a SELECTED tag (a separate frame: a card shows only one
+  UIStroke). Equipped pets get an EQUIPPED tag. In merge mode picks get a green ring and a number,
+  pets you have 3+ of show "xN", and the panel previews the pet you'll make. "Auto-pick 3" picks
+  the first set of 3 identical pets, unequipped ones first.
+- Boost badges are all one width with left-aligned text, so they line up.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

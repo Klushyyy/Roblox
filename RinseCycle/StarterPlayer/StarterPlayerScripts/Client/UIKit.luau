@@ -1474,10 +1474,32 @@ end
 
 -- Closes any other open window first, then runs Open(arg) and plays the open animation.
 -- Opening the window that is already open just calls Open(arg) again (e.g. switching eggs).
+-- Sub-menus: a window opened with UIKit.OpenSubWindow remembers where it came from. Its X turns
+-- into a "<" Back button, and Back / Escape / B take you there instead of closing everything.
+local backOf: { [string]: { Name: string, Arg: any } } = {}
+
+local function setBackLook(name: string, isBack: boolean)
+	local rec = windowRecords[name]
+	local button = rec and rec.CloseButton
+	if button then
+		button.Text = if isBack then "<" else "X"
+		pcall(UIKit.SetButtonColor, button, if isBack then Colors.Primary else Colors.Bad)
+	end
+end
+
+-- Where the open window's Back goes (nil = it just closes).
+local function backTarget(): { Name: string, Arg: any }?
+	return if openName then backOf[openName] else nil
+end
+
 function UIKit.OpenWindow(name: string, arg: any?)
 	ensureInit()
 	if type(name) ~= "string" then
 		return
+	end
+	if backOf[name] then
+		backOf[name] = nil
+		setBackLook(name, false)
 	end
 	if not registry[name] and not windowRecords[name] then
 		warn("[UIKit] OpenWindow: no window called " .. name)
@@ -1525,6 +1547,25 @@ function UIKit.OpenWindow(name: string, arg: any?)
 end
 
 -- nil closes whatever is open; a name only closes that window if it is the open one.
+-- Opens `name` as a sub-menu of `parentName`: its Back button reopens the parent (with parentArg).
+function UIKit.OpenSubWindow(name: string, arg: any?, parentName: string, parentArg: any?)
+	UIKit.OpenWindow(name, arg)
+	if openName == name then
+		backOf[name] = { Name = parentName, Arg = parentArg }
+		setBackLook(name, true)
+	end
+end
+
+-- Back: to the parent of a sub-menu, otherwise just close.
+function UIKit.GoBack()
+	local target = backTarget()
+	if target then
+		UIKit.OpenWindow(target.Name, target.Arg)
+	else
+		UIKit.CloseWindow()
+	end
+end
+
 function UIKit.CloseWindow(name: string?)
 	if openName == nil or (name ~= nil and name ~= openName) then
 		return
@@ -1551,7 +1592,7 @@ end
 local function onCloseClicked(rec: WindowRecord)
 	local current = openName
 	if current and (current == rec.Name or current == rec.LinkedName or recordFor(current) == rec) then
-		UIKit.CloseWindow()
+		UIKit.GoBack()
 	else
 		-- Not driven by the window system (or already closing): just hide it.
 		clearSelectionInside(rec.Frame)
@@ -2477,7 +2518,7 @@ local function onInputBegan(input: InputObject, _processed: boolean)
 	if openName == nil or UserInputService:GetFocusedTextBox() ~= nil then
 		return
 	end
-	UIKit.CloseWindow()
+	UIKit.GoBack()
 end
 
 -- Safe to call more than once; every other entry point calls it lazily too.

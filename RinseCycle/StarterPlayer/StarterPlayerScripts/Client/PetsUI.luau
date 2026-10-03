@@ -111,6 +111,8 @@ local mergePanel: Frame
 local mergeInfo: TextLabel
 local mergeResult: TextLabel
 local mergeGo: TextButton
+local mergePreview: Frame
+local mergeViewport: ViewportFrame
 local detailsCard: Frame
 
 -- Eggs window
@@ -152,7 +154,113 @@ local function canMergeWith(first, pet): boolean
 	return first == nil or (first.Id == pet.Id and (first.Tier or 1) == tier)
 end
 
-local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick: (uid: string) -> ())
+-- Golden and Rainbow pets are shown by their look, not by a word in the name: a gold card, or a
+-- card with a slowly turning rainbow edge. These gradients turn every frame while visible.
+local RAINBOW = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 80, 80)),
+	ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255, 190, 60)),
+	ColorSequenceKeypoint.new(0.4, Color3.fromRGB(110, 230, 90)),
+	ColorSequenceKeypoint.new(0.6, Color3.fromRGB(70, 200, 255)),
+	ColorSequenceKeypoint.new(0.8, Color3.fromRGB(170, 110, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 80, 80)),
+})
+local GOLD_EDGE = Color3.fromRGB(255, 205, 60)
+local spinning: { [UIGradient]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+task.spawn(function()
+	while true do
+		local angle = (os.clock() * 90) % 360
+		for gradient in spinning do
+			if gradient.Parent then
+				gradient.Rotation = angle
+			else
+				spinning[gradient] = nil
+			end
+		end
+		task.wait(1 / 30)
+	end
+end)
+
+-- Paints a card (or any frame with a UIStroke) for a pet's tier.
+local function paintTier(card: Frame, stroke: UIStroke?, tier: number)
+	if tier == 2 then
+		card.BackgroundColor3 = Color3.fromRGB(150, 110, 25)
+		UIKit.Gradient(card, Color3.fromRGB(205, 160, 45), Color3.fromRGB(105, 72, 12))
+		if stroke then
+			stroke.Color = GOLD_EDGE
+			stroke.Thickness = 4
+		end
+	elseif tier >= 3 then
+		card.BackgroundColor3 = Color3.fromRGB(70, 45, 120)
+		UIKit.Gradient(card, Color3.fromRGB(110, 70, 170), Color3.fromRGB(45, 30, 90))
+		if stroke then
+			stroke.Color = Color3.new(1, 1, 1)
+			stroke.Thickness = 4
+			local g = Instance.new("UIGradient")
+			g.Color = RAINBOW
+			g.Parent = stroke
+			spinning[g] = true
+		end
+	end
+end
+
+-- A text label coloured like the tier (gold, or rainbow).
+local function paintTierText(label: TextLabel, tier: number)
+	local old = label:FindFirstChild("TierGradient")
+	if old then
+		old:Destroy()
+	end
+	label.TextColor3 = C.Text
+	if tier == 2 then
+		label.TextColor3 = GOLD_EDGE
+	elseif tier >= 3 then
+		local g = Instance.new("UIGradient")
+		g.Name = "TierGradient"
+		g.Color = RAINBOW
+		g.Parent = label
+	end
+end
+
+-- A bright ring just outside a card (selection / merge pick). Its own frame, because a card can
+-- only show one UIStroke and that one is the rarity / tier edge.
+local function outerRing(card: Frame, color: Color3)
+	local ring = Instance.new("Frame")
+	ring.Name = "OuterRing"
+	ring.BackgroundTransparency = 1
+	ring.Size = UDim2.new(1, 12, 1, 12)
+	ring.Position = UDim2.fromOffset(-6, -6)
+	ring.ZIndex = 6
+	UIKit.Corner(ring, 16)
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 4
+	stroke.Color = color
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Parent = ring
+	ring.Parent = card
+	local tint = Instance.new("Frame")
+	tint.Name = "Tint"
+	tint.Size = UDim2.fromScale(1, 1)
+	tint.BackgroundColor3 = color
+	tint.BackgroundTransparency = 0.78
+	tint.ZIndex = 4
+	UIKit.Corner(tint, 12)
+	tint.Parent = card
+end
+
+local function pill(card: Frame, text: string, color: Color3, pos: UDim2, anchor: Vector2, name: string)
+	local tag = Instance.new("Frame")
+	tag.Name = name
+	tag.AnchorPoint = anchor
+	tag.Position = pos
+	tag.Size = UDim2.fromOffset(#text * 8 + 14, 20)
+	tag.BackgroundColor3 = color
+	tag.ZIndex = 7
+	UIKit.Corner(tag, 10)
+	UIKit.Label({ Text = text, TextSize = 13, Size = UDim2.fromScale(1, 1), Parent = tag, ZIndex = 8 })
+	tag.Parent = card
+end
+
+local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick: (uid: string) -> (), copies: number?)
+	local tier = entry.Tier or 1
 	local card = UIKit.Card({
 		Size = UDim2.fromOffset(GRID_CELL.X, GRID_CELL.Y),
 		Color = C.PanelLight,
@@ -164,6 +272,7 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 		stroke.Thickness = 3
 		stroke.Transparency = 0
 	end
+	paintTier(card, stroke, tier)
 
 	-- Invisible hit surface. Not a UIKit.Button: we want the plain card look, not the chunky style.
 	local hit = Instance.new("TextButton")
@@ -171,7 +280,7 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 	hit.BackgroundTransparency = 1
 	hit.Text = ""
 	hit.Size = UDim2.fromScale(1, 1)
-	hit.ZIndex = 5
+	hit.ZIndex = 9
 	hit.AutoButtonColor = false
 	hit.Parent = card
 
@@ -184,9 +293,8 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 	})
 	viewport.ZIndex = 1
 
-	UIKit.Label({
-		Text = petTitle(entry.Id, entry.Tier),
-		TextColor3 = Config.PetTier(entry.Tier).Color or C.Text,
+	local nameLabel = UIKit.Label({
+		Text = entry.Def.Name,
 		Size = UDim2.new(1, -10, 0, 20),
 		Position = UDim2.new(0.5, 0, 0, 96),
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -195,60 +303,52 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 		Parent = card,
 		ZIndex = 2,
 	})
+	paintTierText(nameLabel, tier)
 	UIKit.Label({
 		Text = entry.Def.Rarity .. "  •  " .. Config.PetPower(entry.Id, entry.Tier),
 		Size = UDim2.new(1, -10, 0, 16),
 		Position = UDim2.new(0.5, 0, 0, 118),
 		AnchorPoint = Vector2.new(0.5, 0),
 		TextSize = 13,
-		TextColor3 = UIKit.RarityColor(entry.Def.Rarity),
+		TextColor3 = if tier > 1 then C.Text else UIKit.RarityColor(entry.Def.Rarity),
 		Parent = card,
 		ZIndex = 2,
 	})
 
 	if equipped then
-		local check = UIKit.Label({
-			Text = "✔",
-			Size = UDim2.fromOffset(26, 26),
-			Position = UDim2.new(1, -4, 0, 4),
-			AnchorPoint = Vector2.new(1, 0),
-			TextSize = 20,
-			TextColor3 = C.Good,
-			Parent = card,
-			ZIndex = 3,
-		})
-		check.Name = "EquippedCheck"
+		pill(card, "EQUIPPED", C.Good, UDim2.new(0.5, 0, 1, -6), Vector2.new(0.5, 1), "EquippedTag")
 	end
 
 	if mergeMode then
 		local pick = table.find(mergeSel, entry.Uid)
 		local blocked = not canMergeWith(petOf(mergeSel[1]), entry)
 		if pick then
-			local ring = UIKit.Stroke(card, C.Good, 4, 0)
-			ring.Name = "MergeRing"
-			local badge = UIKit.Label({
-				Text = tostring(pick),
-				Size = UDim2.fromOffset(28, 28),
-				Position = UDim2.fromOffset(4, 4),
-				TextSize = 20,
-				TextColor3 = C.Good,
-				Parent = card,
-				ZIndex = 4,
-			})
+			outerRing(card, C.Good)
+			local badge = Instance.new("Frame")
 			badge.Name = "MergeBadge"
+			badge.Size = UDim2.fromOffset(30, 30)
+			badge.Position = UDim2.fromOffset(4, 4)
+			badge.BackgroundColor3 = C.Good
+			badge.ZIndex = 7
+			UIKit.Corner(badge, 15)
+			UIKit.Label({ Text = tostring(pick), TextSize = 20, Size = UDim2.fromScale(1, 1), Parent = badge, ZIndex = 8 })
+			badge.Parent = card
 		elseif blocked then
 			local shade = Instance.new("Frame")
 			shade.Name = "Blocked"
 			shade.Size = UDim2.fromScale(1, 1)
 			shade.BackgroundColor3 = Color3.new(0, 0, 0)
-			shade.BackgroundTransparency = 0.5
-			shade.ZIndex = 4
+			shade.BackgroundTransparency = 0.45
+			shade.ZIndex = 5
 			UIKit.Corner(shade, 12)
 			shade.Parent = card
+		elseif (copies or 0) >= MERGE_COUNT and tier < #Config.PetTiers then
+			-- You have enough of this one to merge.
+			pill(card, "x" .. tostring(copies), Color3.fromRGB(170, 110, 255), UDim2.fromOffset(4, 4), Vector2.new(0, 0), "CopiesTag")
 		end
 	elseif selectedUid == entry.Uid then
-		local ring = UIKit.Stroke(card, C.Text, 3, 0.35)
-		ring.Name = "SelectRing"
+		outerRing(card, C.Primary)
+		pill(card, "SELECTED", C.Primary, UDim2.new(1, -4, 0, 4), Vector2.new(1, 0), "SelectedTag")
 	end
 
 	hit.Activated:Connect(function()
@@ -279,8 +379,10 @@ local function refreshDetailPanel(meta: Types.MetaState?)
 	deleteConfirmFrame.Visible = false
 
 	UIKit.SetViewportModel(detailViewport, PetModels.Build(entry.Id, entry.Tier), true)
-	detailName.Text = petTitle(entry.Id, entry.Tier)
-	detailRarity.Text = entry.Def.Rarity
+	detailName.Text = entry.Def.Name
+	paintTierText(detailName, entry.Tier or 1)
+	local tierDef = Config.PetTier(entry.Tier)
+	detailRarity.Text = if tierDef.Name ~= "" then tierDef.Name .. "  •  " .. entry.Def.Rarity else entry.Def.Rarity
 	detailRarity.TextColor3 = UIKit.RarityColor(entry.Def.Rarity)
 	detailPower.Text = powerText(entry.Id, entry.Tier)
 	detailCoin.Text = "Higher = cleans faster, earns more"
@@ -292,14 +394,32 @@ end
 
 local function refreshMergePanel()
 	local first = petOf(mergeSel[1])
-	mergeInfo.Text = string.format("Pick %d of the same pet (same tier). Picked %d/%d.", MERGE_COUNT, #mergeSel, MERGE_COUNT)
+	mergeInfo.Text = string.format("Picked %d/%d", #mergeSel, MERGE_COUNT)
+	-- The preview card: repainted from scratch each time.
+	for _, child in mergePreview:GetChildren() do
+		if child:IsA("UIGradient") then
+			child:Destroy()
+		end
+	end
+	local previewStroke = mergePreview:FindFirstChildOfClass("UIStroke")
+	if previewStroke then
+		for _, child in previewStroke:GetChildren() do
+			child:Destroy()
+		end
+		previewStroke.Color = C.Disabled
+		previewStroke.Thickness = 2
+	end
+	mergePreview.BackgroundColor3 = C.PanelLight
 	if first then
 		local nextTier = (first.Tier or 1) + 1
-		local tierDef = Config.PetTier(nextTier)
+		paintTier(mergePreview, previewStroke, nextTier)
+		UIKit.SetViewportModel(mergeViewport, PetModels.Build(first.Id, nextTier), true)
 		mergeResult.Text = "Makes: " .. petTitle(first.Id, nextTier)
-		mergeResult.TextColor3 = tierDef.Color or C.Text
+		paintTierText(mergeResult, nextTier)
 	else
-		mergeResult.Text = "Makes: Golden, then Rainbow!"
+		UIKit.SetViewportModel(mergeViewport, nil, true)
+		mergeResult.Text = "Pick a pet to merge"
+		paintTierText(mergeResult, 1)
 		mergeResult.TextColor3 = C.TextDim
 	end
 	UIKit.SetButtonColor(mergeGo, if #mergeSel == MERGE_COUNT then C.Good else C.Disabled)
@@ -333,6 +453,47 @@ local function selectPet(uid: string?)
 	-- The grid highlights the selection: cheapest is a full rebuild, and this list is at most
 	-- Config.PetRules.MaxInventory (60) cards, so it's not worth a more surgical update.
 	PetsUI._refreshGrid()
+end
+
+-- Picks the first set of MERGE_COUNT identical pets (same pet, same tier), preferring ones you
+-- don't have equipped.
+local function autoPick()
+	local meta = ClientState.Meta
+	if not meta then
+		return
+	end
+	local groups: { [string]: { any } } = {}
+	local order: { string } = {}
+	for _, entry in sortedPetList(meta) do
+		if (entry.Tier or 1) < #Config.PetTiers then
+			local key = entry.Id .. "#" .. (entry.Tier or 1)
+			if not groups[key] then
+				groups[key] = {}
+				table.insert(order, key)
+			end
+			table.insert(groups[key], entry)
+		end
+	end
+	for _, key in order do
+		local group = groups[key]
+		if #group >= MERGE_COUNT then
+			table.sort(group, function(a, b)
+				local ea, eb = isEquipped(meta, a.Uid), isEquipped(meta, b.Uid)
+				if ea ~= eb then
+					return not ea
+				end
+				return a.Uid < b.Uid
+			end)
+			table.clear(mergeSel)
+			for i = 1, MERGE_COUNT do
+				table.insert(mergeSel, group[i].Uid)
+			end
+			refreshMergePanel()
+			PetsUI._refreshGrid()
+			return
+		end
+	end
+	UIKit.Toast(string.format("You need %d of the same pet to merge.", MERGE_COUNT), "Info")
 end
 
 local function setMergeMode(on: boolean)
@@ -422,8 +583,13 @@ function PetsUI._refreshGrid()
 		return
 	end
 	local list = sortedPetList(meta)
+	local copies: { [string]: number } = {}
 	for _, entry in list do
-		buildPetCard(gridScroll, entry, isEquipped(meta, entry.Uid), selectPet)
+		local key = entry.Id .. "#" .. (entry.Tier or 1)
+		copies[key] = (copies[key] or 0) + 1
+	end
+	for _, entry in list do
+		buildPetCard(gridScroll, entry, isEquipped(meta, entry.Uid), selectPet, copies[entry.Id .. "#" .. (entry.Tier or 1)])
 	end
 	local equippedCount = math.min(#meta.Equipped, meta.PetSlots)
 	equippedLabel.Text = string.format("Equipped %d/%d", equippedCount, meta.PetSlots)
@@ -475,7 +641,6 @@ local function buildPetsWindow()
 	})
 	UIKit.Button({
 		Text = "Equip Best",
-		Icon = "⭐",
 		Size = UDim2.fromOffset(180, 40),
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, 0, 0, 0),
@@ -536,35 +701,58 @@ local function buildPetsWindow()
 	mergePanel.Size = UDim2.fromScale(1, 1)
 	mergePanel.Visible = false
 	mergePanel.Parent = details
-	UIKit.Label({ Text = "Merge Pets", Size = UDim2.new(1, -16, 0, 34), Position = UDim2.new(0.5, 0, 0, 14), AnchorPoint = Vector2.new(0.5, 0), TextSize = 26, Parent = mergePanel })
+	UIKit.Label({ Text = "Merge Pets", Size = UDim2.new(1, -16, 0, 30), Position = UDim2.new(0.5, 0, 0, 10), AnchorPoint = Vector2.new(0.5, 0), TextSize = 26, Parent = mergePanel })
 	UIKit.Label({
-		Text = string.format("%d of the same pet become 1 Golden one; %d Golden make a Rainbow. Faster cleaning, more coins.", MERGE_COUNT, MERGE_COUNT),
-		Size = UDim2.new(1, -24, 0, 48),
-		Position = UDim2.new(0.5, 0, 0, 56),
+		Text = string.format("%d of the same pet make a Golden one. %d Golden make a Rainbow.", MERGE_COUNT, MERGE_COUNT),
+		Size = UDim2.new(1, -24, 0, 38),
+		Position = UDim2.new(0.5, 0, 0, 42),
 		AnchorPoint = Vector2.new(0.5, 0),
-		TextSize = 16,
+		TextSize = 15,
 		TextWrapped = true,
 		TextColor3 = C.TextDim,
 		Parent = mergePanel,
 	})
-	mergeInfo = UIKit.Label({ Text = "", Size = UDim2.new(1, -24, 0, 44), Position = UDim2.new(0.5, 0, 0, 116), AnchorPoint = Vector2.new(0.5, 0), TextSize = 17, TextWrapped = true, Parent = mergePanel })
-	mergeResult = UIKit.Label({ Text = "Makes: ?", Size = UDim2.new(1, -24, 0, 36), Position = UDim2.new(0.5, 0, 0, 170), AnchorPoint = Vector2.new(0.5, 0), TextSize = 22, TextScaled = true, Parent = mergePanel })
+	mergeInfo = UIKit.Label({ Text = "", Size = UDim2.new(1, -24, 0, 24), Position = UDim2.new(0.5, 0, 0, 84), AnchorPoint = Vector2.new(0.5, 0), TextSize = 17, TextWrapped = true, Parent = mergePanel })
+	-- What you'll get, on a card painted like its tier.
+	mergePreview = UIKit.Card({
+		Size = UDim2.fromOffset(150, 112),
+		Position = UDim2.new(0.5, 0, 0, 112),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Color = C.PanelLight,
+		Parent = mergePanel,
+	})
+	mergeViewport = UIKit.Viewport({
+		Size = UDim2.new(1, -12, 1, -12),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Spin = true,
+		Parent = mergePreview,
+	})
+	mergeResult = UIKit.Label({ Text = "Makes: ?", Size = UDim2.new(1, -24, 0, 26), Position = UDim2.new(0.5, 0, 0, 228), AnchorPoint = Vector2.new(0.5, 0), TextSize = 20, TextScaled = true, Parent = mergePanel })
 	mergeGo = UIKit.Button({
 		Text = "MERGE!",
-		Icon = "✨",
-		Size = UDim2.new(1, -24, 0, 56),
-		Position = UDim2.new(0.5, 0, 0, 232),
+		Size = UDim2.new(1, -24, 0, 54),
+		Position = UDim2.new(0.5, 0, 0, 262),
 		AnchorPoint = Vector2.new(0.5, 0),
 		Color = C.Disabled,
 		Parent = mergePanel,
 		OnClick = doMerge,
 	})
 	UIKit.Button({
-		Text = "Clear picks",
-		Size = UDim2.new(1, -24, 0, 40),
-		Position = UDim2.new(0.5, 0, 0, 300),
-		AnchorPoint = Vector2.new(0.5, 0),
+		Text = string.format("Auto-pick %d", MERGE_COUNT),
+		Size = UDim2.new(0.5, -16, 0, 40),
+		Position = UDim2.new(0, 12, 0, 326),
+		Color = Color3.fromRGB(170, 110, 255),
+		TextSize = 17,
+		Parent = mergePanel,
+		OnClick = autoPick,
+	})
+	UIKit.Button({
+		Text = "Clear",
+		Size = UDim2.new(0.5, -16, 0, 40),
+		Position = UDim2.new(0.5, 4, 0, 326),
 		Color = C.PanelLight,
+		TextSize = 17,
 		Parent = mergePanel,
 		OnClick = function()
 			table.clear(mergeSel)

@@ -181,7 +181,8 @@ local function buyPassForSelf(def: any)
 end
 
 local function openPassBuy(def: any, giftOnly: boolean?)
-	UIKit.OpenWindow("PassBuy", { Def = def, GiftOnly = giftOnly == true })
+	-- A sub-menu of the Shop: its Back button returns to the Passes tab.
+	UIKit.OpenSubWindow("PassBuy", { Def = def, GiftOnly = giftOnly == true }, "Shop", "Passes")
 end
 
 local function buildPassRow(def: any): Frame
