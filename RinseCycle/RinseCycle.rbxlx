@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.6.9"
+Config.Version = "1.7.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -7227,7 +7227,8 @@ Remote.AdminLeaderboard.OnServerEvent:Connect(function(admin, action, index, use
 	if not tierHasCommand(getPlayerTier(admin), "leaderboards") then
 		return
 	end
-	if leaderboardBusy[admin] then
+	-- Only a reset waits its turn; viewing reads the boards' cache, so every click is answered.
+	if action == "Reset" and leaderboardBusy[admin] then
 		return
 	end
 	local count = LeaderboardService.BoardCount()
@@ -7235,7 +7236,9 @@ Remote.AdminLeaderboard.OnServerEvent:Connect(function(admin, action, index, use
 		return
 	end
 	index = ((math.floor(index) - 1) % count) + 1
-	leaderboardBusy[admin] = true
+	if action == "Reset" then
+		leaderboardBusy[admin] = true
+	end
 	local ok, err = pcall(function()
 		if action == "Reset" then
 			if type(userId) ~= "number" then
@@ -7258,7 +7261,9 @@ Remote.AdminLeaderboard.OnServerEvent:Connect(function(admin, action, index, use
 		end
 		Remote.AdminLeaderboard:FireClient(admin, index, count, LeaderboardService.BoardTitle(index), rows)
 	end)
-	leaderboardBusy[admin] = nil
+	if action == "Reset" then
+		leaderboardBusy[admin] = nil
+	end
 	if not ok then
 		dsWarn("[AdminServer] leaderboards: " .. tostring(err))
 		sendFeedback(admin, "Couldn't load that leaderboard", true)
@@ -12333,8 +12338,12 @@ return GiftService</ProtectedString></Properties></Item>
 --     Rebirths and Stats.BubblesEarned (descending). Keys are
 --     "u_" .. userId, the same as the profile store.
 --   * Every REFRESH_INTERVAL seconds: write the online players' values (times only when they
---     improved, and only values that changed since this server last wrote them), read the top 10
---     of every store, and redraw.
+--     improved, and only values that changed since this server last wrote them), read the top 100
+--     of every store, and redraw (each board scrolls).
+--   * Your position: every player gets attributes "Lb_&lt;board id&gt;" = "&lt;rank&gt;|&lt;value text&gt;" (board
+--     ids D1..D3 for the Top Players pages, T1..Tn for Fastest), drawn as a highlighted row under
+--     each page by the client (BoardView). Ranks past the top 100 come from a slow background scan
+--     of the store, 100 entries per read, up to DEEP_LIMIT, only while the DataStore budget allows.
 --   * Offline (Studio without API access) the boards rank the players in this server instead.
 --   * The Times board draws every level's page; each client shows the page it picked (Effects).
 --   * Admin resets (the admin panel's Leaderboards view): a reset takes a player off one board
@@ -12344,6 +12353,7 @@ return GiftService</ProtectedString></Properties></Item>
 --     back once they beat the time they had when they were reset. Other servers hear about a
 --     reset through MessagingService.
 
+local CollectionService = game:GetService("CollectionService")
 local DataStoreService = game:GetService("DataStoreService")
 local MessagingService = game:GetService("MessagingService")
 local Players = game:GetService("Players")
@@ -12365,11 +12375,12 @@ local LeaderboardService = {}
 local REFRESH_INTERVAL = 60
 local OFFLINE_REFRESH_INTERVAL = 10 -- offline boards are free to rebuild, so keep them fresh
 local FIRST_REFRESH_DELAY = 6 -- the first WRITE waits for the first players' profiles to load
-local TOP_N = 10
+local TOP_N = 100 -- rows on each board (it scrolls); also what the admin viewer lists
+local DEEP_LIMIT = 1000 -- "your position" is looked up this far down; past it you're "#1000+"
+local DEEP_RESCAN = 300 -- seconds before a board's deep ranks are read again
 local KEY_PREFIX = "u_"
 local ROW_HEIGHT = 34
 
-local MEDALS = { "🥇", "🥈", "🥉" }
 local ROW_COLORS = {
 	Color3.fromRGB(255, 215, 90),
 	Color3.fromRGB(220, 230, 240),
@@ -12380,7 +12391,7 @@ local ROW_COLORS = {
 -- State
 ----------------------------------------------------------------------------------------------------
 
-type Row = { Name: string, Value: number }
+type Row = { UserId: number, Name: string, Value: number }
 
 local levelCount = #Config.Levels
 local timesTop: { [number]: { Row } } = {}
@@ -12539,7 +12550,7 @@ end
 -- Drawing
 ----------------------------------------------------------------------------------------------------
 
-local function clearList(list: Frame)
+local function clearList(list: GuiObject)
 	for _, child in list:GetChildren() do
 		if not child:IsA("UIListLayout") then
 			child:Destroy()
@@ -12553,19 +12564,30 @@ local function label(props: { [string]: any }, parent: Instance): TextLabel
 	lbl.Font = Enum.Font.FredokaOne
 	lbl.TextScaled = true
 	lbl.TextColor3 = Color3.new(1, 1, 1)
+	-- A text stroke instead of a UIStroke: 100 rows a page, so fewer instances to send to everyone.
+	lbl.TextStrokeTransparency = 0.2
+	lbl.TextStrokeColor3 = Color3.fromRGB(10, 30, 60)
 	for k, v in props do
 		(lbl :: any)[k] = v
 	end
-	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = 2
-	stroke.Color = Color3.fromRGB(10, 30, 60)
-	stroke.Parent = lbl
 	lbl.Parent = parent
 	return lbl
 end
 
-local function drawRows(list: Frame, rows: { Row }, valueText: (number) -&gt; string, emptyText: string)
-	clearList(list)
+-- What each list last showed, so an unchanged board isn't torn down and rebuilt every minute.
+local drawn: { [Instance]: string } = {}
+
+local function drawRows(list: GuiObject, rows: { Row }, valueText: (number) -&gt; string, emptyText: string)
+	local parts = { emptyText }
+	for _, row in rows do
+		table.insert(parts, row.UserId .. ":" .. row.Name .. ":" .. row.Value)
+	end
+	local signature = table.concat(parts, ";")
+	if drawn[list] == signature then
+		return
+	end
+	drawn[list] = signature
+	clearList(list :: any)
 	if #rows == 0 then
 		label({
 			Name = "Empty",
@@ -12579,9 +12601,11 @@ local function drawRows(list: Frame, rows: { Row }, valueText: (number) -&gt; st
 		local frame = Instance.new("Frame")
 		frame.Name = "Row" .. rank
 		frame.LayoutOrder = rank
-		frame.Size = UDim2.new(1, 0, 0, ROW_HEIGHT)
+		frame.Size = UDim2.new(1, -16, 0, ROW_HEIGHT)
 		frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		frame.BackgroundTransparency = rank % 2 == 1 and 0.9 or 0.95
+		frame.BorderSizePixel = 0
+		frame:SetAttribute("UserId", row.UserId) -- the client lights up its own row
 		local corner = Instance.new("UICorner")
 		corner.CornerRadius = UDim.new(0, 8)
 		corner.Parent = frame
@@ -12589,15 +12613,15 @@ local function drawRows(list: Frame, rows: { Row }, valueText: (number) -&gt; st
 		local color = ROW_COLORS[rank] or Color3.new(1, 1, 1)
 		label({
 			Name = "Rank",
-			Size = UDim2.new(0, 60, 1, -4),
+			Size = UDim2.new(0, 72, 1, -4),
 			Position = UDim2.new(0, 4, 0, 2),
-			Text = MEDALS[rank] or ("#" .. rank),
+			Text = "#" .. rank,
 			TextColor3 = color,
 		}, frame)
 		label({
 			Name = "Player",
-			Size = UDim2.new(1, -230, 1, -4),
-			Position = UDim2.new(0, 72, 0, 2),
+			Size = UDim2.new(1, -240, 1, -4),
+			Position = UDim2.new(0, 84, 0, 2),
 			Text = row.Name,
 			TextColor3 = color,
 			TextXAlignment = Enum.TextXAlignment.Left,
@@ -12658,7 +12682,7 @@ local function refreshOffline()
 			local profile = DataService.Get(player)
 			local best = profile and profile.BestTimes[i]
 			if best and best &gt; 0 and timeAllowed(player.UserId, i, toTenths(best)) then
-				table.insert(rows, { Name = player.Name, Value = toTenths(best) })
+				table.insert(rows, { UserId = player.UserId, Name = player.Name, Value = toTenths(best) })
 			end
 		end
 		table.sort(rows, function(a, b)
@@ -12673,7 +12697,7 @@ local function refreshOffline()
 			local profile = DataService.Get(player)
 			local value = if profile then boardValue(stat, profile, player.UserId) else 0
 			if value &gt; 0 then
-				table.insert(rows, { Name = player.Name, Value = value })
+				table.insert(rows, { UserId = player.UserId, Name = player.Name, Value = value })
 			end
 		end
 		table.sort(rows, function(a, b)
@@ -12756,27 +12780,36 @@ local function readTop(store: OrderedDataStore, ascending: boolean): { Row }?
 			table.insert(found, { UserId = userId, Value = value })
 		end
 	end
-	-- Look every name up at once (each is a web call), not one after another.
+	-- Names: a few lookups at a time (each is a web call; most are cached after the first read).
 	local names: { [number]: string } = {}
-	local left = #found
-	for i, f in found do
+	local nextIndex = 0
+	local workers = math.min(12, #found)
+	local busy = workers
+	for _ = 1, workers do
 		task.spawn(function()
-			names[i] = nameFor(f.UserId)
-			left -= 1
+			while true do
+				nextIndex += 1
+				local i = nextIndex
+				if i &gt; #found then
+					break
+				end
+				names[i] = nameFor(found[i].UserId)
+			end
+			busy -= 1
 		end)
 	end
-	local deadline = os.clock() + 10
-	while left &gt; 0 and os.clock() &lt; deadline do
+	local deadline = os.clock() + 15
+	while busy &gt; 0 and os.clock() &lt; deadline do
 		task.wait()
 	end
 	local rows: { Row } = {}
 	for i, f in found do
-		table.insert(rows, { Name = names[i] or ("Player " .. f.UserId), Value = f.Value })
+		table.insert(rows, { UserId = f.UserId, Name = names[i] or ("Player " .. f.UserId), Value = f.Value })
 	end
 	return rows
 end
 
--- Reads every board's top 10 (no writes), all boards at once. Also run the moment the server
+-- Reads every board's top 100 (no writes), all boards at once. Also run the moment the server
 -- starts, so the boards are filled before anyone looks at them.
 local function readAll()
 	local left = 0
@@ -12815,6 +12848,136 @@ local function refreshOnline()
 end
 
 ----------------------------------------------------------------------------------------------------
+-- Your position: each player's rank on every board, for the highlighted "you" row under each page
+----------------------------------------------------------------------------------------------------
+
+-- Board ids: "D&lt;i&gt;" = STATS[i] (Top Players page i), "T&lt;i&gt;" = Fastest on level i.
+local function boardIds(): { string }
+	local ids = {}
+	for i = 1, #STATS do
+		table.insert(ids, "D" .. i)
+	end
+	for i = 1, levelCount do
+		table.insert(ids, "T" .. i)
+	end
+	return ids
+end
+
+local function boardParts(id: string): (Stat?, number?)
+	local kind, n = string.match(id, "^(%a)(%d+)$")
+	local index = tonumber(n) or 0
+	if kind == "D" then
+		return STATS[index], nil
+	end
+	return nil, index
+end
+
+local function topRowsOf(id: string): { Row }
+	local stat, level = boardParts(id)
+	if stat then
+		return stat.Top
+	end
+	return timesTop[level :: number] or {}
+end
+
+-- Ranks past the top 100: read 100 at a time in the background, as far as DEEP_LIMIT.
+type Scan = { Pages: any, Rank: number, Found: { [number]: number }, Done: { [number]: number }, FinishedAt: number }
+local scans: { [string]: Scan } = {}
+local scanCursor = 0
+
+local function sortedBudget(): number
+	local ok, n = pcall(function()
+		return DataStoreService:GetRequestBudgetForRequestType(Enum.DataStoreRequestType.GetSortedAsync)
+	end)
+	return if ok and type(n) == "number" then n else 0
+end
+
+local function deepScan()
+	local ids = boardIds()
+	for _ = 1, #ids * 2 do
+		if sortedBudget() &lt;= 4 then
+			return -- leave room for the top-100 reads
+		end
+		scanCursor = scanCursor % #ids + 1
+		local id = ids[scanCursor]
+		local scan = scans[id]
+		if not scan then
+			scan = { Pages = nil, Rank = 0, Found = {}, Done = {}, FinishedAt = -math.huge }
+			scans[id] = scan
+		end
+		if scan.Pages == nil and (os.clock() - scan.FinishedAt &lt; DEEP_RESCAN or #topRowsOf(id) &lt; TOP_N) then
+			continue -- read recently, or everyone fits in the top 100 anyway
+		end
+		local stat, level = boardParts(id)
+		local store: OrderedDataStore? = if stat then stat.DS elseif level then timeStores[level] else nil
+		if not store then
+			continue
+		end
+		local ok = pcall(function()
+			if scan.Pages == nil then
+				scan.Pages = (store :: OrderedDataStore):GetSortedAsync(stat == nil, 100)
+			else
+				scan.Pages:AdvanceToNextPageAsync()
+			end
+			for _, entry in scan.Pages:GetCurrentPage() do
+				local userId = tonumber((string.match(tostring(entry.key), "^" .. KEY_PREFIX .. "(%d+)$")))
+				local value = tonumber(entry.value)
+				if userId and value and value &gt; 0 then
+					scan.Rank += 1
+					scan.Found[userId] = scan.Rank
+				end
+			end
+		end)
+		if not ok or scan.Pages == nil or scan.Pages.IsFinished or scan.Rank &gt;= DEEP_LIMIT then
+			if ok then
+				scan.Done = scan.Found
+			end
+			scan.Pages, scan.Rank, scan.Found, scan.FinishedAt = nil, 0, {}, os.clock()
+		end
+	end
+end
+
+local function rankOf(id: string, userId: number): number?
+	for rank, row in topRowsOf(id) do
+		if row.UserId == userId then
+			return rank
+		end
+	end
+	local scan = scans[id]
+	if scan then
+		local rank = scan.Found[userId] or scan.Done[userId]
+		if rank and rank &gt; TOP_N then
+			return rank
+		end
+	end
+	return nil
+end
+
+-- "&lt;rank&gt;|&lt;value text&gt;": rank 0 = past DEEP_LIMIT or not read yet; empty text = not on the board.
+local function publishRanks()
+	for _, player in Players:GetPlayers() do
+		local profile = DataService.Get(player)
+		if not profile then
+			continue
+		end
+		for _, id in boardIds() do
+			local stat, level = boardParts(id)
+			local text = ""
+			if stat then
+				local value = boardValue(stat, profile, player.UserId)
+				text = if value &gt; 0 then Format.Commas(value) else ""
+			elseif level then
+				local best = profile.BestTimes[level]
+				local tenths = if best and best &gt; 0 then toTenths(best) else nil
+				text = if tenths and timeAllowed(player.UserId, level, tenths) then formatTenths(tenths) else ""
+			end
+			local rank = if text ~= "" then (rankOf(id, player.UserId) or 0) else 0
+			player:SetAttribute("Lb_" .. id, rank .. "|" .. text)
+		end
+	end
+end
+
+----------------------------------------------------------------------------------------------------
 -- Admin: view every board, reset a player on one
 ----------------------------------------------------------------------------------------------------
 
@@ -12834,12 +12997,21 @@ function LeaderboardService.BoardTitle(index: number): string
 	return if level then "Fastest: " .. level.Name else "?"
 end
 
--- Up to `limit` entries of board `index`, best first. Yields (DataStore reads).
+-- Up to `limit` entries of board `index`, best first. Straight from what the lobby boards last
+-- read (no wait); only reads the DataStore if nothing has been read yet.
 function LeaderboardService.ListBoard(index: number, limit: number?): { BoardRow }
 	local count = math.clamp(math.floor(limit or 100), 1, 100)
 	local stat = STATS[index]
 	local level = if stat then nil else index - #STATS
 	local rows: { BoardRow } = {}
+	local cached = if stat then stat.Top elseif level then timesTop[level] else nil
+	if cached and #cached &gt; 0 then
+		for i = 1, math.min(#cached, count) do
+			local r = cached[i]
+			table.insert(rows, { UserId = r.UserId, Name = r.Name, Value = r.Value, Text = if stat then Format.Commas(r.Value) else formatTenths(r.Value) })
+		end
+		return rows
+	end
 	local offline = DataService.IsOffline() or not openStores()
 	if offline then
 		for _, player in Players:GetPlayers() do
@@ -12973,9 +13145,8 @@ function LeaderboardService.ResetEntry(index: number, userId: number): (boolean,
 	-- Forget what this server wrote for them, and take them off the boards on screen now.
 	if stat then
 		stat.Written[userId] = nil
-		local name = nameFor(userId)
 		for i = #stat.Top, 1, -1 do
-			if stat.Top[i].Name == name then
+			if stat.Top[i].UserId == userId then
 				table.remove(stat.Top, i)
 			end
 		end
@@ -12985,15 +13156,15 @@ function LeaderboardService.ResetEntry(index: number, userId: number): (boolean,
 			w[level :: number] = nil
 		end
 		local top = timesTop[level :: number] or {}
-		local name = nameFor(userId)
 		for i = #top, 1, -1 do
-			if top[i].Name == name then
+			if top[i].UserId == userId then
 				table.remove(top, i)
 			end
 		end
 	end
 	pcall(drawTimes)
 	pcall(drawDishes)
+	pcall(publishRanks)
 	return true, string.format("Reset %s on %s", nameFor(userId), LeaderboardService.BoardTitle(index))
 end
 
@@ -13007,6 +13178,11 @@ function LeaderboardService.Init()
 	end
 	Players.PlayerAdded:Connect(function(player)
 		loadResets(player.UserId)
+		-- Their "you" rows: as soon as their save has loaded.
+		task.spawn(function()
+			DataService.WaitFor(player, 30)
+			pcall(publishRanks)
+		end)
 	end)
 	for _, player in Players:GetPlayers() do
 		task.spawn(loadResets, player.UserId)
@@ -13042,6 +13218,12 @@ function LeaderboardService.Start()
 		warn(string.format("[%s] LeaderboardService: no lobby, boards disabled", Config.GameName))
 		return
 	end
+	-- The client (BoardView) makes these scrollable and adds each player's own "you" row.
+	local lobby = LobbyBuilder.GetLobby()
+	for kind, board in { T = lobby.Boards.Times, D = lobby.Boards.Dishes } do
+		board.Part:SetAttribute("LbBoard", kind)
+		CollectionService:AddTag(board.Part, "LeaderboardBoard")
+	end
 	drawTimes()
 	drawDishes()
 
@@ -13061,6 +13243,11 @@ function LeaderboardService.Start()
 			end
 			drawTimes()
 			drawDishes()
+			pcall(publishRanks)
+			if not offline then
+				pcall(deepScan)
+				pcall(publishRanks)
+			end
 			task.wait(if offline then OFFLINE_REFRESH_INTERVAL else REFRESH_INTERVAL)
 		end
 	end)
@@ -13107,10 +13294,10 @@ export type PadInfo = {
 	Barriers: { BasePart },
 	Gui: PadGui,
 }
-export type BoardPage = { Title: TextLabel, List: Frame }
+export type BoardPage = { Title: TextLabel, List: ScrollingFrame }
 -- Pages: one per level on a paged board (the Fastest Clean board); each client flips them locally
 -- with the arrows (tag "BoardArrow"), so nobody changes the page for anyone else.
-export type BoardInfo = { Part: BasePart, Title: TextLabel, List: Frame, Pages: { BoardPage }? }
+export type BoardInfo = { Part: BasePart, Title: TextLabel, List: ScrollingFrame, Pages: { BoardPage }? }
 export type Lobby = {
 	Model: Model,
 	Pads: { PadInfo },
@@ -14322,12 +14509,21 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 			TextColor3 = Color3.new(1, 1, 1),
 		}, root) :: TextLabel
 		mk("UIStroke", { Thickness = 3, Color = Color3.fromRGB(10, 30, 60) }, titleLbl)
-		local list = mk("Frame", {
+		-- The top 100, scrollable (the client moves this SurfaceGui into PlayerGui so it takes the
+		-- mouse wheel / a finger: BoardView). The 46 px under it are for each player's own row.
+		local list = mk("ScrollingFrame", {
 			Name = "List",
-			Size = UDim2.new(1, 0, 1, if paged then -104 else -70),
+			Size = UDim2.new(1, 0, 1, if paged then -150 else -116),
 			Position = UDim2.new(0, 0, 0, 70),
 			BackgroundTransparency = 1,
-		}, root) :: Frame
+			BorderSizePixel = 0,
+			CanvasSize = UDim2.new(),
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			ScrollingDirection = Enum.ScrollingDirection.Y,
+			ScrollBarThickness = 10,
+			ScrollBarImageColor3 = Color3.fromRGB(255, 205, 70),
+			ElasticBehavior = Enum.ElasticBehavior.Never,
+		}, root) :: ScrollingFrame
 		mk("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4) }, list)
 		if paged then
 			-- Page dots along the bottom, this page's dot lit.
@@ -21550,7 +21746,168 @@ print(string.format("[%s] v%s server ready", Config.GameName, Config.Version))</
 <Item class="StarterPlayer" referent="RBX00000023"><Properties><string name="Name">StarterPlayer</string><float name="NameDisplayDistance">0</float><float name="HealthDisplayDistance">0</float></Properties>
 <Item class="StarterPlayerScripts" referent="RBX00000024"><Properties><string name="Name">StarterPlayerScripts</string></Properties>
 <Item class="Folder" referent="RBX00000025"><Properties><string name="Name">Client</string></Properties>
-<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">BubbleJets</string><ProtectedString name="Source">-- BubbleJets: inside a run, hold jump while in the air to fly up on a jet of soap bubbles.
+<Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">BoardView</string><ProtectedString name="Source">--[[
+	BoardView - the lobby leaderboards on this player's screen.
+
+	  * Scrolling: a SurfaceGui only takes the mouse wheel / a finger when it lives in PlayerGui, so
+	    each leaderboard's SurfaceGui (tag "LeaderboardBoard", drawn by LeaderboardService) is moved
+	    into PlayerGui and adorned back onto its board. The server keeps drawing into it as before.
+	  * Your position: under every page, a highlighted row with your rank, name and score
+	    ("#515  you  12,345"), from the player attribute "Lb_&lt;board&gt;&lt;page&gt;" = "&lt;rank&gt;|&lt;value&gt;".
+	    Rank 0 with a value means you're further down than the board looks (past #1000).
+	  * Your row in the top 100 is lit up too.
+]]
+
+local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
+
+local LocalPlayer = Players.LocalPlayer
+
+local BoardView = {}
+
+local GOLD = Color3.fromRGB(255, 205, 70)
+local INK = Color3.fromRGB(10, 30, 60)
+
+local initialized = false
+local guis: { [Instance]: SurfaceGui } = {}
+
+-- The SurfaceGui of a leaderboard part (wherever it lives now). Effects uses this for the arrows.
+function BoardView.GuiOf(board: Instance): SurfaceGui?
+	return guis[board]
+end
+
+local function label(props: { [string]: any }, parent: Instance): TextLabel
+	local lbl = Instance.new("TextLabel")
+	lbl.BackgroundTransparency = 1
+	lbl.Font = Enum.Font.FredokaOne
+	lbl.TextScaled = true
+	lbl.TextColor3 = INK
+	for k, v in props do
+		(lbl :: any)[k] = v
+	end
+	lbl.Parent = parent
+	return lbl
+end
+
+-- Lights up this player's own row among the top 100 (rows carry a UserId attribute).
+local function watchList(list: Instance)
+	local function paint(row: Instance)
+		if row:IsA("Frame") and row:GetAttribute("UserId") == LocalPlayer.UserId and not row:FindFirstChild("YouOutline") then
+			row.BackgroundTransparency = 0.75
+			local outline = Instance.new("UIStroke")
+			outline.Name = "YouOutline"
+			outline.Thickness = 3
+			outline.Color = GOLD
+			outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			outline.Parent = row
+		end
+	end
+	for _, row in list:GetChildren() do
+		paint(row)
+	end
+	list.ChildAdded:Connect(paint)
+end
+
+-- The "you" row under one page.
+local function addYouRow(page: Frame, id: string)
+	local hasDots = page:FindFirstChild("PageDots") ~= nil
+	local row = Instance.new("Frame")
+	row.Name = "YouRow"
+	row.AnchorPoint = Vector2.new(0, 1)
+	row.Position = UDim2.new(0, 0, 1, if hasDots then -30 else -2)
+	row.Size = UDim2.new(1, 0, 0, 40)
+	row.BackgroundColor3 = GOLD
+	row.BorderSizePixel = 0
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 10)
+	corner.Parent = row
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 3
+	stroke.Color = Color3.fromRGB(255, 245, 200)
+	stroke.Parent = row
+	local rankLabel = label({ Name = "Rank", Size = UDim2.new(0, 110, 1, -6), Position = UDim2.new(0, 6, 0, 3) }, row)
+	label({
+		Name = "Player",
+		Size = UDim2.new(1, -290, 1, -6),
+		Position = UDim2.new(0, 124, 0, 3),
+		Text = LocalPlayer.Name .. " (you)",
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, row)
+	local valueLabel = label({
+		Name = "Value",
+		Size = UDim2.new(0, 160, 1, -6),
+		Position = UDim2.new(1, -166, 0, 3),
+		TextXAlignment = Enum.TextXAlignment.Right,
+	}, row)
+	row.Parent = page
+
+	local attr = "Lb_" .. id
+	local function refresh()
+		local raw = LocalPlayer:GetAttribute(attr)
+		local rank, text = string.match(if type(raw) == "string" then raw else "", "^(%d+)|(.*)$")
+		local n = tonumber(rank) or 0
+		if not text or text == "" then
+			rankLabel.Text = "#-"
+			valueLabel.Text = "Not on it yet"
+		else
+			rankLabel.Text = if n &gt; 0 then "#" .. n else "#1000+"
+			valueLabel.Text = text
+		end
+	end
+	refresh()
+	LocalPlayer:GetAttributeChangedSignal(attr):Connect(refresh)
+end
+
+local function setup(board: Instance)
+	if guis[board] or not board:IsA("BasePart") then
+		return
+	end
+	local gui = board:FindFirstChildOfClass("SurfaceGui") or board:WaitForChild("SurfaceGui", 15)
+	if not gui or not gui:IsA("SurfaceGui") or guis[board] then
+		return
+	end
+	guis[board] = gui
+	local kind = tostring(board:GetAttribute("LbBoard") or "")
+	for i = 1, 20 do
+		local page = gui:FindFirstChild("Page" .. i)
+		if not page or not page:IsA("Frame") then
+			break
+		end
+		local list = page:FindFirstChild("List")
+		if list then
+			watchList(list)
+		end
+		if kind ~= "" then
+			addYouRow(page, kind .. i)
+		end
+	end
+	-- Into PlayerGui (still drawn on the board) so the list scrolls.
+	gui.ResetOnSpawn = false
+	gui.Adornee = board
+	gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	board.AncestryChanged:Connect(function()
+		if not board:IsDescendantOf(game) then
+			guis[board] = nil
+			gui:Destroy()
+		end
+	end)
+end
+
+function BoardView.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+	for _, board in CollectionService:GetTagged("LeaderboardBoard") do
+		task.spawn(setup, board)
+	end
+	CollectionService:GetInstanceAddedSignal("LeaderboardBoard"):Connect(function(board)
+		task.spawn(setup, board)
+	end)
+end
+
+return BoardView</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">BubbleJets</string><ProtectedString name="Source">-- BubbleJets: inside a run, hold jump while in the air to fly up on a jet of soap bubbles.
 -- Fuel (a few seconds) refills while you stand on something. The HUD shows the fuel bar from the
 -- LocalPlayer's "JetFuel" attribute (0..1), so this module owns no UI.
 --
@@ -21673,7 +22030,7 @@ function BubbleJets.Init()
 end
 
 return BubbleJets</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">Bubbles</string><ProtectedString name="Source">-- Bubbles: pooled, client-only 3D soap bubbles. Every bubble is an anchored ForceField sphere (the
+<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">Bubbles</string><ProtectedString name="Source">-- Bubbles: pooled, client-only 3D soap bubbles. Every bubble is an anchored ForceField sphere (the
 -- shimmering, see-through film with a bright rim) plus a tiny glowing glint that always sits on
 -- the camera-facing, upper-left side, like a real reflection.
 --
@@ -21901,7 +22258,7 @@ function Bubbles.Init()
 end
 
 return Bubbles</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">Celebrate</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">Celebrate</string><ProtectedString name="Source">--[[
 	Celebrate - the big "congrats" popup with confetti: a gift you sent or got (game passes, a rank
 	from an admin). The server sends ("Celebrate", title, text, icon); popups that arrive together
 	are shown one after another.
@@ -22014,7 +22371,7 @@ function Celebrate.Init()
 end
 
 return Celebrate</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">ChatNames</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">ChatNames</string><ProtectedString name="Source">--[[
 	ChatNames - VIPs get a gold [VIP] tag before their name in the chat, "[VIP] Klushy: hi" (their
 	overhead name has the same tag; see NameTags). Staff get [MOD] / [ADMIN] / [DEV] / [OWNER]
 	instead (player attribute StaffTag, set by AdminServer).
@@ -22064,7 +22421,7 @@ function ChatNames.Init()
 end
 
 return ChatNames</ProtectedString></Properties></Item>
-<Item class="LocalScript" referent="RBX0000002A"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
+<Item class="LocalScript" referent="RBX0000002B"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
 -- Each module exposes Init(); anything that fails is reported without stopping the others.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -22097,6 +22454,7 @@ local Celebrate = require(Client:WaitForChild("Celebrate"))
 local TradeUI = require(Client:WaitForChild("TradeUI"))
 local StayOffer = require(Client:WaitForChild("StayOffer"))
 local MusicPlayer = require(Client:WaitForChild("MusicPlayer"))
+local BoardView = require(Client:WaitForChild("BoardView"))
 
 local function step(name: string, fn: () -&gt; ())
 	local ok, err = xpcall(fn, debug.traceback)
@@ -22134,8 +22492,9 @@ step("ChatNames", ChatNames.Init)
 step("Celebrate", Celebrate.Init)
 step("TradeUI", TradeUI.Init)
 step("StayOffer", StayOffer.Init)
-step("MusicPlayer", MusicPlayer.Init)</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
+step("MusicPlayer", MusicPlayer.Init)
+step("BoardView", BoardView.Init)</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
 -- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
 -- Changed instead of each hooking the remotes themselves.
 
@@ -22257,7 +22616,7 @@ function ClientState.LocalPlayer(): Player
 end
 
 return ClientState</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">Cutscene</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002D"><Properties><string name="Name">Cutscene</string><ProtectedString name="Source">--[[
 	Cutscene - the fade into a run (there is no cutscene any more; the name is kept so the rest of
 	the client, which covers the screen with Cutscene.Cover / Uncover, doesn't change).
 
@@ -22515,7 +22874,7 @@ function Cutscene.Init()
 end
 
 return Cutscene</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002D"><Properties><string name="Name">DailyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002E"><Properties><string name="Name">DailyUI</string><ProtectedString name="Source">--[[
 	DailyUI - the daily reward calendar (🎁 Daily button on the left; it also pops up by itself once
 	per session when a reward is waiting).
 
@@ -22734,7 +23093,7 @@ function DailyUI.Init()
 end
 
 return DailyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002E"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
+<Item class="ModuleScript" referent="RBX0000002F"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
 -- numbers, dish/sale celebrations), CollectionService-driven decoration (spinning arms, lift
 -- pads), the drain guide beam, remaining-dirt sparkle markers, prompt routing (windows and the
 -- in-arena tool shop), and a little lobby ambience.
@@ -23475,8 +23834,23 @@ end
 -- view of the pages (Page1..PageN in the board's SurfaceGui). Nothing is sent to the server.
 ----------------------------------------------------------------------------------------------------
 
+-- A board's SurfaceGui: on the part, or in PlayerGui once BoardView has made it scrollable.
+local function boardGui(board: Instance?): SurfaceGui?
+	if not board then
+		return nil
+	end
+	local onPart = board:FindFirstChildOfClass("SurfaceGui")
+	if onPart then
+		return onPart
+	end
+	local ok, gui = pcall(function()
+		return (require(Client:WaitForChild("BoardView")) :: any).GuiOf(board)
+	end)
+	return if ok then gui else nil
+end
+
 local function flipBoard(board: Instance, dir: number)
-	local gui = board:FindFirstChildOfClass("SurfaceGui")
+	local gui = boardGui(board)
 	if not gui then
 		return
 	end
@@ -23510,7 +23884,7 @@ local function addBoardArrow(inst: Instance)
 	-- The drawn button this click target sits over (in the board's SurfaceGui).
 	local function button(): GuiObject?
 		local board = inst.Parent
-		local gui = board and board:FindFirstChildOfClass("SurfaceGui")
+		local gui = boardGui(board)
 		local name = inst:GetAttribute("Button")
 		local b = gui and type(name) == "string" and gui:FindFirstChild(name)
 		return if b and b:IsA("GuiObject") then b else nil
@@ -23802,7 +24176,7 @@ function Effects.Init()
 end
 
 return Effects</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002F"><Properties><string name="Name">HoldPose</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000030"><Properties><string name="Name">HoldPose</string><ProtectedString name="Source">--[[
 	HoldPose - how a held cleaning tool looks, for every player on this client.
 
 	  * Anyone holding a tool (character attribute HeldToolIndex &gt; 1) holds it out in front, the
@@ -23912,7 +24286,7 @@ function HoldPose.Init()
 end
 
 return HoldPose</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000030"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
+<Item class="ModuleScript" referent="RBX00000031"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
 --   * top centre: the Bubbles pill with a green "+" (opens the Shop)
 --   * right side: big square buttons (Shop/Pets in the lobby, Upgrades/Pets/Leave in a run) with
 --     key hints for keyboard (Tab/G/P) or gamepad (Y/LB)
@@ -25275,7 +25649,7 @@ function HUD.Init()
 end
 
 return HUD</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000031"><Properties><string name="Name">IconArt</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000032"><Properties><string name="Name">IconArt</string><ProtectedString name="Source">--[[
 	IconArt - the game's own drawn icons (no emoji, no uploaded images), built from plain Frames so
 	they stay crisp at any size.
 
@@ -25864,7 +26238,7 @@ function IconArt.Draw(kind: string, px: number): Frame
 end
 
 return IconArt</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000032"><Properties><string name="Name">LevelNPCs</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000033"><Properties><string name="Name">LevelNPCs</string><ProtectedString name="Source">--[[
 	LevelNPCs - the people from the cutscenes, living in the room around the dishwasher during a run.
 
 	They're giants (you're dish-sized): classic R6 blocky figures at 50x scale, the same scale the
@@ -28386,7 +28760,7 @@ LevelNPCs.Kit = {
 }
 
 return LevelNPCs</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000033"><Properties><string name="Name">MusicPlayer</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000034"><Properties><string name="Name">MusicPlayer</string><ProtectedString name="Source">--[[
 	MusicPlayer - background music. The lobby and dishwasher runs each have their own playlist
 	(Config.Music, IDs from StoreIds &gt; Music), played shuffled, one track after another, with a
 	short fade when switching between lobby and run. A "Music" button in the left column turns it
@@ -28508,7 +28882,7 @@ function MusicPlayer.Init()
 end
 
 return MusicPlayer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000034"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000035"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
 	PartyUI - everything shown while ClientState.Party ~= nil (standing in a lobby pad).
 
 	Two screens, Search-for-the-Needle style:
@@ -29226,7 +29600,7 @@ function PartyUI.Init()
 end
 
 return PartyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000035"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
+<Item class="ModuleScript" referent="RBX00000036"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
 -- state (EquippedPets/&lt;slot&gt; StringValue = pet id, its Target ObjectValue = the grime part being
 -- cleaned); this module is the only thing that actually builds and moves pet models. See
 -- DESIGN.md section 6 ("PetRenderer") and section 4 ("Equipped pets for rendering").
@@ -29688,7 +30062,7 @@ function PetRenderer.Init()
 end
 
 return PetRenderer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000036"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
+<Item class="ModuleScript" referent="RBX00000037"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
 -- reveal animation. Everything here is built with UIKit; see DESIGN.md section 6 ("PetsUI") for
 -- the contract. Both windows rebuild their contents from ClientState.Meta whenever it changes and
 -- the relevant window is open, so a purchase/hatch/equip anywhere refreshes what's on screen.
@@ -31023,7 +31397,7 @@ function PetsUI.Init()
 end
 
 return PetsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000037"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000038"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
 	RanksUI - the "Ranks" window (Rank Shrine in the lobby, the HUD's Ranks button, R / gamepad RB).
 
 	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
@@ -31793,7 +32167,7 @@ function RanksUI.Init()
 end
 
 return RanksUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000038"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000039"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
 	RebirthUI - the "Rebirth" window (the Rebirth Fountain in the lobby).
 
 	The endgame loop: once you've cleaned the last dishwasher, trade your Bubbles, unlocked
@@ -31946,7 +32320,7 @@ function RebirthUI.Init()
 end
 
 return RebirthUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000039"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003A"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
 	RewardsUI - two small windows opened from the buttons on the left of the lobby HUD.
 
 	  * "Codes" (🎟️): type a code (Config.Codes) and redeem it. "Look out for codes in the game's
@@ -32311,7 +32685,7 @@ function RewardsUI.Init()
 end
 
 return RewardsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003A"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003B"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
 	ShopUI - the lobby "Shop" window: Perks (bought with Bubbles, permanent) and Robux (game passes).
 	Opened from the Soap Shop ProximityPrompt (routed by Effects via OpenWindow="Shop"), the HUD [🛒 Shop]
 	button, or the G key - all outside our scope, they just call UIKit.OpenWindow("Shop").
@@ -32536,48 +32910,37 @@ local function buildPassRow(def: any): Frame
 		Parent = textCol,
 	})
 
+	-- The same price button whether you own it or not (so it's clear it can still be gifted);
+	-- owning it just adds a small "Owned" above, and the buy window says so.
 	if owned then
-		-- You have it: you can still gift it to someone.
 		UIKit.Label({
 			Text = "Owned",
 			TextSize = 14,
 			TextColor3 = Colors.Good,
 			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.new(1, -14, 0, 4),
-			Size = UDim2.fromOffset(130, 18),
+			Position = UDim2.new(1, -14, 0, 2),
+			Size = UDim2.fromOffset(130, 16),
 			TextXAlignment = Enum.TextXAlignment.Center,
 			Parent = row,
 		})
-		UIKit.Button({
-			Text = "🎁 Gift",
-			Size = UDim2.fromOffset(130, 42),
-			AnchorPoint = Vector2.new(1, 1),
-			Position = UDim2.new(1, -14, 1, -6),
-			Color = Colors.Primary,
-			Parent = row,
-			OnClick = function()
-				openPassBuy(def, true)
-			end,
-		})
-	else
-		local buyButton = UIKit.Button({
-			Text = "R$ " .. tostring(def.Price or "?"),
-			Size = UDim2.fromOffset(130, 46),
-			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -14, 0.5, 0),
-			Color = Colors.Good,
-			Parent = row,
-			OnClick = function()
-				-- For yourself, or as a gift? (PassBuy window)
-				openPassBuy(def)
-			end,
-		})
-		ShopUI.WatchPrice(def, true, function(price)
-			if buyButton.Parent then
-				buyButton.Text = "R$ " .. price
-			end
-		end)
 	end
+	local buyButton = UIKit.Button({
+		Text = "R$ " .. tostring(def.Price or "?"),
+		Size = UDim2.fromOffset(130, 46),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -14, 0.5, if owned then 6 else 0),
+		Color = Colors.Good,
+		Parent = row,
+		OnClick = function()
+			-- For yourself, or as a gift? (PassBuy window)
+			openPassBuy(def)
+		end,
+	})
+	ShopUI.WatchPrice(def, true, function(price)
+		if buyButton.Parent then
+			buyButton.Text = "R$ " .. price
+		end
+	end)
 
 	return row
 end
@@ -32880,7 +33243,7 @@ function ShopUI.Init()
 			r.LayoutOrder = i
 			UIKit.Label({ Text = plr.DisplayName .. "  @" .. plr.Name, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -160, 1, 0), Parent = r })
 			UIKit.Button({
-				Text = "🎁 Gift",
+				Text = "Gift",
 				Color = Colors.Good,
 				TextSize = 18,
 				Size = UDim2.fromOffset(130, 44),
@@ -32900,26 +33263,32 @@ function ShopUI.Init()
 		clearBody()
 		header(def)
 		UIKit.Label({ Text = tostring(def.Desc or ""), TextSize = 18, TextColor3 = Colors.TextDim, TextWrapped = true, Position = UDim2.fromOffset(10, 46), Size = UDim2.new(1, -20, 0, 60), Parent = passBody })
+		local meta = ClientState.Meta
+		local owned = meta ~= nil and meta.Passes[def.Key] == true
 		local selfButton = UIKit.Button({
-			Text = "Buy for myself  (R$ " .. tostring(def.Price or "?") .. ")",
-			Color = Colors.Good,
+			Text = if owned then "Game Pass already owned" else "Buy for myself  (R$ " .. tostring(def.Price or "?") .. ")",
+			Color = if owned then Colors.Disabled else Colors.Good,
 			TextSize = 22,
 			Size = UDim2.new(1, -40, 0, 70),
 			AnchorPoint = Vector2.new(0.5, 0),
 			Position = UDim2.new(0.5, 0, 0, 124),
 			Parent = passBody,
 			OnClick = function()
+				if owned then
+					UIKit.Toast("You already own " .. tostring(def.Name) .. ". You can still gift it!", "Info")
+					return
+				end
 				UIKit.CloseWindow("PassBuy")
 				buyPassForSelf(def)
 			end,
 		})
 		ShopUI.WatchPrice(def, true, function(price)
-			if selfButton.Parent then
+			if selfButton.Parent and not owned then
 				selfButton.Text = "Buy for myself  (R$ " .. price .. ")"
 			end
 		end)
 		UIKit.Button({
-			Text = "🎁 Gift it to a friend",
+			Text = "Gift it to a friend",
 			Color = Colors.Primary,
 			TextSize = 22,
 			Size = UDim2.new(1, -40, 0, 70),
@@ -32938,8 +33307,12 @@ function ShopUI.Init()
 				return
 			end
 			if arg.GiftOnly or not Config.GetGiftProduct(def.Key) then
+				local meta = ClientState.Meta
 				if arg.GiftOnly then
 					drawPicker(def)
+				elseif meta ~= nil and meta.Passes[def.Key] == true then
+					UIKit.CloseWindow("PassBuy")
+					UIKit.Toast("You already own " .. tostring(def.Name) .. "!", "Info")
 				else
 					UIKit.CloseWindow("PassBuy")
 					buyPassForSelf(def)
@@ -33024,7 +33397,7 @@ function ShopUI.Init()
 end
 
 return ShopUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003B"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
+<Item class="ModuleScript" referent="RBX0000003C"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
 -- Aim comes from the mouse on PC, or the screen centre (with a crosshair) on touch/gamepad, cast
@@ -33948,7 +34321,7 @@ function SprayController.Init()
 end
 
 return SprayController</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003C"><Properties><string name="Name">StayOffer</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003D"><Properties><string name="Name">StayOffer</string><ProtectedString name="Source">--[[
 	StayOffer - "WAIT! Don't leave yet!" When a player opens the Roblox menu (usually on the way to
 	Leave), they're offered a free x2 cleaning boost for 15 minutes, once a day
 	(DataService.ClaimStayBoost; saved to their data, so leaving and rejoining can't claim it twice).
@@ -34177,7 +34550,7 @@ function StayOffer.Init()
 end
 
 return StayOffer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003D"><Properties><string name="Name">TradeUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003E"><Properties><string name="Name">TradeUI</string><ProtectedString name="Source">--[[
 	TradeUI - pet trading (lobby only; TradeService on the server checks everything).
 
 	  * The 🤝 Trade button (HUD) opens the Trade window: everyone in the server with a Request
@@ -34717,7 +35090,7 @@ function TradeUI.Init()
 end
 
 return TradeUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003E"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003F"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -37229,7 +37602,7 @@ function UIKit.Init()
 end
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003F"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000040"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button
@@ -37705,7 +38078,7 @@ function UpgradesUI.Init()
 end
 
 return UpgradesUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000040"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000041"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
 	WaterFX - the water coming out of your own hose and pressure washer, built from real parts so
 	it looks solid from every angle (a camera-facing Beam flattens to nothing when you look straight
 	down it, which is exactly the first-person view).
@@ -37945,7 +38318,7 @@ end
 
 return WaterFX</ProtectedString></Properties></Item>
 </Item>
-<Item class="LocalScript" referent="RBX00000041"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
+<Item class="LocalScript" referent="RBX00000042"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
 	AdminClient - Rinse Cycle's admin panel and the admin effects every player can see.
 
 	Everyone:
@@ -39577,12 +39950,22 @@ local function buildPanel(info: any)
 
 	-- Leaderboards: one board at a time, ◀ ▶ to flip, Reset on each row (with a confirm step).
 	local boardIndex, boardCount = 1, 1
+	-- Pages already seen show straight away (then refresh); a reply for a page you've already
+	-- flipped past is ignored, so fast clicking never jumps back.
+	local boardCache: { [number]: { Count: number, Title: string, Entries: { any } } } = {}
+	local showBoard: (number, number, string, { any }) -&gt; () = nil :: any
+	local pendingBoard: number? = nil
 	local function requestBoard(index: number)
 		boardIndex = ((index - 1) % math.max(boardCount, 1)) + 1
+		pendingBoard = boardIndex
+		local cached = boardCache[boardIndex]
+		if cached then
+			showBoard(boardIndex, cached.Count, cached.Title, cached.Entries)
+		end
 		AdminLeaderboard:FireServer("View", boardIndex)
 	end
 	local function confirmReset(entry: Row)
-		local body = detailPage("🏆 Reset " .. tostring(entry.Name))
+		local body = detailPage("Reset " .. tostring(entry.Name))
 		UIKit.Label({
 			Text = string.format("Take %s off \"%s\"?\n\nThey keep all their real stats. Only this leaderboard starts again from zero for them.", tostring(entry.Name), tostring(entry.Board)),
 			TextSize = 20,
@@ -39604,11 +39987,11 @@ local function buildPanel(info: any)
 			end,
 		})
 	end
-	AdminLeaderboard.OnClientEvent:Connect(function(index, count, title, entries)
-		boardIndex = tonumber(index) or 1
-		boardCount = tonumber(count) or 1
+	showBoard = function(index: number, count: number, title: string, entries: { any })
+		boardIndex = index
+		boardCount = count
 		local rows = {}
-		for i, e in (if type(entries) == "table" then entries else {}) do
+		for i, e in entries do
 			table.insert(rows, {
 				Id = e.UserId,
 				Name = e.Name,
@@ -39617,7 +40000,7 @@ local function buildPanel(info: any)
 				Line2 = tostring(e.Text) .. "  ·  UserId " .. tostring(e.UserId),
 			})
 		end
-		showList(string.format("🏆 %s (%d/%d)", tostring(title), boardIndex, boardCount), rows, "Reset", confirmReset, {
+		showList(string.format("%s (%d/%d)", title, boardIndex, boardCount), rows, "Reset", confirmReset, {
 			Prev = function()
 				requestBoard(boardIndex - 1)
 			end,
@@ -39625,6 +40008,17 @@ local function buildPanel(info: any)
 				requestBoard(boardIndex + 1)
 			end,
 		})
+	end
+	AdminLeaderboard.OnClientEvent:Connect(function(index, count, title, entries)
+		local i = tonumber(index) or 1
+		local data = { Count = tonumber(count) or 1, Title = tostring(title), Entries = if type(entries) == "table" then entries else {} }
+		boardCache[i] = data
+		boardCount = data.Count
+		-- A slow reply for a page you've already flipped past is only cached, not drawn.
+		if pendingBoard == nil or i == pendingBoard then
+			pendingBoard = nil
+			showBoard(i, data.Count, data.Title, data.Entries)
+		end
 	end)
 
 	AdminFeedback.OnClientEvent:Connect(function(text, isError)
@@ -39825,5 +40219,5 @@ task.spawn(function()
 end)</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="TextChatService" referent="RBX00000042"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
+<Item class="TextChatService" referent="RBX00000043"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
 </roblox>

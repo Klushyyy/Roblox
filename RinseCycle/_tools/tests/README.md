@@ -38,3 +38,5 @@ Also run `python3 _tools/check_locals.py` before sending scripts: Roblox refuses
 than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch that.
   - `scen_staff`: staff tiers (Moderator / Admin / Developer / clear), their tags, the staff list, and staff can't target higher ranks.  - `scen_boost`: the stay boost (claim once a day, x2 timer reaches the client), level 1's start,
     the daily streak (24 h continues, over 48 h restarts) and the boost/pass badges.
+  - `scen_boards`: the lobby boards in PlayerGui (scrollable), each "you" row, your own row lit up,
+    and the admin viewer answering from the cache.

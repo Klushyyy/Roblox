@@ -223,48 +223,37 @@ local function buildPassRow(def: any): Frame
 		Parent = textCol,
 	})
 
+	-- The same price button whether you own it or not (so it's clear it can still be gifted);
+	-- owning it just adds a small "Owned" above, and the buy window says so.
 	if owned then
-		-- You have it: you can still gift it to someone.
 		UIKit.Label({
 			Text = "Owned",
 			TextSize = 14,
 			TextColor3 = Colors.Good,
 			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.new(1, -14, 0, 4),
-			Size = UDim2.fromOffset(130, 18),
+			Position = UDim2.new(1, -14, 0, 2),
+			Size = UDim2.fromOffset(130, 16),
 			TextXAlignment = Enum.TextXAlignment.Center,
 			Parent = row,
 		})
-		UIKit.Button({
-			Text = "🎁 Gift",
-			Size = UDim2.fromOffset(130, 42),
-			AnchorPoint = Vector2.new(1, 1),
-			Position = UDim2.new(1, -14, 1, -6),
-			Color = Colors.Primary,
-			Parent = row,
-			OnClick = function()
-				openPassBuy(def, true)
-			end,
-		})
-	else
-		local buyButton = UIKit.Button({
-			Text = "R$ " .. tostring(def.Price or "?"),
-			Size = UDim2.fromOffset(130, 46),
-			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -14, 0.5, 0),
-			Color = Colors.Good,
-			Parent = row,
-			OnClick = function()
-				-- For yourself, or as a gift? (PassBuy window)
-				openPassBuy(def)
-			end,
-		})
-		ShopUI.WatchPrice(def, true, function(price)
-			if buyButton.Parent then
-				buyButton.Text = "R$ " .. price
-			end
-		end)
 	end
+	local buyButton = UIKit.Button({
+		Text = "R$ " .. tostring(def.Price or "?"),
+		Size = UDim2.fromOffset(130, 46),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -14, 0.5, if owned then 6 else 0),
+		Color = Colors.Good,
+		Parent = row,
+		OnClick = function()
+			-- For yourself, or as a gift? (PassBuy window)
+			openPassBuy(def)
+		end,
+	})
+	ShopUI.WatchPrice(def, true, function(price)
+		if buyButton.Parent then
+			buyButton.Text = "R$ " .. price
+		end
+	end)
 
 	return row
 end
@@ -567,7 +556,7 @@ function ShopUI.Init()
 			r.LayoutOrder = i
 			UIKit.Label({ Text = plr.DisplayName .. "  @" .. plr.Name, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -160, 1, 0), Parent = r })
 			UIKit.Button({
-				Text = "🎁 Gift",
+				Text = "Gift",
 				Color = Colors.Good,
 				TextSize = 18,
 				Size = UDim2.fromOffset(130, 44),
@@ -587,26 +576,32 @@ function ShopUI.Init()
 		clearBody()
 		header(def)
 		UIKit.Label({ Text = tostring(def.Desc or ""), TextSize = 18, TextColor3 = Colors.TextDim, TextWrapped = true, Position = UDim2.fromOffset(10, 46), Size = UDim2.new(1, -20, 0, 60), Parent = passBody })
+		local meta = ClientState.Meta
+		local owned = meta ~= nil and meta.Passes[def.Key] == true
 		local selfButton = UIKit.Button({
-			Text = "Buy for myself  (R$ " .. tostring(def.Price or "?") .. ")",
-			Color = Colors.Good,
+			Text = if owned then "Game Pass already owned" else "Buy for myself  (R$ " .. tostring(def.Price or "?") .. ")",
+			Color = if owned then Colors.Disabled else Colors.Good,
 			TextSize = 22,
 			Size = UDim2.new(1, -40, 0, 70),
 			AnchorPoint = Vector2.new(0.5, 0),
 			Position = UDim2.new(0.5, 0, 0, 124),
 			Parent = passBody,
 			OnClick = function()
+				if owned then
+					UIKit.Toast("You already own " .. tostring(def.Name) .. ". You can still gift it!", "Info")
+					return
+				end
 				UIKit.CloseWindow("PassBuy")
 				buyPassForSelf(def)
 			end,
 		})
 		ShopUI.WatchPrice(def, true, function(price)
-			if selfButton.Parent then
+			if selfButton.Parent and not owned then
 				selfButton.Text = "Buy for myself  (R$ " .. price .. ")"
 			end
 		end)
 		UIKit.Button({
-			Text = "🎁 Gift it to a friend",
+			Text = "Gift it to a friend",
 			Color = Colors.Primary,
 			TextSize = 22,
 			Size = UDim2.new(1, -40, 0, 70),
@@ -625,8 +620,12 @@ function ShopUI.Init()
 				return
 			end
 			if arg.GiftOnly or not Config.GetGiftProduct(def.Key) then
+				local meta = ClientState.Meta
 				if arg.GiftOnly then
 					drawPicker(def)
+				elseif meta ~= nil and meta.Passes[def.Key] == true then
+					UIKit.CloseWindow("PassBuy")
+					UIKit.Toast("You already own " .. tostring(def.Name) .. "!", "Info")
 				else
 					UIKit.CloseWindow("PassBuy")
 					buyPassForSelf(def)

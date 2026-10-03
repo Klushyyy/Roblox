@@ -1630,12 +1630,22 @@ local function buildPanel(info: any)
 
 	-- Leaderboards: one board at a time, ◀ ▶ to flip, Reset on each row (with a confirm step).
 	local boardIndex, boardCount = 1, 1
+	-- Pages already seen show straight away (then refresh); a reply for a page you've already
+	-- flipped past is ignored, so fast clicking never jumps back.
+	local boardCache: { [number]: { Count: number, Title: string, Entries: { any } } } = {}
+	local showBoard: (number, number, string, { any }) -> () = nil :: any
+	local pendingBoard: number? = nil
 	local function requestBoard(index: number)
 		boardIndex = ((index - 1) % math.max(boardCount, 1)) + 1
+		pendingBoard = boardIndex
+		local cached = boardCache[boardIndex]
+		if cached then
+			showBoard(boardIndex, cached.Count, cached.Title, cached.Entries)
+		end
 		AdminLeaderboard:FireServer("View", boardIndex)
 	end
 	local function confirmReset(entry: Row)
-		local body = detailPage("🏆 Reset " .. tostring(entry.Name))
+		local body = detailPage("Reset " .. tostring(entry.Name))
 		UIKit.Label({
 			Text = string.format("Take %s off \"%s\"?\n\nThey keep all their real stats. Only this leaderboard starts again from zero for them.", tostring(entry.Name), tostring(entry.Board)),
 			TextSize = 20,
@@ -1657,11 +1667,11 @@ local function buildPanel(info: any)
 			end,
 		})
 	end
-	AdminLeaderboard.OnClientEvent:Connect(function(index, count, title, entries)
-		boardIndex = tonumber(index) or 1
-		boardCount = tonumber(count) or 1
+	showBoard = function(index: number, count: number, title: string, entries: { any })
+		boardIndex = index
+		boardCount = count
 		local rows = {}
-		for i, e in (if type(entries) == "table" then entries else {}) do
+		for i, e in entries do
 			table.insert(rows, {
 				Id = e.UserId,
 				Name = e.Name,
@@ -1670,7 +1680,7 @@ local function buildPanel(info: any)
 				Line2 = tostring(e.Text) .. "  ·  UserId " .. tostring(e.UserId),
 			})
 		end
-		showList(string.format("🏆 %s (%d/%d)", tostring(title), boardIndex, boardCount), rows, "Reset", confirmReset, {
+		showList(string.format("%s (%d/%d)", title, boardIndex, boardCount), rows, "Reset", confirmReset, {
 			Prev = function()
 				requestBoard(boardIndex - 1)
 			end,
@@ -1678,6 +1688,17 @@ local function buildPanel(info: any)
 				requestBoard(boardIndex + 1)
 			end,
 		})
+	end
+	AdminLeaderboard.OnClientEvent:Connect(function(index, count, title, entries)
+		local i = tonumber(index) or 1
+		local data = { Count = tonumber(count) or 1, Title = tostring(title), Entries = if type(entries) == "table" then entries else {} }
+		boardCache[i] = data
+		boardCount = data.Count
+		-- A slow reply for a page you've already flipped past is only cached, not drawn.
+		if pendingBoard == nil or i == pendingBoard then
+			pendingBoard = nil
+			showBoard(i, data.Count, data.Title, data.Entries)
+		end
 	end)
 
 	AdminFeedback.OnClientEvent:Connect(function(text, isError)

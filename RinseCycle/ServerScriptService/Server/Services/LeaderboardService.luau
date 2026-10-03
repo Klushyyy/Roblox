@@ -6,8 +6,12 @@
 --     Rebirths and Stats.BubblesEarned (descending). Keys are
 --     "u_" .. userId, the same as the profile store.
 --   * Every REFRESH_INTERVAL seconds: write the online players' values (times only when they
---     improved, and only values that changed since this server last wrote them), read the top 10
---     of every store, and redraw.
+--     improved, and only values that changed since this server last wrote them), read the top 100
+--     of every store, and redraw (each board scrolls).
+--   * Your position: every player gets attributes "Lb_<board id>" = "<rank>|<value text>" (board
+--     ids D1..D3 for the Top Players pages, T1..Tn for Fastest), drawn as a highlighted row under
+--     each page by the client (BoardView). Ranks past the top 100 come from a slow background scan
+--     of the store, 100 entries per read, up to DEEP_LIMIT, only while the DataStore budget allows.
 --   * Offline (Studio without API access) the boards rank the players in this server instead.
 --   * The Times board draws every level's page; each client shows the page it picked (Effects).
 --   * Admin resets (the admin panel's Leaderboards view): a reset takes a player off one board
@@ -17,6 +21,7 @@
 --     back once they beat the time they had when they were reset. Other servers hear about a
 --     reset through MessagingService.
 
+local CollectionService = game:GetService("CollectionService")
 local DataStoreService = game:GetService("DataStoreService")
 local MessagingService = game:GetService("MessagingService")
 local Players = game:GetService("Players")
@@ -38,11 +43,12 @@ local LeaderboardService = {}
 local REFRESH_INTERVAL = 60
 local OFFLINE_REFRESH_INTERVAL = 10 -- offline boards are free to rebuild, so keep them fresh
 local FIRST_REFRESH_DELAY = 6 -- the first WRITE waits for the first players' profiles to load
-local TOP_N = 10
+local TOP_N = 100 -- rows on each board (it scrolls); also what the admin viewer lists
+local DEEP_LIMIT = 1000 -- "your position" is looked up this far down; past it you're "#1000+"
+local DEEP_RESCAN = 300 -- seconds before a board's deep ranks are read again
 local KEY_PREFIX = "u_"
 local ROW_HEIGHT = 34
 
-local MEDALS = { "🥇", "🥈", "🥉" }
 local ROW_COLORS = {
 	Color3.fromRGB(255, 215, 90),
 	Color3.fromRGB(220, 230, 240),
@@ -53,7 +59,7 @@ local ROW_COLORS = {
 -- State
 ----------------------------------------------------------------------------------------------------
 
-type Row = { Name: string, Value: number }
+type Row = { UserId: number, Name: string, Value: number }
 
 local levelCount = #Config.Levels
 local timesTop: { [number]: { Row } } = {}
@@ -212,7 +218,7 @@ end
 -- Drawing
 ----------------------------------------------------------------------------------------------------
 
-local function clearList(list: Frame)
+local function clearList(list: GuiObject)
 	for _, child in list:GetChildren() do
 		if not child:IsA("UIListLayout") then
 			child:Destroy()
@@ -226,19 +232,30 @@ local function label(props: { [string]: any }, parent: Instance): TextLabel
 	lbl.Font = Enum.Font.FredokaOne
 	lbl.TextScaled = true
 	lbl.TextColor3 = Color3.new(1, 1, 1)
+	-- A text stroke instead of a UIStroke: 100 rows a page, so fewer instances to send to everyone.
+	lbl.TextStrokeTransparency = 0.2
+	lbl.TextStrokeColor3 = Color3.fromRGB(10, 30, 60)
 	for k, v in props do
 		(lbl :: any)[k] = v
 	end
-	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = 2
-	stroke.Color = Color3.fromRGB(10, 30, 60)
-	stroke.Parent = lbl
 	lbl.Parent = parent
 	return lbl
 end
 
-local function drawRows(list: Frame, rows: { Row }, valueText: (number) -> string, emptyText: string)
-	clearList(list)
+-- What each list last showed, so an unchanged board isn't torn down and rebuilt every minute.
+local drawn: { [Instance]: string } = {}
+
+local function drawRows(list: GuiObject, rows: { Row }, valueText: (number) -> string, emptyText: string)
+	local parts = { emptyText }
+	for _, row in rows do
+		table.insert(parts, row.UserId .. ":" .. row.Name .. ":" .. row.Value)
+	end
+	local signature = table.concat(parts, ";")
+	if drawn[list] == signature then
+		return
+	end
+	drawn[list] = signature
+	clearList(list :: any)
 	if #rows == 0 then
 		label({
 			Name = "Empty",
@@ -252,9 +269,11 @@ local function drawRows(list: Frame, rows: { Row }, valueText: (number) -> strin
 		local frame = Instance.new("Frame")
 		frame.Name = "Row" .. rank
 		frame.LayoutOrder = rank
-		frame.Size = UDim2.new(1, 0, 0, ROW_HEIGHT)
+		frame.Size = UDim2.new(1, -16, 0, ROW_HEIGHT)
 		frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		frame.BackgroundTransparency = rank % 2 == 1 and 0.9 or 0.95
+		frame.BorderSizePixel = 0
+		frame:SetAttribute("UserId", row.UserId) -- the client lights up its own row
 		local corner = Instance.new("UICorner")
 		corner.CornerRadius = UDim.new(0, 8)
 		corner.Parent = frame
@@ -262,15 +281,15 @@ local function drawRows(list: Frame, rows: { Row }, valueText: (number) -> strin
 		local color = ROW_COLORS[rank] or Color3.new(1, 1, 1)
 		label({
 			Name = "Rank",
-			Size = UDim2.new(0, 60, 1, -4),
+			Size = UDim2.new(0, 72, 1, -4),
 			Position = UDim2.new(0, 4, 0, 2),
-			Text = MEDALS[rank] or ("#" .. rank),
+			Text = "#" .. rank,
 			TextColor3 = color,
 		}, frame)
 		label({
 			Name = "Player",
-			Size = UDim2.new(1, -230, 1, -4),
-			Position = UDim2.new(0, 72, 0, 2),
+			Size = UDim2.new(1, -240, 1, -4),
+			Position = UDim2.new(0, 84, 0, 2),
 			Text = row.Name,
 			TextColor3 = color,
 			TextXAlignment = Enum.TextXAlignment.Left,
@@ -331,7 +350,7 @@ local function refreshOffline()
 			local profile = DataService.Get(player)
 			local best = profile and profile.BestTimes[i]
 			if best and best > 0 and timeAllowed(player.UserId, i, toTenths(best)) then
-				table.insert(rows, { Name = player.Name, Value = toTenths(best) })
+				table.insert(rows, { UserId = player.UserId, Name = player.Name, Value = toTenths(best) })
 			end
 		end
 		table.sort(rows, function(a, b)
@@ -346,7 +365,7 @@ local function refreshOffline()
 			local profile = DataService.Get(player)
 			local value = if profile then boardValue(stat, profile, player.UserId) else 0
 			if value > 0 then
-				table.insert(rows, { Name = player.Name, Value = value })
+				table.insert(rows, { UserId = player.UserId, Name = player.Name, Value = value })
 			end
 		end
 		table.sort(rows, function(a, b)
@@ -429,27 +448,36 @@ local function readTop(store: OrderedDataStore, ascending: boolean): { Row }?
 			table.insert(found, { UserId = userId, Value = value })
 		end
 	end
-	-- Look every name up at once (each is a web call), not one after another.
+	-- Names: a few lookups at a time (each is a web call; most are cached after the first read).
 	local names: { [number]: string } = {}
-	local left = #found
-	for i, f in found do
+	local nextIndex = 0
+	local workers = math.min(12, #found)
+	local busy = workers
+	for _ = 1, workers do
 		task.spawn(function()
-			names[i] = nameFor(f.UserId)
-			left -= 1
+			while true do
+				nextIndex += 1
+				local i = nextIndex
+				if i > #found then
+					break
+				end
+				names[i] = nameFor(found[i].UserId)
+			end
+			busy -= 1
 		end)
 	end
-	local deadline = os.clock() + 10
-	while left > 0 and os.clock() < deadline do
+	local deadline = os.clock() + 15
+	while busy > 0 and os.clock() < deadline do
 		task.wait()
 	end
 	local rows: { Row } = {}
 	for i, f in found do
-		table.insert(rows, { Name = names[i] or ("Player " .. f.UserId), Value = f.Value })
+		table.insert(rows, { UserId = f.UserId, Name = names[i] or ("Player " .. f.UserId), Value = f.Value })
 	end
 	return rows
 end
 
--- Reads every board's top 10 (no writes), all boards at once. Also run the moment the server
+-- Reads every board's top 100 (no writes), all boards at once. Also run the moment the server
 -- starts, so the boards are filled before anyone looks at them.
 local function readAll()
 	local left = 0
@@ -488,6 +516,136 @@ local function refreshOnline()
 end
 
 ----------------------------------------------------------------------------------------------------
+-- Your position: each player's rank on every board, for the highlighted "you" row under each page
+----------------------------------------------------------------------------------------------------
+
+-- Board ids: "D<i>" = STATS[i] (Top Players page i), "T<i>" = Fastest on level i.
+local function boardIds(): { string }
+	local ids = {}
+	for i = 1, #STATS do
+		table.insert(ids, "D" .. i)
+	end
+	for i = 1, levelCount do
+		table.insert(ids, "T" .. i)
+	end
+	return ids
+end
+
+local function boardParts(id: string): (Stat?, number?)
+	local kind, n = string.match(id, "^(%a)(%d+)$")
+	local index = tonumber(n) or 0
+	if kind == "D" then
+		return STATS[index], nil
+	end
+	return nil, index
+end
+
+local function topRowsOf(id: string): { Row }
+	local stat, level = boardParts(id)
+	if stat then
+		return stat.Top
+	end
+	return timesTop[level :: number] or {}
+end
+
+-- Ranks past the top 100: read 100 at a time in the background, as far as DEEP_LIMIT.
+type Scan = { Pages: any, Rank: number, Found: { [number]: number }, Done: { [number]: number }, FinishedAt: number }
+local scans: { [string]: Scan } = {}
+local scanCursor = 0
+
+local function sortedBudget(): number
+	local ok, n = pcall(function()
+		return DataStoreService:GetRequestBudgetForRequestType(Enum.DataStoreRequestType.GetSortedAsync)
+	end)
+	return if ok and type(n) == "number" then n else 0
+end
+
+local function deepScan()
+	local ids = boardIds()
+	for _ = 1, #ids * 2 do
+		if sortedBudget() <= 4 then
+			return -- leave room for the top-100 reads
+		end
+		scanCursor = scanCursor % #ids + 1
+		local id = ids[scanCursor]
+		local scan = scans[id]
+		if not scan then
+			scan = { Pages = nil, Rank = 0, Found = {}, Done = {}, FinishedAt = -math.huge }
+			scans[id] = scan
+		end
+		if scan.Pages == nil and (os.clock() - scan.FinishedAt < DEEP_RESCAN or #topRowsOf(id) < TOP_N) then
+			continue -- read recently, or everyone fits in the top 100 anyway
+		end
+		local stat, level = boardParts(id)
+		local store: OrderedDataStore? = if stat then stat.DS elseif level then timeStores[level] else nil
+		if not store then
+			continue
+		end
+		local ok = pcall(function()
+			if scan.Pages == nil then
+				scan.Pages = (store :: OrderedDataStore):GetSortedAsync(stat == nil, 100)
+			else
+				scan.Pages:AdvanceToNextPageAsync()
+			end
+			for _, entry in scan.Pages:GetCurrentPage() do
+				local userId = tonumber((string.match(tostring(entry.key), "^" .. KEY_PREFIX .. "(%d+)$")))
+				local value = tonumber(entry.value)
+				if userId and value and value > 0 then
+					scan.Rank += 1
+					scan.Found[userId] = scan.Rank
+				end
+			end
+		end)
+		if not ok or scan.Pages == nil or scan.Pages.IsFinished or scan.Rank >= DEEP_LIMIT then
+			if ok then
+				scan.Done = scan.Found
+			end
+			scan.Pages, scan.Rank, scan.Found, scan.FinishedAt = nil, 0, {}, os.clock()
+		end
+	end
+end
+
+local function rankOf(id: string, userId: number): number?
+	for rank, row in topRowsOf(id) do
+		if row.UserId == userId then
+			return rank
+		end
+	end
+	local scan = scans[id]
+	if scan then
+		local rank = scan.Found[userId] or scan.Done[userId]
+		if rank and rank > TOP_N then
+			return rank
+		end
+	end
+	return nil
+end
+
+-- "<rank>|<value text>": rank 0 = past DEEP_LIMIT or not read yet; empty text = not on the board.
+local function publishRanks()
+	for _, player in Players:GetPlayers() do
+		local profile = DataService.Get(player)
+		if not profile then
+			continue
+		end
+		for _, id in boardIds() do
+			local stat, level = boardParts(id)
+			local text = ""
+			if stat then
+				local value = boardValue(stat, profile, player.UserId)
+				text = if value > 0 then Format.Commas(value) else ""
+			elseif level then
+				local best = profile.BestTimes[level]
+				local tenths = if best and best > 0 then toTenths(best) else nil
+				text = if tenths and timeAllowed(player.UserId, level, tenths) then formatTenths(tenths) else ""
+			end
+			local rank = if text ~= "" then (rankOf(id, player.UserId) or 0) else 0
+			player:SetAttribute("Lb_" .. id, rank .. "|" .. text)
+		end
+	end
+end
+
+----------------------------------------------------------------------------------------------------
 -- Admin: view every board, reset a player on one
 ----------------------------------------------------------------------------------------------------
 
@@ -507,12 +665,21 @@ function LeaderboardService.BoardTitle(index: number): string
 	return if level then "Fastest: " .. level.Name else "?"
 end
 
--- Up to `limit` entries of board `index`, best first. Yields (DataStore reads).
+-- Up to `limit` entries of board `index`, best first. Straight from what the lobby boards last
+-- read (no wait); only reads the DataStore if nothing has been read yet.
 function LeaderboardService.ListBoard(index: number, limit: number?): { BoardRow }
 	local count = math.clamp(math.floor(limit or 100), 1, 100)
 	local stat = STATS[index]
 	local level = if stat then nil else index - #STATS
 	local rows: { BoardRow } = {}
+	local cached = if stat then stat.Top elseif level then timesTop[level] else nil
+	if cached and #cached > 0 then
+		for i = 1, math.min(#cached, count) do
+			local r = cached[i]
+			table.insert(rows, { UserId = r.UserId, Name = r.Name, Value = r.Value, Text = if stat then Format.Commas(r.Value) else formatTenths(r.Value) })
+		end
+		return rows
+	end
 	local offline = DataService.IsOffline() or not openStores()
 	if offline then
 		for _, player in Players:GetPlayers() do
@@ -646,9 +813,8 @@ function LeaderboardService.ResetEntry(index: number, userId: number): (boolean,
 	-- Forget what this server wrote for them, and take them off the boards on screen now.
 	if stat then
 		stat.Written[userId] = nil
-		local name = nameFor(userId)
 		for i = #stat.Top, 1, -1 do
-			if stat.Top[i].Name == name then
+			if stat.Top[i].UserId == userId then
 				table.remove(stat.Top, i)
 			end
 		end
@@ -658,15 +824,15 @@ function LeaderboardService.ResetEntry(index: number, userId: number): (boolean,
 			w[level :: number] = nil
 		end
 		local top = timesTop[level :: number] or {}
-		local name = nameFor(userId)
 		for i = #top, 1, -1 do
-			if top[i].Name == name then
+			if top[i].UserId == userId then
 				table.remove(top, i)
 			end
 		end
 	end
 	pcall(drawTimes)
 	pcall(drawDishes)
+	pcall(publishRanks)
 	return true, string.format("Reset %s on %s", nameFor(userId), LeaderboardService.BoardTitle(index))
 end
 
@@ -680,6 +846,11 @@ function LeaderboardService.Init()
 	end
 	Players.PlayerAdded:Connect(function(player)
 		loadResets(player.UserId)
+		-- Their "you" rows: as soon as their save has loaded.
+		task.spawn(function()
+			DataService.WaitFor(player, 30)
+			pcall(publishRanks)
+		end)
 	end)
 	for _, player in Players:GetPlayers() do
 		task.spawn(loadResets, player.UserId)
@@ -715,6 +886,12 @@ function LeaderboardService.Start()
 		warn(string.format("[%s] LeaderboardService: no lobby, boards disabled", Config.GameName))
 		return
 	end
+	-- The client (BoardView) makes these scrollable and adds each player's own "you" row.
+	local lobby = LobbyBuilder.GetLobby()
+	for kind, board in { T = lobby.Boards.Times, D = lobby.Boards.Dishes } do
+		board.Part:SetAttribute("LbBoard", kind)
+		CollectionService:AddTag(board.Part, "LeaderboardBoard")
+	end
 	drawTimes()
 	drawDishes()
 
@@ -734,6 +911,11 @@ function LeaderboardService.Start()
 			end
 			drawTimes()
 			drawDishes()
+			pcall(publishRanks)
+			if not offline then
+				pcall(deepScan)
+				pcall(publishRanks)
+			end
 			task.wait(if offline then OFFLINE_REFRESH_INTERVAL else REFRESH_INTERVAL)
 		end
 	end)

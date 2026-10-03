@@ -4262,7 +4262,8 @@ Remote.AdminLeaderboard.OnServerEvent:Connect(function(admin, action, index, use
 	if not tierHasCommand(getPlayerTier(admin), "leaderboards") then
 		return
 	end
-	if leaderboardBusy[admin] then
+	-- Only a reset waits its turn; viewing reads the boards' cache, so every click is answered.
+	if action == "Reset" and leaderboardBusy[admin] then
 		return
 	end
 	local count = LeaderboardService.BoardCount()
@@ -4270,7 +4271,9 @@ Remote.AdminLeaderboard.OnServerEvent:Connect(function(admin, action, index, use
 		return
 	end
 	index = ((math.floor(index) - 1) % count) + 1
-	leaderboardBusy[admin] = true
+	if action == "Reset" then
+		leaderboardBusy[admin] = true
+	end
 	local ok, err = pcall(function()
 		if action == "Reset" then
 			if type(userId) ~= "number" then
@@ -4293,7 +4296,9 @@ Remote.AdminLeaderboard.OnServerEvent:Connect(function(admin, action, index, use
 		end
 		Remote.AdminLeaderboard:FireClient(admin, index, count, LeaderboardService.BoardTitle(index), rows)
 	end)
-	leaderboardBusy[admin] = nil
+	if action == "Reset" then
+		leaderboardBusy[admin] = nil
+	end
 	if not ok then
 		dsWarn("[AdminServer] leaderboards: " .. tostring(err))
 		sendFeedback(admin, "Couldn't load that leaderboard", true)

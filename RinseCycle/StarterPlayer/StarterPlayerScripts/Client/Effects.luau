@@ -739,8 +739,23 @@ end
 -- view of the pages (Page1..PageN in the board's SurfaceGui). Nothing is sent to the server.
 ----------------------------------------------------------------------------------------------------
 
+-- A board's SurfaceGui: on the part, or in PlayerGui once BoardView has made it scrollable.
+local function boardGui(board: Instance?): SurfaceGui?
+	if not board then
+		return nil
+	end
+	local onPart = board:FindFirstChildOfClass("SurfaceGui")
+	if onPart then
+		return onPart
+	end
+	local ok, gui = pcall(function()
+		return (require(Client:WaitForChild("BoardView")) :: any).GuiOf(board)
+	end)
+	return if ok then gui else nil
+end
+
 local function flipBoard(board: Instance, dir: number)
-	local gui = board:FindFirstChildOfClass("SurfaceGui")
+	local gui = boardGui(board)
 	if not gui then
 		return
 	end
@@ -774,7 +789,7 @@ local function addBoardArrow(inst: Instance)
 	-- The drawn button this click target sits over (in the board's SurfaceGui).
 	local function button(): GuiObject?
 		local board = inst.Parent
-		local gui = board and board:FindFirstChildOfClass("SurfaceGui")
+		local gui = boardGui(board)
 		local name = inst:GetAttribute("Button")
 		local b = gui and type(name) == "string" and gui:FindFirstChild(name)
 		return if b and b:IsA("GuiObject") then b else nil

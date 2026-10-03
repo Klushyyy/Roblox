@@ -1330,6 +1330,21 @@ walls instead of clipping through. All gameplay queries use Include filters.
   water. Roblox's player list can't be moved by a game, so on PC (lobby) the Shop/Pets/Ranks
   column sits below it, estimated as 48 + 40 px per player, while there's room.
 
+## 6x. Scrolling leaderboards with your position; owned passes keep their price (v1.7.0)
+- Lobby boards show the top 100 (ScrollingFrame). BoardView moves each board's SurfaceGui into
+  PlayerGui (Adornee = the board) so the mouse wheel / a finger scrolls it; Effects finds the
+  moved GUI for the arrows (BoardView.GuiOf).
+- Under every page, a gold "you" row: "#rank  name (you)  value", from the player attribute
+  Lb_<D1..D3|T1..Tn> = "<rank>|<value text>". Ranks past 100 come from a background scan of the
+  OrderedDataStore (100 per read, up to #1000, at most every 5 min per board, only while the
+  GetSortedAsync budget is above 4). Past #1000 reads "#1000+". Your top-100 row gets a gold outline.
+- Rows are only rebuilt when a board changes, and use TextStroke instead of UIStroke (fewer
+  instances to replicate).
+- Admin Leaderboards view: served from the boards' cache (instant). The client caches pages it
+  has seen and ignores late replies for pages already flipped past; only Reset is serialized.
+- Shop passes: an owned pass keeps the green R$ price button, with a small "Owned" above it. Its
+  buy window shows a grey "Game Pass already owned" and "Gift it to a friend".
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

@@ -38,10 +38,10 @@ export type PadInfo = {
 	Barriers: { BasePart },
 	Gui: PadGui,
 }
-export type BoardPage = { Title: TextLabel, List: Frame }
+export type BoardPage = { Title: TextLabel, List: ScrollingFrame }
 -- Pages: one per level on a paged board (the Fastest Clean board); each client flips them locally
 -- with the arrows (tag "BoardArrow"), so nobody changes the page for anyone else.
-export type BoardInfo = { Part: BasePart, Title: TextLabel, List: Frame, Pages: { BoardPage }? }
+export type BoardInfo = { Part: BasePart, Title: TextLabel, List: ScrollingFrame, Pages: { BoardPage }? }
 export type Lobby = {
 	Model: Model,
 	Pads: { PadInfo },
@@ -1253,12 +1253,21 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 			TextColor3 = Color3.new(1, 1, 1),
 		}, root) :: TextLabel
 		mk("UIStroke", { Thickness = 3, Color = Color3.fromRGB(10, 30, 60) }, titleLbl)
-		local list = mk("Frame", {
+		-- The top 100, scrollable (the client moves this SurfaceGui into PlayerGui so it takes the
+		-- mouse wheel / a finger: BoardView). The 46 px under it are for each player's own row.
+		local list = mk("ScrollingFrame", {
 			Name = "List",
-			Size = UDim2.new(1, 0, 1, if paged then -104 else -70),
+			Size = UDim2.new(1, 0, 1, if paged then -150 else -116),
 			Position = UDim2.new(0, 0, 0, 70),
 			BackgroundTransparency = 1,
-		}, root) :: Frame
+			BorderSizePixel = 0,
+			CanvasSize = UDim2.new(),
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			ScrollingDirection = Enum.ScrollingDirection.Y,
+			ScrollBarThickness = 10,
+			ScrollBarImageColor3 = Color3.fromRGB(255, 205, 70),
+			ElasticBehavior = Enum.ElasticBehavior.Never,
+		}, root) :: ScrollingFrame
 		mk("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4) }, list)
 		if paged then
 			-- Page dots along the bottom, this page's dot lit.
