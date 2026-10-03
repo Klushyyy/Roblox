@@ -554,14 +554,14 @@ end
 local queued = false -- an Insta Roll click that came in while the last answer was on its way
 
 local function roll_()
-	-- Not enough gems: straight to the Gems shop (its Back button returns here).
+	-- Not enough gems: straight to the Gems shop.
 	local metaNow = ClientState.Meta :: Types.MetaState?
 	if not rolling and (if metaNow then metaNow.Gems or 0 else 0) < Config.RankRoll.Cost then
 		if popupGui then
 			popupGui.Enabled = false
 		end
 		UIKit.Toast(string.format("You need %d Gems to roll. Get more here!", Config.RankRoll.Cost), "Info")
-		UIKit.OpenSubWindow("Shop", "Gems", "Ranks")
+		UIKit.OpenWindow("Shop", "Gems")
 		return
 	end
 	if rolling then

@@ -1,4 +1,4 @@
--- Sub-menus: Back buttons, and Roll with too few gems opening the Gems shop.
+-- Sub-menus: the gift window's Back button; Roll with too few gems opens the Gems shop (plain X).
 local M = G.modules
 local R = "/home/user/Roblox/RinseCycle/"
 local DS = M[R .. "ServerScriptService/Server/Services/DataService.luau"]

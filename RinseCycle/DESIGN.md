@@ -1374,6 +1374,9 @@ walls instead of clipping through. All gameplay queries use Include filters.
   (locked particle), drifting sparkles and a PointLight, gold or rainbow. In menus the card keeps
   its normal colour with a gold (or turning rainbow) edge and a small GOLD / RAINBOW tag under the
   pet; the detail panel says "Rainbow • Epic". The colour-cycling rainbow (v1.7.4) is gone.
+- v1.7.7: hatch buttons read "Hatch 1 (50 Bubbles)". Short of Bubbles they're grey but still
+  clickable: a click opens the Bubbles shop (locked eggs stay disabled; a full pet bag says so).
+  Only the gift window (PassBuy) keeps a Back button; the Gems shop opened from Ranks has a plain X.
 
 ## 7. Balance knobs (all in Config)
 

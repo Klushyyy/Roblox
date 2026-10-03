@@ -1055,16 +1055,32 @@ function PetsUI._refreshEggButtons()
 		eggLockedLabel.Text = "Unlock " .. where .. " to hatch this egg!"
 	end
 
-	hatch1Button:SetAttribute("Disabled", locked or not eggAffordable(egg, 1, meta))
-	hatch3Button:SetAttribute("Disabled", locked or not eggAffordable(egg, 3, meta))
-	hatch1Button.Text = "Hatch 1  (" .. Format.Commas(egg.Cost) .. ")"
-	hatch3Button.Text = "Hatch 3  (" .. Format.Commas(egg.Cost * 3) .. ")"
+	-- Locked eggs can't be clicked. Short of Bubbles, the button only looks grey: clicking it
+	-- opens the Bubbles shop (doHatch).
+	hatch1Button:SetAttribute("Disabled", locked)
+	hatch3Button:SetAttribute("Disabled", locked)
+	UIKit.SetButtonColor(hatch1Button, if eggAffordable(egg, 1, meta) then C.Good else C.Disabled)
+	UIKit.SetButtonColor(hatch3Button, if eggAffordable(egg, 3, meta) then C.Accent else C.Disabled)
+	hatch1Button.Text = "Hatch 1  (" .. Format.Commas(egg.Cost) .. " Bubbles)"
+	hatch3Button.Text = "Hatch 3  (" .. Format.Commas(egg.Cost * 3) .. " Bubbles)"
 end
 
 local function doHatch(count: number)
 	local eggId = currentEggId
 	if not eggId then
 		return
+	end
+	local egg = Config.GetEgg(eggId)
+	local meta = ClientState.Meta
+	if egg and meta then
+		if meta.Bubbles < egg.Cost * count then
+			UIKit.Toast(string.format("You need %s Bubbles. Get more here!", Format.Commas(egg.Cost * count)), "Info")
+			UIKit.OpenWindow("Shop", "Bubbles")
+			return
+		elseif meta.MaxPets - #meta.Pets < count then
+			UIKit.Toast("Your pet bag is full! Delete or merge some pets first.", "Info")
+			return
+		end
 	end
 	local result = ClientState.MetaRequest("Hatch", { Egg = eggId, Count = count })
 	if not result.Ok then
