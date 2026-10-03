@@ -1001,9 +1001,18 @@ end
 
 -- A cute pet model for Config.Pets[petId] (a placeholder for unknown ids). Unparented; the caller
 -- parents it and moves it with PivotTo. Facing -Z, PrimaryPart "Root" at the centre.
--- Tier looks (Config.PetTiers): the pet keeps its own colours. Golden gets a gold glow, halo and
--- sparkles; Rainbow the same in rainbow colours. (Menus add a GOLD / RAINBOW tag and edge.)
+-- Tier looks (Config.PetTiers): the pet keeps its own colours. Golden gets a soft gold halo and gold
+-- sparkles; Rainbow a rainbow halo and sparkles in six separate colours. No light (it bleached
+-- pets and floor to yellow). Menus add a GOLD / RAINBOW tag and edge.
 local GOLD_GLOW = Color3.fromRGB(255, 210, 80)
+local RAINBOW_SPARKS = {
+	Color3.fromRGB(255, 70, 70),
+	Color3.fromRGB(255, 160, 40),
+	Color3.fromRGB(255, 230, 60),
+	Color3.fromRGB(80, 220, 90),
+	Color3.fromRGB(60, 160, 255),
+	Color3.fromRGB(170, 90, 255),
+}
 local RAINBOW_GLOW = ColorSequence.new({
 	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 90, 90)),
 	ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 200, 70)),
@@ -1029,45 +1038,46 @@ local function applyTier(model: Model, tier: number)
 		return
 	end
 	local golden = tier == 2
-	-- Rainbow particles run through every colour over their life, so the cloud is all colours at once.
-	local colors = if golden then ColorSequence.new(GOLD_GLOW) else RAINBOW_GLOW
-	-- A big soft halo around the pet.
+	local function emitter(name: string, color: ColorSequence, rate: number, size: number, emission: number): ParticleEmitter
+		local e = Instance.new("ParticleEmitter")
+		e.Name = name
+		e.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+		e.Color = color
+		e.LightEmission = emission
+		e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, size), NumberSequenceKeypoint.new(1, 0) })
+		e.Lifetime = NumberRange.new(0.8, 1.3)
+		e.Rate = rate
+		e.Speed = NumberRange.new(1.5, 3)
+		e.Drag = 3
+		e.SpreadAngle = Vector2.new(180, 180)
+		e.Rotation = NumberRange.new(0, 360)
+		e.RotSpeed = NumberRange.new(-120, 120)
+		e.Parent = root
+		return e
+	end
+	-- A soft halo (low light emission, so it tints instead of washing the pet out to white).
 	local aura = Instance.new("ParticleEmitter")
 	aura.Name = "TierAura"
 	aura.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	aura.Color = colors
-	aura.LightEmission = 1
+	aura.Color = if golden then ColorSequence.new(GOLD_GLOW) else RAINBOW_GLOW
+	aura.LightEmission = 0.35
 	aura.LockedToPart = true
-	aura.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 5), NumberSequenceKeypoint.new(1, 6.5) })
-	aura.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.4, 0.55), NumberSequenceKeypoint.new(1, 1) })
+	aura.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 3.4), NumberSequenceKeypoint.new(1, 4.2) })
+	aura.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.4, 0.72), NumberSequenceKeypoint.new(1, 1) })
 	aura.Lifetime = NumberRange.new(1, 1.4)
-	aura.Rate = 8
+	aura.Rate = 4
 	aura.Speed = NumberRange.new(0)
 	aura.Rotation = NumberRange.new(0, 360)
 	aura.RotSpeed = NumberRange.new(-40, 40)
 	aura.Parent = root
-	-- Lots of sparkles bursting off it.
-	local sparkle = Instance.new("ParticleEmitter")
-	sparkle.Name = "TierSparkle"
-	sparkle.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	sparkle.Color = colors
-	sparkle.LightEmission = 1
-	sparkle.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.9), NumberSequenceKeypoint.new(1, 0) })
-	sparkle.Lifetime = NumberRange.new(0.8, 1.4)
-	sparkle.Rate = if golden then 28 else 40
-	sparkle.Speed = NumberRange.new(2, 4)
-	sparkle.Drag = 3
-	sparkle.SpreadAngle = Vector2.new(180, 180)
-	sparkle.Rotation = NumberRange.new(0, 360)
-	sparkle.RotSpeed = NumberRange.new(-120, 120)
-	sparkle.Parent = root
-	-- A real glow on whatever's around it.
-	local light = Instance.new("PointLight")
-	light.Name = "TierGlow"
-	light.Color = if golden then GOLD_GLOW else Color3.fromRGB(230, 170, 255)
-	light.Brightness = 2.5
-	light.Range = 12
-	light.Parent = root
+	if golden then
+		emitter("TierSparkle", ColorSequence.new(GOLD_GLOW), 18, 0.7, 0.5)
+	else
+		-- One emitter per colour: a cloud of clearly different colours, never a blend.
+		for i, c in RAINBOW_SPARKS do
+			emitter("TierSparkle" .. i, ColorSequence.new(c), 4, 0.65, 0.3)
+		end
+	end
 end
 
 function PetModels.Build(petId: string, tier: number?): Model

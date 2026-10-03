@@ -1388,6 +1388,9 @@ walls instead of clipping through. All gameplay queries use Include filters.
   badge in place of the buy button; boosted rows get an "x2" tag and "was 0.50%" under the
   chance; without the pass they show "x2 Luck: 1.00%". Footer: "Rare ranks and higher are 2x as
   likely with x2 Luck."
+- v1.8.0: tier effects toned so the two read differently: no PointLight (it bleached pets and floor
+  yellow), a softer halo (LightEmission 0.35, size 3.4-4.2), Golden = 18 gold sparkles/s, Rainbow =
+  six single-colour emitters (red, orange, yellow, green, blue, purple; 4/s each).
 
 ## 7. Balance knobs (all in Config)
 
