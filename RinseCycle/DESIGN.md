@@ -1476,6 +1476,37 @@ walls instead of clipping through. All gameplay queries use Include filters.
   "streak", launch data "daily"), API key from the secret "OpenCloudKey". Players in the server
   are skipped. Off in Studio and until a string ID is set.
 
+## 6zc. Clubs v2, the chest at the chest, poll card, autocomplete, new icons (v2.1.0)
+- Insta Roll is gone (pass, gift and button): every rank roll spins.
+- Treasure Chest: no window. The chest in the lobby (facing the spawn, no shared faces) has a
+  per-player odds board and "1 FREE CHEST!" (hidden once used). Walking up shows OPEN 1 / 3 / 10
+  boxes at the bottom of the screen (E opens one); opening flips the lid and spins a card per chest
+  that lands on the prize (rarest last, confetti for Epic+). The Event button and E elsewhere in the
+  lobby take you to the chest.
+- Next Event ring: Roblox's own event pop-up (SocialService:PromptRsvpToEventAsync) when the event
+  has a RobloxEventId (StoreIds > EventIds); otherwise our card with NOTIFY ME / NO THANKS. The
+  first event is Admin Abuse, 17 Oct 2026 11 pm NZ.
+- Clubs v2 (ClubService rewritten): prefix (2-5, "?" explains it) instead of tag; Owner / Co-Leader
+  / Member (owner promotes with a warning; co-leaders kick members; owner kicks anyone); rename and
+  re-prefix once each every 30 days (own timers, first change free); confirm before leaving /
+  closing; "Creating..." overlay; tabs MY CLUB / TOP CLUBS / FIND CLUBS / LEADERBOARD / CHAT.
+  FIND lists clubs starting with the text A to Z (the "dir_<letter>" shards) and a code finds its
+  club; Filters (type, friends in it, can join, not full) with Back. Members earn the club points
+  and their own (club leaderboard). Club chat: filtered, last 60 kept ("chat_<id>"), live via
+  MessagingService / ClubChat.
+- Poll card: under every window (hidden while one is open); voting tucks it away behind a POLL tab;
+  when the results are in it comes back as POLL FINISHED with each answer's votes and percent until
+  closed. No results banner, no duplicate message.
+- Admin panel: the group tabs scroll sideways; the command line (and name boxes) suggest as you
+  type like Minecraft (Autocomplete): commands, then players, then each option; Tab completes,
+  Up / Down choose, no tab character is ever typed.
+- Icons: Pets (puppy), Shop (bag), Trade (arrows), Clubs (friends), Music (notes), Admin (gavel),
+  Free (heart) redrawn without rotated frames (Roblox doesn't anti-alias rotated frames, which is
+  what made lines go jagged at some sizes): discs, rounded rectangles, rings and gradient-cut
+  triangles only, drawn at one size and scaled (IconArt header).
+- Pets On / Off only shows in a run when you have pets out. Music: lobby track and two run tracks
+  that crossfade into each other.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

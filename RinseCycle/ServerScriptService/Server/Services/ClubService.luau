@@ -1,27 +1,36 @@
 --[[
 	ClubService - player clubs (the Clubs button), like other Roblox games' clans.
 
-	  * Make one for Config.Clubs.CreateCost Gems: a name and a short tag (both run through Roblox's
-	    text filter and unique), public or private, and requirements: a level beaten (0-3) and a
-	    number of rebirths. Up to Config.Clubs.MaxMembers members.
-	  * Public clubs: anyone who meets the requirements joins straight from the list or a search.
-	    Private clubs: only with the club code (the owner sees it and can make a new one).
-	  * Points: every Bubble a member earns while in the club (Stats.BubblesEarned going up) is a
-	    point for the club. TOP CLUBS is the top 25 by points.
-	  * Members wear the club tag after their name (player attribute ClubTag, NameTags).
+	  * Make one for Config.Clubs.CreateCost Gems: a name and a prefix (the short [TAG] shown in
+	    front of members' names; both through Roblox's text filter, names unique), public or private,
+	    and requirements: a level beaten (0-3) and a number of rebirths. Up to MaxMembers.
+	  * Public clubs: anyone who meets the requirements joins from the lists. Private clubs: only with
+	    the club code (members see it; the owner can make a new one).
+	  * Roles: Owner, Co-Leader (the owner promotes members; co-leaders can kick members) and
+	    Member. The owner can kick anyone. Leaving as owner hands the club to a co-leader (else the
+	    longest member); the last one out closes it.
+	  * The owner can rename the club and change the prefix, each once every RenameDays days (each
+	    has its own timer; a brand new club can change straight away).
+	  * Points: every Bubble a member earns while in the club is a point for the club and for that
+	    member (the club leaderboard). TOP CLUBS is the top 25 clubs.
+	  * Club chat: members only, filtered by Roblox's text filter, the last ChatKeep messages kept.
 
 	Storage (DataStores; in Studio without API access everything lives in memory):
 	  RinseCycleClubs        "club_<id>"   the club record (members, settings, points)
 	                         "name_<name>" -> id (names are unique, any case)
-	                         "code_<CODE>" -> id (private club codes)
+	                         "code_<CODE>" -> id (club codes)
+	                         "dir_<c>"     { [id] = summary } every club whose name starts with c
+	                                       (FIND lists them alphabetically)
+	                         "chat_<id>"   the club's chat history
 	  RinseCycleClubPoints   OrderedDataStore id -> points (TOP CLUBS)
-	Other servers hear about kicks and deletes over MessagingService ("RinseCycle_Club"); a player's
-	club is also checked against the record every time they join, so nothing can go stale for long.
+	Other servers hear about kicks and chat over MessagingService ("RinseCycle_Club"); a player's club
+	is also checked against the record every time they join.
 
-	ClubRequest (C->S, action, value) -> { Ok, Error?, Club?, Clubs? }:
-	  "Mine"  "Top"  "Find" (text: code or name)  "Create" ({Name, Tag, Public, ReqLevel, ReqRebirths})
-	  "Join" (club id, public only)  "JoinCode" (code)  "Leave"  "Kick" (userId, owner only)
-	  "Settings" ({Public, ReqLevel, ReqRebirths}, owner only)  "NewCode" (owner only)
+	ClubRequest (C->S, action, value) -> { Ok, Error?, Club?, Clubs?, Messages? }:
+	  "Mine"  "Top"  "Find" (text)  "Create" ({Name, Tag, Public, ReqLevel, ReqRebirths})
+	  "Join" (club id)  "JoinCode" (code)  "Leave"  "Kick" (userId)  "Promote" / "Demote" (userId)
+	  "Settings" ({Public, ReqLevel, ReqRebirths})  "Rename" ({Name?, Tag?})  "NewCode"
+	  "Chat" (text)  "ChatHistory"
 ]]
 
 local DataStoreService = game:GetService("DataStoreService")
@@ -45,7 +54,10 @@ local POINTS_STORE = "RinseCycleClubPoints"
 local TOPIC = "RinseCycle_Club"
 local POINTS_FLUSH = 60 -- seconds between writing earned points
 local TOP_REFRESH = 120 -- seconds the TOP CLUBS list is cached
+local DIR_REFRESH = 60 -- seconds a FIND directory shard is cached
 local TOP_COUNT = 25
+local FIND_COUNT = 30
+local CHAT_GAP = 1.5 -- seconds between one player's chat messages
 local CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" -- no 0/O or 1/I
 
 local initialized = false
@@ -54,11 +66,14 @@ local pointsStore: OrderedDataStore? = nil
 local memory: { [string]: any } = {} -- Studio / no API access
 local memoryPoints: { [string]: number? } = {}
 local lastRequest: { [Player]: number } = {}
+local lastChat: { [Player]: number } = {}
 local seenBubbles: { [Player]: number } = {}
-local pendingPoints: { [string]: number } = {}
+local pendingPoints: { [string]: { [string]: number } } = {} -- club id -> userId -> points
 local topCache: { any } = {}
 local topAt = -math.huge
+local dirCache: { [string]: { At: number, Entries: any } } = {}
 local stateRemote: RemoteEvent
+local chatRemote: RemoteEvent
 
 ----------------------------------------------------------------------------------------------------
 -- Storage
@@ -212,6 +227,46 @@ local function nameKey(name: string): string
 	return "name_" .. string.lower((string.gsub(name, "%s+", " ")))
 end
 
+-- The FIND directory shard a name lives in: its first letter / digit.
+local function dirKey(name: string): string
+	local c = string.lower(string.sub(name, 1, 1))
+	return "dir_" .. (if string.match(c, "%w") then c else "_")
+end
+
+local function cleanName(text: any): string
+	if type(text) ~= "string" then
+		return ""
+	end
+	local name = string.gsub(string.gsub(text, "^%s+", ""), "%s+$", "")
+	return (string.gsub(name, "%s+", " "))
+end
+
+local function cleanTag(text: any): string
+	if type(text) ~= "string" then
+		return ""
+	end
+	return string.upper((string.gsub(text, "%s+", "")))
+end
+
+local function checkName(name: string): string?
+	local rules = Config.Clubs
+	if utf8.len(name) == nil or #name < rules.NameLength[1] or #name > rules.NameLength[2] then
+		return string.format("Club names are %d to %d letters.", rules.NameLength[1], rules.NameLength[2])
+	end
+	if not string.match(name, "^[%w ]+$") then
+		return "Club names use letters, numbers and spaces only."
+	end
+	return nil
+end
+
+local function checkTag(tag: string): string?
+	local rules = Config.Clubs
+	if #tag < rules.TagLength[1] or #tag > rules.TagLength[2] or not string.match(tag, "^%w+$") then
+		return string.format("Prefixes are %d to %d letters or numbers.", rules.TagLength[1], rules.TagLength[2])
+	end
+	return nil
+end
+
 -- Roblox's text filter. Anything it would hide (or a failed check outside Studio) is refused.
 local function filterOk(player: Player, text: string): (boolean, string?)
 	local ok, filtered = pcall(function()
@@ -221,7 +276,7 @@ local function filterOk(player: Player, text: string): (boolean, string?)
 		if RunService:IsStudio() then
 			return true
 		end
-		return false, "Couldn't check that name. Try again in a moment."
+		return false, "Couldn't check that. Try again in a moment."
 	end
 	if filtered ~= text then
 		return false, "That isn't allowed. Try something else."
@@ -229,25 +284,39 @@ local function filterOk(player: Player, text: string): (boolean, string?)
 	return true
 end
 
--- What the client is shown. Members (and only members) see a private club's code.
+local function renameWait(club: any, field: string): number
+	local at = tonumber(club[field]) or 0
+	if at <= 0 then
+		return 0
+	end
+	return math.max(0, at + Config.Clubs.RenameDays * 86400 - os.time())
+end
+
+local ROLE_ORDER = { Owner = 1, CoLeader = 2, Member = 3 }
+
+-- What the client is shown. Members see the code, the member list and their own role.
 local function view(club: any, forUserId: number?): any
 	local members = {}
+	local memberIds = {}
 	for uid, m in club.Members do
 		local id = tonumber(uid) or 0
+		table.insert(memberIds, id)
 		table.insert(members, {
 			UserId = id,
 			Name = m.Name,
-			Role = m.Role,
+			Role = m.Role or "Member",
+			Points = math.floor(tonumber(m.Points) or 0),
 			Online = Players:GetPlayerByUserId(id) ~= nil,
 		})
 	end
 	table.sort(members, function(a, b)
-		if (a.Role == "Owner") ~= (b.Role == "Owner") then
-			return a.Role == "Owner"
+		local ra, rb = ROLE_ORDER[a.Role] or 3, ROLE_ORDER[b.Role] or 3
+		if ra ~= rb then
+			return ra < rb
 		end
-		return a.Name < b.Name
+		return string.lower(a.Name) < string.lower(b.Name)
 	end)
-	local isMember = forUserId ~= nil and club.Members[tostring(forUserId)] ~= nil
+	local me = forUserId and club.Members[tostring(forUserId)]
 	return {
 		Id = club.Id,
 		Name = club.Name,
@@ -260,9 +329,13 @@ local function view(club: any, forUserId: number?): any
 		Max = Config.Clubs.MaxMembers,
 		Owner = club.Owner,
 		OwnerName = club.OwnerName,
-		Code = if isMember then club.Code else nil,
-		Members = if isMember then members else nil,
-		Mine = isMember,
+		MemberIds = memberIds,
+		Code = if me then club.Code else nil,
+		Members = if me then members else nil,
+		Mine = me ~= nil,
+		MyRole = if me then me.Role or "Member" else nil,
+		NameWait = if me then renameWait(club, "NameChangedAt") else nil,
+		TagWait = if me then renameWait(club, "TagChangedAt") else nil,
 	}
 end
 
@@ -282,15 +355,32 @@ end
 
 local function publish(message: any)
 	task.spawn(function()
-		pcall(function()
+		local ok = pcall(function()
 			MessagingService:PublishAsync(TOPIC, message)
 		end)
+		if not ok and message.Kind == "Chat" then
+			-- No MessagingService (Studio): deliver in this server only.
+			local handler = (ClubService :: any).OnMessage
+			if handler then
+				handler(message)
+			end
+		end
 	end)
 end
 
 local function pushState(player: Player, club: any?)
 	if player.Parent == Players then
 		stateRemote:FireClient(player, if club then view(club, player.UserId) else nil)
+	end
+end
+
+-- Tells everyone in this server who's in the club that it changed.
+local function pushToMembers(club: any)
+	for uid in club.Members do
+		local plr = Players:GetPlayerByUserId(tonumber(uid) or 0)
+		if plr then
+			pushState(plr, club)
+		end
 	end
 end
 
@@ -318,6 +408,47 @@ local function cooldownLeft(player: Player): number
 	local profile = DataService.Get(player)
 	local at = profile and profile.ClubMovedAt or 0
 	return math.max(0, at + Config.Clubs.JoinCooldown - os.time())
+end
+
+----------------------------------------------------------------------------------------------------
+-- The FIND directory
+----------------------------------------------------------------------------------------------------
+
+local function summary(club: any): any
+	return { Name = club.Name, Tag = club.Tag, Public = club.Public, ReqLevel = club.ReqLevel, ReqRebirths = club.ReqRebirths }
+end
+
+local function dirPut(club: any)
+	local key = dirKey(club.Name)
+	update(key, function(old)
+		local t = if type(old) == "table" then old else {}
+		t[club.Id] = summary(club)
+		return t
+	end)
+	dirCache[key] = nil
+end
+
+local function dirRemove(name: string, id: string)
+	local key = dirKey(name)
+	update(key, function(old)
+		if type(old) ~= "table" or old[id] == nil then
+			return nil
+		end
+		old[id] = nil
+		return old
+	end)
+	dirCache[key] = nil
+end
+
+local function dirRead(key: string): any
+	local cached = dirCache[key]
+	if cached and os.clock() - cached.At < DIR_REFRESH then
+		return cached.Entries
+	end
+	local ok, entries = get(key)
+	local t = if ok and type(entries) == "table" then entries else {}
+	dirCache[key] = { At = os.clock(), Entries = t }
+	return t
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -355,7 +486,7 @@ local function join(player: Player, id: string, byCode: boolean)
 			reason = why
 			return nil
 		end
-		old.Members[tostring(player.UserId)] = { Name = player.DisplayName, Role = "Member", Joined = os.time() }
+		old.Members[tostring(player.UserId)] = { Name = player.DisplayName, Role = "Member", Joined = os.time(), Points = 0 }
 		return old
 	end)
 	if not ok then
@@ -365,6 +496,7 @@ local function join(player: Player, id: string, byCode: boolean)
 		return fail(reason or "Couldn't join that club.")
 	end
 	setMembership(player, club, true)
+	pushToMembers(club)
 	return { Ok = true, Club = view(club, player.UserId), Message = "Welcome to " .. club.Name .. "!" }
 end
 
@@ -380,17 +512,10 @@ local function create(player: Player, value: any)
 		return fail("Leave your club first.")
 	end
 	local rules = Config.Clubs
-	local name = if type(value.Name) == "string" then string.gsub(string.gsub(value.Name, "^%s+", ""), "%s+$", "") else ""
-	name = string.gsub(name, "%s+", " ")
-	local tag = if type(value.Tag) == "string" then string.upper((string.gsub(value.Tag, "%s+", ""))) else ""
-	if utf8.len(name) == nil or #name < rules.NameLength[1] or #name > rules.NameLength[2] then
-		return fail(string.format("Club names are %d to %d letters.", rules.NameLength[1], rules.NameLength[2]))
-	end
-	if not string.match(name, "^[%w ]+$") then
-		return fail("Use letters, numbers and spaces only.")
-	end
-	if #tag < rules.TagLength[1] or #tag > rules.TagLength[2] or not string.match(tag, "^%w+$") then
-		return fail(string.format("Tags are %d to %d letters or numbers.", rules.TagLength[1], rules.TagLength[2]))
+	local name, tag = cleanName(value.Name), cleanTag(value.Tag)
+	local bad = checkName(name) or checkTag(tag)
+	if bad then
+		return fail(bad)
 	end
 	if (profile.Gems or 0) < rules.CreateCost then
 		return fail(string.format("You need %d Gems to make a club.", rules.CreateCost))
@@ -401,7 +526,7 @@ local function create(player: Player, value: any)
 	end
 	local okTag, whyTag = filterOk(player, tag)
 	if not okTag then
-		return fail(whyTag or "That tag isn't allowed.")
+		return fail(whyTag or "That prefix isn't allowed.")
 	end
 	local reqLevel = math.clamp(math.floor(tonumber(value.ReqLevel) or 0), 0, rules.MaxLevelReq)
 	local reqRebirths = math.clamp(math.floor(tonumber(value.ReqRebirths) or 0), 0, rules.MaxRebirthReq)
@@ -440,7 +565,9 @@ local function create(player: Player, value: any)
 		Code = code,
 		Points = 0,
 		Created = os.time(),
-		Members = { [tostring(player.UserId)] = { Name = player.DisplayName, Role = "Owner", Joined = os.time() } },
+		NameChangedAt = 0, -- 0: the first change is free straight away
+		TagChangedAt = 0,
+		Members = { [tostring(player.UserId)] = { Name = player.DisplayName, Role = "Owner", Joined = os.time(), Points = 0 } },
 	}
 	local okSave = update("club_" .. id, function()
 		return club
@@ -453,6 +580,7 @@ local function create(player: Player, value: any)
 	update("code_" .. code, function()
 		return id
 	end)
+	dirPut(club)
 	setPoints(id, 0)
 	topAt = -math.huge
 	setMembership(player, club, true)
@@ -465,6 +593,8 @@ local function deleteClub(club: any)
 	if club.Code then
 		remove("code_" .. club.Code)
 	end
+	remove("chat_" .. club.Id)
+	dirRemove(club.Name, club.Id)
 	setPoints(club.Id, nil)
 	topAt = -math.huge
 end
@@ -475,7 +605,7 @@ local function leave(player: Player)
 		return fail("You're not in a club.")
 	end
 	local emptied: any = nil
-	local ok = update("club_" .. id, function(old)
+	local ok, club = update("club_" .. id, function(old)
 		if type(old) ~= "table" then
 			return nil
 		end
@@ -485,11 +615,13 @@ local function leave(player: Player)
 			return nil
 		end
 		if old.Owner == player.UserId then
-			-- The longest-standing member takes over.
-			local heir, heirJoined = nil, math.huge
+			-- A co-leader takes over (the longest-standing one), else the longest member.
+			local heir, heirRank, heirJoined = nil, math.huge, math.huge
 			for uid, m in old.Members do
-				if (m.Joined or 0) < heirJoined then
-					heir, heirJoined = uid, m.Joined or 0
+				local rank = if m.Role == "CoLeader" then 1 else 2
+				local joined = m.Joined or 0
+				if rank < heirRank or (rank == heirRank and joined < heirJoined) then
+					heir, heirRank, heirJoined = uid, rank, joined
 				end
 			end
 			old.Owner = tonumber(heir)
@@ -503,12 +635,16 @@ local function leave(player: Player)
 	end
 	if emptied then
 		deleteClub(emptied)
+	elseif club then
+		pushToMembers(club)
 	end
 	setMembership(player, nil, true)
-	return { Ok = true, Message = "You left the club." }
+	return { Ok = true, Message = if emptied then "Your club was closed." else "You left the club." }
 end
 
-local function ownerEdit(player: Player, edit: (any) -> string?)
+-- An edit by a club leader. `allowed(me)` says if this member may do it; `edit(club)` returns an
+-- error message or nil.
+local function leaderEdit(player: Player, allowed: (any) -> boolean, edit: (any) -> string?)
 	local id = clubOf(player)
 	if not id then
 		return fail("You're not in a club.")
@@ -519,8 +655,9 @@ local function ownerEdit(player: Player, edit: (any) -> string?)
 			reason = "That club doesn't exist any more."
 			return nil
 		end
-		if old.Owner ~= player.UserId then
-			reason = "Only the club owner can do that."
+		local me = old.Members[tostring(player.UserId)]
+		if not me or not allowed(me) then
+			reason = "You can't do that in this club."
 			return nil
 		end
 		reason = edit(old)
@@ -535,17 +672,31 @@ local function ownerEdit(player: Player, edit: (any) -> string?)
 	if not club then
 		return fail(reason or "Couldn't do that.")
 	end
-	pushState(player, club)
+	pushToMembers(club)
 	return { Ok = true, Club = view(club, player.UserId) }
+end
+
+local function isOwner(me: any): boolean
+	return me.Role == "Owner"
+end
+
+local function isLeader(me: any): boolean
+	return me.Role == "Owner" or me.Role == "CoLeader"
 end
 
 local function kick(player: Player, userId: any)
 	if type(userId) ~= "number" or userId == player.UserId then
 		return fail("Pick a member to kick.")
 	end
-	local result = ownerEdit(player, function(club)
-		if not club.Members[tostring(userId)] then
+	local result = leaderEdit(player, isLeader, function(club)
+		local target = club.Members[tostring(userId)]
+		if not target then
 			return "They're not in your club."
+		end
+		local me = club.Members[tostring(player.UserId)]
+		-- The owner kicks anyone; co-leaders only kick members.
+		if target.Role == "Owner" or (me.Role == "CoLeader" and target.Role ~= "Member") then
+			return "You can't kick them."
 		end
 		club.Members[tostring(userId)] = nil
 		return nil
@@ -562,11 +713,25 @@ local function kick(player: Player, userId: any)
 	return result
 end
 
+local function setRole(player: Player, userId: any, role: string)
+	if type(userId) ~= "number" or userId == player.UserId then
+		return fail("Pick a member.")
+	end
+	return leaderEdit(player, isOwner, function(club)
+		local target = club.Members[tostring(userId)]
+		if not target or target.Role == "Owner" then
+			return "They're not a member you can change."
+		end
+		target.Role = role
+		return nil
+	end)
+end
+
 local function settings(player: Player, value: any)
 	if type(value) ~= "table" then
 		return fail("Bad request.")
 	end
-	return ownerEdit(player, function(club)
+	local result = leaderEdit(player, isOwner, function(club)
 		if value.Public ~= nil then
 			club.Public = value.Public == true
 		end
@@ -578,11 +743,125 @@ local function settings(player: Player, value: any)
 		end
 		return nil
 	end)
+	if result.Ok then
+		local _, club = clubOf(player)
+		if club then
+			dirPut(club)
+		end
+	end
+	return result
+end
+
+-- Name and prefix changes: owner only, each once every RenameDays (its own timer).
+local function rename(player: Player, value: any)
+	if type(value) ~= "table" then
+		return fail("Bad request.")
+	end
+	local id, current = clubOf(player)
+	if not id or not current then
+		return fail("You're not in a club.")
+	end
+	local newName = if value.Name ~= nil then cleanName(value.Name) else nil
+	local newTag = if value.Tag ~= nil then cleanTag(value.Tag) else nil
+	if newName == current.Name then
+		newName = nil
+	end
+	if newTag == current.Tag then
+		newTag = nil
+	end
+	if not newName and not newTag then
+		return fail("Nothing to change.")
+	end
+	if newName then
+		local bad = checkName(newName)
+		if bad then
+			return fail(bad)
+		end
+		if renameWait(current, "NameChangedAt") > 0 then
+			return fail("The club name can't be changed again yet.")
+		end
+		local okF, why = filterOk(player, newName)
+		if not okF then
+			return fail(why or "That name isn't allowed.")
+		end
+		-- Claim the new name (the old one is freed once the change is saved).
+		local taken = false
+		local okClaim = update(nameKey(newName), function(old)
+			if type(old) == "string" and old ~= "" and old ~= id then
+				taken = true
+				return nil
+			end
+			return id
+		end)
+		if not okClaim then
+			return fail("Clubs are busy. Try again in a moment.")
+		end
+		if taken then
+			return fail("A club already has that name.")
+		end
+	end
+	if newTag then
+		local bad = checkTag(newTag)
+		if bad then
+			return fail(bad)
+		end
+		if renameWait(current, "TagChangedAt") > 0 then
+			return fail("The prefix can't be changed again yet.")
+		end
+		local okF, why = filterOk(player, newTag)
+		if not okF then
+			return fail(why or "That prefix isn't allowed.")
+		end
+	end
+	local oldName = current.Name
+	local result = leaderEdit(player, isOwner, function(club)
+		if newName then
+			if renameWait(club, "NameChangedAt") > 0 then
+				return "The club name can't be changed again yet."
+			end
+			club.Name = newName
+			club.NameChangedAt = os.time()
+		end
+		if newTag then
+			if renameWait(club, "TagChangedAt") > 0 then
+				return "The prefix can't be changed again yet."
+			end
+			club.Tag = newTag
+			club.TagChangedAt = os.time()
+		end
+		return nil
+	end)
+	if not result.Ok then
+		if newName then
+			remove(nameKey(newName))
+		end
+		return result
+	end
+	if newName then
+		remove(nameKey(oldName))
+		dirRemove(oldName, id)
+	end
+	local _, club = clubOf(player)
+	if club then
+		dirPut(club)
+		if newTag then
+			-- Everyone here in the club gets the new prefix over their head now; others on join.
+			for uid in club.Members do
+				local plr = Players:GetPlayerByUserId(tonumber(uid) or 0)
+				if plr then
+					DataService.SetClub(plr, club.Id, club.Tag, false)
+				end
+			end
+		end
+	end
+	topAt = -math.huge
+	result.Message = "Saved!"
+	return result
 end
 
 local function regenerateCode(player: Player)
 	local oldCode: string? = nil
-	local result = ownerEdit(player, function(club)
+	local result = leaderEdit(player, isOwner, function(club)
 		oldCode = club.Code
 		club.Code = newCode()
 		return nil
@@ -599,42 +878,47 @@ local function regenerateCode(player: Player)
 	return result
 end
 
+-- FIND: a club code, or clubs whose name starts with the text (alphabetical).
 local function find(player: Player, text: any)
 	if type(text) ~= "string" then
 		return fail("Type a club name or code.")
 	end
 	local query = string.gsub(string.gsub(text, "^%s+", ""), "%s+$", "")
-	if #query < 2 or #query > 30 then
+	if #query < 1 or #query > 30 then
 		return fail("Type a club name or code.")
 	end
 	local clubs = {}
 	local seen = {}
-	local function add(id: any)
-		if type(id) ~= "string" or seen[id] then
+	local function add(id: any, byCode: boolean)
+		if type(id) ~= "string" or seen[id] or #clubs >= FIND_COUNT then
 			return
 		end
 		seen[id] = true
 		local ok, club = get("club_" .. id)
 		if ok and type(club) == "table" then
 			local v = view(club, player.UserId)
-			v.ByCode = string.upper(query) == club.Code
+			v.ByCode = byCode
 			table.insert(clubs, v)
 		end
 	end
-	local okCode, byCode = get("code_" .. string.upper(query))
-	if okCode then
-		add(byCode)
-	end
-	local okName, byName = get(nameKey(query))
-	if okName then
-		add(byName)
-	end
-	-- Also any club in TOP CLUBS whose name contains the text.
-	local lower = string.lower(query)
-	for _, c in topCache do
-		if string.find(string.lower(c.Name), lower, 1, true) then
-			add(c.Id)
+	if #query == Config.Clubs.CodeLength then
+		local okCode, byCode = get("code_" .. string.upper(query))
+		if okCode then
+			add(byCode, true)
 		end
+	end
+	local lower = string.lower(query)
+	local matches = {}
+	for id, entry in dirRead(dirKey(query)) do
+		if type(entry) == "table" and type(entry.Name) == "string" and string.sub(string.lower(entry.Name), 1, #lower) == lower then
+			table.insert(matches, { Id = id, Name = entry.Name })
+		end
+	end
+	table.sort(matches, function(a, b)
+		return string.lower(a.Name) < string.lower(b.Name)
+	end)
+	for _, m in matches do
+		add(m.Id, false)
 	end
 	return { Ok = true, Clubs = clubs }
 end
@@ -669,9 +953,61 @@ local function top(player: Player)
 	return { Ok = true, Clubs = list }
 end
 
+----------------------------------------------------------------------------------------------------
+-- Chat
+----------------------------------------------------------------------------------------------------
+
+local function chatHistory(player: Player)
+	local id = clubOf(player)
+	if not id then
+		return fail("You're not in a club.")
+	end
+	local ok, list = get("chat_" .. id)
+	return { Ok = true, Messages = if ok and type(list) == "table" then list else {} }
+end
+
+local function chat(player: Player, text: any)
+	if type(text) ~= "string" then
+		return fail("Type a message.")
+	end
+	local message = string.gsub(string.gsub(text, "^%s+", ""), "%s+$", "")
+	if #message == 0 or #message > Config.Clubs.ChatLength then
+		return fail(string.format("Messages are 1 to %d letters.", Config.Clubs.ChatLength))
+	end
+	if os.clock() - (lastChat[player] or 0) < CHAT_GAP then
+		return fail("Slow down a little!")
+	end
+	lastChat[player] = os.clock()
+	local id = clubOf(player)
+	if not id then
+		return fail("You're not in a club.")
+	end
+	-- Roblox's text filter (members see it in every server, so filter for broadcast).
+	local ok, filtered = pcall(function()
+		return TextService:FilterStringAsync(message, player.UserId, Enum.TextFilterContext.PublicChat):GetNonChatStringForBroadcastAsync()
+	end)
+	if not ok then
+		if not RunService:IsStudio() then
+			return fail("Couldn't send that. Try again in a moment.")
+		end
+		filtered = message
+	end
+	local entry = { U = player.UserId, N = player.DisplayName, T = filtered, At = os.time() }
+	update("chat_" .. id, function(old)
+		local list = if type(old) == "table" then old else {}
+		table.insert(list, entry)
+		while #list > Config.Clubs.ChatKeep do
+			table.remove(list, 1)
+		end
+		return list
+	end)
+	publish({ Kind = "Chat", ClubId = id, Msg = entry })
+	return { Ok = true }
+end
+
 local function onRequest(player: Player, action: any, value: any): any
 	local now = os.clock()
-	if now - (lastRequest[player] or 0) < 0.4 then
+	if now - (lastRequest[player] or 0) < 0.3 then
 		return fail("Slow down a little!")
 	end
 	lastRequest[player] = now
@@ -713,10 +1049,20 @@ local function onRequest(player: Player, action: any, value: any): any
 			return leave(player)
 		elseif action == "Kick" then
 			return kick(player, value)
+		elseif action == "Promote" then
+			return setRole(player, value, "CoLeader")
+		elseif action == "Demote" then
+			return setRole(player, value, "Member")
 		elseif action == "Settings" then
 			return settings(player, value)
+		elseif action == "Rename" then
+			return rename(player, value)
 		elseif action == "NewCode" then
 			return regenerateCode(player)
+		elseif action == "Chat" then
+			return chat(player, value)
+		elseif action == "ChatHistory" then
+			return chatHistory(player)
 		end
 		return fail("Unknown request.")
 	end)
@@ -731,6 +1077,16 @@ end
 -- Points and membership checks
 ----------------------------------------------------------------------------------------------------
 
+local function addPending(clubId: string, userId: number, amount: number)
+	local byUser = pendingPoints[clubId]
+	if not byUser then
+		byUser = {}
+		pendingPoints[clubId] = byUser
+	end
+	local key = tostring(userId)
+	byUser[key] = (byUser[key] or 0) + amount
+end
+
 -- Bubbles members earned since the last look become club points (written every POINTS_FLUSH).
 local function collectPoints()
 	for _, player in Players:GetPlayers() do
@@ -740,7 +1096,7 @@ local function collectPoints()
 			local last = seenBubbles[player]
 			seenBubbles[player] = earned
 			if last and earned > last then
-				pendingPoints[profile.ClubId] = (pendingPoints[profile.ClubId] or 0) + (earned - last)
+				addPending(profile.ClubId, player.UserId, earned - last)
 			end
 		end
 	end
@@ -750,12 +1106,18 @@ local function flushPoints()
 	collectPoints()
 	local batch = pendingPoints
 	pendingPoints = {}
-	for id, add in batch do
+	for id, byUser in batch do
 		local ok, club = update("club_" .. id, function(old)
 			if type(old) ~= "table" then
 				return nil
 			end
-			old.Points = (old.Points or 0) + add
+			for uid, add in byUser do
+				old.Points = (old.Points or 0) + add
+				local m = old.Members[uid]
+				if m then
+					m.Points = (tonumber(m.Points) or 0) + add
+				end
+			end
 			return old
 		end)
 		if ok and club then
@@ -764,7 +1126,7 @@ local function flushPoints()
 	end
 end
 
--- On join: is the club still there, and are they still in it? The tag is refreshed from it.
+-- On join: is the club still there, and are they still in it? The prefix is refreshed from it.
 local function checkOnJoin(player: Player)
 	local profile = DataService.Get(player)
 	if not profile or profile.ClubId == "" then
@@ -781,6 +1143,28 @@ local function checkOnJoin(player: Player)
 	end
 end
 
+-- MessagingService messages (and the Studio fallback).
+function ClubService.OnMessage(data: any)
+	if type(data) ~= "table" then
+		return
+	end
+	if data.Kind == "Kicked" then
+		local target = Players:GetPlayerByUserId(tonumber(data.UserId) or 0)
+		local profile = target and DataService.Get(target)
+		if target and profile and profile.ClubId == data.ClubId then
+			setMembership(target, nil, false)
+			Remotes.Event("Notify"):FireClient(target, "You were removed from your club.", "Info")
+		end
+	elseif data.Kind == "Chat" and type(data.Msg) == "table" then
+		for _, plr in Players:GetPlayers() do
+			local profile = DataService.Get(plr)
+			if profile and profile.ClubId == data.ClubId then
+				chatRemote:FireClient(plr, data.Msg)
+			end
+		end
+	end
+end
+
 function ClubService.Init()
 	if initialized then
 		return
@@ -791,6 +1175,7 @@ function ClubService.Init()
 		pointsStore = DataStoreService:GetOrderedDataStore(POINTS_STORE)
 	end)
 	stateRemote = Remotes.Event("ClubState")
+	chatRemote = Remotes.Event("ClubChat")
 	Remotes.Function("ClubRequest").OnServerInvoke = onRequest
 	DataService.ProfileLoaded:Connect(function(player)
 		task.spawn(checkOnJoin, player)
@@ -800,25 +1185,15 @@ function ClubService.Init()
 		local earned = profile and tonumber(profile.Stats and profile.Stats.BubblesEarned)
 		local last = seenBubbles[player]
 		if profile and profile.ClubId ~= "" and earned and last and earned > last then
-			pendingPoints[profile.ClubId] = (pendingPoints[profile.ClubId] or 0) + (earned - last)
+			addPending(profile.ClubId, player.UserId, earned - last)
 		end
 		lastRequest[player] = nil
+		lastChat[player] = nil
 		seenBubbles[player] = nil
 	end)
 	pcall(function()
 		MessagingService:SubscribeAsync(TOPIC, function(message)
-			local data = message.Data
-			if type(data) ~= "table" then
-				return
-			end
-			if data.Kind == "Kicked" then
-				local target = Players:GetPlayerByUserId(tonumber(data.UserId) or 0)
-				local profile = target and DataService.Get(target)
-				if target and profile and profile.ClubId == data.ClubId then
-					setMembership(target, nil, false)
-					Remotes.Event("Notify"):FireClient(target, "You were removed from your club.", "Info")
-				end
-			end
+			ClubService.OnMessage(message.Data)
 		end)
 	end)
 end

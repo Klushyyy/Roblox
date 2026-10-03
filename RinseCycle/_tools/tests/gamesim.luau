@@ -843,6 +843,12 @@ rawget(UIS, "__p").GetNavigationGamepads = function()
 end
 rawget(service("ContentProvider"), "__p").PreloadAsync = function() end
 rawget(service("SoundService"), "__p").PlayLocalSound = function() end
+rawget(service("BadgeService"), "__p").AwardBadge = function()
+	return true
+end
+rawget(service("BadgeService"), "__p").UserHasBadgeAsync = function()
+	return false
+end
 rawget(UIS, "__p").IsGamepadButtonDown = function()
 	return false
 end

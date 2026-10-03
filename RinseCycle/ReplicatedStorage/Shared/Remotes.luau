@@ -20,6 +20,7 @@ Remotes.Events = {
 	"TradeState", -- S->C (state: TradeState?) / ("Request", fromUserId, fromName) for an invite
 	"ChestResult", -- S->C (rewards: { { Index: number, Text: string } }) bought chests opened
 	"ClubState", -- S->C (club: ClubInfo?) your club changed (joined, left, kicked, edited)
+	"ClubChat", -- S->C (message: { U, N, T, At }) a new message in your club's chat
 }
 
 Remotes.Functions = {

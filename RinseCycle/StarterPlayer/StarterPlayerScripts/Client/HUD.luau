@@ -226,10 +226,10 @@ function HUD.Init()
 	local upgradesButton = sideButton("📖", "Upgrades", Colors.Good, "Tab", "Y", function()
 		UIKit.ToggleWindow("Upgrades")
 	end)
-	local shopButton = sideButton("🛒", "Shop", Colors.Bad, "G", "Y", function()
+	local shopButton = sideButton("@Bag", "Shop", Colors.Bad, "G", "Y", function()
 		UIKit.ToggleWindow("Shop")
 	end)
-	local petsButton = sideButton("🐾", "Pets", Colors.Warning, "P", "LB", function()
+	local petsButton = sideButton("@Pup", "Pets", Colors.Warning, "P", "LB", function()
 		UIKit.ToggleWindow("Pets")
 	end)
 	local ranksButton = sideButton("@Medal", "Ranks", Colors.Accent, "R", "RB", function()
@@ -238,12 +238,13 @@ function HUD.Init()
 	local leaveButton = sideButton("🚪", "Leave", Colors.PanelLight, "", "", function()
 		UIKit.OpenWindow("LeaveConfirm")
 	end)
-	local clubsButton = sideButton("@Club", "Clubs", Colors.Primary, "C", "", function()
+	local clubsButton = sideButton("@Group", "Clubs", Colors.Primary, "C", "", function()
 		UIKit.ToggleWindow("Clubs")
 	end)
 	-- The Treasure Chest event (only while it runs), with a "FREE" tag while a free chest waits.
-	local eventButton = sideButton("@Chest", "Event", Colors.Coin, "", "", function()
-		UIKit.ToggleWindow("Chest")
+	-- It (and E) takes you to the chest in the lobby, where the opening happens.
+	local eventButton = sideButton("@Chest", "Event", Colors.Coin, "E", "", function()
+		(require(script.Parent:WaitForChild("ChestUI")) :: any).GoToChest()
 	end)
 	local freeTag = Instance.new("Frame")
 	freeTag.Name = "FreeTag"
@@ -287,16 +288,16 @@ function HUD.Init()
 	end
 	local dailyButton = leftButton(1, "@Gift", "Daily", Colors.Bubble, "Daily")
 	local codesButton = leftButton(2, "@Ticket", "Codes", Colors.Primary, "Codes")
-	local freeButton = leftButton(3, "@Heart", "Free", Colors.Good, "Free")
+	local freeButton = leftButton(3, "@Love", "Free", Colors.Good, "Free")
 	-- Trade lives in the right column (under Ranks), leaving room above Daily for the boost badges.
-	local tradeButton = sideButton("🤝", "Trade", Colors.Accent, "T", "", function()
+	local tradeButton = sideButton("@Trade", "Trade", Colors.Accent, "T", "", function()
 		UIKit.ToggleWindow("Trade")
 	end)
 	-- Music on / off (MusicPlayer). Under Trade; the staff Admin button goes below it.
 	local musicButton: TextButton
 	musicButton = UIKit.IconButton({
 		Name = "MusicButton",
-		Icon = "♪",
+		Icon = "@Notes",
 		Label = "Music",
 		Color = Colors.PanelLight,
 		Size = UDim2.fromOffset(80, 80),
@@ -314,7 +315,12 @@ function HUD.Init()
 		end,
 	})
 	-- Pets on / off: switched off, your pets just follow you around instead of cleaning (saved).
+	-- Only in a run, and only when you have pets out.
 	local petsToggle: TextButton
+	local function petsToggleWanted(inRun: boolean): boolean
+		local meta = ClientState.Meta :: any
+		return inRun and meta ~= nil and type(meta.Equipped) == "table" and #meta.Equipped > 0
+	end
 	local function paintPetsToggle()
 		local meta = ClientState.Meta :: any
 		local resting = meta ~= nil and meta.PetsResting == true
@@ -326,7 +332,7 @@ function HUD.Init()
 	end
 	petsToggle = UIKit.IconButton({
 		Name = "PetsToggle",
-		Icon = "🐾",
+		Icon = "@Pup",
 		Label = "Pets On",
 		Color = Colors.Warning,
 		Size = UDim2.fromOffset(80, 80),
@@ -358,7 +364,7 @@ function HUD.Init()
 		end
 		adminButton = UIKit.IconButton({
 			Name = "AdminButton",
-			Icon = "🛡️",
+			Icon = "@Gavel",
 			Label = "Admin",
 			Color = Colors.PanelLight,
 			Size = UDim2.fromOffset(80, 80),
@@ -376,7 +382,7 @@ function HUD.Init()
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
 		musicButton.Visible = true
-		petsToggle.Visible = inRun -- in the lobby pets only ever follow you
+		petsToggle.Visible = petsToggleWanted(inRun) -- in the lobby pets only ever follow you
 		leftColumn.Visible = true
 	end
 	addAdminButton = makeAdminButton
@@ -1272,7 +1278,7 @@ function HUD.Init()
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
 		musicButton.Visible = true
-		petsToggle.Visible = inRun -- in the lobby pets only ever follow you
+		petsToggle.Visible = petsToggleWanted(inRun) -- in the lobby pets only ever follow you
 		leftColumn.Visible = true
 		eventButton.LayoutOrder = 0
 		upgradesButton.LayoutOrder = 1
@@ -1358,6 +1364,7 @@ function HUD.Init()
 			updateCurrencyValues()
 			local meta = ClientState.Meta :: any
 			freeTag.Visible = meta ~= nil and (tonumber(meta.ChestFreeLeft) or 0) > 0
+			petsToggle.Visible = petsToggleWanted(ClientState.Run ~= nil)
 		end
 	end)
 

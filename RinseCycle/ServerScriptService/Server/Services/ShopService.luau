@@ -243,8 +243,7 @@ local function rollRank(player: Player, _value: any): Types.RequestResult
 		return fail(ERR_GENERIC)
 	end
 	local passes = DataService.GetPasses(player)
-	-- Insta Roll owners see no reel, so they can roll as fast as they click (a tiny guard only).
-	rollingUntil[player] = now + (if passes.InstaRoll == true then 0.05 else ROLL_SECONDS)
+	rollingUntil[player] = now + ROLL_SECONDS
 	local weights, total = Config.RankWeights(Config.LuckMult(passes.DoubleLuck == true, DataService.AdLuckStacks(profile)))
 	local r = rankRng:NextNumber() * total
 	local picked = weights[#weights].Rank

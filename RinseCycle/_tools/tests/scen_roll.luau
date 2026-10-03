@@ -36,11 +36,7 @@ for _, d in G.find(G.playerGui, "RankRollPopup"):GetDescendants() do
 	if d.ClassName == "TextButton" and tostring(d.Text):find("Roll again") then again = d end
 end
 out("again button " .. tostring(again ~= nil))
-prof.Passes = prof.Passes or {}
-DS.SetPass(G.player, "InstaRoll", true)
-pump(0.5, G.frame)
 G.getSignal(again, "Activated"):Fire()
-pump(1.5, G.frame)
+pump(8, G.frame)
 local pg = G.find(G.playerGui, "RankRollPopup")
-out("insta: title=" .. tostring(G.find(pg, "Title").Text) .. " | " .. tostring(G.find(pg, "Rarity").Text) .. " rank=" .. prof.Rank .. " gems=" .. prof.Gems)
-G.dumpGui(pg, OUT .. "roll_insta.json")
+out("roll again: title=" .. tostring(G.find(pg, "Title").Text) .. " | " .. tostring(G.find(pg, "Rarity").Text) .. " rank=" .. prof.Rank .. " gems=" .. prof.Gems)

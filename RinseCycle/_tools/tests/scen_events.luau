@@ -32,6 +32,9 @@ local function club(action, value)
 	if r and r.Clubs then
 		extra ..= " clubs=" .. #r.Clubs
 	end
+	if r and r.Messages then
+		extra ..= " messages=" .. #r.Messages
+	end
 	out(string.format("club %-8s -> ok=%s %s%s", action, tostring(r and r.Ok), tostring(r and (r.Error or r.Message) or ""), extra))
 	return r
 end
@@ -60,23 +63,60 @@ for i, r in Config.ChestEvent.Rewards do
 end
 out("400 opens: " .. table.concat(parts, " | "))
 out(string.format("bubbles +%d gems +%d pets +%d", prof.Bubbles - before[1], prof.Gems - before[2], #prof.Pets - before[3]))
--- The window and reveal.
-call("client", function()
-	UIKit.OpenWindow("Chest")
-end)
-pump(1, G.frame)
-local chestGui = p.PlayerGui:FindFirstChild("ChestUI")
-out("chest window rows: " .. #(chestGui and chestGui:FindFirstChild("List", true) and chestGui:FindFirstChild("List", true):GetChildren() or {}))
+-- At the chest: the Open boxes appear, E opens one, the reveal spins and lands.
+local chestModel
+for _, d in G.workspace:GetDescendants() do
+	if d.Name == "TreasureChest" then
+		chestModel = d
+	end
+end
+local ChestUI = M[R .. "StarterPlayer/StarterPlayerScripts/Client/ChestUI.luau"]
 call("client", function()
 	UIKit.CloseWindow()
+	ChestUI.GoToChest()
 end)
-
+pump(1, G.frame)
+local boxes = p.PlayerGui:FindFirstChild("OpenBoxes", true)
+local root = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+out(string.format("chest model: %s  went to it: %.1f studs away  boxes shown: %s", tostring(chestModel ~= nil), (root.Position - chestModel.PrimaryPart.Position).Magnitude, tostring(boxes and boxes.Visible)))
+local openWins = {}
+for _, d in p.PlayerGui:GetDescendants() do
+	if d:IsA("Frame") and d:GetAttribute("Title") and d.Visible then
+		table.insert(openWins, d.Name)
+	end
+end
+out("open windows: " .. table.concat(openWins, ","))
+out("window open: " .. tostring(call("client", function() return UIKit.IsWindowOpen() end)) .. " meta free: " .. tostring(CS.Meta.ChestFreeLeft))
+local board = p.PlayerGui:FindFirstChild("OddsBoard", true)
+local freeSign = board and board:FindFirstChild("FreeSign", true)
+out("odds board: " .. tostring(board ~= nil) .. "  free sign shown: " .. tostring(freeSign and freeSign.Visible))
+prof.ChestEventId, prof.ChestFreeUsed = "", 0
+DS.PushMeta(p)
+pump(0.5, G.frame)
+call("client", function()
+	ChestUI.Open(1)
+end)
+pump(6, G.frame)
+local reveal = p.PlayerGui:FindFirstChild("Reveal", true)
+local cards = {}
+for _, c in reveal:FindFirstChild("Grid"):GetChildren() do
+	if c:IsA("Frame") then
+		table.insert(cards, c:FindFirstChild("RewardName").Text .. "/" .. c:FindFirstChild("Tier").Text)
+	end
+end
+out("meta free after: " .. tostring(CS.Meta.ChestFreeLeft))
+out("reveal visible: " .. tostring(reveal.Visible) .. "  cards: " .. table.concat(cards, ", ") .. "  free sign now: " .. tostring(freeSign and freeSign.Visible))
+call("client", function()
+	ChestUI.Open(10)
+end)
+pump(1, G.frame)
 -- Clubs.
 prof.Gems = 100
 club("Create", { Name = "Soap Squad", Tag = "SOAP", Public = true, ReqLevel = 0, ReqRebirths = 0 })
 prof.Gems = 2000
 club("Create", { Name = "x", Tag = "SOAP" })
 club("Create", { Name = "Soap Squad", Tag = "S" })
+club("Create", { Name = "Soap Squad", Tag = "TOOLONG" })
 local made = club("Create", { Name = "Soap Squad", Tag = "soap", Public = false, ReqLevel = 0, ReqRebirths = 0 })
 out("gems after create: " .. prof.Gems .. " tag attr: " .. tostring(p:GetAttribute("ClubTag")) .. " profile club: " .. prof.ClubId)
 club("Create", { Name = "Another", Tag = "ANO" })
@@ -85,6 +125,14 @@ club("Top")
 club("Find", "soap")
 club("Find", made.Club and made.Club.Code or "")
 club("Settings", { Public = true, ReqLevel = 2, ReqRebirths = 5 })
+club("Rename", { Name = "Suds Squad" })
+club("Rename", { Name = "Bubble Squad" })
+club("Rename", { Tag = "SUDS5" })
+out("prefix over head: " .. tostring(p:GetAttribute("ClubTag")))
+club("Find", "s")
+club("Find", "soap")
+club("Chat", "hello club")
+club("ChatHistory")
 club("NewCode")
 Club.FlushPoints()
 prof.Stats.BubblesEarned += 1234

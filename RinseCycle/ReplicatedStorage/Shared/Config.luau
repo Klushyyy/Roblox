@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.0.1"
+Config.Version = "2.1.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -361,7 +361,6 @@ Config.GamePasses = {
 	{ Key = "DoubleBubbles", Id = 0, Price = 179, Name = "2x Bubbles", Icon = "🧼", Desc = "Earn double Bubbles from every finished wash." },
 	{ Key = "VIP", Id = 0, Price = 199, Name = "VIP", Icon = "👑", Desc = "+25% coins and +25% Bubbles on every wash." },
 	{ Key = "DoubleLuck", Id = 0, Price = 149, Name = "x2 Luck", Icon = "🍀", Desc = "Doubles your chance of rolling Rare, Epic, Legendary and Mythic ranks." },
-	{ Key = "InstaRoll", Id = 0, Price = 39, Name = "Insta Roll", Icon = "⚡", Desc = "Skip the rank roll spin: see your new rank instantly." },
 	-- Tool passes: start every run already owning that tool (you still upgrade it with coins). They
 	-- pop up when you try to buy the tool without enough coins.
 	{ Key = "ToolNozzle", Id = 0, Price = 49, Name = "Spray Nozzle", Icon = "🚿", Desc = "Start every wash with the Spray Nozzle already unlocked." },
@@ -1025,25 +1024,19 @@ function Config.ChestEventLive(now: number?): boolean
 end
 
 ----------------------------------------------------------------------------------------------------
--- UPCOMING EVENTS (the "Next Event" spot in the lobby). The first one that hasn't ended is shown,
--- with a countdown, or LIVE NOW between Starts and Ends.
--- RobloxEventId: optional. Create the event on Roblox (Creator Dashboard > your experience >
--- Engagement > Events), copy its ID from the URL and paste it here: the button then becomes Roblox's
--- own "Notify Me" (players get a notification when it starts). 0 = a "remind me" toast instead.
+-- UPCOMING EVENTS (the "Next Event" ring in the lobby). The first one that hasn't ended is shown
+-- on the banner with a countdown (or LIVE NOW between Starts and Ends).
+-- Make the event on Roblox too (Creator Hub > your experience > Engagement > Events) with the same
+-- start time, and paste its ID into StoreIds > EventIds: walking into the ring then brings up
+-- Roblox's own event pop-up (Notify Me / join). Times are os.time() (unixtimestamp.com).
 Config.UpcomingEvents = {
 	{
-		Name = "Admin Abuse Bubble Bash",
+		Key = "AdminAbuse",
+		Name = "Admin Abuse",
 		Desc = "x2 Cleaning for everyone, surprise game pass drops and giveaways all hour!",
-		Starts = 1791993600, -- 14 October 2026 16:00 UTC
-		Ends = 1791997200,
-		RobloxEventId = "0",
-	},
-	{
-		Name = "Sunken Treasure Finale",
-		Desc = "Last day of the Treasure Chest event. Big giveaways and polls!",
-		Starts = 1793397600, -- 30 October 2026 22:00 UTC
-		Ends = 1793404800,
-		RobloxEventId = "0",
+		Starts = 1792231200, -- 17 October 2026, 11:00 pm New Zealand time (10:00 UTC)
+		Ends = 1792234800, -- an hour later
+		RobloxEventId = "", -- set from StoreIds > EventIds > AdminAbuse
 	},
 }
 
@@ -1065,11 +1058,14 @@ Config.Clubs = {
 	CreateCost = 500, -- Gems
 	MaxMembers = 25,
 	NameLength = { 3, 20 },
-	TagLength = { 2, 4 },
+	TagLength = { 2, 5 }, -- the prefix shown in front of members' names
 	MaxRebirthReq = 50,
 	MaxLevelReq = 3, -- "must have beaten level N" (0 = anyone)
 	CodeLength = 6,
 	JoinCooldown = 60, -- seconds between joining / leaving clubs
+	RenameDays = 30, -- the name and the prefix can each be changed once in this many days
+	ChatLength = 150, -- letters per chat message
+	ChatKeep = 60, -- chat messages kept per club
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -1111,6 +1107,14 @@ do
 		apply(Config.DevProducts, ids.DevProducts)
 		apply(Config.GiftProducts, ids.GiftPasses)
 		apply(Config.Badges, ids.Badges)
+		if type(ids.EventIds) == "table" then
+			for _, e in Config.UpcomingEvents do
+				local id = ids.EventIds[e.Key]
+				if (type(id) == "string" or type(id) == "number") and tostring(id) ~= "" and tostring(id) ~= "0" then
+					e.RobloxEventId = tostring(id)
+				end
+			end
+		end
 		if type(ids.Notifications) == "table" and type(ids.Notifications.DailyReady) == "string" then
 			Config.DailyNotify.MessageId = ids.Notifications.DailyReady
 		end

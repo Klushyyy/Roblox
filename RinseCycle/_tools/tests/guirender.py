@@ -373,11 +373,41 @@ class Renderer:
         kids = [c for c in node["children"] if c["props"].get("ClassName") in GUI_CLASSES]
         order = sorted(range(len(kids)), key=lambda i: ((kids[i]["props"].get("ZIndex", 1) or 1), i))
         layout = first(node, "UIListLayout")
+        glayout = first(node, "UIGridLayout")
         forced_map = {}
         if layout:
             forced_map = self.list_layout(layout, kids, cbox, k * (P(scale, "Scale", 1) if scale else 1))
+        elif glayout:
+            forced_map = self.grid_layout(glayout, kids, cbox, k * (P(scale, "Scale", 1) if scale else 1))
         for i in order:
             self.render_node(kids[i], cbox, (cx, cy, rot), child_clip, kk, group_t, forced_map.get(i))
+
+    def grid_layout(self, layout, kids, cbox, k):
+        bx, by, bw, bh = cbox
+        cs = P(layout, "CellSize")
+        cp = P(layout, "CellPadding")
+        cw, ch = (cs["xs"] * bw + cs["xo"] * k, cs["ys"] * bh + cs["yo"] * k) if cs else (100 * k, 100 * k)
+        px, py = (cp["xs"] * bw + cp["xo"] * k, cp["ys"] * bh + cp["yo"] * k) if cp else (5 * k, 5 * k)
+        maxc = P(layout, "FillDirectionMaxCells", 0) or 0
+        per = max(1, int((bw + px) // (cw + px)))
+        if maxc > 0:
+            per = min(per, maxc)
+        vis = [i for i, c in enumerate(kids) if c["props"].get("Visible") is not False]
+        if enum(P(layout, "SortOrder"), "LayoutOrder") == "LayoutOrder":
+            vis.sort(key=lambda i: ((kids[i]["props"].get("LayoutOrder", 0) or 0), i))
+        cols = min(per, len(vis)) if vis else 0
+        rows = (len(vis) + per - 1) // per if vis else 0
+        totw = cols * cw + max(0, cols - 1) * px
+        toth = rows * ch + max(0, rows - 1) * py
+        ha = enum(P(layout, "HorizontalAlignment"), "Left")
+        va = enum(P(layout, "VerticalAlignment"), "Top")
+        x0 = bx + {"Left": 0, "Center": (bw - totw) / 2, "Right": bw - totw}[ha]
+        y0 = by + {"Top": 0, "Center": (bh - toth) / 2, "Bottom": bh - toth}[va]
+        out = {}
+        for n, i in enumerate(vis):
+            r, c = divmod(n, per)
+            out[i] = (cw, ch, x0 + c * (cw + px), y0 + r * (ch + py))
+        return out
 
     def list_layout(self, layout, kids, cbox, k):
         bx, by, bw, bh = cbox

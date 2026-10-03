@@ -3,8 +3,7 @@
 
 	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
 	Config.RankRoll.Cost gems, and your gems. Rolling opens a full-screen popup: a slot reel of rank
-	cards spins while the server rolls, slows down and lands on your new rank (the Insta Roll pass
-	skips the spin).
+	cards spins while the server rolls, slows down and lands on your new rank.
 	Right: every rank with its exact odds (x2 Luck applied if you own the pass: gems can be bought with
 	Robux, so the odds are always shown before rolling), its perk, and Equip for the ones you own.
 
@@ -247,7 +246,6 @@ end
 ----------------------------------------------------------------------------------------------------
 -- Roll popup: a full-screen slot reel. Rank cards race past a gold marker, slow down and stop on
 -- the rank the server rolled, then the result is revealed (rarity banner, glow, confetti for Epic+).
--- The Insta Roll pass skips the spin and shows the result straight away.
 ----------------------------------------------------------------------------------------------------
 local CARD_W, CARD_GAP = 136, 12
 local PITCH = CARD_W + CARD_GAP
@@ -266,7 +264,6 @@ local popup: {
 	Result: Frame,
 	Buttons: Frame,
 	Again: TextButton,
-	Insta: TextButton,
 }? = nil
 
 local function pickWeighted(weights: { any }, total: number): any
@@ -453,30 +450,7 @@ local function ensurePopup()
 			gui.Enabled = false
 		end,
 	})
-	-- Offered while the reel spins (the spin itself is the ad for it).
-	local insta = UIKit.Button({
-		Text = "Insta Roll pass: skip the spin",
-		Size = UDim2.fromOffset(320, 44),
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 64 + REEL_H + 40),
-		Color = Color3.fromRGB(250, 190, 40),
-		TextSize = 18,
-		Parent = panel,
-		OnClick = function()
-			ShopUI.BuyPass("InstaRoll")
-		end,
-	})
-	local pass = Config.GetPass("InstaRoll")
-	if pass then
-		local label = insta:FindFirstChildWhichIsA("TextLabel", true)
-		ShopUI.WatchPrice(pass, true, function(price)
-			if label then
-				label.Text = string.format("Insta Roll pass: skip the spin  •  R$ %d", price)
-			end
-		end)
-	end
-
-	popup = { Dim = dim, Panel = panel, Title = title, Strip = strip, Cards = cards, Result = result, Buttons = buttons, Again = again, Insta = insta }
+	popup = { Dim = dim, Panel = panel, Title = title, Strip = strip, Cards = cards, Result = result, Buttons = buttons, Again = again }
 	return popup
 end
 
@@ -594,22 +568,15 @@ local function spinReel(getResult: () -> any, weights: { any }, total: number): 
 	return true
 end
 
-local function showPopup(instant: boolean)
+local function showPopup()
 	local pp = ensurePopup()
-	-- Insta Roll: rolling again from an open popup just swaps the card (no pop-in, no flicker).
-	if instant and popupGui and popupGui.Enabled then
-		pp.Insta.Visible = false
-		return
-	end
 	if popupGui then
 		popupGui.Enabled = true
 	end
-	pp.Title.Text = if instant then "" else "ROLLING..."
+	pp.Title.Text = "ROLLING..."
 	pp.Title.TextColor3 = Colors.Text
 	setResultText(nil)
-	pp.Buttons.Visible = instant
-	local meta = ClientState.Meta :: Types.MetaState?
-	pp.Insta.Visible = not instant and not (meta ~= nil and meta.Passes.InstaRoll == true)
+	pp.Buttons.Visible = false
 	local scale = pp.Panel:FindFirstChild("PopScale") :: UIScale
 	scale.Scale = 0.85
 	TweenService:Create(scale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
@@ -617,7 +584,6 @@ end
 
 local function finishPopup(ok: boolean)
 	local pp = ensurePopup()
-	pp.Insta.Visible = false
 	pp.Buttons.Visible = true
 	UIKit.SetDisabled(pp.Again, false) -- short of gems, it opens the Gems shop
 	if not ok then
@@ -625,8 +591,6 @@ local function finishPopup(ok: boolean)
 		pp.Title.TextColor3 = Colors.Bad
 	end
 end
-
-local queued = false -- an Insta Roll click that came in while the last answer was on its way
 
 local function roll_()
 	-- Not enough gems: straight to the Gems shop.
@@ -640,18 +604,13 @@ local function roll_()
 		return
 	end
 	if rolling then
-		local meta = ClientState.Meta :: Types.MetaState?
-		if meta ~= nil and meta.Passes.InstaRoll == true then
-			queued = true
-		end
 		return
 	end
 	rolling = true
 	renderGems()
 	local meta = ClientState.Meta :: Types.MetaState?
-	local instant = meta ~= nil and meta.Passes.InstaRoll == true
 	local weights, total = Config.RankWeights((currentLuck(meta)))
-	showPopup(instant)
+	showPopup()
 
 	-- Ask the server in the background; the reel spins until it answers.
 	local answer: any = nil
@@ -662,32 +621,13 @@ local function roll_()
 		answer = if r and r.Ok and r.Rank then r.Rank else false
 	end)
 
-	local ok
-	if instant then
-		while answer == nil do
-			RunService.RenderStepped:Wait()
-		end
-		ok = answer ~= false
-		local rank = ok and Config.GetRank(answer)
-		if rank then
-			local pp = ensurePopup()
-			-- Just the one card, dead centre.
-			pp.Strip.Position = UDim2.fromOffset(REEL_W / 2 - CARD_W / 2, 0)
-			for i, card in pp.Cards do
-				card.Visible = i == 1
-			end
-			paintCard(pp.Cards[1], rank)
-			celebrate(rank, pp.Cards[1])
-		end
-	else
-		local pp = ensurePopup()
-		for _, card in pp.Cards do
-			card.Visible = true
-		end
-		ok = spinReel(function()
-			return answer
-		end, weights, total)
+	local pp = ensurePopup()
+	for _, card in pp.Cards do
+		card.Visible = true
 	end
+	local ok = spinReel(function()
+		return answer
+	end, weights, total)
 	if ok and response then
 		local rank = Config.GetRank(response.Rank)
 		setResultText(rank, response.Previous)
@@ -701,12 +641,6 @@ local function roll_()
 	rolling = false
 	finishPopup(ok)
 	render()
-	if queued then
-		queued = false
-		if ok and instant then
-			task.defer(roll)
-		end
-	end
 end
 
 roll = function()

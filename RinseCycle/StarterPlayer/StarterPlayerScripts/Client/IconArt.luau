@@ -14,6 +14,16 @@
 	           clipped diamonds give the triangles and trapezoids (gem facets, roof points, crown
 	           spikes, the drop's tip)
 	  line     a rounded bar from one point to another
+	  tri      half of a square (centre, side s) cut along a diagonal; keep = "tl" | "tr" | "bl" | "br"
+	           names the corner whose half stays. The cut is a UIGradient transparency edge, which
+	           Roblox draws smoothly (anti-aliased), unlike the edge of a rotated frame
+	  ring     a circle outline: hole diameter d, thickness th (a UIStroke round a circle)
+
+	Smooth edges: Roblox doesn't anti-alias the edges of ROTATED frames, so they go jagged and look
+	different at every size. Rounded corners (UICorner), strokes and gradient edges ARE smooth. The
+	newer icons (pets, shop, trade, clubs, music, admin, free) are built only from those: discs,
+	rounded rectangles, rings and gradient-cut triangles, never a rotated frame. They're also drawn
+	at one big reference size and scaled down as a whole (HI_RES), so every size is the same shape.
 
 	Any shape can take `clip = { x0, y0, x1, y1 }` (canvas units): it is drawn inside that box only.
 	Every position and size is snapped to whole pixels, keeping centred shapes exactly centred, so
@@ -196,6 +206,40 @@ local function draw(parent: Instance, s: Shape, px: number, grow: number)
 		if grow == 0 then
 			gradient(f, fill, 45)
 		end
+	elseif kind == "tri" then
+		local side = s.s * px + grow * 2
+		local f = frame(holder, s.x * px - ox, s.y * px - oy, side, side, 0, color, transparency)
+		if s.r then
+			corner(f, s.r)
+		end
+		local g = Instance.new("UIGradient")
+		-- Runs from the kept corner (opaque) to the opposite one (clear); the cut crosses the middle.
+		g.Rotation = ({ tl = 45, br = 225, tr = 135, bl = -45 })[s.keep or "tl"]
+		local span = side * SQRT2
+		-- The outline's cut sits `grow` px further out, so the diagonal gets its outline too.
+		local edge = 0.5 + grow / span
+		local soft = 0.6 / span -- about a pixel of blend: a smooth, sharp edge
+		g.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0),
+			NumberSequenceKeypoint.new(edge - soft, 0),
+			NumberSequenceKeypoint.new(edge + soft, 1),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		if grow == 0 and typeof(fill) ~= "Color3" then
+			g.Color = ColorSequence.new(fill[1], fill[2])
+		end
+		g.Parent = f
+	elseif kind == "ring" then
+		-- UIStroke draws outside the circle; the outline is a thicker stroke round a smaller circle.
+		local d = s.d * px - grow * 2
+		local f = frame(holder, s.x * px - ox, s.y * px - oy, d, d, 0, color, 1)
+		corner(f, 0.5)
+		local stroke = Instance.new("UIStroke")
+		stroke.Thickness = s.th * px + grow * 2
+		stroke.Color = color
+		stroke.Transparency = transparency
+		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		stroke.Parent = f
 	elseif kind == "line" then
 		local dx, dy = (s.x2 - s.x1) * px, (s.y2 - s.y1) * px
 		local len = math.sqrt(dx * dx + dy * dy)
@@ -560,6 +604,115 @@ ART.Calendar = {
 	{ "rect", x = 0.5, y = 0.72, w = 0.13, h = 0.1, r = 0.2, fill = rgb(120, 140, 175) },
 }
 
+----------------------------------------------------------------------------------------------------
+-- HUD buttons (smooth-edged set: no rotated frames anywhere, see the header)
+----------------------------------------------------------------------------------------------------
+
+-- Pets: a happy puppy face with floppy ears.
+ART.Pup = {
+	{ "rect", x = 0.17, y = 0.44, w = 0.22, h = 0.46, r = 0.5, fill = { rgb(176, 112, 70), rgb(132, 78, 46) }, o = true },
+	{ "rect", x = 0.83, y = 0.44, w = 0.22, h = 0.46, r = 0.5, fill = { rgb(176, 112, 70), rgb(132, 78, 46) }, o = true },
+	"|",
+	{ "disc", x = 0.5, y = 0.52, d = 0.7, fill = { rgb(255, 222, 170), rgb(236, 176, 110) }, o = true },
+	{ "rect", x = 0.5, y = 0.7, w = 0.4, h = 0.26, r = 0.5, fill = rgb(255, 240, 214) },
+	{ "disc", x = 0.36, y = 0.48, d = 0.11, fill = rgb(40, 28, 24) },
+	{ "disc", x = 0.64, y = 0.48, d = 0.11, fill = rgb(40, 28, 24) },
+	{ "disc", x = 0.345, y = 0.465, d = 0.04, fill = WHITE },
+	{ "disc", x = 0.625, y = 0.465, d = 0.04, fill = WHITE },
+	{ "rect", x = 0.5, y = 0.62, w = 0.15, h = 0.1, r = 0.5, fill = rgb(50, 32, 28) },
+	{ "rect", x = 0.5, y = 0.79, w = 0.1, h = 0.12, r = 0.5, fill = rgb(255, 110, 130) },
+	{ "disc", x = 0.25, y = 0.64, d = 0.1, fill = rgb(255, 150, 150), t = 0.45 },
+	{ "disc", x = 0.75, y = 0.64, d = 0.1, fill = rgb(255, 150, 150), t = 0.45 },
+	{ "rect", x = 0.42, y = 0.26, w = 0.16, h = 0.05, r = 0.5, fill = WHITE, t = 0.5 },
+}
+
+-- Shop: a shopping bag with a round handle.
+ART.Bag = {
+	{ "ring", x = 0.5, y = 0.3, d = 0.3, th = 0.075, fill = rgb(250, 236, 242), o = true },
+	"|",
+	{ "rect", x = 0.5, y = 0.62, w = 0.78, h = 0.6, r = 0.16, fill = { rgb(255, 128, 168), rgb(220, 52, 104) }, o = true },
+	{ "rect", x = 0.5, y = 0.4, w = 0.78, h = 0.08, r = 0.4, fill = rgb(196, 36, 88), t = 0.35 },
+	{ "disc", x = 0.33, y = 0.47, d = 0.07, fill = rgb(120, 20, 56) },
+	{ "disc", x = 0.67, y = 0.47, d = 0.07, fill = rgb(120, 20, 56) },
+	{ "rect", x = 0.5, y = 0.66, w = 0.26, h = 0.2, r = 0.3, fill = WHITE, t = 0.15 },
+	{ "rect", x = 0.5, y = 0.66, w = 0.1, h = 0.1, r = 0.5, fill = rgb(255, 196, 60) },
+	{ "rect", x = 0.22, y = 0.64, w = 0.05, h = 0.32, r = 0.5, fill = WHITE, t = 0.55 },
+}
+
+-- Trade: two arrows passing each other (green right on top, blue left underneath).
+do
+	local a = 0.2 -- arrowhead half-height
+	local function arrow(y: number, right: boolean, fill: any): { any }
+		local tipX = if right then 0.9 else 0.1
+		local backX = if right then tipX - a else tipX + a
+		local shaftFrom = if right then 0.12 else 0.88
+		local cx = (shaftFrom + backX) / 2
+		local nudge = 0.004 -- the two halves overlap by half a pixel: no seam
+		local half = a / 2
+		local x = if right then backX + half else backX - half
+		return {
+			{ "rect", x = cx, y = y, w = math.abs(backX - shaftFrom) + 0.04, h = 0.15, r = 0.5, fill = fill, o = true },
+			{ "tri", x = x, y = y - half + nudge, s = a, keep = if right then "bl" else "br", fill = fill, o = true },
+			{ "tri", x = x, y = y + half - nudge, s = a, keep = if right then "tl" else "tr", fill = fill, o = true },
+		}
+	end
+	local shapes: { any } = {}
+	for _, s in arrow(0.66, false, rgb(70, 170, 255)) do
+		table.insert(shapes, s)
+	end
+	table.insert(shapes, "|")
+	for _, s in arrow(0.32, true, rgb(70, 220, 140)) do
+		table.insert(shapes, s)
+	end
+	table.insert(shapes, { "rect", x = 0.36, y = 0.29, w = 0.36, h = 0.035, r = 0.5, fill = WHITE, t = 0.45 })
+	ART.Trade = shapes
+end
+
+-- Clubs: three friends, the middle one in front.
+ART.Group = {
+	{ "rect", x = 0.24, y = 0.74, w = 0.32, h = 0.38, r = 0.45, fill = { rgb(150, 130, 255), rgb(100, 80, 220) }, o = true },
+	{ "disc", x = 0.24, y = 0.42, d = 0.24, fill = { rgb(255, 224, 190), rgb(240, 186, 140) }, o = true },
+	{ "rect", x = 0.76, y = 0.74, w = 0.32, h = 0.38, r = 0.45, fill = { rgb(255, 150, 200), rgb(230, 90, 150) }, o = true },
+	{ "disc", x = 0.76, y = 0.42, d = 0.24, fill = { rgb(255, 224, 190), rgb(240, 186, 140) }, o = true },
+	"|",
+	{ "rect", x = 0.5, y = 0.78, w = 0.42, h = 0.44, r = 0.45, fill = { rgb(110, 210, 255), rgb(40, 140, 230) }, o = true },
+	{ "disc", x = 0.5, y = 0.36, d = 0.3, fill = { rgb(255, 228, 196), rgb(240, 186, 140) }, o = true },
+	{ "rect", x = 0.44, y = 0.27, w = 0.1, h = 0.04, r = 0.5, fill = WHITE, t = 0.4 },
+}
+
+-- Music: two beamed notes.
+ART.Notes = {
+	{ "rect", x = 0.42, y = 0.47, w = 0.08, h = 0.56, r = 0.5, fill = rgb(150, 100, 255), o = true },
+	{ "rect", x = 0.82, y = 0.42, w = 0.08, h = 0.5, r = 0.5, fill = rgb(150, 100, 255), o = true },
+	{ "rect", x = 0.62, y = 0.22, w = 0.48, h = 0.13, r = 0.3, fill = { rgb(190, 150, 255), rgb(140, 90, 250) }, o = true },
+	{ "rect", x = 0.31, y = 0.76, w = 0.3, h = 0.22, r = 0.5, fill = { rgb(190, 150, 255), rgb(130, 80, 240) }, o = true },
+	{ "rect", x = 0.71, y = 0.68, w = 0.3, h = 0.22, r = 0.5, fill = { rgb(190, 150, 255), rgb(130, 80, 240) }, o = true },
+	{ "rect", x = 0.26, y = 0.73, w = 0.1, h = 0.05, r = 0.5, fill = WHITE, t = 0.4 },
+	{ "rect", x = 0.66, y = 0.65, w = 0.1, h = 0.05, r = 0.5, fill = WHITE, t = 0.4 },
+}
+
+-- Admin: a judge's gavel, upright.
+ART.Gavel = {
+	{ "rect", x = 0.5, y = 0.66, w = 0.13, h = 0.6, r = 0.5, fill = { rgb(200, 132, 80), rgb(140, 86, 48) }, o = true },
+	{ "rect", x = 0.5, y = 0.92, w = 0.42, h = 0.1, r = 0.5, fill = { rgb(200, 132, 80), rgb(140, 86, 48) }, o = true },
+	"|",
+	{ "rect", x = 0.5, y = 0.27, w = 0.72, h = 0.3, r = 0.28, fill = { rgb(236, 242, 252), rgb(150, 164, 190) }, o = true },
+	{ "rect", x = 0.25, y = 0.27, w = 0.08, h = 0.34, r = 0.3, fill = { rgb(255, 214, 90), rgb(222, 150, 30) }, o = true },
+	{ "rect", x = 0.75, y = 0.27, w = 0.08, h = 0.34, r = 0.3, fill = { rgb(255, 214, 90), rgb(222, 150, 30) }, o = true },
+	{ "rect", x = 0.5, y = 0.19, w = 0.4, h = 0.04, r = 0.5, fill = WHITE, t = 0.4 },
+}
+
+-- Free: a heart (two circles and a gradient-cut point).
+ART.Love = {
+	{ "disc", x = 0.31, y = 0.38, d = 0.42, fill = rgb(244, 76, 104), o = true },
+	{ "disc", x = 0.69, y = 0.38, d = 0.42, fill = rgb(244, 76, 104), o = true },
+	{ "tri", x = 0.3, y = 0.66, s = 0.4, keep = "tr", fill = rgb(244, 76, 104), o = true },
+	{ "tri", x = 0.7, y = 0.66, s = 0.4, keep = "tl", fill = rgb(244, 76, 104), o = true },
+	{ "rect", x = 0.5, y = 0.52, w = 0.4, h = 0.28, fill = rgb(244, 76, 104) },
+	{ "disc", x = 0.27, y = 0.32, d = 0.13, fill = WHITE, t = 0.2 },
+	{ "disc", x = 0.36, y = 0.24, d = 0.06, fill = WHITE, t = 0.45 },
+}
+
 -- Puts the whole icon on one ZIndex (for ScreenGuis that use Global ZIndex ordering).
 -- Moves a drawn icon to layer z. Its shapes keep their own stacking order inside it (every
 -- ScreenGui here uses Sibling ZIndex, so they only order among themselves).
@@ -571,7 +724,18 @@ function IconArt.Has(kind: string): boolean
 	return ART[kind] ~= nil
 end
 
-local HI_RES: { [string]: boolean } = { Heart = true }
+local HI_RES: { [string]: boolean } = {
+	Heart = true,
+	Pup = true,
+	Bag = true,
+	Trade = true,
+	Group = true,
+	Notes = true,
+	Gavel = true,
+	Love = true,
+	Club = true,
+	Chest = true,
+}
 local HI_RES_SIZE = 120
 
 function IconArt.Draw(kind: string, px: number): Frame

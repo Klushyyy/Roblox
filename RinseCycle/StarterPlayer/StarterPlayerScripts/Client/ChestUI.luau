@@ -1,20 +1,28 @@
 --[[
-	ChestUI - the Treasure Chest event window (HUD "Event" button, and the chest in the lobby).
+	ChestUI - the Treasure Chest event, played at the chest itself (LobbyBuilder's "EventChest").
 
-	Left: the event (name, time left), the FREE chest while you have one, and the three packs. The
-	packs are priced like cinema popcorn: x1 is fine, x3 looks barely better (greyed and small, on
-	purpose), and x10 is the big gold "BEST VALUE" one.
-	Right: WHAT'S INSIDE, every reward with its exact chance (Config.ChestEvent.Rewards).
+	  * Above the chest: a board with every reward and its exact chance, and "1 FREE CHEST!" while
+	    you still have your free one.
+	  * Walk up to it and the Open boxes come up at the bottom of the screen: OPEN 1 (FREE, or 49 R$),
+	    OPEN 3 and OPEN 10. They're priced like cinema popcorn: x3 is barely cheaper per chest (and
+	    looks it, small and grey), x10 is the big gold BEST VALUE. E opens one.
+	  * Opening: the lid flies open and a card spins for every chest, slowing down until it lands on
+	    what you got (like a rank roll), rarest last with confetti.
+	  * The HUD's Event button (and E anywhere else in the lobby) takes you to the chest.
 
-	Opening: the free chest asks EventService (ChestRequest "Free"); bought packs open on the server
-	when Roblox confirms the purchase and the results arrive on ChestResult. Either way the reveal
-	popup flips the results in one by one.
+	Free chests ask EventService (ChestRequest "Free"); bought packs open on the server when Roblox
+	confirms the purchase, and the results arrive on ChestResult. Studio: packs without a product
+	ID open for free (ChestRequest "Test").
 ]]
 
+local CollectionService = game:GetService("CollectionService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
@@ -29,14 +37,27 @@ local ChestUI = {}
 local Colors = UIKit.Theme.Colors
 local LocalPlayer = Players.LocalPlayer
 
+local NEAR = 16 -- studs from the chest for the Open boxes
+local CARD_W, CARD_H = 150, 180
+
 local initialized = false
 local busy = false
-local freeButton: TextButton
-local freeNote: TextLabel
-local timeLabel: TextLabel
+local revealing = false
+local near = false
+local promptsShown = 0
+local panel: Frame
+local firstLabel: TextLabel
+local firstPrice: TextLabel
+local firstButton: TextButton
+local freeSign: TextLabel? = nil
 local reveal: Frame
 local revealGrid: Frame
 local revealTitle: TextLabel
+local revealDone: TextButton
+
+----------------------------------------------------------------------------------------------------
+-- Rewards: how each one looks
+----------------------------------------------------------------------------------------------------
 
 local function rewardColor(r: any): Color3
 	if r.Kind == "Bubbles" then
@@ -46,10 +67,10 @@ local function rewardColor(r: any): Color3
 	elseif r.Kind == "Boost" then
 		return Colors.Good
 	elseif r.Kind == "Pet" then
-		local pet = Config.Pets[r.Pet]
 		if (r.Tier or 1) > 1 then
 			return Config.PetTiers[r.Tier].Color or Colors.Coin
 		end
+		local pet = Config.Pets[r.Pet]
 		local rarity = pet and Config.Rarities[pet.Rarity]
 		return if rarity then rarity.Color else Colors.Accent
 	end
@@ -69,204 +90,420 @@ local function rewardIcon(r: any): string
 	return "Crown"
 end
 
-local function isBig(r: any): boolean
-	return r.Kind == "Pass" or (r.Kind == "Pet" and r.Chance <= 5)
+-- How rare a reward feels, from its chance.
+local function tierOf(r: any): (string, number)
+	if r.Chance < 1 then
+		return "LEGENDARY", 4
+	elseif r.Chance < 5 then
+		return "EPIC", 3
+	elseif r.Chance < 15 then
+		return "RARE", 2
+	end
+	return "COMMON", 1
 end
 
-local function timeLeft(): string
-	local left = math.max(0, Config.ChestEvent.Ends - os.time())
-	if left <= 0 then
-		return "Event over"
-	end
-	local d, h, m = left // 86400, (left % 86400) // 3600, (left % 3600) // 60
-	if d > 0 then
-		return string.format("Ends in %dd %02dh", d, h)
-	end
-	return string.format("Ends in %dh %02dm", h, m)
+local function pctText(chance: number): string
+	return if chance < 1 then string.format("%.1f%%", chance) else string.format("%g%%", chance)
 end
 
 ----------------------------------------------------------------------------------------------------
--- Reveal
+-- The chest in the world
 ----------------------------------------------------------------------------------------------------
+
+local function chestModel(): Model?
+	for _, m in CollectionService:GetTagged("EventChest") do
+		if m:IsA("Model") and m:IsDescendantOf(workspace) then
+			return m
+		end
+	end
+	return nil
+end
+
+local function chestPivot(): CFrame?
+	local model = chestModel()
+	local box = model and model.PrimaryPart
+	return if box then box.CFrame else nil
+end
+
+-- The odds board and the free sign above the chest (built here, so each player sees their own).
+local function buildBoard(model: Model): boolean
+	local box = model.PrimaryPart
+	if not box or freeSign ~= nil then
+		return false
+	end
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "OddsBoard"
+	gui.Adornee = box
+	gui.Size = UDim2.fromScale(10, 9)
+	gui.StudsOffsetWorldSpace = Vector3.new(0, 8.5, 0) -- above the lid, under the title sign
+	gui.MaxDistance = 70
+	gui.LightInfluence = 0
+	gui.ResetOnSpawn = false
+	local list = Instance.new("Frame")
+	list.BackgroundColor3 = Colors.PanelDark
+	list.BackgroundTransparency = 0.15
+	list.Size = UDim2.fromScale(1, 0.84)
+	list.Position = UDim2.fromScale(0, 0.16)
+	UIKit.Corner(list, 14)
+	list.Parent = gui
+	local layout = Instance.new("UIListLayout")
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0.01, 0)
+	layout.Parent = list
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0.03, 0)
+	pad.PaddingLeft = UDim.new(0.04, 0)
+	pad.PaddingRight = UDim.new(0.04, 0)
+	pad.Parent = list
+	local count = #Config.ChestEvent.Rewards
+	for i, r in Config.ChestEvent.Rewards do
+		local row = Instance.new("Frame")
+		row.BackgroundTransparency = 1
+		row.Size = UDim2.fromScale(1, 0.94 / count - 0.01)
+		row.LayoutOrder = i
+		row.Parent = list
+		local name = UIKit.Label({ Text = Config.ChestRewardName(r), TextScaled = true, TextColor3 = rewardColor(r), TextXAlignment = Enum.TextXAlignment.Left, Size = UDim2.fromScale(0.74, 1), Parent = row })
+		local _ = name
+		UIKit.Label({ Text = pctText(r.Chance), TextScaled = true, TextXAlignment = Enum.TextXAlignment.Right, Position = UDim2.fromScale(0.74, 0), Size = UDim2.fromScale(0.26, 1), Parent = row })
+	end
+	freeSign = UIKit.Label({ Name = "FreeSign", Text = "1 FREE CHEST!", TextScaled = true, TextColor3 = Colors.Good, Size = UDim2.fromScale(1, 0.14), Parent = gui })
+	gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	return true
+end
+
+-- Lid open / shut (client only, just for looks). Lid parts turn about the back hinge.
+local lidHome: { [BasePart]: CFrame } = {}
+local function setLid(open: boolean)
+	local model = chestModel()
+	local box = model and model.PrimaryPart
+	if not model or not box then
+		return
+	end
+	local hinge = box.CFrame * CFrame.new(0, box.Size.Y / 2, box.Size.Z / 2)
+	for _, part in model:GetDescendants() do
+		if part:IsA("BasePart") and (CollectionService:HasTag(part, "EventChestLid") or part:GetAttribute("LidPart")) then
+			lidHome[part] = lidHome[part] or part.CFrame
+			local home = lidHome[part]
+			local target = if open then hinge * CFrame.Angles(math.rad(-105), 0, 0) * hinge:Inverse() * home else home
+			TweenService:Create(part, TweenInfo.new(if open then 0.35 else 0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { CFrame = target }):Play()
+		end
+	end
+end
+
+function ChestUI.GoToChest()
+	local pivot = chestPivot()
+	local character = LocalPlayer.Character
+	if not pivot or not character or ClientState.Run ~= nil then
+		if not pivot then
+			UIKit.Toast("The Treasure Chest event isn't on right now.", "Info")
+		end
+		return
+	end
+	-- In front of the lock, looking at the chest.
+	local spot = (pivot * CFrame.new(0, 1, -10)).Position
+	character:PivotTo(CFrame.lookAt(spot, Vector3.new(pivot.Position.X, spot.Y, pivot.Position.Z)))
+end
+
+----------------------------------------------------------------------------------------------------
+-- Reveal: one spinning card per chest
+----------------------------------------------------------------------------------------------------
+
+local function paintCard(card: Frame, r: any, landed: boolean)
+	local color = rewardColor(r)
+	card.BackgroundColor3 = UIKit.Darken(color, 0.55)
+	local stroke = card:FindFirstChildOfClass("UIStroke")
+	if stroke then
+		stroke.Color = color
+	end
+	local holder = card:FindFirstChild("IconHolder") :: Frame
+	for _, c in holder:GetChildren() do
+		c:Destroy()
+	end
+	local icon = UIKit.Icon(rewardIcon(r), 64, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5) })
+	icon.Parent = holder
+	local name = card:FindFirstChild("RewardName") :: TextLabel
+	name.Text = Config.ChestRewardName(r)
+	name.TextColor3 = color
+	local tierLabel = card:FindFirstChild("Tier") :: TextLabel
+	tierLabel.Text = if landed then (tierOf(r)) else ""
+	tierLabel.TextColor3 = color
+end
+
+local function makeCard(i: number): Frame
+	local card = Instance.new("Frame")
+	card.Name = "Card" .. i
+	card.LayoutOrder = i
+	card.BackgroundColor3 = Colors.PanelLight
+	UIKit.Corner(card, 14)
+	UIKit.Stroke(card, Colors.Coin, 3, 0)
+	local holder = Instance.new("Frame")
+	holder.Name = "IconHolder"
+	holder.BackgroundTransparency = 1
+	holder.Position = UDim2.fromScale(0, 0.12)
+	holder.Size = UDim2.fromScale(1, 0.5)
+	holder.Parent = card
+	UIKit.Label({ Name = "Tier", Text = "", TextSize = 14, Position = UDim2.fromScale(0, 0.02), Size = UDim2.fromScale(1, 0.12), Parent = card })
+	UIKit.Label({ Name = "RewardName", Text = "", TextScaled = true, TextWrapped = true, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -6), Size = UDim2.new(1, -10, 0.3, 0), Parent = card })
+	local scale = Instance.new("UIScale")
+	scale.Name = "Pop"
+	scale.Parent = card
+	return card
+end
+
+-- Picks a random reward by weight, for the spinning faces.
+local function randomReward(): any
+	local x = math.random() * 100
+	for _, r in Config.ChestEvent.Rewards do
+		x -= r.Chance
+		if x <= 0 then
+			return r
+		end
+	end
+	return Config.ChestEvent.Rewards[1]
+end
 
 local function showResults(results: { any })
 	if type(results) ~= "table" or #results == 0 then
 		return
 	end
-	for _, child in revealGrid:GetChildren() do
-		if child:IsA("GuiObject") then
-			child:Destroy()
+	revealing = true
+	panel.Visible = false
+	for _, c in revealGrid:GetChildren() do
+		if c:IsA("GuiObject") then
+			c:Destroy()
 		end
 	end
+	local count = #results
 	local layout = revealGrid:FindFirstChildOfClass("UIGridLayout") :: UIGridLayout
-	local many = #results > 5
-	layout.CellSize = if many then UDim2.fromOffset(130, 130) else UDim2.fromOffset(150, 170)
-	revealTitle.Text = if #results == 1 then "YOU GOT" else string.format("%d CHESTS OPENED", #results)
+	local scale = if count == 1 then 1.35 elseif count <= 3 then 1.1 else 0.8
+	layout.CellSize = UDim2.fromOffset(math.floor(CARD_W * scale), math.floor(CARD_H * scale))
+	revealTitle.Text = if count == 1 then "OPENING..." else string.format("OPENING %d CHESTS...", count)
+	revealDone.Visible = false
 	reveal.Visible = true
 	UIKit.Bounce(reveal)
+	setLid(true)
 	UIKit.PlaySound("Sparkle")
-	local best = false
+
+	-- Land the rarest last, so the best moment comes at the end.
+	local order = {}
 	for i, res in results do
-		local def = Config.ChestEvent.Rewards[tonumber(res.Index) or 0]
-		local color = if def then rewardColor(def) else Colors.Coin
-		local card = UIKit.Card({ Name = "Result", Color = UIKit.Darken(color, 0.55), LayoutOrder = i, Parent = revealGrid })
-		UIKit.Stroke(card, color, 3, 0)
-		local icon = UIKit.Icon(if def then rewardIcon(def) else "Star", if many then 56 else 70, {
-			AnchorPoint = Vector2.new(0.5, 0),
-			Position = UDim2.new(0.5, 0, 0, 10),
-		})
-		icon.Parent = card
-		UIKit.Label({
-			Text = tostring(res.Text),
-			TextSize = 16,
-			TextScaled = true,
-			TextWrapped = true,
-			TextColor3 = color,
-			AnchorPoint = Vector2.new(0.5, 1),
-			Position = UDim2.new(0.5, 0, 1, -8),
-			Size = UDim2.new(1, -12, 0, if many then 44 else 56),
-			Parent = card,
-		})
-		local scale = Instance.new("UIScale")
-		scale.Scale = 0
-		scale.Parent = card
-		TweenService:Create(scale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
-		if def and isBig(def) then
-			best = true
+		local def = Config.ChestEvent.Rewards[tonumber(res.Index) or 0] or Config.ChestEvent.Rewards[1]
+		table.insert(order, { Def = def, Text = res.Text, I = i })
+	end
+	local cards = {}
+	for i = 1, count do
+		local card = makeCard(i)
+		card.Parent = revealGrid
+		paintCard(card, randomReward(), false)
+		cards[i] = card
+	end
+	local landOrder = table.clone(order)
+	table.sort(landOrder, function(a, b)
+		local ta, tb = select(2, tierOf(a.Def)), select(2, tierOf(b.Def))
+		if ta ~= tb then
+			return ta < tb
 		end
-		UIKit.PlaySound("Pop", 0.9 + i * 0.04)
-		task.wait(if many then 0.12 else 0.25)
+		return a.I < b.I
+	end)
+	local landAt: { [number]: number } = {}
+	local start = os.clock()
+	local spinFor = if count == 1 then 2.4 else 1.6
+	local step = if count == 1 then 0 else math.min(0.22, 1.6 / count)
+	for k, entry in landOrder do
+		landAt[entry.I] = spinFor + (k - 1) * step
 	end
-	if best then
-		UIKit.Confetti(120)
-		UIKit.PlaySound("Sparkle", 1.2)
+	local nextFlip: { [number]: number } = {}
+	local landed: { [number]: boolean } = {}
+	local best = 0
+	while true do
+		local t = os.clock() - start
+		local all = true
+		for i, card in cards do
+			if not landed[i] then
+				all = false
+				local left = landAt[i] - t
+				if left <= 0 then
+					landed[i] = true
+					local entry = order[i]
+					paintCard(card, entry.Def, true)
+					local nameLabel = card:FindFirstChild("RewardName") :: TextLabel
+					nameLabel.Text = tostring(entry.Text)
+					local pop = card:FindFirstChild("Pop") :: UIScale
+					pop.Scale = 1.25
+					TweenService:Create(pop, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+					local tier = select(2, tierOf(entry.Def))
+					best = math.max(best, tier)
+					UIKit.PlaySound(if tier >= 3 then "Sparkle" else "Pop", 0.9 + tier * 0.1)
+					if tier >= 3 then
+						UIKit.Confetti(if tier >= 4 then 140 else 70)
+					end
+				elseif t >= (nextFlip[i] or 0) then
+					-- Faster at first, slowing right down as it lands.
+					local gap = 0.05 + 0.3 * math.clamp(1 - left / 1.2, 0, 1) ^ 2
+					nextFlip[i] = t + gap
+					paintCard(card, randomReward(), false)
+					UIKit.PlaySound("Click", 1.4)
+				end
+			end
+		end
+		if all then
+			break
+		end
+		RunService.RenderStepped:Wait()
 	end
+	revealTitle.Text = if best >= 4 then "JACKPOT!" elseif best >= 3 then "AMAZING!" else "YOU GOT"
+	revealDone.Visible = true
+	UIKit.Bounce(revealDone)
+end
+
+local function finishReveal()
+	reveal.Visible = false
+	revealing = false
+	setLid(false)
 end
 
 ----------------------------------------------------------------------------------------------------
--- Window
+-- Opening
 ----------------------------------------------------------------------------------------------------
 
-local function refresh()
+local function freeLeft(): number
 	local meta = ClientState.Meta :: any
-	local free = if meta then tonumber(meta.ChestFreeLeft) or 0 else 0
-	local live = Config.ChestEventLive()
-	freeButton.Visible = free > 0 and live
-	freeNote.Visible = not freeButton.Visible
-	local opened = if meta then tonumber(meta.ChestsOpened) or 0 else 0
-	freeNote.Text = if not live
-		then "This event has ended. See you at the next one!"
-		elseif opened > 0 then string.format("Free chest opened! You've opened %d chests.", opened)
-		else "Free chest opened!"
-	timeLabel.Text = timeLeft()
+	return if meta then tonumber(meta.ChestFreeLeft) or 0 else 0
 end
 
-local function openFree()
-	if busy then
+local function request(action: string, value: any?)
+	if busy or revealing then
 		return
 	end
 	busy = true
-	UIKit.SetDisabled(freeButton, true)
-	local result = Remotes.Function("ChestRequest"):InvokeServer("Free")
+	local ok, result = pcall(function()
+		return Remotes.Function("ChestRequest"):InvokeServer(action, value)
+	end)
 	busy = false
-	UIKit.SetDisabled(freeButton, false)
-	if result and result.Ok then
+	if ok and result and result.Ok then
 		task.spawn(showResults, result.Rewards)
 	else
-		UIKit.Toast(result and result.Error or "Couldn't open that.", "Info")
-	end
-	refresh()
-end
-
-local function buy(pack: any)
-	local id = Config.EventProducts[pack.Key]
-	if type(id) == "number" and id > 0 then
-		pcall(function()
-			MarketplaceService:PromptProductPurchase(LocalPlayer, id)
-		end)
-		return
-	end
-	-- No product yet: Studio test (free), "coming soon" in a live game.
-	if busy then
-		return
-	end
-	busy = true
-	local result = Remotes.Function("ChestRequest"):InvokeServer("Test", pack.Count)
-	busy = false
-	if result and result.Ok then
-		task.spawn(showResults, result.Rewards)
-	else
-		UIKit.Toast(result and result.Error or "Coming soon!", "Info")
+		UIKit.Toast(if ok and result then result.Error or "Couldn't open that." else "Couldn't open that.", "Info")
 	end
 end
 
--- One pack card. `style`: "plain", "decoy" (the x3: dull and small) or "best" (the x10).
-local function packCard(parent: Frame, pack: any, style: string, x: number, width: number, height: number)
+function ChestUI.Open(count: number)
+	if busy or revealing then
+		return
+	end
+	if count == 1 and freeLeft() > 0 then
+		task.spawn(request, "Free")
+		return
+	end
+	for _, pack in Config.ChestEvent.Packs do
+		if pack.Count == count then
+			local id = Config.EventProducts[pack.Key]
+			if type(id) == "number" and id > 0 then
+				pcall(function()
+					MarketplaceService:PromptProductPurchase(LocalPlayer, id)
+				end)
+			else
+				task.spawn(request, "Test", pack.Count) -- Studio: free test
+			end
+			return
+		end
+	end
+end
+
+----------------------------------------------------------------------------------------------------
+-- The Open boxes
+----------------------------------------------------------------------------------------------------
+
+-- style: "plain", "decoy" (the x3: small and grey on purpose) or "best" (the big gold x10).
+local function openBox(parent: Frame, pack: any, style: string, order: number): (TextButton, TextLabel, TextLabel)
 	local base = Config.ChestEvent.Packs[1]
 	local each = pack.Price / pack.Count
 	local save = math.floor((1 - each / (base.Price / base.Count)) * 100 + 0.5)
+	local w, h = if style == "best" then 200 elseif style == "decoy" then 128 else 150, if style == "best" then 132 elseif style == "decoy" then 96 else 112
 	local color = if style == "best" then Colors.Coin elseif style == "decoy" then Colors.Disabled else Colors.Primary
-	local card = UIKit.Card({
-		Name = "Pack" .. pack.Count,
-		Color = if style == "best" then UIKit.Darken(Colors.Coin, 0.5) else Colors.PanelLight,
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0, x, 1, 0),
-		Size = UDim2.fromOffset(width, height),
-		Parent = parent,
-	})
-	UIKit.Stroke(card, color, if style == "best" then 4 else 2, 0)
-	local iconSize = if style == "best" then 86 elseif style == "decoy" then 50 else 60
-	local icon = UIKit.Icon("Chest", iconSize, { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, if style == "best" then 30 else 14) })
-	icon.Parent = card
-	UIKit.Label({
-		Text = string.format("x%d", pack.Count),
-		TextSize = if style == "best" then 34 else 26,
+	local button = Instance.new("TextButton")
+	button.Name = "Open" .. pack.Count
+	button.Text = ""
+	button.AutoButtonColor = false
+	button.LayoutOrder = order
+	button.Size = UDim2.fromOffset(w, h)
+	button.BackgroundColor3 = if style == "best" then UIKit.Darken(Colors.Coin, 0.45) else Colors.PanelDark
+	UIKit.Corner(button, 16)
+	UIKit.Stroke(button, color, if style == "best" then 4 else 3, 0)
+	local title = UIKit.Label({
+		Name = "Title",
+		Text = string.format("OPEN %d", pack.Count),
+		TextSize = if style == "best" then 30 elseif style == "decoy" then 18 else 24,
 		TextColor3 = if style == "decoy" then Colors.TextDim else Colors.Text,
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, iconSize + (if style == "best" then 30 else 14)),
-		Size = UDim2.new(1, -10, 0, 34),
-		Parent = card,
+		Position = UDim2.fromScale(0, 0.08),
+		Size = UDim2.fromScale(1, 0.32),
+		Parent = button,
+	})
+	local price = UIKit.Label({
+		Name = "Price",
+		Text = string.format("R$ %d", pack.Price),
+		TextSize = if style == "best" then 28 elseif style == "decoy" then 16 else 22,
+		TextColor3 = if style == "best" then Colors.Good elseif style == "decoy" then Colors.TextDim else Colors.Coin,
+		Position = UDim2.fromScale(0, 0.4),
+		Size = UDim2.fromScale(1, 0.3),
+		Parent = button,
 	})
 	UIKit.Label({
-		Text = if save > 0 then string.format("%d R$ each  (save %d%%)", math.floor(each + 0.5), save) else string.format("%d R$ each", pack.Price),
-		TextSize = if style == "best" then 16 else 13,
+		Name = "Each",
+		Text = if save > 0 then string.format("%d each, save %d%%", math.floor(each + 0.5), save) else "per chest",
+		TextSize = if style == "best" then 15 else 12,
 		TextColor3 = if style == "best" then Colors.Good else Colors.TextDim,
-		TextScaled = true,
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, if style == "best" then -66 else -58),
-		Size = UDim2.new(1, -12, 0, 18),
-		Parent = card,
-	})
-	UIKit.Button({
-		Text = string.format("R$ %d", pack.Price),
-		Color = if style == "best" then Colors.Good elseif style == "decoy" then Colors.Disabled else Colors.Primary,
-		TextSize = if style == "best" then 26 else 18,
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -8),
-		Size = UDim2.new(1, -16, 0, if style == "best" then 52 else 44),
-		Parent = card,
-		OnClick = function()
-			task.spawn(buy, pack)
-		end,
+		Position = UDim2.fromScale(0, 0.72),
+		Size = UDim2.fromScale(1, 0.2),
+		Parent = button,
 	})
 	if pack.Tag then
 		local ribbon = Instance.new("Frame")
 		ribbon.Name = "Ribbon"
 		ribbon.AnchorPoint = Vector2.new(0.5, 0.5)
-		ribbon.Position = UDim2.new(0.5, 0, 0, 2)
-		ribbon.Size = UDim2.fromOffset(width - 30, 30)
+		ribbon.Position = UDim2.fromScale(0.5, 0)
+		ribbon.Size = UDim2.fromOffset(w - 30, 28)
 		ribbon.BackgroundColor3 = Colors.Bad
-		ribbon.ZIndex = 6
-		UIKit.Corner(ribbon, 15)
+		ribbon.ZIndex = 3
+		UIKit.Corner(ribbon, 14)
 		UIKit.Stroke(ribbon, Colors.Ink, 2)
-		UIKit.Label({ Text = pack.Tag, TextSize = 18, Size = UDim2.fromScale(1, 1), ZIndex = 7, Parent = ribbon })
-		ribbon.Parent = card
-		-- A slow pulse so the eye lands on it first.
-		local scale = Instance.new("UIScale")
-		scale.Parent = card
-		TweenService:Create(scale, TweenInfo.new(0.7, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Scale = 1.04 }):Play()
+		UIKit.Label({ Text = pack.Tag, TextSize = 16, Size = UDim2.fromScale(1, 1), ZIndex = 4, Parent = ribbon })
+		ribbon.Parent = button
+		local pulse = Instance.new("UIScale")
+		pulse.Parent = button
+		TweenService:Create(pulse, TweenInfo.new(0.7, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Scale = 1.05 }):Play()
 	end
-	return card
+	button.Activated:Connect(function()
+		UIKit.PlaySound("Click")
+		ChestUI.Open(pack.Count)
+	end)
+	button.Parent = parent
+	return button, title, price
+end
+
+local function refresh()
+	local free = freeLeft()
+	local packOne = Config.ChestEvent.Packs[1]
+	if free > 0 then
+		firstLabel.Text = "OPEN 1"
+		firstPrice.Text = "FREE!"
+		firstPrice.TextColor3 = Colors.Good
+	else
+		firstLabel.Text = "OPEN 1"
+		firstPrice.Text = string.format("R$ %d", packOne.Price)
+		firstPrice.TextColor3 = Colors.Coin
+	end
+	local each = firstButton:FindFirstChild("Each")
+	if each and each:IsA("TextLabel") then
+		each.Visible = free <= 0
+	end
+	local stroke = firstButton:FindFirstChildOfClass("UIStroke")
+	if stroke then
+		stroke.Color = if free > 0 then Colors.Good else Colors.Primary
+	end
+	if freeSign then
+		(freeSign :: TextLabel).Visible = free > 0
+	end
 end
 
 function ChestUI.Init()
@@ -275,195 +512,140 @@ function ChestUI.Init()
 	end
 	initialized = true
 
-	local _gui, screenRoot = UIKit.CreateScreen("ChestUI", 10)
-	local _window, content = UIKit.Window({
-		Name = "Chest",
-		Title = "Treasure Chests",
-		Icon = "@Chest",
-		Size = Vector2.new(920, 580),
-		Parent = screenRoot,
-	})
+	local _gui, root = UIKit.CreateScreen("ChestUI", 9)
+	panel = Instance.new("Frame")
+	panel.Name = "OpenBoxes"
+	panel.AnchorPoint = Vector2.new(0.5, 1)
+	panel.Position = UDim2.new(0.5, 0, 1, -24)
+	panel.Size = UDim2.fromOffset(520, 150)
+	panel.BackgroundTransparency = 1
+	panel.Visible = false
+	panel.Parent = root
+	local row = Instance.new("UIListLayout")
+	row.FillDirection = Enum.FillDirection.Horizontal
+	row.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	row.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	row.Padding = UDim.new(0, 14)
+	row.SortOrder = Enum.SortOrder.LayoutOrder
+	row.Parent = panel
+	local packs = Config.ChestEvent.Packs
+	firstButton, firstLabel, firstPrice = openBox(panel, packs[1], "plain", 1)
+	-- The E hint on the first box.
+	local hint = Instance.new("Frame")
+	hint.Name = "KeyHint"
+	hint.Position = UDim2.fromOffset(-8, -8)
+	hint.Size = UDim2.fromOffset(30, 28)
+	hint.BackgroundColor3 = Colors.PanelDark
+	hint.ZIndex = 5
+	UIKit.Corner(hint, 8)
+	UIKit.Stroke(hint, Colors.Ink, 2)
+	UIKit.Label({ Text = "E", TextSize = 16, Size = UDim2.fromScale(1, 1), ZIndex = 6, Parent = hint })
+	hint.Parent = firstButton
+	openBox(panel, packs[2], "decoy", 2)
+	openBox(panel, packs[3], "best", 3)
 
-	local left = Instance.new("Frame")
-	left.Name = "Left"
-	left.BackgroundTransparency = 1
-	left.Size = UDim2.new(1, -316, 1, 0)
-	left.Parent = content
-
-	-- The event header.
-	local header = UIKit.Card({ Name = "Header", Size = UDim2.new(1, 0, 0, 132), Color = Colors.PanelDark, Parent = left })
-	UIKit.Gradient(header, Color3.fromRGB(30, 110, 150), Color3.fromRGB(12, 40, 80))
-	local headIcon = UIKit.Icon("Chest", 100, { Position = UDim2.fromOffset(14, 16) })
-	headIcon.Parent = header
-	UIKit.Label({
-		Text = string.upper(Config.ChestEvent.Name),
-		TextSize = 30,
-		TextScaled = true,
-		TextColor3 = Colors.Coin,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Position = UDim2.fromOffset(128, 10),
-		Size = UDim2.new(1, -140, 0, 36),
-		Parent = header,
-	})
-	timeLabel = UIKit.Label({
-		Text = "",
-		TextSize = 18,
-		TextColor3 = Colors.Bad,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Position = UDim2.fromOffset(128, 46),
-		Size = UDim2.new(1, -140, 0, 22),
-		Parent = header,
-	})
-	freeButton = UIKit.Button({
-		Text = "OPEN FREE CHEST",
-		Color = Colors.Good,
-		TextSize = 22,
-		Position = UDim2.fromOffset(128, 74),
-		Size = UDim2.new(1, -144, 0, 48),
-		Parent = header,
-		OnClick = function()
-			task.spawn(openFree)
-		end,
-	})
-	freeNote = UIKit.Label({
-		Text = "",
-		TextSize = 16,
-		TextWrapped = true,
-		TextColor3 = Colors.TextDim,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Position = UDim2.fromOffset(128, 74),
-		Size = UDim2.new(1, -144, 0, 48),
-		Parent = header,
-	})
-
-	-- The packs, bottom-aligned: x1, x3 (the decoy), x10 (the big one).
-	local packs = Instance.new("Frame")
-	packs.Name = "Packs"
-	packs.BackgroundTransparency = 1
-	packs.Position = UDim2.fromOffset(0, 150)
-	packs.Size = UDim2.new(1, 0, 1, -150)
-	packs.Parent = left
-	local list = Config.ChestEvent.Packs
-	packCard(packs, list[1], "plain", 0, 164, 236)
-	packCard(packs, list[2], "decoy", 176, 148, 214)
-	packCard(packs, list[3], "best", 336, 238, 296)
-
-	-- Odds.
-	local right = UIKit.Card({
-		Name = "Odds",
-		Color = Colors.PanelDark,
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 0),
-		Size = UDim2.new(0, 300, 1, 0),
-		Parent = content,
-	})
-	UIKit.Label({ Text = "WHAT'S INSIDE", TextSize = 20, Position = UDim2.fromOffset(0, 8), Size = UDim2.new(1, 0, 0, 24), Parent = right })
-	local odds = Instance.new("ScrollingFrame")
-	odds.Name = "List"
-	odds.BackgroundTransparency = 1
-	odds.BorderSizePixel = 0
-	odds.Position = UDim2.fromOffset(8, 40)
-	odds.Size = UDim2.new(1, -16, 1, -48)
-	odds.ScrollBarThickness = 6
-	odds.AutomaticCanvasSize = Enum.AutomaticSize.Y
-	odds.CanvasSize = UDim2.new()
-	odds.Parent = right
-	local oddsLayout = Instance.new("UIListLayout")
-	oddsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	oddsLayout.Padding = UDim.new(0, 6)
-	oddsLayout.Parent = odds
-	for i, r in Config.ChestEvent.Rewards do
-		local color = rewardColor(r)
-		local row = UIKit.Card({ Name = "Reward", Size = UDim2.new(1, -8, 0, 40), LayoutOrder = i, Parent = odds })
-		UIKit.Stroke(row, color, if isBig(r) then 2.5 else 1, 0)
-		local icon = UIKit.Icon(rewardIcon(r), 28, { Position = UDim2.fromOffset(6, 6) })
-		icon.Parent = row
-		UIKit.Label({
-			Text = Config.ChestRewardName(r),
-			TextSize = 15,
-			TextScaled = true,
-			TextColor3 = color,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			Position = UDim2.fromOffset(40, 6),
-			Size = UDim2.new(1, -110, 0, 28),
-			Parent = row,
-		})
-		UIKit.Label({
-			Text = if r.Chance < 1 then string.format("%.1f%%", r.Chance) else string.format("%g%%", r.Chance),
-			TextSize = 17,
-			TextXAlignment = Enum.TextXAlignment.Right,
-			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.new(1, -8, 0, 6),
-			Size = UDim2.fromOffset(64, 28),
-			Parent = row,
-		})
-	end
-
-	-- The reveal popup (over everything).
+	-- The reveal (over everything).
 	local _rgui, revealRoot = UIKit.CreateScreen("ChestReveal", 40)
 	reveal = Instance.new("Frame")
 	reveal.Name = "Reveal"
 	reveal.AnchorPoint = Vector2.new(0.5, 0.5)
 	reveal.Position = UDim2.fromScale(0.5, 0.5)
-	reveal.Size = UDim2.fromOffset(780, 470)
+	reveal.Size = UDim2.fromOffset(860, 520)
 	reveal.BackgroundColor3 = Colors.PanelDark
+	reveal.BackgroundTransparency = 0.05
 	reveal.Visible = false
-	UIKit.Corner(reveal, 18)
+	UIKit.Corner(reveal, 20)
 	UIKit.Stroke(reveal, Colors.Coin, 4, 0)
 	reveal.Parent = revealRoot
-	revealTitle = UIKit.Label({ Text = "YOU GOT", TextSize = 36, TextColor3 = Colors.Coin, Position = UDim2.fromOffset(0, 12), Size = UDim2.new(1, 0, 0, 44), Parent = reveal })
+	revealTitle = UIKit.Label({ Text = "", TextSize = 38, TextColor3 = Colors.Coin, Position = UDim2.fromOffset(0, 12), Size = UDim2.new(1, 0, 0, 46), Parent = reveal })
 	revealGrid = Instance.new("Frame")
 	revealGrid.Name = "Grid"
 	revealGrid.BackgroundTransparency = 1
 	revealGrid.Position = UDim2.fromOffset(20, 66)
-	revealGrid.Size = UDim2.new(1, -40, 1, -146)
+	revealGrid.Size = UDim2.new(1, -40, 1, -150)
 	revealGrid.Parent = reveal
 	local grid = Instance.new("UIGridLayout")
-	grid.CellPadding = UDim2.fromOffset(10, 10)
+	grid.CellPadding = UDim2.fromOffset(12, 12)
 	grid.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	grid.VerticalAlignment = Enum.VerticalAlignment.Center
 	grid.SortOrder = Enum.SortOrder.LayoutOrder
 	grid.Parent = revealGrid
-	UIKit.Button({
+	revealDone = UIKit.Button({
 		Text = "AWESOME!",
 		Color = Colors.Good,
 		TextSize = 24,
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -14),
+		Position = UDim2.new(0.5, 0, 1, -16),
 		Size = UDim2.fromOffset(240, 56),
 		Parent = reveal,
-		OnClick = function()
-			reveal.Visible = false
-			refresh()
-		end,
+		OnClick = finishReveal,
 	})
 
-	UIKit.RegisterWindow("Chest", {
-		Open = function()
-			refresh()
-		end,
-	})
 	ClientState.Changed:Connect(function(kind)
-		if kind == "Meta" and UIKit.IsWindowOpen("Chest") then
+		if kind == "Meta" then
 			refresh()
 		end
 	end)
 	Remotes.Event("ChestResult").OnClientEvent:Connect(function(results)
 		task.spawn(showResults, results)
 	end)
-	task.spawn(function()
-		while true do
-			task.wait(30)
-			if UIKit.IsWindowOpen("Chest") then
-				timeLabel.Text = timeLeft()
-			end
+	ProximityPromptService.PromptShown:Connect(function()
+		promptsShown += 1
+	end)
+	ProximityPromptService.PromptHidden:Connect(function()
+		promptsShown = math.max(0, promptsShown - 1)
+	end)
+	-- E: open one at the chest; anywhere else in the lobby, go to it. (Leaves E alone while
+	-- another prompt is up or you're typing.)
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if input.KeyCode ~= Enum.KeyCode.E or processed or UserInputService:GetFocusedTextBox() then
+			return
+		end
+		if ClientState.Run ~= nil or promptsShown > 0 or revealing or UIKit.IsWindowOpen() then
+			return
+		end
+		if not Config.ChestEventLive() then
+			return
+		end
+		if near then
+			ChestUI.Open(1)
+		else
+			ChestUI.GoToChest()
 		end
 	end)
-end
 
--- Opens the window (the lobby chest's prompt).
-function ChestUI.Open()
-	UIKit.OpenWindow("Chest")
+	-- Near the chest? Show the boxes. (Also builds the odds board once the chest has streamed in.)
+	task.spawn(function()
+		while true do
+			local model = chestModel()
+			if model and buildBoard(model) then
+				refresh()
+			end
+			local pivot = chestPivot()
+			local character = LocalPlayer.Character
+			local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+			local isNear = pivot ~= nil
+				and rootPart ~= nil
+				and rootPart:IsA("BasePart")
+				and ClientState.Run == nil
+				and (rootPart.Position - pivot.Position).Magnitude <= NEAR
+			if isNear ~= near then
+				near = isNear
+				refresh()
+				if near and not revealing then
+					panel.Visible = true
+					UIKit.Bounce(panel)
+				end
+			end
+			if not near then
+				panel.Visible = false
+			elseif not revealing then
+				panel.Visible = not UIKit.IsWindowOpen()
+			end
+			task.wait(0.2)
+		end
+	end)
+	refresh()
 end
 
 return ChestUI

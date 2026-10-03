@@ -735,7 +735,7 @@ local COMMANDS: { Command } = ({
 	{ Name = "wipelogs", Icon = "🧹", Label = "Wipe logs", Desc = "Deletes the whole command log.", Group = "Server", Target = "none", Danger = true },
 	{ Name = "setadminrank", Icon = "🛡️", Label = "Staff tier", Desc = "Make them Moderator, Admin or Developer (saved, works straight away), or clear it.", Group = "Server", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = opts({ "Moderator", "Admin", "Developer", "clear" }) } } },
 	{ Name = "stafflist", Icon = "📋", Label = "Staff list", Desc = "Everyone with a staff rank, online or not. Remove anyone.", Group = "Server", Target = "none" },
-	{ Name = "globalpoll", Icon = "📊", Label = "Poll", Desc = "A poll in EVERY server. Type: Question | answer | answer (2 to 4 answers). Results go up as a banner when it ends.", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+	{ Name = "globalpoll", Icon = "📊", Label = "Poll", Desc = "A poll in EVERY server. Type: Question | answer | answer (2 to 4 answers). When it ends, everyone's poll card shows the results.", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		return { { Label = "30 seconds", Value = "30" }, { Label = "1 minute", Value = "60" }, { Label = "2 minutes", Value = "120" } }
 	end }, { Kind = "text", Placeholder = "Which level next? | Pizzeria | Castle", Required = true } } },
 	{ Name = "globalgive", Icon = "🎁", Label = "Give everyone", Desc = "Everyone online in EVERY server gets this much (Coins only reach people inside a dishwasher).", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "Bubbles", "Gems", "Coins" }) }, { Kind = "number", Placeholder = "Amount", Required = true } } },
@@ -916,10 +916,18 @@ local function buildPanel(info: any)
 	right.Size = UDim2.new(1, -262, 1, -64)
 	right.Parent = content
 
-	local tabs = Instance.new("Frame")
+	-- The group tabs scroll sideways when they don't all fit.
+	local tabs = Instance.new("ScrollingFrame")
 	tabs.Name = "Groups"
 	tabs.BackgroundTransparency = 1
-	tabs.Size = UDim2.new(1, 0, 0, 48)
+	tabs.BorderSizePixel = 0
+	tabs.Size = UDim2.new(1, 0, 0, 52)
+	tabs.ScrollingDirection = Enum.ScrollingDirection.X
+	tabs.AutomaticCanvasSize = Enum.AutomaticSize.X
+	tabs.CanvasSize = UDim2.new()
+	tabs.ScrollBarThickness = 4
+	tabs.ScrollBarImageColor3 = Colors.Primary
+	tabs.VerticalScrollBarInset = Enum.ScrollBarInset.None
 	tabs.Parent = right
 	listLayout(tabs, 8, true)
 	local tabButtons: { [string]: TextButton } = {}
@@ -1103,6 +1111,18 @@ local function buildPanel(info: any)
 				box:GetPropertyChangedSignal("Text"):Connect(function()
 					values[i] = box.Text
 				end)
+				-- A name box (":joinserver" and friends): suggest players here, Tab completes.
+				if cmd.Target == "text" and i == 1 then
+					local Autocomplete = require(Client:WaitForChild("Autocomplete")) :: any
+					local detach = Autocomplete.Attach(box, function(text: string)
+						local names = {}
+						for _, plr in Players:GetPlayers() do
+							table.insert(names, { Text = plr.Name, Hint = if plr.DisplayName ~= plr.Name then plr.DisplayName else nil })
+						end
+						return { Items = Autocomplete.Match((string.gsub(text, "%s+$", "")), names), Replace = 1 }
+					end, { Above = false })
+					box.Destroying:Connect(detach)
+				end
 			end
 		end
 	end
@@ -1722,6 +1742,72 @@ local function buildPanel(info: any)
 	end)
 
 	------------------------------------------------------------------ command line
+	-- Suggestions as you type, like Minecraft: the command, then a player, then each option.
+	-- Tab completes (Autocomplete never leaves a tab character in the box).
+	local Autocomplete = require(Client:WaitForChild("Autocomplete")) :: any
+	local function playerItems(): { any }
+		local out = {}
+		for _, plr in Players:GetPlayers() do
+			table.insert(out, { Text = plr.Name, Hint = if plr.DisplayName ~= plr.Name then plr.DisplayName else nil })
+		end
+		return out
+	end
+	local function usageOf(cmd: any): string
+		local bits = { ":" .. cmd.Name }
+		if cmd.Target == "player" then
+			table.insert(bits, "<player>")
+		end
+		for _, input in cmd.Inputs or {} do
+			local name = if input.Kind == "duration" then "time" elseif input.Kind == "choice" then "option" else string.lower(input.Placeholder or input.Kind)
+			table.insert(bits, if input.Required or input.Kind == "duration" then "<" .. name .. ">" else "[" .. name .. "]")
+		end
+		return table.concat(bits, " ") .. "   -  " .. cmd.Label
+	end
+	Autocomplete.Attach(commandLine, function(text: string)
+		local words, lastStart = Autocomplete.Split(text)
+		local first = string.lower((string.gsub(words[1] or "", "^:", "")))
+		if #words <= 1 then
+			local start = if string.sub(text, lastStart, lastStart) == ":" then lastStart + 1 else lastStart
+			local candidates = {}
+			for _, cmd in COMMANDS do
+				if allowed[cmd.Name] then
+					table.insert(candidates, { Text = cmd.Name, Hint = cmd.Label })
+				end
+			end
+			return { Items = Autocomplete.Match(string.sub(text, start), candidates), Replace = start }
+		end
+		local cmd = nil
+		for _, c in COMMANDS do
+			if c.Name == first and allowed[c.Name] then
+				cmd = c
+			end
+		end
+		if not cmd then
+			return { Usage = "Unknown command", Items = {}, Replace = lastStart }
+		end
+		local word = words[#words]
+		local index = #words - 1 -- 1 = the first thing after the command
+		local usage = usageOf(cmd)
+		if cmd.Target == "player" or cmd.Target == "text" then
+			if index == 1 then
+				return { Usage = usage, Items = Autocomplete.Match(word, playerItems()), Replace = lastStart }
+			end
+			index -= if cmd.Target == "player" then 1 else 0
+		end
+		local input = (cmd.Inputs or {})[index]
+		local items = {}
+		if input and input.Kind == "choice" and input.Options then
+			for _, o in input.Options() do
+				table.insert(items, { Text = o.Value, Hint = if o.Label ~= o.Value then o.Label else nil })
+			end
+		elseif input and input.Kind == "duration" then
+			for _, d in DURATIONS do
+				table.insert(items, { Text = d })
+			end
+		end
+		return { Usage = usage, Items = Autocomplete.Match(word, items, true), Replace = lastStart }
+	end)
+
 	commandLine.FocusLost:Connect(function(enterPressed)
 		if not enterPressed then
 			return

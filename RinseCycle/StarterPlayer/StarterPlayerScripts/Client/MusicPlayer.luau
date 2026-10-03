@@ -1,6 +1,7 @@
 --[[
 	MusicPlayer - background music. The lobby and dishwasher runs each have their own playlist
-	(Config.Music, IDs from StoreIds > Music), played shuffled, one track after another, with a
+	(Config.Music, IDs from StoreIds > Music), played shuffled, one track after another. Each track
+	crossfades into the next (the next one starts CROSSFADE seconds before the end), and there's a
 	short fade when switching between lobby and run. A "Music" button in the left column turns it
 	off / on (remembered for this session). Plays nothing until track IDs are filled in.
 ]]
@@ -17,6 +18,7 @@ local ClientState = require(Client:WaitForChild("ClientState"))
 local MusicPlayer = {}
 
 local FADE = 1.2
+local CROSSFADE = 4 -- seconds the end of one track overlaps the start of the next
 
 local initialized = false
 local enabled = true
@@ -24,9 +26,10 @@ local current: Sound? = nil
 local currentList = ""
 local token = 0
 
-local function fadeOut(sound: Sound)
-	TweenService:Create(sound, TweenInfo.new(FADE), { Volume = 0 }):Play()
-	task.delay(FADE + 0.1, function()
+local function fadeOut(sound: Sound, seconds: number?)
+	local t = seconds or FADE
+	TweenService:Create(sound, TweenInfo.new(t), { Volume = 0 }):Play()
+	task.delay(t + 0.1, function()
 		sound:Destroy()
 	end)
 end
@@ -49,6 +52,7 @@ local function playList(name: string)
 	end
 	task.spawn(function()
 		local order = table.clone(ids)
+		local firstTrack = true
 		local index = 0
 		while myToken == token do
 			index += 1
@@ -67,12 +71,18 @@ local function playList(name: string)
 			sound.Parent = SoundService
 			current = sound
 			sound:Play()
-			TweenService:Create(sound, TweenInfo.new(FADE), { Volume = Config.Music.Volume }):Play()
-			-- Wait for the track to finish (or something else to take over); a track that never
-			-- loads is skipped after a while.
+			TweenService:Create(sound, TweenInfo.new(if firstTrack then FADE else CROSSFADE), { Volume = Config.Music.Volume }):Play()
+			firstTrack = false
+			-- Wait for the track to near its end (or something else to take over); a track that
+			-- never loads is skipped after a while.
 			local started = os.clock()
+			local crossfading = false
 			while myToken == token and sound.Parent do
 				if sound.IsLoaded and not sound.IsPlaying and os.clock() - started > 2 then
+					break
+				end
+				if sound.IsLoaded and sound.TimeLength > CROSSFADE * 3 and sound.TimePosition >= sound.TimeLength - CROSSFADE then
+					crossfading = true
 					break
 				end
 				if not sound.IsLoaded and os.clock() - started > 15 then
@@ -81,7 +91,11 @@ local function playList(name: string)
 				task.wait(0.5)
 			end
 			if myToken == token and sound.Parent then
-				sound:Destroy()
+				if crossfading then
+					fadeOut(sound, CROSSFADE) -- the next track fades in over it
+				else
+					sound:Destroy()
+				end
 			end
 		end
 	end)

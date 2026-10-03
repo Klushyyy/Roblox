@@ -25,10 +25,26 @@ local btns = {}
 for _, b in answers:GetChildren() do if b:IsA("TextButton") then table.insert(btns, b) end end
 table.sort(btns, function(a, b) return a.LayoutOrder < b.LayoutOrder end)
 G.getSignal(btns[2], "Activated"):Fire()
-pump(0.5, G.frame)
+pump(1.5, G.frame)
+local slider = G.find(me.PlayerGui, "Slider")
+local tab = G.find(me.PlayerGui, "PullTab")
+out("after voting: tucked (slider y) = " .. tostring(slider.Position.Y.Offset) .. "  pull tab shown: " .. tostring(tab.Visible))
 pump(40, G.frame)
-out("card after end: " .. tostring(card.Visible))
-out("results banner: " .. tostring(banners[#banners]))
+local holder = G.find(me.PlayerGui, "PollHolder")
+local lines = {}
+for _, d in card:GetDescendants() do
+	if d.ClassName == "TextLabel" and d.Parent and d.Parent.Name == "Result" then
+		table.insert(lines, d.Text)
+	end
+end
+local title
+for _, d in card:GetChildren() do
+	if d.ClassName == "TextLabel" and tostring(d.Text):find("POLL") then
+		title = d.Text
+	end
+end
+out("after end: shown=" .. tostring(holder.Visible) .. " slider y=" .. tostring(slider.Position.Y.Offset) .. " title=" .. tostring(title) .. " results: " .. table.concat(lines, " | "))
+out("results banner (should be none): " .. tostring(banners[#banners]))
 out("admin got: " .. tostring(last()))
 -- give everyone
 local b0 = DS.Get(me).Bubbles

@@ -4738,8 +4738,9 @@ do
 
 	----------------------------------------------------------------- polls
 	-- :globalpoll [30|60|120] Question | answer | answer ... Everyone gets a popup with buttons;
-	-- each server counts its own votes, sends the counts back to the admin's server, and the
-	-- results go up as a banner everywhere.
+	-- each server counts its own votes and sends the counts back to the admin's server, which sends
+	-- the final results to every server: each player's poll card turns into the results (once, no
+	-- banner), and stays until they close it.
 	local polls = {} -- [id] = { Id, Question, Options, EndsAt, Votes = { [userId] = index } }
 	local collecting = {} -- on the admin's server: [id] = { Counts, Question, Options, Admin }
 
@@ -4777,6 +4778,14 @@ do
 		end
 		for i = 1, #c.Options do
 			c.Counts[i] += math.max(0, math.floor(tonumber(d.Counts[i]) or 0))
+		end
+	end
+	handlers.PollResult = function(d)
+		if type(d.Id) ~= "string" or type(d.Options) ~= "table" or type(d.Counts) ~= "table" then
+			return
+		end
+		for _, plr in ipairs(Players:GetPlayers()) do
+			Remote.GlobalPoll:FireClient(plr, "Result", d.Id, tostring(d.Question), d.Options, d.Counts)
 		end
 	end
 	Players.PlayerAdded:Connect(function(plr)
@@ -4837,20 +4846,7 @@ do
 			if not c then
 				return
 			end
-			local total = 0
-			for _, n in ipairs(c.Counts) do
-				total += n
-			end
-			local bits = {}
-			for i, option in ipairs(c.Options) do
-				local pct = if total > 0 then math.floor(c.Counts[i] / total * 100 + 0.5) else 0
-				table.insert(bits, string.format("%s %d (%d%%)", option, c.Counts[i], pct))
-			end
-			local summary = "Poll results - " .. c.Question .. ": " .. table.concat(bits, "  |  ")
-			publish({ Kind = "Banner", Text = summary })
-			if admin.Parent then
-				sendFeedback(admin, summary .. string.format("  (%d votes)", total), false)
-			end
+			publish({ Kind = "PollResult", Id = id, Question = c.Question, Options = c.Options, Counts = c.Counts })
 		end)
 	end
 

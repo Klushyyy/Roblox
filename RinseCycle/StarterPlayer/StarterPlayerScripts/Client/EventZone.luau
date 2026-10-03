@@ -1,10 +1,10 @@
 --[[
 	EventZone - the Next Event spot in the lobby (LobbyBuilder's glowing ring, tag "NextEventZone").
 
-	Walk into the ring and a card pops up with the next event (Config.NextEvent): its name, what
-	happens, and when ("Starts in 3d 04h", or LIVE NOW). The button is Roblox's own Notify Me
-	(SocialService:PromptRsvpToEventAsync) when the event has a RobloxEventId; otherwise it asks for
-	experience notifications, so players still hear about it. Walking out closes the card.
+	Walk into the ring and Roblox's own event pop-up comes up for the next event (Config.NextEvent,
+	SocialService:PromptRsvpToEventAsync with its RobloxEventId from StoreIds > EventIds): the event
+	card with Notify Me, or Join while it's on. Until an event ID is pasted in, a card of ours shows
+	the event and its countdown, with Notify Me (experience notifications) and No thanks.
 	The banner over the ring (tag "NextEventCountdown") counts down too.
 ]]
 
@@ -68,7 +68,28 @@ local function notify(event: any)
 	UIKit.Toast("We'll let you know when " .. (if event then event.Name else "the next event") .. " starts!", "Good")
 end
 
+local lastPrompt = 0
+
+-- Roblox's event pop-up, when the event is set up on Roblox. True if it was shown.
+local function robloxPopup(event: any): boolean
+	local id = tostring(event and event.RobloxEventId or "")
+	if id == "" or id == "0" or os.clock() - lastPrompt < 20 then
+		return id ~= "" and id ~= "0"
+	end
+	lastPrompt = os.clock()
+	local ok, err = pcall(function()
+		SocialService:PromptRsvpToEventAsync(id)
+	end)
+	if not ok then
+		warn("[EventZone] event pop-up failed: " .. tostring(err))
+	end
+	return ok
+end
+
 local function show(event: any)
+	if robloxPopup(event) then
+		return
+	end
 	shownFor = event
 	nameLabel.Text = if event then event.Name else "No events planned yet"
 	descLabel.Text = if event then event.Desc else "Check back soon. Turn on notifications so you never miss one!"
@@ -120,12 +141,25 @@ function EventZone.Init()
 		Text = "NOTIFY ME",
 		Color = Color3.fromRGB(240, 90, 140),
 		TextSize = 22,
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -12),
-		Size = UDim2.fromOffset(260, 52),
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(0.5, -6, 1, -12),
+		Size = UDim2.fromOffset(220, 52),
 		Parent = card,
 		OnClick = function()
+			card.Visible = false
 			task.spawn(notify, shownFor)
+		end,
+	})
+	UIKit.Button({
+		Text = "NO THANKS",
+		Color = Colors.PanelLight,
+		TextSize = 20,
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0.5, 6, 1, -12),
+		Size = UDim2.fromOffset(180, 52),
+		Parent = card,
+		OnClick = function()
+			card.Visible = false
 		end,
 	})
 	UIKit.Button({

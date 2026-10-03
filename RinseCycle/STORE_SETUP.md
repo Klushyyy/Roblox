@@ -31,7 +31,6 @@ These are the `GamePasses` list in StoreIds.
 | 10 | `ToolNozzle` | Spray Nozzle | 49 | Start every run with the Spray Nozzle |
 | 11 | `ToolWasher` | Pressure Washer | 99 | Start every run with the Pressure Washer |
 | 12 | `ToolCannon` | Foam Cannon | 199 | Start every run with the Foam Cannon |
-| 13 | `InstaRoll` | Insta Roll | 39 | Skip the rank roll spin and see the result instantly (button in the Ranks window) |
 
 ### Developer Products (Monetization → Developer Products), 11 total
 

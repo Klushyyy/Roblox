@@ -24,7 +24,6 @@ return {
 		DoubleBubbles = 0, -- 2x Bubbles (179 R$)
 		VIP = 0,           -- VIP (199 R$)
 		DoubleLuck = 0,    -- x2 Luck (149 R$)
-		InstaRoll = 0,     -- Insta Roll (39 R$)
 		ToolNozzle = 0,    -- Spray Nozzle (49 R$)
 		ToolWasher = 0,    -- Pressure Washer (99 R$)
 		ToolCannon = 0,    -- Foam Cannon (199 R$)
@@ -45,6 +44,13 @@ return {
 		RestoreStreak = 0, -- Restore Streak (29 R$)
 	},
 
+	-- Roblox Events for the Next Event ring in the lobby (Creator Hub > your experience > Engagement
+	-- > Events > Create Event). Copy the event's ID from its page URL (the long number) and paste it
+	-- in quotes. The start time on Roblox should match Config.UpcomingEvents (17 Oct, 11 pm NZ).
+	EventIds = {
+		AdminAbuse = "", -- e.g. "4987654321098765432"
+	},
+
 	-- "Your daily reward is ready" notification (sent 24 h after a claim, to players who turned
 	-- notifications on). Setup:
 	--   1. Creator Hub > your experience > Engagement > Notifications > Create a Notification String.
@@ -56,17 +62,17 @@ return {
 	--      OpenCloudKey, paste the key, domain apis.roblox.com.
 	--   4. Game Settings > Security > Allow HTTP Requests: on.
 	Notifications = {
-		DailyReady = "", -- e.g. "b6a3c6f2-...." (keep the quotes)
+		DailyReady = "30b2bd07-8110-3042-ab43-4b7e0afe2781",
 	},
 
 	-- Badges (Creator Dashboard > your experience > Engagement > Badges > Create a Badge). Use the
 	-- name and description shown, then paste the badge's ID. Given out automatically.
 	Badges = {
-		Welcome = 0,    -- "Welcome to Rinse Cycle!"  Join the game for the first time.
-		Level1 = 0,     -- "Family Dinner Cleared"    Clean every dish in level 1.
-		Level2 = 0,     -- "Pizza Party Cleared"      Clean every dish in level 2.
-		Level3 = 0,     -- "Royal Banquet Cleared"    Clean every dish in level 3.
-		FirstPet = 0,   -- "New Best Friend"          Hatch your first pet.
+		Welcome = 2575871538930984,    -- "Welcome to Rinse Cycle!"  Join the game for the first time.
+		Level1 = 2019833923438430,     -- "Family Dinner Cleared"    Clean every dish in level 1.
+		Level2 = 4342556802449819,     -- "Pizza Party Cleared"      Clean every dish in level 2.
+		Level3 = 4215993717051062,     -- "Royal Banquet Cleared"    Clean every dish in level 3.
+		FirstPet = 996802792244268,   -- "New Best Friend"          Hatch your first pet.
 		GoldenPet = 0,  -- "Golden Touch"             Merge a Golden pet.
 		Rebirth = 0,    -- "Born Again"               Rebirth for the first time.
 		LegendRank = 0, -- "Legendary Luck"           Roll a Legendary or Mythic rank.
@@ -87,8 +93,8 @@ return {
 	-- Background music: audio asset IDs (Creator Store > Audio > Music, or the Toolbox's Audio tab;
 	-- right-click a track > Copy Asset ID). Add as many as you like; they play shuffled and loop.
 	Music = {
-		Lobby = { 0 }, -- calm tracks for the lobby, e.g. { 1234567890, 2345678901 }
-		Run = { 0 },   -- upbeat tracks while cleaning a dishwasher
+		Lobby = { 108307358965008 }, -- calm tracks for the lobby
+		Run = { 74135947568576, 95101745664541 }, -- while cleaning (they crossfade into each other)
 	},
 
 	-- Gift products: one DEVELOPER PRODUCT per pass (not a game pass!), named "Gift: <pass name>"
@@ -103,7 +109,6 @@ return {
 		DoubleBubbles = 3715577887, -- Gift: 2x Bubbles (179 R$)
 		VIP = 3715577914,           -- Gift: VIP (199 R$)
 		DoubleLuck = 3715577947,    -- Gift: x2 Luck (149 R$)
-		InstaRoll = 3715578140,     -- Gift: Insta Roll (39 R$)
 		ToolNozzle = 3715578032,    -- Gift: Spray Nozzle (49 R$)
 		ToolWasher = 3715578073,    -- Gift: Pressure Washer (99 R$)
 		ToolCannon = 3715578099,    -- Gift: Foam Cannon (199 R$)
