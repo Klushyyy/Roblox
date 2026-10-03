@@ -511,14 +511,14 @@ local function think(player: Player, state: OwnerState, now: number)
 
 	local power = runPower(player)
 
-	for _, slot in state.Slots do
+	for slotIndex, slot in state.Slots do
 		-- No bag any more: what a pet cleans is paid straight to the owner's coins, gathered up
 		-- and paid about once a second (PAY_INTERVAL) so the coin pop-ups don't spam.
 		if slot.Bag > 0 and now - (slot.LastPay or 0) >= PAY_INTERVAL then
 			local units = slot.Bag
 			slot.Bag = 0
 			slot.LastPay = now
-			safe(RoundService.PayPetCoins, player, units)
+			safe(RoundService.PayPetCoins, player, units, slotIndex) -- "+coins" floats over that pet
 		end
 
 		local target = slot.Target

@@ -1321,8 +1321,14 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - v1.6.8: the stay popup is near full-screen and loud ("WAIT! DON'T LEAVE YET!", pulsing claim
   button). A claim is saved within 2 s, so leaving and rejoining can't claim twice; the boost ends
   (stats recomputed) on whichever server the player is on. Boost badges sit under the Bubbles
-  pill: the x2 Cleaning timer plus one chip per owned multiplier pass. The run progress bar moved
+  pill (moved in v1.6.9): the x2 Cleaning timer plus one chip per owned multiplier pass. The run progress bar moved
   down to y 90 to make room.
+- v1.6.9: the badges moved to a column just right of the left-hand buttons (it follows the
+  HUD's LeftColumn), clear of toasts, the progress bar and the player list; the progress bar is
+  back at y 72. Pets' "+coins" floats over the pet that earned it (Sold carries Slot). The drain
+  looks like a sink drain: chrome rim, dark gap, steel strainer with 1 + 6 + 12 holes, a film of
+  water. Roblox's player list can't be moved by a game, so on PC (lobby) the Shop/Pets/Ranks
+  column sits below it, estimated as 48 + 40 px per player, while there's room.
 
 ## 7. Balance knobs (all in Config)
 

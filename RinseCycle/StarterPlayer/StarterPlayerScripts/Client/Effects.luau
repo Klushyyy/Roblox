@@ -240,11 +240,24 @@ end
 
 local function onSold(data: any)
 	if data and data.Pet then
-		-- A pet sold its bag: a small floater over you instead of a toast (pets sell often).
-		local character = LocalPlayer.Character
-		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if root and root:IsA("BasePart") then
-			billboardNumber(root.Position + Vector3.new(0, 3, 0), "+" .. UIKit.Short(data.Coins) .. " coins", UIKit.Theme.Colors.Coin, FLOATER_RISE + 1)
+		-- A pet's cleaning paid out: a small "+coins" floater over that pet (over you if it can't
+		-- be found), instead of a toast (pets earn often).
+		local pos = nil
+		if type(data.Slot) == "number" then
+			local okPet, petPos = pcall(function()
+				return (require(Client:WaitForChild("PetRenderer")) :: any).PetPosition(LocalPlayer, data.Slot)
+			end)
+			pos = if okPet and typeof(petPos) == "Vector3" then petPos else nil
+		end
+		if not pos then
+			local character = LocalPlayer.Character
+			local root = character and character:FindFirstChild("HumanoidRootPart")
+			if root and root:IsA("BasePart") then
+				pos = root.Position + Vector3.new(0, 3, 0)
+			end
+		end
+		if pos then
+			billboardNumber(pos, "+" .. UIKit.Short(data.Coins) .. " coins", UIKit.Theme.Colors.Coin, FLOATER_RISE + 1)
 		end
 		UIKit.PlaySound("Coins", 1.2)
 		return

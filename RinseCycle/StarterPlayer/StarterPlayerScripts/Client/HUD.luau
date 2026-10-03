@@ -601,7 +601,7 @@ function HUD.Init()
 		topCurrency.Position = UDim2.new(0.5, 0, 0, 2)
 		gemsPill.Position = UDim2.new(0.5, 133, 0, 7)
 		hotbar.Position = UDim2.new(0.5, 0, 1, -(if touch then 24 else 12) - safe.Bottom)
-		topBar.Position = UDim2.new(0.5, 0, 0, 90) -- under the boost badges (StayOffer)
+		topBar.Position = UDim2.new(0.5, 0, 0, 72)
 
 		-- Right column: vertically centred, but on touch kept above the jump button.
 		local colH = rightColumn.AbsoluteSize.Y / UIKit.GetScale()
@@ -610,6 +610,14 @@ function HUD.Init()
 			centerY = math.min(centerY, canvas.Y - 300 - colH / 2)
 		end
 		centerY = math.max(centerY, inset + 80 + colH / 2)
+		-- PC: Roblox's own player list (top right; games can't move it) grows down by a row per
+		-- player. Keep Shop / Pets / Ranks below it while there's room (the list scrolls itself
+		-- once it's long). Phones and consoles keep it closed until opened from the menu.
+		if not touch and not UserInputService.GamepadEnabled and ClientState.Run == nil then
+			local listPx = 48 + 40 * #Players:GetPlayers() -- the list is drawn in real pixels
+			local below = inset + listPx / UIKit.GetScale() + 14 + colH / 2
+			centerY = math.max(centerY, math.min(below, canvas.Y - 12 - safe.Bottom - colH / 2))
+		end
 		-- The side columns only keep half of the notch / rounded-corner inset: close to the edges on
 		-- phones, still clear of the notch itself.
 		local sideLeft = 12 + math.floor(safe.Left * 0.5)
@@ -644,6 +652,10 @@ function HUD.Init()
 		refreshHints()
 	end
 	rightColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
+	Players.PlayerAdded:Connect(relayoutHud)
+	Players.PlayerRemoving:Connect(function()
+		task.defer(relayoutHud)
+	end)
 	leftColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 	moneyBlock:GetPropertyChangedSignal("Visible"):Connect(relayoutHud)
 
@@ -1249,6 +1261,7 @@ function HUD.Init()
 	ClientState.Changed:Connect(function(kind: string)
 		if kind == "Run" then
 			refreshMode()
+			relayoutHud() -- the player-list room only applies in the lobby
 			updateCurrencyValues()
 			refreshArenaWatch()
 			checkRunStartBanner()

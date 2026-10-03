@@ -421,6 +421,23 @@ local function onRenderStepped(dt: number)
 	end
 end
 
+-- Where a player's pet (by slot number) is drawn right now, for pop-ups over its head.
+function PetRenderer.PetPosition(player: Player, number: number): Vector3?
+	local state = owners[player]
+	if not state then
+		return nil
+	end
+	for _, slot in state.Slots do
+		if slot.Number == number and slot.Model and not slot.Hidden then
+			local ok, cf, size = pcall(slot.Model.GetBoundingBox, slot.Model)
+			if ok then
+				return cf.Position + Vector3.new(0, size.Y / 2 + 1, 0)
+			end
+		end
+	end
+	return nil
+end
+
 ----------------------------------------------------------------------------------------------------
 -- Init
 ----------------------------------------------------------------------------------------------------

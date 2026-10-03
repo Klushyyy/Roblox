@@ -1284,8 +1284,9 @@ function RoundService.GetDrainPart(player: Player): BasePart?
 	return if drain and drain:IsA("BasePart") then drain else nil
 end
 
--- A pet came back from the drain with `units` of dirt: pay its owner like a tank sale.
-function RoundService.PayPetCoins(player: Player, units: number)
+-- A pet cleaned `units` of dirt: pay its owner straight away (no trip to the drain). `slot` is
+-- the pet's slot number, so the "+coins" pop-up can float over that pet.
+function RoundService.PayPetCoins(player: Player, units: number, slot: number?)
 	local run = runOf[player]
 	local pr = run and run.Players[player]
 	if not run or not pr or run.Ended or type(units) ~= "number" or units ~= units or units <= 0 then
@@ -1296,7 +1297,7 @@ function RoundService.PayPetCoins(player: Player, units: number)
 		return
 	end
 	pr.Coins += coins
-	fireOne(player, "Sold", { Coins = coins, Units = units, By = player.UserId, Pet = true })
+	fireOne(player, "Sold", { Coins = coins, Units = units, By = player.UserId, Pet = true, Slot = slot })
 	queuePush(player)
 end
 

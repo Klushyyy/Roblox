@@ -5,12 +5,13 @@
 	The popup is big and loud on purpose: it sits behind Roblox's menu, so it's the first thing they
 	see the moment they close it.
 
-	Also the boost badges: a row of small chips under the Bubbles pill showing what's boosting you
+	Also the boost badges: a column of small chips beside the left-hand buttons showing what's boosting you
 	right now - "x2 Cleaning 14:32" while the stay boost runs, and one chip per owned multiplier
 	pass (x2 Coins, x2 Bubbles, x2 Luck, ...).
 ]]
 
 local GuiService = game:GetService("GuiService")
+local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 
 local Client = script.Parent
@@ -69,7 +70,7 @@ local function badge(parent: GuiObject, text: string, color: Color3, order: numb
 	local chip = Instance.new("Frame")
 	chip.Name = "Badge"
 	chip.LayoutOrder = order
-	chip.Size = UDim2.fromOffset(width or (#text * 10 + 18), 26)
+	chip.Size = UDim2.fromOffset(width or (#text * 10 + 20), 26)
 	chip.BackgroundColor3 = color
 	chip.BorderSizePixel = 0
 	chip.Visible = false
@@ -155,21 +156,34 @@ function StayOffer.Init()
 	})
 	UIKit.RegisterWindow("StayOffer", { Open = function() end })
 
-	-- Boost badges, in a row under the Bubbles pill.
+	-- Boost badges: a neat column just right of the left-hand buttons (Daily, Codes, ...), clear of
+	-- the Bubbles pill, the pop-up messages, the run's progress bar and Roblox's player list.
 	local row = Instance.new("Frame")
 	row.Name = "BoostBadges"
-	row.AnchorPoint = Vector2.new(0.5, 0)
-	row.Position = UDim2.new(0.5, 0, 0, 60)
-	row.Size = UDim2.fromOffset(900, 26)
+	row.AnchorPoint = Vector2.new(0, 0)
+	row.Position = UDim2.fromOffset(108, 140)
+	row.Size = UDim2.fromOffset(170, 300)
 	row.BackgroundTransparency = 1
 	row.Parent = root
 	local layout = Instance.new("UIListLayout")
-	layout.FillDirection = Enum.FillDirection.Horizontal
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.FillDirection = Enum.FillDirection.Vertical
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Padding = UDim.new(0, 6)
+	layout.Padding = UDim.new(0, 5)
 	layout.Parent = row
 
+	-- Follows the HUD's left column (it moves for phones, the thumbstick and runs).
+	local function placeRow()
+		local hud = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+		local column = hud and hud:FindFirstChild("LeftColumn", true)
+		if column and column:IsA("GuiObject") and column.Visible and column.AbsoluteSize.Y > 0 then
+			local height = column.AbsoluteSize.Y / UIKit.GetScale()
+			row.Position = UDim2.fromOffset(column.Position.X.Offset + column.Size.X.Offset + 12, math.floor(column.Position.Y.Offset - height / 2 + 4))
+		else
+			local safe = UIKit.SafeInsets()
+			row.Position = UDim2.fromOffset(16 + math.floor(safe.Left * 0.5), math.floor(UIKit.TopInset() + 90))
+		end
+	end
 	local boostChip, boostLabel = badge(row, "", Colors.Good, 0, 170)
 	local passChips = {}
 	for i, def in PASS_BADGES do
@@ -188,6 +202,7 @@ function StayOffer.Init()
 			local meta = ClientState.Meta :: any
 			local passes = meta and meta.Passes or {}
 			row.Visible = not cutscenePlaying()
+			placeRow()
 			local left = boostLeft()
 			boostChip.Visible = left > 0
 			if left > 0 then

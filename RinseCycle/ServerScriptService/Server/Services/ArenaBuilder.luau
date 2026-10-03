@@ -1119,9 +1119,30 @@ local function buildLifts(b: Builder, theme)
 	end
 end
 
-local function buildDrain(b: Builder, theme): Vector3
-	cyl(b, "DrainGrate", 0.5, 15, DRAIN_POS.X, 0.25, DRAIN_POS.Z, Color3.fromRGB(70, 75, 80), Enum.Material.DiamondPlate)
-	local ring = cyl(b, "DrainSwirl", 0.2, 13, DRAIN_POS.X, 0.6, DRAIN_POS.Z, theme.Accent, Enum.Material.ForceField, noCollide())
+-- A real-looking sink drain: a chrome rim round a dark gap, a brushed steel strainer with a
+-- centre hole, a ring of 6 holes and an outer ring of 12, and a thin film of swirling water.
+local function buildDrain(b: Builder, _theme): Vector3
+	local x, z = DRAIN_POS.X, DRAIN_POS.Z
+	local chrome = Color3.fromRGB(196, 202, 210)
+	local steel = Color3.fromRGB(165, 172, 180)
+	local hole = Color3.fromRGB(18, 20, 24)
+	local rim = cyl(b, "DrainGrate", 0.5, 15, x, 0.25, z, chrome, Enum.Material.Metal)
+	rim.Reflectance = 0.25
+	cyl(b, "DrainGap", 0.1, 12.4, x, 0.53, z, Color3.fromRGB(40, 44, 50), Enum.Material.SmoothPlastic, noCollide())
+	local plate = cyl(b, "DrainStrainer", 0.12, 10.6, x, 0.6, z, steel, Enum.Material.Metal, noCollide())
+	plate.Reflectance = 0.15
+	cyl(b, "DrainHole", 0.04, 1.5, x, 0.68, z, hole, Enum.Material.SmoothPlastic, noCollide())
+	for i = 1, 6 do
+		local a = math.rad(i * 60)
+		cyl(b, "DrainHole", 0.04, 1.3, x + math.cos(a) * 2.3, 0.68, z + math.sin(a) * 2.3, hole, Enum.Material.SmoothPlastic, noCollide())
+	end
+	for i = 1, 12 do
+		local a = math.rad(i * 30 + 15)
+		cyl(b, "DrainHole", 0.04, 1.05, x + math.cos(a) * 4.1, 0.68, z + math.sin(a) * 4.1, hole, Enum.Material.SmoothPlastic, noCollide())
+	end
+	-- Water swirling down it (spun by the client, SpinY).
+	local ring = cyl(b, "DrainSwirl", 0.04, 9.6, x, 0.72, z, Color3.fromRGB(170, 220, 255), Enum.Material.Glass, noCollide())
+	ring.Transparency = 0.7
 	ring:SetAttribute("SpinSpeed", 2.4)
 	CollectionService:AddTag(ring, "SpinY")
 	local post = box(b, "DrainSign", Vector3.new(0.6, 0.6, 0.6), DRAIN_POS.X, 1, DRAIN_POS.Z, Color3.new(1, 1, 1), nil, { Transparency = 1, CanCollide = false })
