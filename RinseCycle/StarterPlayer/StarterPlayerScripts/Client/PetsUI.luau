@@ -130,7 +130,7 @@ local currentEggId: string? = nil
 -- Pets window: grid + details panel
 ----------------------------------------------------------------------------------------------------
 
-local GRID_CELL = Vector2.new(122, 156)
+local GRID_CELL = Vector2.new(122, 172) -- room for the EQUIPPED tag under the stats line
 local GRID_GAP = 10
 
 -- Merge rule (same as the server): three of the same pet at the same tier -> that pet, next tier.

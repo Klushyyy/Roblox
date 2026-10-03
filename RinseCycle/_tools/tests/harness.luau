@@ -661,12 +661,26 @@ elseif what == "pets" then
 		end
 	end
 	table.sort(ids)
-	for i, id in ids do
-		local m = PetModels.Build(id)
-		local col, row = (i - 1) % 5, (i - 1) // 5
-		m:PivotTo(CFrame.new(col * 5 - 10, 2, row * 5) * CFrame.Angles(0, math.rad(20), 0))
-		m.Parent = rootInst
-		print(i, id)
+	-- TIERS=1,2,3: one row per tier (normal, Golden, Rainbow) instead of the 5-wide grid.
+	local tiersEnv = require("@lune/process").env.TIERS
+	if tiersEnv then
+		local t = 0
+		for tierText in string.gmatch(tiersEnv, "%d+") do
+			t += 1
+			for i, id in ids do
+				local m = PetModels.Build(id, tonumber(tierText))
+				m:PivotTo(CFrame.new((i - 1) * 5 - 10, 2, (t - 1) * 5) * CFrame.Angles(0, math.rad(20), 0))
+				m.Parent = rootInst
+			end
+		end
+	else
+		for i, id in ids do
+			local m = PetModels.Build(id)
+			local col, row = (i - 1) % 5, (i - 1) // 5
+			m:PivotTo(CFrame.new(col * 5 - 10, 2, row * 5) * CFrame.Angles(0, math.rad(20), 0))
+			m.Parent = rootInst
+			print(i, id)
+		end
 	end
 elseif what == "held" then
 	local ToolModels = loadModule(ROOT .. "/ReplicatedStorage/Shared/ToolModels")

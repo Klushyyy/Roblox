@@ -1360,6 +1360,11 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - Boost badges are all one width with left-aligned text, so they line up.
 - v1.7.2: in a run the left column keeps Daily and Music (plus Admin for staff); Codes, Free and
   Trade are lobby-only.
+- v1.7.3: badges grouped by colour. v1.7.4: badges live on their own screen layer (DisplayOrder 4)
+  under every window; pet cards are 172 px tall so EQUIPPED sits under the stats line; Rainbow
+  pets keep one smooth rainbow fade (bottom to top, 0.3 of the wheel) that slowly cycles
+  (PetModels.StartRainbow, tag "RainbowPet", started by PetRenderer) instead of a patchwork of
+  part colours.
 
 ## 7. Balance knobs (all in Config)
 

@@ -169,7 +169,9 @@ function StayOffer.Init()
 	row.Position = UDim2.fromOffset(108, 140)
 	row.Size = UDim2.fromOffset(170, 300)
 	row.BackgroundTransparency = 1
-	row.Parent = root
+	-- Its own screen layer under every window (HUD is 5, windows 10+), so menus cover the badges.
+	local _badgeGui, badgeRoot = UIKit.CreateScreen("BoostBadges", 4)
+	row.Parent = badgeRoot
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Vertical
 	layout.HorizontalAlignment = Enum.HorizontalAlignment.Left

@@ -447,6 +447,7 @@ function PetRenderer.Init()
 		return
 	end
 	initialized = true
+	PetModels.StartRainbow() -- Rainbow pets slowly cycle their colours (world and menus)
 
 	ensureClientPetsFolder()
 

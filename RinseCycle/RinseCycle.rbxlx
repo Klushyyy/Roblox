@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.7.3"
+Config.Version = "1.7.4"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1029,6 +1029,7 @@ return Format</ProtectedString></Properties></Item>
 --   * Models are built at the origin (Root.CFrame = identity), so "model space" = world space while
 --     building. Each id is built once into a template; every call returns a fresh Clone.
 
+local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
@@ -2017,9 +2018,36 @@ end
 
 -- A cute pet model for Config.Pets[petId] (a placeholder for unknown ids). Unparented; the caller
 -- parents it and moves it with PivotTo. Facing -Z, PrimaryPart "Root" at the centre.
--- Tier looks (Config.PetTiers): Golden turns the body gold and glinting, Rainbow paints each part a
--- different pastel hue; both get a sparkle. Eyes and shines keep their colours.
+-- Tier looks (Config.PetTiers): Golden turns the body gold and glinting. Rainbow gives the whole
+-- pet one smooth rainbow fade from bottom to top that slowly cycles through every colour (on the
+-- client: PetModels.StartRainbow). Both get a sparkle. Eyes and shines keep their colours.
 local KEEP = { Eye = true, EyeShine = true, Shine = true }
+local RAINBOW_SPREAD = 0.3 -- how much of the rainbow one pet shows at once, bottom to top
+local RAINBOW_SPEED = 0.12 -- full colour cycles per second
+
+-- Client only: keeps every Rainbow pet (in the world and in menus) slowly cycling its colours.
+local rainbowStarted = false
+function PetModels.StartRainbow()
+	if rainbowStarted then
+		return
+	end
+	rainbowStarted = true
+	task.spawn(function()
+		while true do
+			local shift = (os.clock() * RAINBOW_SPEED) % 1
+			for _, model in CollectionService:GetTagged("RainbowPet") do
+				for _, part in model:GetDescendants() do
+					local y = part:GetAttribute("RainbowY")
+					if y and part:IsA("BasePart") then
+						part.Color = Color3.fromHSV((shift + y * RAINBOW_SPREAD) % 1, 0.5, part:GetAttribute("RainbowV") or 1)
+					end
+				end
+			end
+			task.wait(1 / 20)
+		end
+	end)
+end
+
 local function applyTier(model: Model, tier: number)
 	if tier &lt;= 1 then
 		return
@@ -2030,17 +2058,28 @@ local function applyTier(model: Model, tier: number)
 			table.insert(parts, d)
 		end
 	end
-	table.sort(parts, function(a, b)
-		return a.Position.Y &lt; b.Position.Y
-	end)
-	for i, part in parts do
+	local minY, maxY = math.huge, -math.huge
+	for _, part in parts do
+		minY = math.min(minY, part.Position.Y)
+		maxY = math.max(maxY, part.Position.Y)
+	end
+	for _, part in parts do
 		if tier == 2 then
 			local h, _, v = part.Color:ToHSV()
 			part.Color = Color3.fromHSV(0.12 + (h - 0.12) * 0.1, 0.75, math.max(v, 0.85))
 			part.Reflectance = 0.15
 		else
-			part.Color = Color3.fromHSV((i / math.max(#parts, 1) * 0.85) % 1, 0.45, 1)
+			-- Where this part sits on the pet (0 = bottom, 1 = top), and how bright it was, so the
+			-- fade keeps the pet's light and dark parts.
+			local _, _, v = part.Color:ToHSV()
+			local y = if maxY &gt; minY then (part.Position.Y - minY) / (maxY - minY) else 0.5
+			part:SetAttribute("RainbowY", y)
+			part:SetAttribute("RainbowV", math.max(v, 0.95))
+			part.Color = Color3.fromHSV((0.55 + y * RAINBOW_SPREAD) % 1, 0.5, math.max(v, 0.95))
 		end
+	end
+	if tier &gt;= 3 then
+		CollectionService:AddTag(model, "RainbowPet")
 	end
 	local root = model.PrimaryPart or parts[1]
 	if root then
@@ -30050,6 +30089,7 @@ function PetRenderer.Init()
 		return
 	end
 	initialized = true
+	PetModels.StartRainbow() -- Rainbow pets slowly cycle their colours (world and menus)
 
 	ensureClientPetsFolder()
 
@@ -30195,7 +30235,7 @@ local currentEggId: string? = nil
 -- Pets window: grid + details panel
 ----------------------------------------------------------------------------------------------------
 
-local GRID_CELL = Vector2.new(122, 156)
+local GRID_CELL = Vector2.new(122, 172) -- room for the EQUIPPED tag under the stats line
 local GRID_GAP = 10
 
 -- Merge rule (same as the server): three of the same pet at the same tier -&gt; that pet, next tier.
@@ -34679,7 +34719,9 @@ function StayOffer.Init()
 	row.Position = UDim2.fromOffset(108, 140)
 	row.Size = UDim2.fromOffset(170, 300)
 	row.BackgroundTransparency = 1
-	row.Parent = root
+	-- Its own screen layer under every window (HUD is 5, windows 10+), so menus cover the badges.
+	local _badgeGui, badgeRoot = UIKit.CreateScreen("BoostBadges", 4)
+	row.Parent = badgeRoot
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Vertical
 	layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
