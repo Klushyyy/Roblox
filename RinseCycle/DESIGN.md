@@ -1465,6 +1465,17 @@ walls instead of clipping through. All gameplay queries use Include filters.
   Config.UpcomingEvents with a countdown and Notify Me (Roblox's event RSVP when RobloxEventId is
   set, otherwise the experience-notification opt-in).
 
+## 6zb. Badges and "daily reward ready" notifications (v2.0.1)
+- 10 Roblox badges (Config.Badges, IDs in StoreIds > Badges), given by BadgeAwards: Welcome, each
+  level cleared, first pet, a Golden pet, first rebirth, a Legendary+ rank, joining a club, 1,000
+  dishes. Checked on load and every 5 s; awarded ones are noted in the profile (BadgesGot). A
+  badge without an ID is skipped (not noted), so it's given out as soon as its ID is pasted in.
+- DailyNotify: claiming the daily reward queues the player in a MemoryStore sorted map for 24 h
+  later; each server polls the due entries every minute, takes one atomically and sends Open
+  Cloud's user notification (notification string StoreIds > Notifications > DailyReady, parameter
+  "streak", launch data "daily"), API key from the secret "OpenCloudKey". Players in the server
+  are skipped. Off in Studio and until a string ID is set.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

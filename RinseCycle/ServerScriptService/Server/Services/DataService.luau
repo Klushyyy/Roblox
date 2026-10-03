@@ -110,6 +110,8 @@ export type Profile = {
 	ClubId: string, -- the club they're in ("" = none); ClubService keeps the club's own record
 	ClubTag: string, -- that club's tag, for the name tag (refreshed from the club on join)
 	ClubMovedAt: number, -- os.time() they last joined / left a club (Config.Clubs.JoinCooldown)
+	BadgesGot: { [string]: boolean }, -- Config.Badges keys already awarded (BadgeAwards)
+	DailyNotifyAt: number, -- os.time() the "daily reward ready" notification is queued for (0 = none)
 	Referrals: number, -- new players who joined through this player's invites (paid out)
 	Stats: {
 		Runs: number,
@@ -189,6 +191,8 @@ local TEMPLATE: Profile = {
 	ClubId = "",
 	ClubTag = "",
 	ClubMovedAt = 0,
+	BadgesGot = {},
+	DailyNotifyAt = 0,
 	Referrals = 0,
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
@@ -397,6 +401,14 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.ClubId = if type(p.ClubId) == "string" and #p.ClubId <= 40 then p.ClubId else ""
 	p.ClubTag = if type(p.ClubTag) == "string" and #p.ClubTag <= 20 then p.ClubTag else ""
 	p.ClubMovedAt = toCount(p.ClubMovedAt, 0)
+	local badges = {}
+	for key, got in (if type(p.BadgesGot) == "table" then p.BadgesGot else {}) do
+		if type(key) == "string" and #key <= 30 and got == true then
+			badges[key] = true
+		end
+	end
+	p.BadgesGot = badges
+	p.DailyNotifyAt = toCount(p.DailyNotifyAt, 0)
 	p.Referrals = toCount(p.Referrals, 0)
 	p.DailyDay = toCount(p.DailyDay, 0)
 	p.DailyLast = toCount(p.DailyLast, 0)

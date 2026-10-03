@@ -45,6 +45,35 @@ return {
 		RestoreStreak = 0, -- Restore Streak (29 R$)
 	},
 
+	-- "Your daily reward is ready" notification (sent 24 h after a claim, to players who turned
+	-- notifications on). Setup:
+	--   1. Creator Hub > your experience > Engagement > Notifications > Create a Notification String.
+	--      Name: Daily reward ready.  Text: Your Day {streak} daily reward is ready! Come claim it before your streak resets.
+	--      (Add "streak" as the custom parameter.) Copy the string's ID (Copy Asset ID) here.
+	--   2. Creator Hub > Open Cloud > API Keys > Create API Key: add the "user-notification" API
+	--      for this experience (write), allow IP 0.0.0.0/0, no expiry. Copy the key.
+	--   3. Creator Hub > your experience > Secrets (Configure > Secrets) > Create Secret: name
+	--      OpenCloudKey, paste the key, domain apis.roblox.com.
+	--   4. Game Settings > Security > Allow HTTP Requests: on.
+	Notifications = {
+		DailyReady = "", -- e.g. "b6a3c6f2-...." (keep the quotes)
+	},
+
+	-- Badges (Creator Dashboard > your experience > Engagement > Badges > Create a Badge). Use the
+	-- name and description shown, then paste the badge's ID. Given out automatically.
+	Badges = {
+		Welcome = 0,    -- "Welcome to Rinse Cycle!"  Join the game for the first time.
+		Level1 = 0,     -- "Family Dinner Cleared"    Clean every dish in level 1.
+		Level2 = 0,     -- "Pizza Party Cleared"      Clean every dish in level 2.
+		Level3 = 0,     -- "Royal Banquet Cleared"    Clean every dish in level 3.
+		FirstPet = 0,   -- "New Best Friend"          Hatch your first pet.
+		GoldenPet = 0,  -- "Golden Touch"             Merge a Golden pet.
+		Rebirth = 0,    -- "Born Again"               Rebirth for the first time.
+		LegendRank = 0, -- "Legendary Luck"           Roll a Legendary or Mythic rank.
+		Club = 0,       -- "Better Together"          Make or join a club.
+		DishMaster = 0, -- "Dish Master"              Clean 1,000 dishes.
+	},
+
 	-- Developer products for the Treasure Chest event and the luck ad. Create each one in Creator
 	-- Dashboard > Monetization > Developer Products with the name and price shown.
 	Events = {

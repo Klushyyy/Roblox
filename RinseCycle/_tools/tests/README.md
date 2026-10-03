@@ -51,3 +51,4 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
   - `scen_referral`: referral payouts (new player once, inviter, cap) and the Free window's cards.
   - `scen_adluck`: luck from ads (+20% each, max 5, x2 / x4 with the pass), the Ranks window's luck line and odds tag, expiry.
   - `scen_events`: Treasure Chests (free once, packs, 400-open odds), Clubs (create rules, settings, code, points, leave, join requirements, cooldown), the button grid, the Next Event ring and the lobby chest.
+  - `scen_badges`: every badge rule, awarding only badges with an ID and never twice, and the daily-notification queue (queued 24 h out, sent once when due, removed).

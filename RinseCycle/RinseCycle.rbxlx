@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.0.0"
+Config.Version = "2.0.1"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -761,6 +761,12 @@ Config.Daily = {
 	Cooldown = 24 * 60 * 60,
 	Grace = 24 * 60 * 60,
 }
+-- "Your daily reward is ready" phone / app notifications (DailyNotify). Needs a notification
+-- string and an Open Cloud API key: see StoreIds &gt; Notifications for the setup steps.
+Config.DailyNotify = {
+	MessageId = "", -- the notification string's ID (StoreIds &gt; Notifications &gt; DailyReady)
+	SecretName = "OpenCloudKey", -- the name of the API key secret (Creator Hub &gt; Secrets)
+}
 Config.DailyRewards = {
 	{ Kind = "Bubbles", Amount = 60 },
 	{ Kind = "Bubbles", Amount = 120 },
@@ -1070,6 +1076,23 @@ Config.Clubs = {
 	JoinCooldown = 60, -- seconds between joining / leaving clubs
 }
 
+----------------------------------------------------------------------------------------------------
+-- BADGES (Roblox badges, awarded automatically by BadgeAwards). Create each one in Creator
+-- Dashboard &gt; your experience &gt; Engagement &gt; Badges with this name and description, then paste its
+-- ID into StoreIds &gt; Badges. Players who already did the thing get it the next time they join.
+Config.Badges = {
+	{ Key = "Welcome", Id = 0, Name = "Welcome to Rinse Cycle!", Desc = "Join the game for the first time." },
+	{ Key = "Level1", Id = 0, Name = "Family Dinner Cleared", Desc = "Clean every dish in level 1." },
+	{ Key = "Level2", Id = 0, Name = "Pizza Party Cleared", Desc = "Clean every dish in level 2." },
+	{ Key = "Level3", Id = 0, Name = "Royal Banquet Cleared", Desc = "Clean every dish in level 3." },
+	{ Key = "FirstPet", Id = 0, Name = "New Best Friend", Desc = "Hatch your first pet." },
+	{ Key = "GoldenPet", Id = 0, Name = "Golden Touch", Desc = "Merge a Golden pet." },
+	{ Key = "Rebirth", Id = 0, Name = "Born Again", Desc = "Rebirth for the first time." },
+	{ Key = "LegendRank", Id = 0, Name = "Legendary Luck", Desc = "Roll a Legendary or Mythic rank." },
+	{ Key = "Club", Id = 0, Name = "Better Together", Desc = "Make or join a club." },
+	{ Key = "DishMaster", Id = 0, Name = "Dish Master", Desc = "Clean 1,000 dishes." },
+}
+
 -- The IDs pasted into StoreIds (ReplicatedStorage &gt; Shared &gt; StoreIds), the one script to edit
 -- once the passes and products exist on Roblox. A number there replaces the matching Id here.
 do
@@ -1091,6 +1114,10 @@ do
 		apply(Config.GamePasses, ids.GamePasses)
 		apply(Config.DevProducts, ids.DevProducts)
 		apply(Config.GiftProducts, ids.GiftPasses)
+		apply(Config.Badges, ids.Badges)
+		if type(ids.Notifications) == "table" and type(ids.Notifications.DailyReady) == "string" then
+			Config.DailyNotify.MessageId = ids.Notifications.DailyReady
+		end
 		if type(ids.Music) == "table" then
 			for _, key in { "Lobby", "Run" } do
 				local list = {}
@@ -2492,6 +2519,35 @@ return {
 		Gems2 = 0,         -- Sack of Gems (79 R$)
 		Gems3 = 0,         -- Chest of Gems (199 R$)
 		RestoreStreak = 0, -- Restore Streak (29 R$)
+	},
+
+	-- "Your daily reward is ready" notification (sent 24 h after a claim, to players who turned
+	-- notifications on). Setup:
+	--   1. Creator Hub &gt; your experience &gt; Engagement &gt; Notifications &gt; Create a Notification String.
+	--      Name: Daily reward ready.  Text: Your Day {streak} daily reward is ready! Come claim it before your streak resets.
+	--      (Add "streak" as the custom parameter.) Copy the string's ID (Copy Asset ID) here.
+	--   2. Creator Hub &gt; Open Cloud &gt; API Keys &gt; Create API Key: add the "user-notification" API
+	--      for this experience (write), allow IP 0.0.0.0/0, no expiry. Copy the key.
+	--   3. Creator Hub &gt; your experience &gt; Secrets (Configure &gt; Secrets) &gt; Create Secret: name
+	--      OpenCloudKey, paste the key, domain apis.roblox.com.
+	--   4. Game Settings &gt; Security &gt; Allow HTTP Requests: on.
+	Notifications = {
+		DailyReady = "", -- e.g. "b6a3c6f2-...." (keep the quotes)
+	},
+
+	-- Badges (Creator Dashboard &gt; your experience &gt; Engagement &gt; Badges &gt; Create a Badge). Use the
+	-- name and description shown, then paste the badge's ID. Given out automatically.
+	Badges = {
+		Welcome = 0,    -- "Welcome to Rinse Cycle!"  Join the game for the first time.
+		Level1 = 0,     -- "Family Dinner Cleared"    Clean every dish in level 1.
+		Level2 = 0,     -- "Pizza Party Cleared"      Clean every dish in level 2.
+		Level3 = 0,     -- "Royal Banquet Cleared"    Clean every dish in level 3.
+		FirstPet = 0,   -- "New Best Friend"          Hatch your first pet.
+		GoldenPet = 0,  -- "Golden Touch"             Merge a Golden pet.
+		Rebirth = 0,    -- "Born Again"               Rebirth for the first time.
+		LegendRank = 0, -- "Legendary Luck"           Roll a Legendary or Mythic rank.
+		Club = 0,       -- "Better Together"          Make or join a club.
+		DishMaster = 0, -- "Dish Master"              Clean 1,000 dishes.
 	},
 
 	-- Developer products for the Treasure Chest event and the luck ad. Create each one in Creator
@@ -9817,7 +9873,161 @@ function ArenaBuilder.Destroy(arena: any)
 end
 
 return ArenaBuilder</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000012"><Properties><string name="Name">Characters</string><ProtectedString name="Source">-- Character helpers shared by every server service: collision groups, teleporting,
+<Item class="ModuleScript" referent="RBX00000012"><Properties><string name="Name">BadgeAwards</string><ProtectedString name="Source">--[[
+	BadgeAwards - gives the Roblox badges in Config.Badges (IDs in StoreIds &gt; Badges).
+
+	Every few seconds (and right after a save loads) each player's profile is checked against the
+	badge rules below. A badge that's earned and has an ID is awarded with BadgeService and noted in
+	the profile (BadgesGot) so it's never asked for twice. Badges without an ID yet are skipped and
+	not noted, so they're handed out as soon as the ID is pasted in, including for things players
+	did before the badge existed. Roblox shows its own "badge awarded" pop-up.
+]]
+
+local BadgeService = game:GetService("BadgeService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+
+local DataService = require(script.Parent:WaitForChild("DataService"))
+
+local BadgeAwards = {}
+
+local CHECK_EVERY = 5
+local DISH_MASTER = 1000
+
+local initialized = false
+local awarding: { [Player]: { [string]: boolean } } = {}
+
+local function bestRankOrder(profile: any): number
+	local best = 0
+	local function consider(id: any)
+		local rank = if type(id) == "string" then Config.GetRank(id) else nil
+		local rarity = rank and Config.RankRarities[rank.Rarity]
+		if rarity then
+			best = math.max(best, rarity.Order)
+		end
+	end
+	consider(profile.Rank)
+	for _, id in profile.Ranks or {} do
+		consider(id)
+	end
+	return best
+end
+
+-- Has this player earned the badge? (Only reads the profile.)
+local RULES: { [string]: (any) -&gt; boolean } = {
+	Welcome = function()
+		return true
+	end,
+	Level1 = function(p)
+		return DataService.LevelsBeaten(p) &gt;= 1
+	end,
+	Level2 = function(p)
+		return DataService.LevelsBeaten(p) &gt;= 2
+	end,
+	Level3 = function(p)
+		return DataService.LevelsBeaten(p) &gt;= 3
+	end,
+	FirstPet = function(p)
+		return #(p.Pets or {}) &gt; 0 or ((p.Stats and p.Stats.EggsHatched) or 0) &gt; 0
+	end,
+	GoldenPet = function(p)
+		for _, pet in p.Pets or {} do
+			if (tonumber(pet.Tier) or 1) &gt;= 2 then
+				return true
+			end
+		end
+		return false
+	end,
+	Rebirth = function(p)
+		return (p.Rebirths or 0) &gt; 0
+	end,
+	LegendRank = function(p)
+		return bestRankOrder(p) &gt;= Config.RankRarities.Legendary.Order
+	end,
+	Club = function(p)
+		return type(p.ClubId) == "string" and p.ClubId ~= ""
+	end,
+	DishMaster = function(p)
+		return ((p.Stats and p.Stats.DishesCleaned) or 0) &gt;= DISH_MASTER
+	end,
+}
+BadgeAwards.Rules = RULES
+
+local function award(player: Player, badge: any)
+	local busy = awarding[player]
+	if not busy or busy[badge.Key] then
+		return
+	end
+	busy[badge.Key] = true
+	task.spawn(function()
+		local ok, result = pcall(function()
+			return BadgeService:AwardBadge(player.UserId, badge.Id)
+		end)
+		local profile = DataService.Get(player)
+		if ok and profile then
+			-- true = given now. false usually means they already had it: note it either way.
+			profile.BadgesGot[badge.Key] = true
+		elseif not ok then
+			warn(string.format("[BadgeAwards] %s for %s: %s", badge.Key, player.Name, tostring(result)))
+		end
+		task.wait(if ok then 0 else 60) -- a failed award is tried again a minute later
+		if awarding[player] then
+			awarding[player][badge.Key] = nil
+		end
+	end)
+end
+
+function BadgeAwards.Check(player: Player)
+	local profile = DataService.Get(player)
+	if not profile or type(profile.BadgesGot) ~= "table" then
+		return
+	end
+	for _, badge in Config.Badges do
+		local rule = RULES[badge.Key]
+		if type(badge.Id) == "number" and badge.Id &gt; 0 and not profile.BadgesGot[badge.Key] and rule then
+			local ok, earned = pcall(rule, profile)
+			if ok and earned then
+				award(player, badge)
+			end
+		end
+	end
+end
+
+function BadgeAwards.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+	Players.PlayerAdded:Connect(function(player)
+		awarding[player] = {}
+	end)
+	for _, player in Players:GetPlayers() do
+		awarding[player] = {}
+	end
+	Players.PlayerRemoving:Connect(function(player)
+		awarding[player] = nil
+	end)
+	DataService.ProfileLoaded:Connect(function(player)
+		task.defer(BadgeAwards.Check, player)
+	end)
+end
+
+function BadgeAwards.Start()
+	task.spawn(function()
+		while true do
+			task.wait(CHECK_EVERY)
+			for _, player in Players:GetPlayers() do
+				pcall(BadgeAwards.Check, player)
+			end
+		end
+	end)
+end
+
+return BadgeAwards</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000013"><Properties><string name="Name">Characters</string><ProtectedString name="Source">-- Character helpers shared by every server service: collision groups, teleporting,
 -- walk speed that survives respawns, and "where should this player respawn".
 
 local Players = game:GetService("Players")
@@ -10003,7 +10213,7 @@ function Characters.AddRespawnResolver(resolver: (Player) -&gt; CFrame?)
 end
 
 return Characters</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000013"><Properties><string name="Name">ClubService</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000014"><Properties><string name="Name">ClubService</string><ProtectedString name="Source">--[[
 	ClubService - player clubs (the Clubs button), like other Roblox games' clans.
 
 	  * Make one for Config.Clubs.CreateCost Gems: a name and a short tag (both run through Roblox's
@@ -10844,7 +11054,186 @@ end
 ClubService.FlushPoints = flushPoints
 
 return ClubService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000014"><Properties><string name="Name">DataService</string><ProtectedString name="Source">-- DataService: every player's permanent profile (Bubbles, perks, pets, unlocks, best times, stats).
+<Item class="ModuleScript" referent="RBX00000015"><Properties><string name="Name">DailyNotify</string><ProtectedString name="Source">--[[
+	DailyNotify - "Your daily reward is ready!" Roblox notifications.
+
+	When a player claims their daily reward, they're queued (MemoryStore sorted map, ordered by when
+	the next reward is ready). Every server checks the front of the queue each minute; whichever takes
+	a due entry first sends it through Open Cloud's user notifications API and removes it. Roblox
+	only delivers it to players who turned notifications on (RewardsUI / DailyUI ask them), and
+	tapping it joins the game.
+
+	Needs (StoreIds &gt; Notifications explains each step): the notification string's ID, an Open
+	Cloud API key saved as the secret Config.DailyNotify.SecretName, and HTTP requests allowed.
+	Without them nothing is queued and nothing is sent.
+]]
+
+local HttpService = game:GetService("HttpService")
+local MemoryStoreService = game:GetService("MemoryStoreService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+
+local DataService = require(script.Parent:WaitForChild("DataService"))
+
+local DailyNotify = {}
+
+local MAP_NAME = "RinseCycle_DailyNotify"
+local POLL_EVERY = 60
+local BATCH = 20
+local CLAIM_SECONDS = 120 -- a taken entry is left alone this long (the sender removes it)
+
+local initialized = false
+local queue: MemoryStoreSortedMap? = nil
+local warned = false
+
+local function enabled(): boolean
+	return Config.DailyNotify.MessageId ~= "" and game.GameId &gt; 0
+end
+
+-- Queues this player's "ready" notification for when their next daily reward unlocks.
+function DailyNotify.Queue(player: Player)
+	local profile = DataService.Get(player)
+	if not profile or not enabled() or not queue then
+		return
+	end
+	local due = (profile.DailyLast or os.time()) + Config.Daily.Cooldown
+	local streak = (profile.DailyStreak or 0) % #Config.DailyRewards + 1
+	profile.DailyNotifyAt = due
+	local map = queue :: MemoryStoreSortedMap
+	task.spawn(function()
+		local ok, err = pcall(function()
+			-- Kept until well after it's due (servers may be quiet for a while).
+			map:SetAsync(tostring(player.UserId), { Due = due, Streak = streak }, Config.Daily.Cooldown + 2 * 86400, due)
+		end)
+		if not ok then
+			warn("[DailyNotify] couldn't queue: " .. tostring(err))
+		end
+	end)
+end
+
+local function send(userId: number, streak: number): boolean
+	local okSecret, secret = pcall(function()
+		return HttpService:GetSecret(Config.DailyNotify.SecretName)
+	end)
+	if not okSecret then
+		if not warned then
+			warned = true
+			warn("[DailyNotify] no API key secret '" .. Config.DailyNotify.SecretName .. "': " .. tostring(secret))
+		end
+		return false
+	end
+	local body = HttpService:JSONEncode({
+		source = { universe = "universes/" .. tostring(game.GameId) },
+		payload = {
+			message_id = Config.DailyNotify.MessageId,
+			type = "MOMENT",
+			parameters = { streak = { string_value = tostring(streak) } },
+			join_experience = { launch_data = "daily" },
+		},
+		analytics_data = { category = "Daily reward" },
+	})
+	local ok, response = pcall(function()
+		return HttpService:RequestAsync({
+			Url = string.format("https://apis.roblox.com/cloud/v2/users/%d/notifications", userId),
+			Method = "POST",
+			Headers = { ["Content-Type"] = "application/json", ["x-api-key"] = secret :: any },
+			Body = body,
+		})
+	end)
+	if not ok then
+		warn("[DailyNotify] request failed: " .. tostring(response))
+		return false
+	end
+	if not response.Success then
+		warn(string.format("[DailyNotify] %d %s", response.StatusCode, tostring(response.Body)))
+		-- 4xx (not opted in, bad id) won't get better by retrying: drop it.
+		return response.StatusCode &gt;= 400 and response.StatusCode &lt; 500
+	end
+	return true
+end
+
+local function poll()
+	local map = queue
+	if not map or not enabled() then
+		return
+	end
+	local now = os.time()
+	local ok, items = pcall(function()
+		return map:GetRangeAsync(Enum.SortDirection.Ascending, BATCH, nil, { sortKey = now + 1 })
+	end)
+	if not ok or type(items) ~= "table" then
+		return
+	end
+	for _, item in items do
+		local key = item.key
+		local userId = tonumber(key)
+		-- Take it (another server may be looking at the same entry).
+		local mine = false
+		local taken = nil
+		pcall(function()
+			map:UpdateAsync(key, function(value, sortKey)
+				if type(value) ~= "table" or (value.Due or 0) &gt; now then
+					return nil
+				end
+				if value.TakenAt and now - value.TakenAt &lt; CLAIM_SECONDS then
+					return nil
+				end
+				value.TakenAt = now
+				mine = true
+				taken = value
+				return value, sortKey
+			end, CLAIM_SECONDS * 2)
+		end)
+		if mine and userId and taken then
+			local value: any = taken
+			-- Already in this server: the Daily button's "!" says it; no notification needed.
+			local here = Players:GetPlayerByUserId(userId) ~= nil
+			local done = here or DailyNotify.Send(userId, tonumber(value.Streak) or 1)
+			if done then
+				pcall(function()
+					map:RemoveAsync(key)
+				end)
+			end
+		end
+	end
+end
+
+DailyNotify.Send = send
+
+-- Tests: a stand-in queue, and one poll on demand.
+function DailyNotify.SetQueueForTests(map: any)
+	queue = map
+end
+DailyNotify.Poll = poll
+
+function DailyNotify.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+	pcall(function()
+		queue = MemoryStoreService:GetSortedMap(MAP_NAME)
+	end)
+end
+
+function DailyNotify.Start()
+	if RunService:IsStudio() then
+		return -- no notifications from Studio test sessions
+	end
+	task.spawn(function()
+		while true do
+			task.wait(POLL_EVERY + math.random() * 10)
+			pcall(poll)
+		end
+	end)
+end
+
+return DailyNotify</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000016"><Properties><string name="Name">DataService</string><ProtectedString name="Source">-- DataService: every player's permanent profile (Bubbles, perks, pets, unlocks, best times, stats).
 --
 -- Life of a profile:
 --   join     -&gt; a Session is created and loaded in the background. The load is one UpdateAsync that
@@ -10956,6 +11345,8 @@ export type Profile = {
 	ClubId: string, -- the club they're in ("" = none); ClubService keeps the club's own record
 	ClubTag: string, -- that club's tag, for the name tag (refreshed from the club on join)
 	ClubMovedAt: number, -- os.time() they last joined / left a club (Config.Clubs.JoinCooldown)
+	BadgesGot: { [string]: boolean }, -- Config.Badges keys already awarded (BadgeAwards)
+	DailyNotifyAt: number, -- os.time() the "daily reward ready" notification is queued for (0 = none)
 	Referrals: number, -- new players who joined through this player's invites (paid out)
 	Stats: {
 		Runs: number,
@@ -11035,6 +11426,8 @@ local TEMPLATE: Profile = {
 	ClubId = "",
 	ClubTag = "",
 	ClubMovedAt = 0,
+	BadgesGot = {},
+	DailyNotifyAt = 0,
 	Referrals = 0,
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
@@ -11243,6 +11636,14 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.ClubId = if type(p.ClubId) == "string" and #p.ClubId &lt;= 40 then p.ClubId else ""
 	p.ClubTag = if type(p.ClubTag) == "string" and #p.ClubTag &lt;= 20 then p.ClubTag else ""
 	p.ClubMovedAt = toCount(p.ClubMovedAt, 0)
+	local badges = {}
+	for key, got in (if type(p.BadgesGot) == "table" then p.BadgesGot else {}) do
+		if type(key) == "string" and #key &lt;= 30 and got == true then
+			badges[key] = true
+		end
+	end
+	p.BadgesGot = badges
+	p.DailyNotifyAt = toCount(p.DailyNotifyAt, 0)
 	p.Referrals = toCount(p.Referrals, 0)
 	p.DailyDay = toCount(p.DailyDay, 0)
 	p.DailyLast = toCount(p.DailyLast, 0)
@@ -12728,7 +13129,7 @@ function DataService.CanSave(player: Player): boolean
 end
 
 return DataService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000015"><Properties><string name="Name">DishFactory</string><ProtectedString name="Source">-- DishFactory: builds one dish (plate/bowl/cup/glass/fork/knife/spoon/pan/pot) and covers a built
+<Item class="ModuleScript" referent="RBX00000017"><Properties><string name="Name">DishFactory</string><ProtectedString name="Source">-- DishFactory: builds one dish (plate/bowl/cup/glass/fork/knife/spoon/pan/pot) and covers a built
 -- dish in dirt spots that sit on its real, raycast-checked surfaces.
 --
 -- Everything here works in the dish's own "anchor" frame: `cf` (a CFrame passed to BuildDish) whose
@@ -13773,7 +14174,7 @@ function DishFactory.Sparkle(dish: Model)
 end
 
 return DishFactory</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000016"><Properties><string name="Name">EventService</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000018"><Properties><string name="Name">EventService</string><ProtectedString name="Source">--[[
 	EventService - the limited-time Treasure Chest event (Config.ChestEvent).
 
 	  * Free chests: ChestRequest "Free" opens one (Config.ChestEvent.FreeOpens per event, saved).
@@ -13939,7 +14340,7 @@ end
 function EventService.Start() end
 
 return EventService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000017"><Properties><string name="Name">GiftService</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000019"><Properties><string name="Name">GiftService</string><ProtectedString name="Source">--[[
 	GiftService - gifting game passes to another player.
 
 	Roblox can't sell a game pass to one player on behalf of another, so every pass has a matching
@@ -14169,7 +14570,7 @@ function GiftService.Init()
 end
 
 return GiftService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000018"><Properties><string name="Name">LeaderboardService</string><ProtectedString name="Source">-- Lobby leaderboards: "Fastest Clean" (one page per level) and "Top Players" (pages: Most Dishes
+<Item class="ModuleScript" referent="RBX0000001A"><Properties><string name="Name">LeaderboardService</string><ProtectedString name="Source">-- Lobby leaderboards: "Fastest Clean" (one page per level) and "Top Players" (pages: Most Dishes
 -- Cleaned, Most Rebirths, Most Bubbles Collected). Players flip pages with the arrows.
 --
 --   * OrderedDataStores: RinseCycle_Fastest_L&lt;n&gt; holds best times in tenths of a second (ascending,
@@ -15093,7 +15494,7 @@ function LeaderboardService.Start()
 end
 
 return LeaderboardService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000019"><Properties><string name="Name">LobbyBuilder</string><ProtectedString name="Source">-- LobbyBuilder: builds the entire lobby world at boot. Nothing here is an uploaded asset: every part
+<Item class="ModuleScript" referent="RBX0000001B"><Properties><string name="Name">LobbyBuilder</string><ProtectedString name="Source">-- LobbyBuilder: builds the entire lobby world at boot. Nothing here is an uploaded asset: every part
 -- is a primitive. The layout is deliberately compact (you can cross it in a few seconds):
 --
 --                         [ giant dishwasher building + title ]
@@ -16890,7 +17291,7 @@ function LobbyBuilder.GetSpawnCFrame(): CFrame
 end
 
 return LobbyBuilder</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001A"><Properties><string name="Name">LobbyFun</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000001C"><Properties><string name="Name">LobbyFun</string><ProtectedString name="Source">--[[
 	LobbyFun - little things to do in the lobby between runs (Config.LobbyBubbles, Config.Ducks).
 
 	* Poppable soap bubbles float over the plaza. Touch or click one to pop it for +1 Bubble (a rare
@@ -17321,7 +17722,7 @@ function LobbyFun.Start()
 end
 
 return LobbyFun</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001B"><Properties><string name="Name">MarketService</string><ProtectedString name="Source">-- MarketService: Robux purchases.
+<Item class="ModuleScript" referent="RBX0000001D"><Properties><string name="Name">MarketService</string><ProtectedString name="Source">-- MarketService: Robux purchases.
 --
 -- Game passes (Config.GamePasses, only entries with Id ~= 0):
 --   * When a profile loads, ownership is checked with UserOwnsGamePassAsync and recorded with
@@ -17692,7 +18093,7 @@ function MarketService.Start()
 end
 
 return MarketService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001C"><Properties><string name="Name">NameTags</string><ProtectedString name="Source">-- NameTags: the overhead tag every player wears: their name (with an "R N" badge once they've
+<Item class="ModuleScript" referent="RBX0000001E"><Properties><string name="Name">NameTags</string><ProtectedString name="Source">-- NameTags: the overhead tag every player wears: their name (with an "R N" badge once they've
 -- rebirthed) and their rank underneath in its rarity colour. No rank yet: just the name. VIPs get
 -- a gold [VIP] tag in front of their name (and in chat: the VIP attribute is read by the client's
 -- chat hook).
@@ -17916,7 +18317,7 @@ function NameTags.Init()
 end
 
 return NameTags</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001D"><Properties><string name="Name">PartyService</string><ProtectedString name="Source">-- Party pads: walk-in matchmaking in the lobby. One party per pad, fully server-authoritative.
+<Item class="ModuleScript" referent="RBX0000001F"><Properties><string name="Name">PartyService</string><ProtectedString name="Source">-- Party pads: walk-in matchmaking in the lobby. One party per pad, fully server-authoritative.
 --
 --   * A poll loop (Config.Party.PollInterval) tests every free player's HumanoidRootPart against each
 --     pad's Zone box, in the Zone's own space so rotated pads work.
@@ -19027,7 +19428,7 @@ function PartyService.RemovePlayer(player: Player)
 end
 
 return PartyService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001E"><Properties><string name="Name">PetService</string><ProtectedString name="Source">-- PetService: pet inventory (Hatch / Equip / Unequip / EquipBest / Delete), the EquippedPets
+<Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">PetService</string><ProtectedString name="Source">-- PetService: pet inventory (Hatch / Equip / Unequip / EquipBest / Delete), the EquippedPets
 -- folders clients render from, and the pet auto-clean loop inside runs.
 --
 --   * Every inventory op validates everything first, then writes the profile with no yield in
@@ -20183,7 +20584,7 @@ function PetService.Start()
 end
 
 return PetService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000001F"><Properties><string name="Name">RoundService</string><ProtectedString name="Source">-- RoundService: owns every run (one party inside one dishwasher).
+<Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">RoundService</string><ProtectedString name="Source">-- RoundService: owns every run (one party inside one dishwasher).
 --
 -- A run's life:
 --   StartRound  -&gt; claim an arena slot, ArenaBuilder.Build (yields), index the grime, create a
@@ -21942,7 +22343,7 @@ function RoundService.Start()
 end
 
 return RoundService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">RunServers</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">RunServers</string><ProtectedString name="Source">--[[
 	RunServers - each party plays its run in its own private server.
 
 	  * Lobby side: when a party launches, Launch() freezes the party (their screens are already
@@ -22463,7 +22864,7 @@ function RunServers.Start()
 end
 
 return RunServers</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">ShopService</string><ProtectedString name="Source">-- ShopService: owns the MetaRequest RemoteFunction (permanent purchases and pet management).
+<Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">ShopService</string><ProtectedString name="Source">-- ShopService: owns the MetaRequest RemoteFunction (permanent purchases and pet management).
 --
 --   "BuyPerk"   (perkId)                     handled here: price from Config.PerkCost, pay with
 --                                            DataService.SpendBubbles, level up, push MetaState, and
@@ -22753,6 +23154,10 @@ local function claimDaily(player: Player, _value: any): Types.RequestResult
 	if not day then
 		return fail(err or ERR_GENERIC)
 	end
+	-- "Your next reward is ready" notification for 24 h from now.
+	pcall(function()
+		(require(script.Parent:WaitForChild("DailyNotify")) :: any).Queue(player)
+	end)
 	return { Ok = true, Day = day, Message = Config.RewardText({
 		Bubbles = if Config.DailyRewards[day].Kind == "Gems" then nil else Config.DailyRewards[day].Amount,
 		Gems = if Config.DailyRewards[day].Kind == "Gems" then Config.DailyRewards[day].Amount else nil,
@@ -22965,7 +23370,7 @@ function ShopService.Start()
 end
 
 return ShopService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">SocialService</string><ProtectedString name="Source">-- SocialService: the Follow / Favorite rewards and friend referrals (Config.Social). Nothing is
+<Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">SocialService</string><ProtectedString name="Source">-- SocialService: the Follow / Favorite rewards and friend referrals (Config.Social). Nothing is
 -- paid without a check.
 --
 -- The Free Rewards window's buttons check straight away (CheckNow). A follow Roblox can't show us
@@ -23213,7 +23618,7 @@ end
 function SocialService.Start() end
 
 return SocialService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">TradeService</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">TradeService</string><ProtectedString name="Source">--[[
 	TradeService - pet trading between two players, in the lobby only.
 
 	  1. "Request" (userId): asks another player in the lobby to trade. They get an invite with
@@ -23673,7 +24078,7 @@ end
 
 return TradeService</ProtectedString></Properties></Item>
 </Item>
-<Item class="Script" referent="RBX00000024"><Properties><string name="Name">Main</string><bool name="Disabled">false</bool><token name="RunContext">1</token><ProtectedString name="Source">-- Rinse Cycle server entry point. Builds the world, then starts every service in order.
+<Item class="Script" referent="RBX00000026"><Properties><string name="Name">Main</string><bool name="Disabled">false</bool><token name="RunContext">1</token><ProtectedString name="Source">-- Rinse Cycle server entry point. Builds the world, then starts every service in order.
 -- Each service module exposes Init() (set up state and remote handlers, no long yields)
 -- and Start() (spawn loops). See DESIGN.md for what each one owns.
 
@@ -23784,6 +24189,8 @@ local GiftService = need("GiftService")
 local TradeService = need("TradeService")
 local EventService = need("EventService")
 local ClubService = need("ClubService")
+local BadgeAwards = need("BadgeAwards")
+local DailyNotify = need("DailyNotify")
 
 local function step(name: string, fn: () -&gt; ())
 	local started = os.clock()
@@ -23834,6 +24241,8 @@ local services = {
 	{ "TradeService", TradeService },
 	{ "EventService", EventService },
 	{ "ClubService", ClubService },
+	{ "BadgeAwards", BadgeAwards },
+	{ "DailyNotify", DailyNotify },
 }
 
 for _, entry in services do
@@ -23858,10 +24267,10 @@ end
 print(string.format("[%s] v%s server ready", Config.GameName, Config.Version))</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="StarterPlayer" referent="RBX00000025"><Properties><string name="Name">StarterPlayer</string><float name="NameDisplayDistance">0</float><float name="HealthDisplayDistance">0</float></Properties>
-<Item class="StarterPlayerScripts" referent="RBX00000026"><Properties><string name="Name">StarterPlayerScripts</string></Properties>
-<Item class="Folder" referent="RBX00000027"><Properties><string name="Name">Client</string></Properties>
-<Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">BoardView</string><ProtectedString name="Source">--[[
+<Item class="StarterPlayer" referent="RBX00000027"><Properties><string name="Name">StarterPlayer</string><float name="NameDisplayDistance">0</float><float name="HealthDisplayDistance">0</float></Properties>
+<Item class="StarterPlayerScripts" referent="RBX00000028"><Properties><string name="Name">StarterPlayerScripts</string></Properties>
+<Item class="Folder" referent="RBX00000029"><Properties><string name="Name">Client</string></Properties>
+<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">BoardView</string><ProtectedString name="Source">--[[
 	BoardView - the lobby leaderboards on this player's screen.
 
 	  * Scrolling: a SurfaceGui only takes the mouse wheel / a finger when it lives in PlayerGui, so
@@ -24022,7 +24431,7 @@ function BoardView.Init()
 end
 
 return BoardView</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">BubbleJets</string><ProtectedString name="Source">-- BubbleJets: inside a run, hold jump while in the air to fly up on a jet of soap bubbles.
+<Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">BubbleJets</string><ProtectedString name="Source">-- BubbleJets: inside a run, hold jump while in the air to fly up on a jet of soap bubbles.
 -- Fuel (a few seconds) refills while you stand on something. The HUD shows the fuel bar from the
 -- LocalPlayer's "JetFuel" attribute (0..1), so this module owns no UI.
 --
@@ -24187,7 +24596,7 @@ function BubbleJets.Init()
 end
 
 return BubbleJets</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">Bubbles</string><ProtectedString name="Source">-- Bubbles: pooled, client-only 3D soap bubbles. Every bubble is an anchored ForceField sphere (the
+<Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">Bubbles</string><ProtectedString name="Source">-- Bubbles: pooled, client-only 3D soap bubbles. Every bubble is an anchored ForceField sphere (the
 -- shimmering, see-through film with a bright rim) plus a tiny glowing glint that always sits on
 -- the camera-facing, upper-left side, like a real reflection.
 --
@@ -24415,7 +24824,7 @@ function Bubbles.Init()
 end
 
 return Bubbles</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">Celebrate</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002D"><Properties><string name="Name">Celebrate</string><ProtectedString name="Source">--[[
 	Celebrate - the big "congrats" popup with confetti: a gift you sent or got (game passes, a rank
 	from an admin). The server sends ("Celebrate", title, text, icon); popups that arrive together
 	are shown one after another.
@@ -24528,7 +24937,7 @@ function Celebrate.Init()
 end
 
 return Celebrate</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">ChatNames</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002E"><Properties><string name="Name">ChatNames</string><ProtectedString name="Source">--[[
 	ChatNames - VIPs get a gold [VIP] tag before their name in the chat, "[VIP] Klushy: hi" (their
 	overhead name has the same tag; see NameTags). Staff get [MOD] / [ADMIN] / [DEV] / [OWNER]
 	instead (player attribute StaffTag, set by AdminServer).
@@ -24578,7 +24987,7 @@ function ChatNames.Init()
 end
 
 return ChatNames</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002D"><Properties><string name="Name">ChestUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000002F"><Properties><string name="Name">ChestUI</string><ProtectedString name="Source">--[[
 	ChestUI - the Treasure Chest event window (HUD "Event" button, and the chest in the lobby).
 
 	Left: the event (name, time left), the FREE chest while you have one, and the three packs. The
@@ -25047,7 +25456,7 @@ function ChestUI.Open()
 end
 
 return ChestUI</ProtectedString></Properties></Item>
-<Item class="LocalScript" referent="RBX0000002E"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
+<Item class="LocalScript" referent="RBX00000030"><Properties><string name="Name">ClientMain</string><bool name="Disabled">false</bool><ProtectedString name="Source">-- Rinse Cycle client entry point. Starts the shared client state, then every UI / gameplay module.
 -- Each module exposes Init(); anything that fails is reported without stopping the others.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -25128,7 +25537,7 @@ step("PollUI", PollUI.Init)
 step("ChestUI", ChestUI.Init)
 step("ClubsUI", ClubsUI.Init)
 step("EventZone", EventZone.Init)</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000002F"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
+<Item class="ModuleScript" referent="RBX00000031"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
 -- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
 -- Changed instead of each hooking the remotes themselves.
 
@@ -25250,7 +25659,7 @@ function ClientState.LocalPlayer(): Player
 end
 
 return ClientState</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000030"><Properties><string name="Name">ClubsUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000032"><Properties><string name="Name">ClubsUI</string><ProtectedString name="Source">--[[
 	ClubsUI - the Clubs window (HUD "Clubs" button, C key). Three tabs, like other games' clans:
 
 	  CLUB       Not in one: make a club (name, tag, public / private, requirements, costs Gems) or
@@ -25972,7 +26381,7 @@ function ClubsUI.Init()
 end
 
 return ClubsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000031"><Properties><string name="Name">Cutscene</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000033"><Properties><string name="Name">Cutscene</string><ProtectedString name="Source">--[[
 	Cutscene - the fade into a run (there is no cutscene any more; the name is kept so the rest of
 	the client, which covers the screen with Cutscene.Cover / Uncover, doesn't change).
 
@@ -26230,7 +26639,7 @@ function Cutscene.Init()
 end
 
 return Cutscene</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000032"><Properties><string name="Name">DailyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000034"><Properties><string name="Name">DailyUI</string><ProtectedString name="Source">--[[
 	DailyUI - the daily reward calendar (🎁 Daily button on the left; it also pops up by itself once
 	per session when a reward is waiting).
 
@@ -26460,7 +26869,7 @@ function DailyUI.Init()
 end
 
 return DailyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000033"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
+<Item class="ModuleScript" referent="RBX00000035"><Properties><string name="Name">Effects</string><ProtectedString name="Source">-- Effects: every world FX that isn't owned by another module. RunFX handlers (grime pops, floating
 -- numbers, dish/sale celebrations), CollectionService-driven decoration (spinning arms, lift
 -- pads), the drain guide beam, remaining-dirt sparkle markers, prompt routing (windows and the
 -- in-arena tool shop), and a little lobby ambience.
@@ -27543,7 +27952,7 @@ function Effects.Init()
 end
 
 return Effects</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000034"><Properties><string name="Name">EventZone</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000036"><Properties><string name="Name">EventZone</string><ProtectedString name="Source">--[[
 	EventZone - the Next Event spot in the lobby (LobbyBuilder's glowing ring, tag "NextEventZone").
 
 	Walk into the ring and a card pops up with the next event (Config.NextEvent): its name, what
@@ -27721,7 +28130,7 @@ function EventZone.Init()
 end
 
 return EventZone</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000035"><Properties><string name="Name">HoldPose</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000037"><Properties><string name="Name">HoldPose</string><ProtectedString name="Source">--[[
 	HoldPose - how a held cleaning tool looks, for every player on this client.
 
 	  * Anyone holding a tool (character attribute HeldToolIndex &gt; 1) holds it out in front, the
@@ -27831,7 +28240,7 @@ function HoldPose.Init()
 end
 
 return HoldPose</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000036"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
+<Item class="ModuleScript" referent="RBX00000038"><Properties><string name="Name">HUD</string><ProtectedString name="Source">-- Always-on heads-up display, laid out like the big round-based simulators:
 --   * top centre: the Bubbles pill with a green "+" (opens the Shop)
 --   * right side: big square buttons (Shop/Pets in the lobby, Upgrades/Pets/Leave in a run) with
 --     key hints for keyboard (Tab/G/P) or gamepad (Y/LB)
@@ -29290,7 +29699,7 @@ function HUD.Init()
 end
 
 return HUD</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000037"><Properties><string name="Name">IconArt</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000039"><Properties><string name="Name">IconArt</string><ProtectedString name="Source">--[[
 	IconArt - the game's own drawn icons (no emoji, no uploaded images), built from plain Frames so
 	they stay crisp at any size.
 
@@ -29924,7 +30333,7 @@ function IconArt.Draw(kind: string, px: number): Frame
 end
 
 return IconArt</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000038"><Properties><string name="Name">LevelNPCs</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003A"><Properties><string name="Name">LevelNPCs</string><ProtectedString name="Source">--[[
 	LevelNPCs - the people from the cutscenes, living in the room around the dishwasher during a run.
 
 	They're giants (you're dish-sized): classic R6 blocky figures at 50x scale, the same scale the
@@ -32446,7 +32855,7 @@ LevelNPCs.Kit = {
 }
 
 return LevelNPCs</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000039"><Properties><string name="Name">MusicPlayer</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003B"><Properties><string name="Name">MusicPlayer</string><ProtectedString name="Source">--[[
 	MusicPlayer - background music. The lobby and dishwasher runs each have their own playlist
 	(Config.Music, IDs from StoreIds &gt; Music), played shuffled, one track after another, with a
 	short fade when switching between lobby and run. A "Music" button in the left column turns it
@@ -32568,7 +32977,7 @@ function MusicPlayer.Init()
 end
 
 return MusicPlayer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003A"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003C"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
 	PartyUI - everything shown while ClientState.Party ~= nil (standing in a lobby pad).
 
 	Two screens, Search-for-the-Needle style:
@@ -33286,7 +33695,7 @@ function PartyUI.Init()
 end
 
 return PartyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003B"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
+<Item class="ModuleScript" referent="RBX0000003D"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
 -- state (EquippedPets/&lt;slot&gt; StringValue = pet id, its Target ObjectValue = the grime part being
 -- cleaned); this module is the only thing that actually builds and moves pet models. See
 -- DESIGN.md section 6 ("PetRenderer") and section 4 ("Equipped pets for rendering").
@@ -33757,7 +34166,7 @@ function PetRenderer.Init()
 end
 
 return PetRenderer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003C"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
+<Item class="ModuleScript" referent="RBX0000003E"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
 -- reveal animation. Everything here is built with UIKit; see DESIGN.md section 6 ("PetsUI") for
 -- the contract. Both windows rebuild their contents from ClientState.Meta whenever it changes and
 -- the relevant window is open, so a purchase/hatch/equip anywhere refreshes what's on screen.
@@ -35381,7 +35790,7 @@ function PetsUI.Init()
 end
 
 return PetsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003D"><Properties><string name="Name">PollUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003F"><Properties><string name="Name">PollUI</string><ProtectedString name="Source">--[[
 	PollUI - the community poll card (admin panel &gt; Global &gt; Poll, AdminServer "GlobalPoll").
 	A card near the bottom of the screen with the question, one button per answer and a countdown.
 	Tap an answer to vote (tap another to change your mind); the card goes when the poll ends and the
@@ -35499,7 +35908,7 @@ function PollUI.Init()
 end
 
 return PollUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003E"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000040"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
 	RanksUI - the "Ranks" window (Rank Shrine in the lobby, the HUD's Ranks button, R / gamepad RB).
 
 	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
@@ -36404,7 +36813,7 @@ function RanksUI.Init()
 end
 
 return RanksUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003F"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000041"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
 	RebirthUI - the "Rebirth" window (the Rebirth Fountain in the lobby).
 
 	The endgame loop: once you've cleaned the last dishwasher, trade your Bubbles, unlocked
@@ -36557,7 +36966,7 @@ function RebirthUI.Init()
 end
 
 return RebirthUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000040"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000042"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
 	RewardsUI - two small windows opened from the buttons on the left of the lobby HUD.
 
 	  * "Codes" (🎟️): type a code (Config.Codes) and redeem it. "Look out for codes in the game's
@@ -37008,7 +37417,7 @@ function RewardsUI.Init()
 end
 
 return RewardsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000041"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000043"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
 	ShopUI - the lobby "Shop" window: Perks (bought with Bubbles, permanent) and Robux (game passes).
 	Opened from the Soap Shop ProximityPrompt (routed by Effects via OpenWindow="Shop"), the HUD [🛒 Shop]
 	button, or the G key - all outside our scope, they just call UIKit.OpenWindow("Shop").
@@ -37727,7 +38136,7 @@ function ShopUI.Init()
 end
 
 return ShopUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000042"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
+<Item class="ModuleScript" referent="RBX00000044"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
 -- Aim comes from the mouse on PC, the finger on touch (tap / hold the dirt), or the screen centre
@@ -38683,7 +39092,7 @@ function SprayController.Init()
 end
 
 return SprayController</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000043"><Properties><string name="Name">StayOffer</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000045"><Properties><string name="Name">StayOffer</string><ProtectedString name="Source">--[[
 	StayOffer - "WAIT! Don't leave yet!" When a player opens the Roblox menu (usually on the way to
 	Leave), they're offered a free x2 cleaning boost for 15 minutes, once a day
 	(DataService.ClaimStayBoost; saved to their data, so leaving and rejoining can't claim it twice).
@@ -38946,7 +39355,7 @@ function StayOffer.Init()
 end
 
 return StayOffer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000044"><Properties><string name="Name">TradeUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000046"><Properties><string name="Name">TradeUI</string><ProtectedString name="Source">--[[
 	TradeUI - pet trading (lobby only; TradeService on the server checks everything).
 
 	  * The 🤝 Trade button (HUD) opens the Trade window: everyone in the server with a Request
@@ -39486,7 +39895,7 @@ function TradeUI.Init()
 end
 
 return TradeUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000045"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000047"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -42050,7 +42459,7 @@ function UIKit.Init()
 end
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000046"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000048"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button
@@ -42526,7 +42935,7 @@ function UpgradesUI.Init()
 end
 
 return UpgradesUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000047"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000049"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
 	WaterFX - the water coming out of your own hose and pressure washer, built from real parts so
 	it looks solid from every angle (a camera-facing Beam flattens to nothing when you look straight
 	down it, which is exactly the first-person view).
@@ -42766,7 +43175,7 @@ end
 
 return WaterFX</ProtectedString></Properties></Item>
 </Item>
-<Item class="LocalScript" referent="RBX00000048"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
+<Item class="LocalScript" referent="RBX0000004A"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
 	AdminClient - Rinse Cycle's admin panel and the admin effects every player can see.
 
 	Everyone:
@@ -44680,5 +45089,5 @@ task.spawn(function()
 end)</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="TextChatService" referent="RBX00000049"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
+<Item class="TextChatService" referent="RBX0000004B"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
 </roblox>

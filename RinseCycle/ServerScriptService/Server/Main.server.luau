@@ -109,6 +109,8 @@ local GiftService = need("GiftService")
 local TradeService = need("TradeService")
 local EventService = need("EventService")
 local ClubService = need("ClubService")
+local BadgeAwards = need("BadgeAwards")
+local DailyNotify = need("DailyNotify")
 
 local function step(name: string, fn: () -> ())
 	local started = os.clock()
@@ -159,6 +161,8 @@ local services = {
 	{ "TradeService", TradeService },
 	{ "EventService", EventService },
 	{ "ClubService", ClubService },
+	{ "BadgeAwards", BadgeAwards },
+	{ "DailyNotify", DailyNotify },
 }
 
 for _, entry in services do

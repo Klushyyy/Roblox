@@ -288,6 +288,10 @@ local function claimDaily(player: Player, _value: any): Types.RequestResult
 	if not day then
 		return fail(err or ERR_GENERIC)
 	end
+	-- "Your next reward is ready" notification for 24 h from now.
+	pcall(function()
+		(require(script.Parent:WaitForChild("DailyNotify")) :: any).Queue(player)
+	end)
 	return { Ok = true, Day = day, Message = Config.RewardText({
 		Bubbles = if Config.DailyRewards[day].Kind == "Gems" then nil else Config.DailyRewards[day].Amount,
 		Gems = if Config.DailyRewards[day].Kind == "Gems" then Config.DailyRewards[day].Amount else nil,

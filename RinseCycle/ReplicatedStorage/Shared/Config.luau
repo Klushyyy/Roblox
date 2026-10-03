@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.0.0"
+Config.Version = "2.0.1"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -757,6 +757,12 @@ Config.Daily = {
 	Cooldown = 24 * 60 * 60,
 	Grace = 24 * 60 * 60,
 }
+-- "Your daily reward is ready" phone / app notifications (DailyNotify). Needs a notification
+-- string and an Open Cloud API key: see StoreIds > Notifications for the setup steps.
+Config.DailyNotify = {
+	MessageId = "", -- the notification string's ID (StoreIds > Notifications > DailyReady)
+	SecretName = "OpenCloudKey", -- the name of the API key secret (Creator Hub > Secrets)
+}
 Config.DailyRewards = {
 	{ Kind = "Bubbles", Amount = 60 },
 	{ Kind = "Bubbles", Amount = 120 },
@@ -1066,6 +1072,23 @@ Config.Clubs = {
 	JoinCooldown = 60, -- seconds between joining / leaving clubs
 }
 
+----------------------------------------------------------------------------------------------------
+-- BADGES (Roblox badges, awarded automatically by BadgeAwards). Create each one in Creator
+-- Dashboard > your experience > Engagement > Badges with this name and description, then paste its
+-- ID into StoreIds > Badges. Players who already did the thing get it the next time they join.
+Config.Badges = {
+	{ Key = "Welcome", Id = 0, Name = "Welcome to Rinse Cycle!", Desc = "Join the game for the first time." },
+	{ Key = "Level1", Id = 0, Name = "Family Dinner Cleared", Desc = "Clean every dish in level 1." },
+	{ Key = "Level2", Id = 0, Name = "Pizza Party Cleared", Desc = "Clean every dish in level 2." },
+	{ Key = "Level3", Id = 0, Name = "Royal Banquet Cleared", Desc = "Clean every dish in level 3." },
+	{ Key = "FirstPet", Id = 0, Name = "New Best Friend", Desc = "Hatch your first pet." },
+	{ Key = "GoldenPet", Id = 0, Name = "Golden Touch", Desc = "Merge a Golden pet." },
+	{ Key = "Rebirth", Id = 0, Name = "Born Again", Desc = "Rebirth for the first time." },
+	{ Key = "LegendRank", Id = 0, Name = "Legendary Luck", Desc = "Roll a Legendary or Mythic rank." },
+	{ Key = "Club", Id = 0, Name = "Better Together", Desc = "Make or join a club." },
+	{ Key = "DishMaster", Id = 0, Name = "Dish Master", Desc = "Clean 1,000 dishes." },
+}
+
 -- The IDs pasted into StoreIds (ReplicatedStorage > Shared > StoreIds), the one script to edit
 -- once the passes and products exist on Roblox. A number there replaces the matching Id here.
 do
@@ -1087,6 +1110,10 @@ do
 		apply(Config.GamePasses, ids.GamePasses)
 		apply(Config.DevProducts, ids.DevProducts)
 		apply(Config.GiftProducts, ids.GiftPasses)
+		apply(Config.Badges, ids.Badges)
+		if type(ids.Notifications) == "table" and type(ids.Notifications.DailyReady) == "string" then
+			Config.DailyNotify.MessageId = ids.Notifications.DailyReady
+		end
 		if type(ids.Music) == "table" then
 			for _, key in { "Lobby", "Run" } do
 				local list = {}
