@@ -67,24 +67,26 @@ local function pulse(gui: GuiObject, amount: number, period: number)
 	tween:Play()
 end
 
-local BADGE_WIDTH = 170 -- fits the longest, "x2 Cleaning 14:59"
+local BADGE_WIDTH = 124 -- fits the longest, "x2 Clean 14:59"
+local BADGE_HEIGHT = 22
+local BADGE_GAP = 4
 
 local function badge(parent: GuiObject, text: string, color: Color3, order: number, width: number?): (Frame, TextLabel)
 	local chip = Instance.new("Frame")
 	chip.Name = "Badge"
 	chip.LayoutOrder = order
-	chip.Size = UDim2.fromOffset(width or BADGE_WIDTH, 26) -- all one width, so they line up
+	chip.Size = UDim2.fromOffset(width or BADGE_WIDTH, BADGE_HEIGHT) -- all one width, so they line up
 	chip.BackgroundColor3 = color
 	chip.BorderSizePixel = 0
 	chip.Visible = false
-	UIKit.Corner(chip, 8)
+	UIKit.Corner(chip, 7)
 	UIKit.Stroke(chip, Colors.Ink, 2)
 	local label = UIKit.Label({
 		Text = text,
-		TextSize = 16,
+		TextSize = 14,
 		TextXAlignment = Enum.TextXAlignment.Left,
-		Position = UDim2.fromOffset(10, 0),
-		Size = UDim2.new(1, -14, 1, 0),
+		Position = UDim2.fromOffset(8, 0),
+		Size = UDim2.new(1, -10, 1, 0),
 		Parent = chip,
 	})
 	chip.Parent = parent
@@ -167,7 +169,7 @@ function StayOffer.Init()
 	row.Name = "BoostBadges"
 	row.AnchorPoint = Vector2.new(0, 0)
 	row.Position = UDim2.fromOffset(108, 140)
-	row.Size = UDim2.fromOffset(170, 300)
+	row.Size = UDim2.fromOffset(BADGE_WIDTH, 300)
 	row.BackgroundTransparency = 1
 	-- Its own screen layer under every window (HUD is 5, windows 10+), so menus cover the badges.
 	local _badgeGui, badgeRoot = UIKit.CreateScreen("BoostBadges", 4)
@@ -176,21 +178,35 @@ function StayOffer.Init()
 	layout.FillDirection = Enum.FillDirection.Vertical
 	layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Padding = UDim.new(0, 5)
+	layout.Padding = UDim.new(0, BADGE_GAP)
 	layout.Parent = row
 
-	-- Follows the HUD's left column (it moves for phones, the thumbstick and runs).
-	local function placeRow()
+	-- Above the HUD's left column (it moves for phones, the thumbstick and runs; on PC the HUD
+	-- slides it down to make room, from the "BadgeStackHeight" attribute). If there isn't room
+	-- above it (phones), beside it instead.
+	local function placeRow(count: number)
+		local height = if count > 0 then count * (BADGE_HEIGHT + BADGE_GAP) - BADGE_GAP else 0
+		if Players.LocalPlayer:GetAttribute("BadgeStackHeight") ~= height then
+			Players.LocalPlayer:SetAttribute("BadgeStackHeight", height)
+		end
 		local hud = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
 		local column = hud and hud:FindFirstChild("LeftColumn", true)
+		local inset = UIKit.TopInset()
 		if column and column:IsA("GuiObject") and column.Visible and column.AbsoluteSize.Y > 0 then
-			local height = column.AbsoluteSize.Y / UIKit.GetScale()
-			row.Position = UDim2.fromOffset(column.Position.X.Offset + column.Size.X.Offset + 12, math.floor(column.Position.Y.Offset - height / 2 + 4))
+			local colH = column.AbsoluteSize.Y / UIKit.GetScale()
+			local colTop = column.Position.Y.Offset - colH / 2
+			local x = column.Position.X.Offset
+			if colTop - 10 - height >= inset + 6 then
+				row.Position = UDim2.fromOffset(x, math.floor(colTop - 10 - height))
+			else
+				row.Position = UDim2.fromOffset(x + column.Size.X.Offset + 12, math.floor(colTop + 4))
+			end
 		else
 			local safe = UIKit.SafeInsets()
-			row.Position = UDim2.fromOffset(16 + math.floor(safe.Left * 0.5), math.floor(UIKit.TopInset() + 90))
+			row.Position = UDim2.fromOffset(16 + math.floor(safe.Left * 0.5), math.floor(inset + 90))
 		end
 	end
+
 	local boostChip, boostLabel = badge(row, "", Colors.Good, 0)
 	local passChips = {}
 	for i, def in PASS_BADGES do
@@ -209,15 +225,19 @@ function StayOffer.Init()
 			local meta = ClientState.Meta :: any
 			local passes = meta and meta.Passes or {}
 			row.Visible = not cutscenePlaying()
-			placeRow()
 			local left = boostLeft()
 			boostChip.Visible = left > 0
 			if left > 0 then
-				boostLabel.Text = string.format("x2 Cleaning %d:%02d", left // 60, left % 60)
+				boostLabel.Text = string.format("x2 Clean %d:%02d", left // 60, left % 60)
 			end
+			local count = if left > 0 then 1 else 0
 			for key, chip in passChips do
 				chip.Visible = passes[key] == true
+				if chip.Visible then
+					count += 1
+				end
 			end
+			placeRow(count)
 			task.wait(1)
 		end
 	end)

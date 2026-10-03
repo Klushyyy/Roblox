@@ -264,7 +264,10 @@ function HUD.Init()
 	local dailyButton = leftButton(1, "@Gift", "Daily", Colors.Bubble, "Daily")
 	local codesButton = leftButton(2, "@Ticket", "Codes", Colors.Primary, "Codes")
 	local freeButton = leftButton(3, "@Heart", "Free", Colors.Good, "Free")
-	local tradeButton = leftButton(4, "🤝", "Trade", Colors.Accent, "Trade")
+	-- Trade lives in the right column (under Ranks), leaving room above Daily for the boost badges.
+	local tradeButton = sideButton("🤝", "Trade", Colors.Accent, "", "", function()
+		UIKit.ToggleWindow("Trade")
+	end)
 	-- Music on / off (MusicPlayer). Under Trade; the staff Admin button goes below it.
 	local musicButton: TextButton
 	musicButton = UIKit.IconButton({
@@ -637,6 +640,14 @@ function HUD.Init()
 			leftY = math.min(leftY, bottom - moneyBlock.Size.Y.Offset - 16 - leftH / 2)
 		end
 		leftY = math.max(leftY, inset + 80 + leftH / 2)
+		-- The boost badges stack above the column (StayOffer): off touch, slide the column down so
+		-- they fit (on phones they go beside the column instead).
+		local badgeH = tonumber(LocalPlayer:GetAttribute("BadgeStackHeight")) or 0
+		if badgeH > 0 and not touch then
+			local wanted = inset + 12 + badgeH + 10 + leftH / 2
+			local lowest = (if moneyBlock.Visible then bottom - moneyBlock.Size.Y.Offset - 16 else canvas.Y - 16 - safe.Bottom) - leftH / 2
+			leftY = math.max(leftY, math.min(wanted, lowest))
+		end
 		leftColumn.Position = UDim2.new(0, sideLeft, 0, math.floor(leftY))
 
 		-- Timer: bottom-right on desktop/console; top-right under the topbar on touch.
@@ -653,6 +664,7 @@ function HUD.Init()
 	end
 	rightColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 	Players.PlayerAdded:Connect(relayoutHud)
+	LocalPlayer:GetAttributeChangedSignal("BadgeStackHeight"):Connect(relayoutHud)
 	Players.PlayerRemoving:Connect(function()
 		task.defer(relayoutHud)
 	end)
@@ -1193,7 +1205,8 @@ function HUD.Init()
 		shopButton.LayoutOrder = 2
 		petsButton.LayoutOrder = 3
 		ranksButton.LayoutOrder = 4
-		leaveButton.LayoutOrder = 5
+		tradeButton.LayoutOrder = 5
+		leaveButton.LayoutOrder = 6
 		plusButton.Visible = true
 		hotbar.Visible = playing
 		local key = hotbarKey()

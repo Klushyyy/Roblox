@@ -1076,28 +1076,40 @@ local function applyTier(model: Model, tier: number)
 	local _, extents = model:GetBoundingBox()
 	local half = math.clamp(extents.Y * 0.22, 0.25, 0.8)
 	local back = math.clamp(extents.Z * 0.35, 0.3, 1.5)
-	local a0 = Instance.new("Attachment")
-	a0.Name = "TrailTop"
-	a0.Position = Vector3.new(0, half, back)
-	a0.Parent = root
-	local a1 = Instance.new("Attachment")
-	a1.Name = "TrailBottom"
-	a1.Position = Vector3.new(0, -half, back)
-	a1.Parent = root
-	local trail = Instance.new("Trail")
-	trail.Name = "TierTrail"
-	trail.Attachment0 = a0
-	trail.Attachment1 = a1
-	trail.Color = if golden
-		then ColorSequence.new(Color3.fromRGB(255, 225, 90), Color3.fromRGB(255, 170, 30))
-		else RAINBOW_GLOW
-	trail.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(1, 1) })
-	trail.WidthScale = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.2) })
-	trail.Lifetime = 0.5
-	trail.MinLength = 0.05
-	trail.LightEmission = 0.4
-	trail.FaceCamera = true
-	trail.Parent = root
+	local function makeTrail(name: string, top: number, bottom: number, color: ColorSequence, taper: boolean)
+		local a0 = Instance.new("Attachment")
+		a0.Name = name .. "Top"
+		a0.Position = Vector3.new(0, top, back)
+		a0.Parent = root
+		local a1 = Instance.new("Attachment")
+		a1.Name = name .. "Bottom"
+		a1.Position = Vector3.new(0, bottom, back)
+		a1.Parent = root
+		local trail = Instance.new("Trail")
+		trail.Name = name
+		trail.Attachment0 = a0
+		trail.Attachment1 = a1
+		trail.Color = color
+		trail.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(1, 1) })
+		if taper then
+			trail.WidthScale = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.2) })
+		end
+		trail.Lifetime = 0.5
+		trail.MinLength = 0.05
+		trail.LightEmission = 0.4
+		trail.FaceCamera = true
+		trail.Parent = root
+	end
+	if golden then
+		makeTrail("TierTrail", half, -half, ColorSequence.new(Color3.fromRGB(255, 225, 90), Color3.fromRGB(255, 170, 30)), true)
+	else
+		-- Rainbow: one thin stripe per colour, stacked top to bottom, so the whole ribbon is a rainbow.
+		local stripe = (half * 2) / #RAINBOW_SPARKS
+		for i, c in RAINBOW_SPARKS do
+			local top = half - (i - 1) * stripe
+			makeTrail("TierTrail" .. i, top, top - stripe, ColorSequence.new(c), false)
+		end
+	end
 
 	if golden then
 		emitter("TierSparkle", ColorSequence.new(GOLD_GLOW), 18, 0.7, 0.5)

@@ -1396,6 +1396,11 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - v1.8.2: Golden / Rainbow pets also leave a small solid Trail while they move (two attachments
   behind the body, ~0.5-1.6 studs tall, 0.5 s, faces the camera): gold, or a red-to-purple
   rainbow ribbon. Particles alone were hard to tell apart.
+- v1.8.3: Trade moved to the right column (under Ranks). Boost badges are smaller (124 x 22, 14 px
+  text) and stack above the left column; on PC the HUD slides the column down to fit them
+  (LocalPlayer attribute BadgeStackHeight); where there's no room (phones) they go beside it.
+  The rainbow trail is six thin single-colour trails stacked top to bottom (a striped ribbon);
+  gold stays one tapered trail.
 
 ## 7. Balance knobs (all in Config)
 
