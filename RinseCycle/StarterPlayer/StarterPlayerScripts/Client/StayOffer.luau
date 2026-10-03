@@ -70,6 +70,7 @@ end
 local BADGE_WIDTH = 124 -- fits the longest, "x2 Clean 14:59"
 local BADGE_HEIGHT = 22
 local BADGE_GAP = 4
+local BADGES_PER_COLUMN = 4
 
 local function badge(parent: GuiObject, text: string, color: Color3, order: number, width: number?): (Frame, TextLabel)
 	local chip = Instance.new("Frame")
@@ -174,18 +175,15 @@ function StayOffer.Init()
 	-- Its own screen layer under every window (HUD is 5, windows 10+), so menus cover the badges.
 	local _badgeGui, badgeRoot = UIKit.CreateScreen("BoostBadges", 4)
 	row.Parent = badgeRoot
-	local layout = Instance.new("UIListLayout")
-	layout.FillDirection = Enum.FillDirection.Vertical
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Padding = UDim.new(0, BADGE_GAP)
-	layout.Parent = row
+	-- Laid out by hand: columns of BADGES_PER_COLUMN, the next column to the right
+	-- (1-2-3-4, then 1-2-3), so the stack never gets taller than four.
 
 	-- Above the HUD's left column (it moves for phones, the thumbstick and runs; on PC the HUD
 	-- slides it down to make room, from the "BadgeStackHeight" attribute). If there isn't room
 	-- above it (phones), beside it instead.
 	local function placeRow(count: number)
-		local height = if count > 0 then count * (BADGE_HEIGHT + BADGE_GAP) - BADGE_GAP else 0
+		local rows = math.min(count, BADGES_PER_COLUMN)
+		local height = if rows > 0 then rows * (BADGE_HEIGHT + BADGE_GAP) - BADGE_GAP else 0
 		if Players.LocalPlayer:GetAttribute("BadgeStackHeight") ~= height then
 			Players.LocalPlayer:SetAttribute("BadgeStackHeight", height)
 		end
@@ -230,14 +228,23 @@ function StayOffer.Init()
 			if left > 0 then
 				boostLabel.Text = string.format("x2 Clean %d:%02d", left // 60, left % 60)
 			end
-			local count = if left > 0 then 1 else 0
-			for key, chip in passChips do
-				chip.Visible = passes[key] == true
+			local shown = {}
+			if left > 0 then
+				table.insert(shown, boostChip)
+			end
+			for _, def in PASS_BADGES do
+				local chip = passChips[def.Key]
+				chip.Visible = passes[def.Key] == true
 				if chip.Visible then
-					count += 1
+					table.insert(shown, chip)
 				end
 			end
-			placeRow(count)
+			for i, chip in shown do
+				local col, line = (i - 1) // BADGES_PER_COLUMN, (i - 1) % BADGES_PER_COLUMN
+				chip.Position = UDim2.fromOffset(col * (BADGE_WIDTH + BADGE_GAP + 2), line * (BADGE_HEIGHT + BADGE_GAP))
+			end
+			row.Size = UDim2.fromOffset(BADGE_WIDTH * 2 + BADGE_GAP + 2, 300)
+			placeRow(#shown)
 			task.wait(1)
 		end
 	end)
