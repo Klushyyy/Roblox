@@ -129,6 +129,7 @@ export type MetaState = {
 	BoostUntil: number?, -- os.time() until which cleaning is x2 (the stay boost)
 	StayBoostReady: boolean?, -- today's free stay boost can still be claimed
 	PetsResting: boolean?, -- pets switched off: they follow you but don't clean
+	Referrals: number?, -- friends who joined through your invites (paid out)
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,

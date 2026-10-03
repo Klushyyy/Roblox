@@ -115,6 +115,7 @@ local ALL_COMMANDS = {
 	"viewpets", "givepet",
 	"fly",
 	"leaderboards", "globalannounce", "joinserver", "bringserver", "serverlist",
+	"globalpoll",
 }
 
 -- =====================================================================
@@ -219,7 +220,7 @@ local TIER_COMMANDS = {
 		for _, name in ipairs(FOUNDER_ONLY_COMMANDS) do
 			table.insert(list, name)
 		end
-		for _, name in ipairs({ "setadminrank", "stafflist", "wipelogs", "givegamepass", "removegamepass" }) do
+		for _, name in ipairs({ "setadminrank", "stafflist", "wipelogs", "givegamepass", "removegamepass", "globalgive", "globalpassdrop", "globalboost" }) do
 			table.insert(list, name)
 		end
 		return list
@@ -288,6 +289,7 @@ end
 
 -- Every server of the game, for the admin's "All servers" list (filled in at the bottom).
 local ServerList = {}
+local GlobalEvents = { Commands = {} } -- the panel's Global tab (filled in near the bottom)
 
 local function getPlayerTier(player)
 	-- Studio-only testing override, set via Studio's Command Bar (View >
@@ -3114,6 +3116,14 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 		extraText = string.sub(extraText, 1, 200)
 	end
 
+	-- The Global tab's events (polls, giveaways, pass drops, boosts): the whole input is free text.
+	local globalCommand = GlobalEvents.Commands[commandName]
+	if globalCommand then
+		local text = ((if typeof(targetName) == "string" then targetName else "") .. " " .. extraText):match("^%s*(.-)%s*$")
+		globalCommand(admin, text)
+		return
+	end
+
 	-- Handled before target resolution: the three list commands don't
 	-- target anyone at all. Unbanning is no longer a standalone typed
 	-- command - it's done from :banlist's per-row "Modify" popup, which
@@ -4672,3 +4682,322 @@ game:BindToClose(function()
 		end)
 	end
 end)
+
+-- =====================================================================
+-- Global events (the panel's Global tab): polls, giveaways, pass drops and x2 boosts in EVERY
+-- server. One MessagingService topic carries them all; each server runs its own players' part.
+-- Without MessagingService (Studio) everything just runs in this server.
+-- =====================================================================
+Remote.GlobalPoll = Instance.new("RemoteEvent")
+Remote.GlobalPoll.Name = "GlobalPoll"
+Remote.GlobalPoll.Parent = ReplicatedStorage
+Remote.GlobalPollVote = Instance.new("RemoteEvent")
+Remote.GlobalPollVote.Name = "GlobalPollVote"
+Remote.GlobalPollVote.Parent = ReplicatedStorage
+do
+	local TextService = game:GetService("TextService")
+	local Format = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Format"))
+	local TOPIC = "RinseCycle_GlobalEvent"
+	local handlers = {}
+	local Commands = GlobalEvents.Commands
+
+	local function publish(data)
+		local ok = pcall(function()
+			MessagingService:PublishAsync(TOPIC, data)
+		end)
+		if not ok then
+			local handler = handlers[data.Kind]
+			if handler then
+				task.spawn(handler, data)
+			end
+		end
+		return ok
+	end
+	task.spawn(function()
+		pcall(function()
+			MessagingService:SubscribeAsync(TOPIC, function(message)
+				local data = message.Data
+				local handler = type(data) == "table" and handlers[data.Kind]
+				if handler then
+					handler(data)
+				end
+			end)
+		end)
+	end)
+
+	local function bannerAll(text)
+		for _, plr in ipairs(Players:GetPlayers()) do
+			Remote.AdminAnnouncement:FireClient(plr, string.sub(text, 1, 200))
+		end
+	end
+	handlers.Banner = function(d)
+		if type(d.Text) == "string" then
+			bannerAll(d.Text)
+		end
+	end
+
+	----------------------------------------------------------------- polls
+	-- :globalpoll [30|60|120] Question | answer | answer ... Everyone gets a popup with buttons;
+	-- each server counts its own votes, sends the counts back to the admin's server, and the
+	-- results go up as a banner everywhere.
+	local polls = {} -- [id] = { Id, Question, Options, EndsAt, Votes = { [userId] = index } }
+	local collecting = {} -- on the admin's server: [id] = { Counts, Question, Options, Admin }
+
+	local function sendPoll(plr, poll)
+		Remote.GlobalPoll:FireClient(plr, "Start", poll.Id, poll.Question, poll.Options, poll.EndsAt)
+	end
+	handlers.PollStart = function(d)
+		if type(d.Id) ~= "string" or type(d.Options) ~= "table" or polls[d.Id] then
+			return
+		end
+		local poll = { Id = d.Id, Question = tostring(d.Question), Options = d.Options, EndsAt = tonumber(d.EndsAt) or os.time(), Origin = d.Origin, Votes = {} }
+		polls[d.Id] = poll
+		for _, plr in ipairs(Players:GetPlayers()) do
+			sendPoll(plr, poll)
+		end
+		task.delay(math.max(0, poll.EndsAt - os.time()) + 0.5, function()
+			local counts = {}
+			for i = 1, #poll.Options do
+				counts[i] = 0
+			end
+			for _, index in pairs(poll.Votes) do
+				counts[index] += 1
+			end
+			polls[poll.Id] = nil
+			for _, plr in ipairs(Players:GetPlayers()) do
+				Remote.GlobalPoll:FireClient(plr, "End", poll.Id)
+			end
+			publish({ Kind = "PollTally", Id = poll.Id, Origin = poll.Origin, Counts = counts })
+		end)
+	end
+	handlers.PollTally = function(d)
+		local c = collecting[d.Id]
+		if not c or d.Origin ~= game.JobId or type(d.Counts) ~= "table" then
+			return
+		end
+		for i = 1, #c.Options do
+			c.Counts[i] += math.max(0, math.floor(tonumber(d.Counts[i]) or 0))
+		end
+	end
+	Players.PlayerAdded:Connect(function(plr)
+		for _, poll in pairs(polls) do
+			if poll.EndsAt > os.time() then
+				sendPoll(plr, poll)
+			end
+		end
+	end)
+	Remote.GlobalPollVote.OnServerEvent:Connect(function(plr, id, index)
+		local poll = type(id) == "string" and polls[id]
+		if poll and type(index) == "number" and index == math.floor(index) and index >= 1 and index <= #poll.Options and os.time() <= poll.EndsAt then
+			poll.Votes[plr.UserId] = index -- you can change your mind until it ends
+		end
+	end)
+
+	Commands.globalpoll = function(admin, text)
+		local seconds, rest = text:match("^(%d+)%s+(.+)$")
+		seconds = math.clamp(tonumber(seconds) or 60, 15, 300)
+		local parts = {}
+		for piece in string.gmatch(rest or text, "[^|]+") do
+			piece = piece:match("^%s*(.-)%s*$")
+			if piece ~= "" then
+				table.insert(parts, string.sub(piece, 1, 60))
+			end
+		end
+		if #parts < 3 then
+			sendFeedback(admin, "Usage: :globalpoll 60 Question | answer | answer (2 to 4 answers)", true)
+			return
+		end
+		local question = table.remove(parts, 1)
+		local options = { table.unpack(parts, 1, math.min(#parts, 4)) }
+		-- Chat filter: the question and answers are shown to everyone.
+		local okFilter, filtered = pcall(function()
+			local all = question .. "\n" .. table.concat(options, "\n")
+			return TextService:FilterStringAsync(all, admin.UserId):GetNonChatStringForBroadcastAsync()
+		end)
+		if okFilter and type(filtered) == "string" then
+			local lines = string.split(filtered, "\n")
+			question = lines[1] or question
+			for i = 1, #options do
+				options[i] = lines[i + 1] or options[i]
+			end
+		end
+		local id = game.JobId .. ":" .. tostring(os.clock())
+		local counts = {}
+		for i = 1, #options do
+			counts[i] = 0
+		end
+		collecting[id] = { Counts = counts, Question = question, Options = options }
+		publish({ Kind = "PollStart", Id = id, Question = question, Options = options, EndsAt = os.time() + seconds, Origin = game.JobId })
+		sendFeedback(admin, string.format("Poll sent to every server: results in %d s", seconds), false)
+		logCommand(admin, "globalpoll", nil, question, admin.Name .. " started a global poll: " .. question)
+		-- Every server's counts come back a few seconds after it closes.
+		task.delay(seconds + 7, function()
+			local c = collecting[id]
+			collecting[id] = nil
+			if not c then
+				return
+			end
+			local total = 0
+			for _, n in ipairs(c.Counts) do
+				total += n
+			end
+			local bits = {}
+			for i, option in ipairs(c.Options) do
+				local pct = if total > 0 then math.floor(c.Counts[i] / total * 100 + 0.5) else 0
+				table.insert(bits, string.format("%s %d (%d%%)", option, c.Counts[i], pct))
+			end
+			local summary = "Poll results - " .. c.Question .. ": " .. table.concat(bits, "  |  ")
+			publish({ Kind = "Banner", Text = summary })
+			if admin.Parent then
+				sendFeedback(admin, summary .. string.format("  (%d votes)", total), false)
+			end
+		end)
+	end
+
+	----------------------------------------------------------------- giveaways
+	-- :globalgive [Bubbles|Gems|Coins] [amount]: everyone online, in every server. Coins only exist
+	-- inside a dishwasher, so they go to whoever is cleaning right now.
+	local CURRENCIES = { bubbles = "Bubbles", gems = "Gems", coins = "Coins" }
+	handlers.GiveAll = function(d)
+		local currency = CURRENCIES[string.lower(tostring(d.Currency))]
+		local amount = math.floor(tonumber(d.Amount) or 0)
+		if not currency or amount <= 0 then
+			return
+		end
+		for _, plr in ipairs(Players:GetPlayers()) do
+			local given = false
+			if currency == "Bubbles" then
+				given = DataService.AddBubbles(plr, amount, "admin event")
+			elseif currency == "Gems" then
+				given = DataService.AddGems(plr, amount)
+			else
+				given = RoundService.AddCoins(plr, amount)
+			end
+			if given then
+				celebrate(plr, "Admin event!", string.format("Everyone got %s %s!", Format.Commas(amount), currency), "@Gift")
+			end
+		end
+	end
+	Commands.globalgive = function(admin, text)
+		local currencyText, amountText = text:match("^(%a+)%s+(%d+)")
+		local currency = currencyText and CURRENCIES[string.lower(currencyText)]
+		local amount = math.clamp(math.floor(tonumber(amountText) or 0), 0, 1000000)
+		if not currency or amount <= 0 then
+			sendFeedback(admin, "Usage: :globalgive [Bubbles|Gems|Coins] [amount]", true)
+			return
+		end
+		local ok = publish({ Kind = "GiveAll", Currency = currency, Amount = amount })
+		sendFeedback(admin, string.format("Gave everyone %s %s%s", Format.Commas(amount), currency, if ok then " in every server" else " (this server only)"), false)
+		logCommand(admin, "globalgive", nil, currency .. " " .. amount, string.format("%s gave everyone %d %s", admin.Name, amount, currency))
+	end
+
+	----------------------------------------------------------------- pass drops
+	-- :globalpassdrop [winners] [pass key | random]: that many random players (across every
+	-- server) win a game pass. Someone who already has it gets a different pass they don't have
+	-- (or 50 Gems if they own them all).
+	handlers.PassDrop = function(d)
+		if type(d.W) ~= "table" then
+			return
+		end
+		for _, w in ipairs(d.W) do
+			local plr = Players:GetPlayerByUserId(tonumber(w.u) or 0)
+			if plr then
+				local passes = DataService.GetPasses and DataService.GetPasses(plr) or {}
+				local function has(key)
+					return passes[key] == true or plr:GetAttribute(gamepassAttribute(key)) == true
+				end
+				local pass = Config.GetPass(tostring(w.p))
+				if not pass or has(pass.Key) then
+					pass = nil
+					local free = {}
+					for _, p in ipairs(Config.GamePasses) do
+						if not has(p.Key) then
+							table.insert(free, p)
+						end
+					end
+					if #free > 0 then
+						pass = free[math.random(1, #free)]
+					end
+				end
+				if pass then
+					setGamepassGrant(plr, pass, true, false)
+					celebrate(plr, "You won a game pass!", "Lucky draw: you got " .. pass.Name .. "!", pass.Icon)
+				else
+					DataService.AddGems(plr, 50)
+					celebrate(plr, "You won!", "You own every pass already, so here are 50 Gems!", "@Gift")
+				end
+			end
+		end
+		if type(d.Text) == "string" then
+			bannerAll(d.Text)
+		end
+	end
+	Commands.globalpassdrop = function(admin, text)
+		local countText, passText = text:match("^(%d+)%s*(.*)$")
+		local count = math.clamp(math.floor(tonumber(countText) or 0), 0, 25)
+		if count <= 0 then
+			sendFeedback(admin, "Usage: :globalpassdrop [winners 1-25] [pass or random]", true)
+			return
+		end
+		local chosen = nil
+		if passText ~= "" and string.lower(passText) ~= "random" then
+			chosen = resolveGamepass(passText)
+			if not chosen then
+				sendFeedback(admin, "Unknown pass: " .. passText, true)
+				return
+			end
+		end
+		-- Everyone online in every server (from the server list), hidden staff left out.
+		local pool = {}
+		local seen = {}
+		for _, server in ipairs(ServerList.Read()) do
+			for _, p in ipairs(server.Players or {}) do
+				local id = tonumber(p.UserId)
+				if id and not p.Hidden and not seen[id] then
+					seen[id] = true
+					table.insert(pool, { UserId = id, Name = tostring(p.Name) })
+				end
+			end
+		end
+		if #pool == 0 then
+			sendFeedback(admin, "Nobody online to win.", true)
+			return
+		end
+		local winners, names = {}, {}
+		for _ = 1, math.min(count, #pool) do
+			local pick = table.remove(pool, math.random(1, #pool))
+			local key = if chosen then chosen.Key else Config.GamePasses[math.random(1, #Config.GamePasses)].Key
+			table.insert(winners, { u = pick.UserId, p = key })
+			table.insert(names, pick.Name)
+		end
+		local shown = table.concat(names, ", ", 1, math.min(#names, 8)) .. (if #names > 8 then string.format(" and %d more", #names - 8) else "")
+		local banner = string.format("Pass drop! %s won %s!", shown, if chosen then chosen.Name else "a game pass")
+		local ok = publish({ Kind = "PassDrop", W = winners, Text = banner })
+		sendFeedback(admin, string.format("%d winner(s): %s%s", #winners, shown, if ok then "" else " (this server only)"), false)
+		logCommand(admin, "globalpassdrop", nil, if chosen then chosen.Name else "random", admin.Name .. " ran a pass drop: " .. shown)
+	end
+
+	----------------------------------------------------------------- x2 boost
+	-- :globalboost [minutes]: everyone online gets x2 cleaning for that long (on top of any boost).
+	handlers.Boost = function(d)
+		local minutes = math.floor(tonumber(d.Minutes) or 0)
+		if minutes <= 0 then
+			return
+		end
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if DataService.AddBoost(plr, minutes * 60) then
+				celebrate(plr, "Admin event!", string.format("x2 Cleaning for everyone: %d minutes!", minutes), "@Gift")
+			end
+		end
+	end
+	Commands.globalboost = function(admin, text)
+		local minutes = math.clamp(math.floor(tonumber(text:match("^(%d+)")) or 0), 0, 180)
+		if minutes <= 0 then
+			sendFeedback(admin, "Usage: :globalboost [minutes 1-180]", true)
+			return
+		end
+		local ok = publish({ Kind = "Boost", Minutes = minutes })
+		sendFeedback(admin, string.format("x2 Cleaning for everyone for %d minutes%s", minutes, if ok then " in every server" else " (this server only)"), false)
+		logCommand(admin, "globalboost", nil, tostring(minutes), string.format("%s gave everyone %d min of x2 cleaning", admin.Name, minutes))
+	end
+end

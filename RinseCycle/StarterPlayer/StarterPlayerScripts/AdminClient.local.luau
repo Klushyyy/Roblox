@@ -665,9 +665,9 @@ local COMMANDS: { Command } = ({
 	{ Name = "bring", Icon = "⬅️", Label = "Bring", Desc = "Teleports them to you.", Group = "Move", Target = "player" },
 	{ Name = "spectate", Icon = "👁️", Label = "Spectate", Desc = "Watch them. Stop from the bar at the bottom.", Group = "Move", Target = "player" },
 	{ Name = "controlplayer", Icon = "🎮", Label = "Control", Desc = "Move their character with your controls.", Group = "Move", Target = "player" },
-	{ Name = "serverlist", Icon = "🌍", Label = "All servers", Desc = "Everyone in every server: Join them (you arrive invisible) or Bring them here.", Group = "Move", Target = "none" },
-	{ Name = "joinserver", Icon = "🛰️", Label = "Join server", Desc = "Teleport to that player's server, wherever they are (type their username).", Group = "Move", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
-	{ Name = "bringserver", Icon = "🧲", Label = "Bring (any server)", Desc = "Pull that player from their server into yours (type their username).", Group = "Move", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
+	{ Name = "serverlist", Icon = "🌍", Label = "All servers", Desc = "Everyone in every server: Join them (you arrive invisible) or Bring them here.", Group = "Global", Target = "none" },
+	{ Name = "joinserver", Icon = "🛰️", Label = "Join server", Desc = "Teleport to that player's server, wherever they are (type their username).", Group = "Global", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
+	{ Name = "bringserver", Icon = "🧲", Label = "Bring (any server)", Desc = "Pull that player from their server into yours (type their username).", Group = "Global", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
 	{ Name = "viewpets", Icon = "🐾", Label = "Pets", Desc = "See their pets. Remove any, or add new ones.", Group = "Game", Target = "player" },
 	-- Game
 	{ Name = "givecoins", Icon = "💰", Label = "Give coins", Desc = "Coins for their current run.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
@@ -714,7 +714,7 @@ local COMMANDS: { Command } = ({
 	{ Name = "demote", Icon = "⬇️", Label = "Demote", Desc = "Next more common rank.", Group = "Game", Target = "player" },
 	-- Server
 	{ Name = "announce", Icon = "📢", Label = "Announce", Desc = "A banner on everyone's screen.", Group = "Server", Target = "none", Inputs = { { Kind = "text", Placeholder = "Announcement", Required = true } } },
-	{ Name = "globalannounce", Icon = "🌍", Label = "Global announce", Desc = "A banner on everyone's screen in EVERY server of the game.", Group = "Server", Target = "none", Inputs = { { Kind = "text", Placeholder = "Announcement", Required = true } } },
+	{ Name = "globalannounce", Icon = "🌍", Label = "Global announce", Desc = "A banner on everyone's screen in EVERY server of the game.", Group = "Global", Target = "none", Inputs = { { Kind = "text", Placeholder = "Announcement", Required = true } } },
 	{ Name = "leaderboards", Icon = "🏆", Label = "Leaderboards", Desc = "See everyone on every leaderboard; reset someone's spot (they keep their stats).", Group = "Server", Target = "none" },
 	{ Name = "givegamepass", Icon = "🎟️", Label = "Gift pass", Desc = "Gives them a game pass for free (saved).", Group = "Server", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = function()
 		local out = {}
@@ -735,6 +735,18 @@ local COMMANDS: { Command } = ({
 	{ Name = "wipelogs", Icon = "🧹", Label = "Wipe logs", Desc = "Deletes the whole command log.", Group = "Server", Target = "none", Danger = true },
 	{ Name = "setadminrank", Icon = "🛡️", Label = "Staff tier", Desc = "Make them Moderator, Admin or Developer (saved, works straight away), or clear it.", Group = "Server", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = opts({ "Moderator", "Admin", "Developer", "clear" }) } } },
 	{ Name = "stafflist", Icon = "📋", Label = "Staff list", Desc = "Everyone with a staff rank, online or not. Remove anyone.", Group = "Server", Target = "none" },
+	{ Name = "globalpoll", Icon = "📊", Label = "Poll", Desc = "A poll in EVERY server. Type: Question | answer | answer (2 to 4 answers). Results go up as a banner when it ends.", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+		return { { Label = "30 seconds", Value = "30" }, { Label = "1 minute", Value = "60" }, { Label = "2 minutes", Value = "120" } }
+	end }, { Kind = "text", Placeholder = "Which level next? | Pizzeria | Castle", Required = true } } },
+	{ Name = "globalgive", Icon = "🎁", Label = "Give everyone", Desc = "Everyone online in EVERY server gets this much (Coins only reach people inside a dishwasher).", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "Bubbles", "Gems", "Coins" }) }, { Kind = "number", Placeholder = "Amount", Required = true } } },
+	{ Name = "globalpassdrop", Icon = "🎟️", Label = "Pass drop", Desc = "Random players across EVERY server win a game pass. Already own it? They get another one they don't have.", Group = "Global", Target = "none", Inputs = { { Kind = "number", Placeholder = "Winners (1-25)", Required = true }, { Kind = "choice", Required = true, Options = function()
+		local out = { { Label = "Random pass each", Value = "random" } }
+		for _, pass in Config.GamePasses do
+			table.insert(out, { Label = pass.Name, Value = pass.Key })
+		end
+		return out
+	end } } },
+	{ Name = "globalboost", Icon = "⚡", Label = "x2 boost", Desc = "x2 Cleaning for everyone online in EVERY server, for this many minutes.", Group = "Global", Target = "none", Inputs = { { Kind = "number", Placeholder = "Minutes (1-180)", Required = true } } },
 }) :: any
 local GROUPS = {
 	{ Name = "Punish", Icon = "🔨" },
@@ -742,6 +754,7 @@ local GROUPS = {
 	{ Name = "Move", Icon = "🧭" },
 	{ Name = "Game", Icon = "🧼" },
 	{ Name = "Server", Icon = "📢" },
+	{ Name = "Global", Icon = "🌍" },
 }
 local DURATIONS = { "1h", "6h", "24h", "3d", "7d", "30d" }
 local PRESETS = {

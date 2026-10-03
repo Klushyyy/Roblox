@@ -12,7 +12,9 @@
 ]]
 
 local AvatarEditorService = game:GetService("AvatarEditorService")
+local ExperienceNotificationService = game:GetService("ExperienceNotificationService")
 local GroupService = game:GetService("GroupService")
+local SocialService = game:GetService("SocialService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -26,6 +28,7 @@ local UIKit = require(Client:WaitForChild("UIKit"))
 
 local Colors = UIKit.Theme.Colors
 local Fonts = UIKit.Theme.Fonts
+local LocalPlayer = Players.LocalPlayer
 
 local RewardsUI = {}
 
@@ -281,10 +284,20 @@ local function buildFree(screenRoot: Instance)
 		Size = Vector2.new(720, 470),
 		Parent = screenRoot,
 	})
-	local list = Instance.new("Frame")
+	-- Scrolls: five reward cards don't all fit at once.
+	local list = Instance.new("ScrollingFrame")
 	list.BackgroundTransparency = 1
+	list.BorderSizePixel = 0
 	list.Size = UDim2.new(1, 0, 1, 0)
+	list.CanvasSize = UDim2.new()
+	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	list.ScrollBarThickness = 8
+	list.ScrollBarImageColor3 = Colors.Primary
 	list.Parent = content
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 4)
+	pad.PaddingBottom = UDim.new(0, 8)
+	pad.Parent = list
 	local layout = Instance.new("UIListLayout")
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
@@ -338,18 +351,91 @@ local function buildFree(screenRoot: Instance)
 		end
 	end)
 
+	-- Invite friends (Roblox's invite prompt; the invite carries your UserId so the game knows who
+	-- brought them in: SocialService pays you both when a NEW player joins through it).
+	local referral = Config.Social.ReferralReward
+	local invite = card(list, 4, "🤝", "Invite friends", string.format("A friend who's new joins from your invite: you get %s, they get %s.", Config.RewardText(referral), Config.RewardText(Config.Social.ReferredReward)))
+	UIKit.Button({
+		Text = "INVITE",
+		Size = UDim2.fromOffset(210, 52),
+		Position = UDim2.new(1, -14, 0.5, -10),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Color = Colors.Good,
+		TextSize = 20,
+		Parent = invite,
+		OnClick = function()
+			task.spawn(function()
+				local okCan, can = pcall(function()
+					return SocialService:CanSendGameInviteAsync(LocalPlayer)
+				end)
+				if okCan and can == false then
+					UIKit.Toast("Invites aren't available on this account.", "Info")
+					return
+				end
+				local ok = pcall(function()
+					local options = Instance.new("ExperienceInviteOptions")
+					options.PromptMessage = "Come clean dishes with me in Rinse Cycle!"
+					options.LaunchData = tostring(LocalPlayer.UserId)
+					SocialService:PromptGameInvite(LocalPlayer, options)
+				end)
+				if not ok then
+					UIKit.Toast("Couldn't open the invite. Try again!", "Info")
+				end
+			end)
+		end,
+	})
+	local inviteStatus = UIKit.Label({ Text = "", TextSize = 15, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(230, 20), Position = UDim2.new(1, -4, 1, -8), AnchorPoint = Vector2.new(1, 1), Parent = invite })
+	local function refreshInvite()
+		local meta = ClientState.Meta :: any
+		local n = meta and tonumber(meta.Referrals) or 0
+		inviteStatus.Text = if n > 0 then string.format("Friends joined: %d", n) else ""
+	end
+
+	-- Notifications: Roblox's own opt-in prompt (experience notifications, e.g. "your daily reward is
+	-- ready"). Roblox decides when it may be shown again.
+	local notify = card(list, 5, "🔔", "Turn on notifications", "Get a Roblox notification when your next daily reward is ready.")
+	UIKit.Button({
+		Text = "NOTIFY ME",
+		Size = UDim2.fromOffset(210, 52),
+		Position = UDim2.new(1, -14, 0.5, -10),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Color = Colors.Primary,
+		TextSize = 20,
+		Parent = notify,
+		OnClick = function()
+			task.spawn(RewardsUI.PromptNotifications, true)
+		end,
+	})
+
 	UIKit.RegisterWindow("Free", {
 		Open = function()
 			refreshGroup()
 			refreshSocial()
+			refreshInvite()
 		end,
 	})
 	ClientState.Changed:Connect(function(kind)
 		if kind == "Meta" and UIKit.IsWindowOpen("Free") then
 			refreshGroup()
 			refreshSocial()
+			refreshInvite()
 		end
 	end)
+end
+
+-- Roblox's notification opt-in prompt, if Roblox allows it right now. `fromButton`: say so when
+-- it can't be shown (already on, or asked too recently).
+function RewardsUI.PromptNotifications(fromButton: boolean?)
+	local okCan, can = pcall(function()
+		return ExperienceNotificationService:CanPromptOptInAsync()
+	end)
+	if okCan and can then
+		pcall(function()
+			ExperienceNotificationService:PromptOptIn()
+		end)
+	elseif fromButton then
+		UIKit.Toast("Notifications are already on, or Roblox can't ask again just yet.", "Info")
+	end
 end
 
 function RewardsUI.Init()

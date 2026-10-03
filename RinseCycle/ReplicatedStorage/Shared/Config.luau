@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.8.8"
+Config.Version = "1.9.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -892,6 +892,12 @@ Config.Social = {
 	GroupReward = { Bubbles = 500, Gems = 25 },
 	FollowReward = { Bubbles = 300, Gems = 15 },
 	LikeReward = { Bubbles = 300, Gems = 15 } :: { Bubbles: number?, Gems: number? }?,
+	-- Referrals: invite a friend (Roblox's invite prompt carries your UserId as launch data). When
+	-- someone NEW joins through it, you get ReferralReward and they get ReferredReward. Up to
+	-- MaxReferrals friends pay out per player.
+	ReferralReward = { Bubbles = 300, Gems = 20 },
+	ReferredReward = { Bubbles = 200, Gems = 10 },
+	MaxReferrals = 50,
 }
 
 function Config.GetGroupId(): number

@@ -991,6 +991,7 @@ local FILL = {
 	givecoins = { "500" }, setbubbles = { "1234" }, setgems = { "77" }, setrebirths = { "2" },
 	warn = { "spamming" }, msg = { "hello there" }, announce = { "Server restart soon" },
 	playerlogs = { "EnderBuilda" }, kick = { "bye" }, ban = { "test ban" },
+	globalpoll = { "Best? | Yes | No" }, globalgive = { "100" }, globalpassdrop = { "1" }, globalboost = { "5" },
 }
 local SKIP = { kick = true, ban = true, tempban = true, spectate = true, controlplayer = true, wipelogs = false }
 local results = {}

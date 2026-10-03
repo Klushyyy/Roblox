@@ -352,6 +352,7 @@ function HUD.Init()
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
 		musicButton.Visible = true
+		petsToggle.Visible = inRun -- in the lobby pets only ever follow you
 		leftColumn.Visible = true
 	end
 	addAdminButton = makeAdminButton
@@ -1243,6 +1244,7 @@ function HUD.Init()
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
 		musicButton.Visible = true
+		petsToggle.Visible = inRun -- in the lobby pets only ever follow you
 		leftColumn.Visible = true
 		upgradesButton.LayoutOrder = 1
 		shopButton.LayoutOrder = 2

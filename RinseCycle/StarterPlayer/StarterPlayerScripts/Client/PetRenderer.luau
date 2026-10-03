@@ -98,6 +98,15 @@ local function setHidden(slot: Slot, hidden: boolean)
 	for _, part in slot.Model:GetDescendants() do
 		if part:IsA("BasePart") then
 			part.LocalTransparencyModifier = if hidden then 1 else 0
+		elseif part:IsA("ParticleEmitter") or part:IsA("Trail") or part:IsA("Light") then
+			-- Golden / Rainbow sparkles, halo and trail go with the pet (left on, they'd keep
+			-- glowing where it was hidden).
+			part.Enabled = not hidden
+			if hidden and part:IsA("ParticleEmitter") then
+				part:Clear()
+			elseif hidden and part:IsA("Trail") then
+				part:Clear()
+			end
 		end
 	end
 end

@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.8.8"
+Config.Version = "1.9.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -896,6 +896,12 @@ Config.Social = {
 	GroupReward = { Bubbles = 500, Gems = 25 },
 	FollowReward = { Bubbles = 300, Gems = 15 },
 	LikeReward = { Bubbles = 300, Gems = 15 } :: { Bubbles: number?, Gems: number? }?,
+	-- Referrals: invite a friend (Roblox's invite prompt carries your UserId as launch data). When
+	-- someone NEW joins through it, you get ReferralReward and they get ReferredReward. Up to
+	-- MaxReferrals friends pay out per player.
+	ReferralReward = { Bubbles = 300, Gems = 20 },
+	ReferredReward = { Bubbles = 200, Gems = 10 },
+	MaxReferrals = 50,
 }
 
 function Config.GetGroupId(): number
@@ -2881,6 +2887,7 @@ export type MetaState = {
 	BoostUntil: number?, -- os.time() until which cleaning is x2 (the stay boost)
 	StayBoostReady: boolean?, -- today's free stay boost can still be claimed
 	PetsResting: boolean?, -- pets switched off: they follow you but don't clean
+	Referrals: number?, -- friends who joined through your invites (paid out)
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
@@ -3200,6 +3207,7 @@ local ALL_COMMANDS = {
 	"viewpets", "givepet",
 	"fly",
 	"leaderboards", "globalannounce", "joinserver", "bringserver", "serverlist",
+	"globalpoll",
 }
 
 -- =====================================================================
@@ -3304,7 +3312,7 @@ local TIER_COMMANDS = {
 		for _, name in ipairs(FOUNDER_ONLY_COMMANDS) do
 			table.insert(list, name)
 		end
-		for _, name in ipairs({ "setadminrank", "stafflist", "wipelogs", "givegamepass", "removegamepass" }) do
+		for _, name in ipairs({ "setadminrank", "stafflist", "wipelogs", "givegamepass", "removegamepass", "globalgive", "globalpassdrop", "globalboost" }) do
 			table.insert(list, name)
 		end
 		return list
@@ -3373,6 +3381,7 @@ end
 
 -- Every server of the game, for the admin's "All servers" list (filled in at the bottom).
 local ServerList = {}
+local GlobalEvents = { Commands = {} } -- the panel's Global tab (filled in near the bottom)
 
 local function getPlayerTier(player)
 	-- Studio-only testing override, set via Studio's Command Bar (View &gt;
@@ -6199,6 +6208,14 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 		extraText = string.sub(extraText, 1, 200)
 	end
 
+	-- The Global tab's events (polls, giveaways, pass drops, boosts): the whole input is free text.
+	local globalCommand = GlobalEvents.Commands[commandName]
+	if globalCommand then
+		local text = ((if typeof(targetName) == "string" then targetName else "") .. " " .. extraText):match("^%s*(.-)%s*$")
+		globalCommand(admin, text)
+		return
+	end
+
 	-- Handled before target resolution: the three list commands don't
 	-- target anyone at all. Unbanning is no longer a standalone typed
 	-- command - it's done from :banlist's per-row "Modify" popup, which
@@ -7756,7 +7773,326 @@ game:BindToClose(function()
 			ServerList.Map:RemoveAsync(game.JobId)
 		end)
 	end
-end)</ProtectedString></Properties></Item>
+end)
+
+-- =====================================================================
+-- Global events (the panel's Global tab): polls, giveaways, pass drops and x2 boosts in EVERY
+-- server. One MessagingService topic carries them all; each server runs its own players' part.
+-- Without MessagingService (Studio) everything just runs in this server.
+-- =====================================================================
+Remote.GlobalPoll = Instance.new("RemoteEvent")
+Remote.GlobalPoll.Name = "GlobalPoll"
+Remote.GlobalPoll.Parent = ReplicatedStorage
+Remote.GlobalPollVote = Instance.new("RemoteEvent")
+Remote.GlobalPollVote.Name = "GlobalPollVote"
+Remote.GlobalPollVote.Parent = ReplicatedStorage
+do
+	local TextService = game:GetService("TextService")
+	local Format = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Format"))
+	local TOPIC = "RinseCycle_GlobalEvent"
+	local handlers = {}
+	local Commands = GlobalEvents.Commands
+
+	local function publish(data)
+		local ok = pcall(function()
+			MessagingService:PublishAsync(TOPIC, data)
+		end)
+		if not ok then
+			local handler = handlers[data.Kind]
+			if handler then
+				task.spawn(handler, data)
+			end
+		end
+		return ok
+	end
+	task.spawn(function()
+		pcall(function()
+			MessagingService:SubscribeAsync(TOPIC, function(message)
+				local data = message.Data
+				local handler = type(data) == "table" and handlers[data.Kind]
+				if handler then
+					handler(data)
+				end
+			end)
+		end)
+	end)
+
+	local function bannerAll(text)
+		for _, plr in ipairs(Players:GetPlayers()) do
+			Remote.AdminAnnouncement:FireClient(plr, string.sub(text, 1, 200))
+		end
+	end
+	handlers.Banner = function(d)
+		if type(d.Text) == "string" then
+			bannerAll(d.Text)
+		end
+	end
+
+	----------------------------------------------------------------- polls
+	-- :globalpoll [30|60|120] Question | answer | answer ... Everyone gets a popup with buttons;
+	-- each server counts its own votes, sends the counts back to the admin's server, and the
+	-- results go up as a banner everywhere.
+	local polls = {} -- [id] = { Id, Question, Options, EndsAt, Votes = { [userId] = index } }
+	local collecting = {} -- on the admin's server: [id] = { Counts, Question, Options, Admin }
+
+	local function sendPoll(plr, poll)
+		Remote.GlobalPoll:FireClient(plr, "Start", poll.Id, poll.Question, poll.Options, poll.EndsAt)
+	end
+	handlers.PollStart = function(d)
+		if type(d.Id) ~= "string" or type(d.Options) ~= "table" or polls[d.Id] then
+			return
+		end
+		local poll = { Id = d.Id, Question = tostring(d.Question), Options = d.Options, EndsAt = tonumber(d.EndsAt) or os.time(), Origin = d.Origin, Votes = {} }
+		polls[d.Id] = poll
+		for _, plr in ipairs(Players:GetPlayers()) do
+			sendPoll(plr, poll)
+		end
+		task.delay(math.max(0, poll.EndsAt - os.time()) + 0.5, function()
+			local counts = {}
+			for i = 1, #poll.Options do
+				counts[i] = 0
+			end
+			for _, index in pairs(poll.Votes) do
+				counts[index] += 1
+			end
+			polls[poll.Id] = nil
+			for _, plr in ipairs(Players:GetPlayers()) do
+				Remote.GlobalPoll:FireClient(plr, "End", poll.Id)
+			end
+			publish({ Kind = "PollTally", Id = poll.Id, Origin = poll.Origin, Counts = counts })
+		end)
+	end
+	handlers.PollTally = function(d)
+		local c = collecting[d.Id]
+		if not c or d.Origin ~= game.JobId or type(d.Counts) ~= "table" then
+			return
+		end
+		for i = 1, #c.Options do
+			c.Counts[i] += math.max(0, math.floor(tonumber(d.Counts[i]) or 0))
+		end
+	end
+	Players.PlayerAdded:Connect(function(plr)
+		for _, poll in pairs(polls) do
+			if poll.EndsAt &gt; os.time() then
+				sendPoll(plr, poll)
+			end
+		end
+	end)
+	Remote.GlobalPollVote.OnServerEvent:Connect(function(plr, id, index)
+		local poll = type(id) == "string" and polls[id]
+		if poll and type(index) == "number" and index == math.floor(index) and index &gt;= 1 and index &lt;= #poll.Options and os.time() &lt;= poll.EndsAt then
+			poll.Votes[plr.UserId] = index -- you can change your mind until it ends
+		end
+	end)
+
+	Commands.globalpoll = function(admin, text)
+		local seconds, rest = text:match("^(%d+)%s+(.+)$")
+		seconds = math.clamp(tonumber(seconds) or 60, 15, 300)
+		local parts = {}
+		for piece in string.gmatch(rest or text, "[^|]+") do
+			piece = piece:match("^%s*(.-)%s*$")
+			if piece ~= "" then
+				table.insert(parts, string.sub(piece, 1, 60))
+			end
+		end
+		if #parts &lt; 3 then
+			sendFeedback(admin, "Usage: :globalpoll 60 Question | answer | answer (2 to 4 answers)", true)
+			return
+		end
+		local question = table.remove(parts, 1)
+		local options = { table.unpack(parts, 1, math.min(#parts, 4)) }
+		-- Chat filter: the question and answers are shown to everyone.
+		local okFilter, filtered = pcall(function()
+			local all = question .. "\n" .. table.concat(options, "\n")
+			return TextService:FilterStringAsync(all, admin.UserId):GetNonChatStringForBroadcastAsync()
+		end)
+		if okFilter and type(filtered) == "string" then
+			local lines = string.split(filtered, "\n")
+			question = lines[1] or question
+			for i = 1, #options do
+				options[i] = lines[i + 1] or options[i]
+			end
+		end
+		local id = game.JobId .. ":" .. tostring(os.clock())
+		local counts = {}
+		for i = 1, #options do
+			counts[i] = 0
+		end
+		collecting[id] = { Counts = counts, Question = question, Options = options }
+		publish({ Kind = "PollStart", Id = id, Question = question, Options = options, EndsAt = os.time() + seconds, Origin = game.JobId })
+		sendFeedback(admin, string.format("Poll sent to every server: results in %d s", seconds), false)
+		logCommand(admin, "globalpoll", nil, question, admin.Name .. " started a global poll: " .. question)
+		-- Every server's counts come back a few seconds after it closes.
+		task.delay(seconds + 7, function()
+			local c = collecting[id]
+			collecting[id] = nil
+			if not c then
+				return
+			end
+			local total = 0
+			for _, n in ipairs(c.Counts) do
+				total += n
+			end
+			local bits = {}
+			for i, option in ipairs(c.Options) do
+				local pct = if total &gt; 0 then math.floor(c.Counts[i] / total * 100 + 0.5) else 0
+				table.insert(bits, string.format("%s %d (%d%%)", option, c.Counts[i], pct))
+			end
+			local summary = "Poll results - " .. c.Question .. ": " .. table.concat(bits, "  |  ")
+			publish({ Kind = "Banner", Text = summary })
+			if admin.Parent then
+				sendFeedback(admin, summary .. string.format("  (%d votes)", total), false)
+			end
+		end)
+	end
+
+	----------------------------------------------------------------- giveaways
+	-- :globalgive [Bubbles|Gems|Coins] [amount]: everyone online, in every server. Coins only exist
+	-- inside a dishwasher, so they go to whoever is cleaning right now.
+	local CURRENCIES = { bubbles = "Bubbles", gems = "Gems", coins = "Coins" }
+	handlers.GiveAll = function(d)
+		local currency = CURRENCIES[string.lower(tostring(d.Currency))]
+		local amount = math.floor(tonumber(d.Amount) or 0)
+		if not currency or amount &lt;= 0 then
+			return
+		end
+		for _, plr in ipairs(Players:GetPlayers()) do
+			local given = false
+			if currency == "Bubbles" then
+				given = DataService.AddBubbles(plr, amount, "admin event")
+			elseif currency == "Gems" then
+				given = DataService.AddGems(plr, amount)
+			else
+				given = RoundService.AddCoins(plr, amount)
+			end
+			if given then
+				celebrate(plr, "Admin event!", string.format("Everyone got %s %s!", Format.Commas(amount), currency), "@Gift")
+			end
+		end
+	end
+	Commands.globalgive = function(admin, text)
+		local currencyText, amountText = text:match("^(%a+)%s+(%d+)")
+		local currency = currencyText and CURRENCIES[string.lower(currencyText)]
+		local amount = math.clamp(math.floor(tonumber(amountText) or 0), 0, 1000000)
+		if not currency or amount &lt;= 0 then
+			sendFeedback(admin, "Usage: :globalgive [Bubbles|Gems|Coins] [amount]", true)
+			return
+		end
+		local ok = publish({ Kind = "GiveAll", Currency = currency, Amount = amount })
+		sendFeedback(admin, string.format("Gave everyone %s %s%s", Format.Commas(amount), currency, if ok then " in every server" else " (this server only)"), false)
+		logCommand(admin, "globalgive", nil, currency .. " " .. amount, string.format("%s gave everyone %d %s", admin.Name, amount, currency))
+	end
+
+	----------------------------------------------------------------- pass drops
+	-- :globalpassdrop [winners] [pass key | random]: that many random players (across every
+	-- server) win a game pass. Someone who already has it gets a different pass they don't have
+	-- (or 50 Gems if they own them all).
+	handlers.PassDrop = function(d)
+		if type(d.W) ~= "table" then
+			return
+		end
+		for _, w in ipairs(d.W) do
+			local plr = Players:GetPlayerByUserId(tonumber(w.u) or 0)
+			if plr then
+				local passes = DataService.GetPasses and DataService.GetPasses(plr) or {}
+				local function has(key)
+					return passes[key] == true or plr:GetAttribute(gamepassAttribute(key)) == true
+				end
+				local pass = Config.GetPass(tostring(w.p))
+				if not pass or has(pass.Key) then
+					pass = nil
+					local free = {}
+					for _, p in ipairs(Config.GamePasses) do
+						if not has(p.Key) then
+							table.insert(free, p)
+						end
+					end
+					if #free &gt; 0 then
+						pass = free[math.random(1, #free)]
+					end
+				end
+				if pass then
+					setGamepassGrant(plr, pass, true, false)
+					celebrate(plr, "You won a game pass!", "Lucky draw: you got " .. pass.Name .. "!", pass.Icon)
+				else
+					DataService.AddGems(plr, 50)
+					celebrate(plr, "You won!", "You own every pass already, so here are 50 Gems!", "@Gift")
+				end
+			end
+		end
+		if type(d.Text) == "string" then
+			bannerAll(d.Text)
+		end
+	end
+	Commands.globalpassdrop = function(admin, text)
+		local countText, passText = text:match("^(%d+)%s*(.*)$")
+		local count = math.clamp(math.floor(tonumber(countText) or 0), 0, 25)
+		if count &lt;= 0 then
+			sendFeedback(admin, "Usage: :globalpassdrop [winners 1-25] [pass or random]", true)
+			return
+		end
+		local chosen = nil
+		if passText ~= "" and string.lower(passText) ~= "random" then
+			chosen = resolveGamepass(passText)
+			if not chosen then
+				sendFeedback(admin, "Unknown pass: " .. passText, true)
+				return
+			end
+		end
+		-- Everyone online in every server (from the server list), hidden staff left out.
+		local pool = {}
+		local seen = {}
+		for _, server in ipairs(ServerList.Read()) do
+			for _, p in ipairs(server.Players or {}) do
+				local id = tonumber(p.UserId)
+				if id and not p.Hidden and not seen[id] then
+					seen[id] = true
+					table.insert(pool, { UserId = id, Name = tostring(p.Name) })
+				end
+			end
+		end
+		if #pool == 0 then
+			sendFeedback(admin, "Nobody online to win.", true)
+			return
+		end
+		local winners, names = {}, {}
+		for _ = 1, math.min(count, #pool) do
+			local pick = table.remove(pool, math.random(1, #pool))
+			local key = if chosen then chosen.Key else Config.GamePasses[math.random(1, #Config.GamePasses)].Key
+			table.insert(winners, { u = pick.UserId, p = key })
+			table.insert(names, pick.Name)
+		end
+		local shown = table.concat(names, ", ", 1, math.min(#names, 8)) .. (if #names &gt; 8 then string.format(" and %d more", #names - 8) else "")
+		local banner = string.format("Pass drop! %s won %s!", shown, if chosen then chosen.Name else "a game pass")
+		local ok = publish({ Kind = "PassDrop", W = winners, Text = banner })
+		sendFeedback(admin, string.format("%d winner(s): %s%s", #winners, shown, if ok then "" else " (this server only)"), false)
+		logCommand(admin, "globalpassdrop", nil, if chosen then chosen.Name else "random", admin.Name .. " ran a pass drop: " .. shown)
+	end
+
+	----------------------------------------------------------------- x2 boost
+	-- :globalboost [minutes]: everyone online gets x2 cleaning for that long (on top of any boost).
+	handlers.Boost = function(d)
+		local minutes = math.floor(tonumber(d.Minutes) or 0)
+		if minutes &lt;= 0 then
+			return
+		end
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if DataService.AddBoost(plr, minutes * 60) then
+				celebrate(plr, "Admin event!", string.format("x2 Cleaning for everyone: %d minutes!", minutes), "@Gift")
+			end
+		end
+	end
+	Commands.globalboost = function(admin, text)
+		local minutes = math.clamp(math.floor(tonumber(text:match("^(%d+)")) or 0), 0, 180)
+		if minutes &lt;= 0 then
+			sendFeedback(admin, "Usage: :globalboost [minutes 1-180]", true)
+			return
+		end
+		local ok = publish({ Kind = "Boost", Minutes = minutes })
+		sendFeedback(admin, string.format("x2 Cleaning for everyone for %d minutes%s", minutes, if ok then " in every server" else " (this server only)"), false)
+		logCommand(admin, "globalboost", nil, tostring(minutes), string.format("%s gave everyone %d min of x2 cleaning", admin.Name, minutes))
+	end
+end</ProtectedString></Properties></Item>
 </Item>
 <Item class="Folder" referent="RBX0000000F"><Properties><string name="Name">Server</string></Properties>
 <Item class="Folder" referent="RBX00000010"><Properties><string name="Name">Services</string></Properties>
@@ -9616,6 +9952,8 @@ export type Profile = {
 	BoostUntil: number, -- os.time() until which cleaning is x2 (the "stay" boost); 0 = none
 	StayBoostDay: string, -- UTC date ("2026-10-03") the stay boost was last claimed: once a day
 	PetsResting: boolean, -- the player switched their pets off: they follow but don't clean
+	ReferredBy: number, -- UserId of the friend whose invite brought them in (0 = nobody)
+	Referrals: number, -- new players who joined through this player's invites (paid out)
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
@@ -9685,6 +10023,8 @@ local TEMPLATE: Profile = {
 	BoostUntil = 0,
 	StayBoostDay = "",
 	PetsResting = false,
+	ReferredBy = 0,
+	Referrals = 0,
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
 }
@@ -9883,6 +10223,8 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.BoostUntil = toCount(p.BoostUntil, 0)
 	p.StayBoostDay = if type(p.StayBoostDay) == "string" then p.StayBoostDay else ""
 	p.PetsResting = p.PetsResting == true
+	p.ReferredBy = toCount(p.ReferredBy, 0)
+	p.Referrals = toCount(p.Referrals, 0)
 	p.DailyDay = toCount(p.DailyDay, 0)
 	p.DailyLast = toCount(p.DailyLast, 0)
 	if p.DailyLast == 0 and p.DailyDay &gt; 0 then
@@ -10141,6 +10483,7 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		BoostUntil = profile.BoostUntil,
 		StayBoostReady = profile.StayBoostDay ~= os.date("!%Y-%m-%d"),
 		PetsResting = profile.PetsResting,
+		Referrals = profile.Referrals,
 		Stats = {
 			Runs = stats.Runs,
 			DishesCleaned = stats.DishesCleaned,
@@ -10849,6 +11192,64 @@ function DataService.ClaimStayBoost(player: Player): (boolean, string)
 	DataService.PassesChanged:Fire(player) -- run stats pick up the x2 now
 	watchBoostEnd(player)
 	return true, "x2 Cleaning for 15 minutes! Enjoy!"
+end
+
+-- Adds `seconds` of x2 cleaning (the stay boost) on top of whatever's left. Admin events use this.
+function DataService.AddBoost(player: Player, seconds: number): boolean
+	local profile = DataService.Get(player)
+	if not profile or not isFinite(seconds) or seconds &lt;= 0 then
+		return false
+	end
+	profile.BoostUntil = math.max(os.time(), profile.BoostUntil) + math.floor(seconds)
+	DataService.PushMeta(player)
+	DataService.PassesChanged:Fire(player) -- run stats pick up the x2 now
+	watchBoostEnd(player)
+	return true
+end
+
+-- Referrals (SocialService). The new player's side: only for someone who hasn't really played yet
+-- (no runs, dishes or rebirths) and wasn't referred before. Returns true if it paid out.
+function DataService.ClaimReferred(player: Player, inviterId: number): boolean
+	local profile = DataService.Get(player)
+	if not profile or profile.ReferredBy ~= 0 or inviterId == player.UserId or inviterId &lt;= 0 then
+		return false
+	end
+	if profile.Stats.Runs &gt; 0 or profile.Stats.DishesCleaned &gt; 0 or profile.Rebirths &gt; 0 then
+		return false
+	end
+	profile.ReferredBy = inviterId
+	local reward = Config.Social.ReferredReward
+	profile.Gems += reward.Gems or 0
+	applyBubbles(profile, reward.Bubbles or 0)
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + 2)
+	end
+	DataService.PushMeta(player)
+	return true
+end
+
+-- The inviter's side: `count` new friends joined through their invites. Returns how many paid out
+-- (capped at Config.Social.MaxReferrals in total).
+function DataService.AddReferrals(player: Player, count: number): number
+	local profile = DataService.Get(player)
+	if not profile or not isFinite(count) or count &lt;= 0 then
+		return 0
+	end
+	local paid = math.min(math.floor(count), math.max(0, Config.Social.MaxReferrals - profile.Referrals))
+	if paid &lt;= 0 then
+		return 0
+	end
+	profile.Referrals += paid
+	local reward = Config.Social.ReferralReward
+	profile.Gems += (reward.Gems or 0) * paid
+	applyBubbles(profile, (reward.Bubbles or 0) * paid)
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + 2)
+	end
+	DataService.PushMeta(player)
+	return paid
 end
 
 -- The pets on / off switch: resting pets follow you but don't clean. Saved, so it carries over
@@ -21119,7 +21520,8 @@ function ShopService.Start()
 end
 
 return ShopService</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">SocialService</string><ProtectedString name="Source">-- SocialService: the Follow / Favorite rewards (Config.Social). Nothing is paid without a check.
+<Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">SocialService</string><ProtectedString name="Source">-- SocialService: the Follow / Favorite rewards and friend referrals (Config.Social). Nothing is
+-- paid without a check.
 --
 -- The Free Rewards window's buttons check straight away (CheckNow). A follow Roblox can't show us
 -- yet stays pending and is checked again automatically on the next join:
@@ -21131,7 +21533,9 @@ return ShopService</ProtectedString></Properties></Item>
 --     favorited), which is the only way Roblox offers. Likes can't be checked by any game, so
 --     there is no Like reward any more. (Saves keep the old "Like" field names for this reward.)
 
+local DataStoreService = game:GetService("DataStoreService")
 local HttpService = game:GetService("HttpService")
+local MessagingService = game:GetService("MessagingService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -21240,6 +21644,103 @@ function SocialService.CheckNow(player: Player, kind: string): (boolean, string)
 	return false, "That reward doesn't exist."
 end
 
+----------------------------------------------------------------------------------------------------
+-- Referrals. The Free Rewards "Invite" button opens Roblox's invite prompt with the inviter's
+-- UserId as launch data. When a friend joins through it, their join data carries that UserId:
+--   * the friend gets Config.Social.ReferredReward (only if they're new: DataService.ClaimReferred)
+--   * the inviter gets Config.Social.ReferralReward: straight away if they're in this server,
+--     otherwise it waits in the "RinseCycle_ReferralPending" store and MessagingService tells
+--     their server (or it's paid on their next join).
+----------------------------------------------------------------------------------------------------
+
+local PENDING_STORE = "RinseCycle_ReferralPending"
+local REFERRAL_TOPIC = "RinseCycle_Referral"
+local pendingStore: DataStore? = nil
+
+local function getPendingStore(): DataStore?
+	if pendingStore == nil and not DataService.IsOffline() then
+		pcall(function()
+			pendingStore = DataStoreService:GetDataStore(PENDING_STORE)
+		end)
+	end
+	return pendingStore
+end
+
+local function celebrate(player: Player, title: string, text: string)
+	pcall(function()
+		local Remotes = require(Shared:WaitForChild("Remotes"))
+		Remotes.Event("Celebrate"):FireClient(player, title, text, "@Gift")
+	end)
+end
+
+local function payInviter(inviter: Player, count: number)
+	local paid = DataService.AddReferrals(inviter, count)
+	if paid &gt; 0 then
+		local reward = Config.Social.ReferralReward
+		local each = Config.RewardText({ Bubbles = (reward.Bubbles or 0) * paid, Gems = (reward.Gems or 0) * paid })
+		celebrate(inviter, "A friend joined!", string.format("%d friend%s joined from your invite: +%s!", paid, if paid == 1 then "" else "s", each))
+	end
+end
+
+-- Takes whatever referrals are waiting for this player and pays them.
+local function claimPending(player: Player)
+	local store = getPendingStore()
+	if not store then
+		return
+	end
+	local taken = 0
+	local ok = pcall(function()
+		store:UpdateAsync("u_" .. player.UserId, function(old)
+			taken = math.max(0, math.floor(tonumber(old) or 0))
+			if taken == 0 then
+				return nil
+			end
+			return 0
+		end)
+	end)
+	if ok and taken &gt; 0 and player.Parent then
+		payInviter(player, taken)
+	end
+end
+
+local function creditInviter(inviterId: number)
+	local inviter = Players:GetPlayerByUserId(inviterId)
+	if inviter and DataService.Get(inviter) then
+		payInviter(inviter, 1)
+		return
+	end
+	local store = getPendingStore()
+	if not store then
+		return
+	end
+	local ok = pcall(function()
+		store:UpdateAsync("u_" .. inviterId, function(old)
+			return math.max(0, math.floor(tonumber(old) or 0)) + 1
+		end)
+	end)
+	if ok then
+		pcall(function()
+			MessagingService:PublishAsync(REFERRAL_TOPIC, { UserId = inviterId })
+		end)
+	end
+end
+
+-- A player who joined through someone's invite.
+local function checkReferral(player: Player)
+	local launch = nil
+	pcall(function()
+		launch = player:GetJoinData().LaunchData
+	end)
+	local inviterId = tonumber(launch)
+	if not inviterId or inviterId &lt;= 0 or inviterId == player.UserId then
+		return
+	end
+	if DataService.ClaimReferred(player, inviterId) then
+		celebrate(player, "Welcome!", "You joined from a friend's invite: +" .. Config.RewardText(Config.Social.ReferredReward) .. "!")
+		creditInviter(inviterId)
+	end
+end
+
 function SocialService.Init()
 	if initialized then
 		return
@@ -21247,6 +21748,20 @@ function SocialService.Init()
 	initialized = true
 	DataService.ProfileLoaded:Connect(function(player)
 		task.spawn(settle, player)
+		task.spawn(checkReferral, player)
+		task.spawn(claimPending, player)
+	end)
+	-- Another server says one of our players got a referral: pay it now.
+	task.spawn(function()
+		pcall(function()
+			MessagingService:SubscribeAsync(REFERRAL_TOPIC, function(message)
+				local data = message.Data
+				local player = type(data) == "table" and Players:GetPlayerByUserId(tonumber(data.UserId) or 0)
+				if player then
+					claimPending(player)
+				end
+			end)
+		end)
 	end)
 end
 
@@ -22648,6 +23163,7 @@ local TradeUI = require(Client:WaitForChild("TradeUI"))
 local StayOffer = require(Client:WaitForChild("StayOffer"))
 local MusicPlayer = require(Client:WaitForChild("MusicPlayer"))
 local BoardView = require(Client:WaitForChild("BoardView"))
+local PollUI = require(Client:WaitForChild("PollUI"))
 
 local function step(name: string, fn: () -&gt; ())
 	local ok, err = xpcall(fn, debug.traceback)
@@ -22686,7 +23202,8 @@ step("Celebrate", Celebrate.Init)
 step("TradeUI", TradeUI.Init)
 step("StayOffer", StayOffer.Init)
 step("MusicPlayer", MusicPlayer.Init)
-step("BoardView", BoardView.Init)</ProtectedString></Properties></Item>
+step("BoardView", BoardView.Init)
+step("PollUI", PollUI.Init)</ProtectedString></Properties></Item>
 <Item class="ModuleScript" referent="RBX0000002C"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
 -- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
 -- Changed instead of each hooking the remotes themselves.
@@ -23175,6 +23692,8 @@ local function render()
 	end
 end
 
+local askedNotifications = false
+
 local function claim()
 	if claiming or not DailyUI.Ready() then
 		return
@@ -23190,6 +23709,15 @@ local function claim()
 	UIKit.Confetti(50)
 	UIKit.Toast(string.format("Day %d: %s!", result.Day or 1, result.Message or ""), "Good")
 	render()
+	-- A good moment to offer Roblox notifications ("your next daily reward is ready"): once a session.
+	if not askedNotifications then
+		askedNotifications = true
+		task.delay(2, function()
+			pcall(function()
+				(require(script.Parent:WaitForChild("RewardsUI")) :: any).PromptNotifications(false)
+			end)
+		end)
+	end
 end
 
 function DailyUI.Init()
@@ -24833,6 +25361,7 @@ function HUD.Init()
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
 		musicButton.Visible = true
+		petsToggle.Visible = inRun -- in the lobby pets only ever follow you
 		leftColumn.Visible = true
 	end
 	addAdminButton = makeAdminButton
@@ -25724,6 +26253,7 @@ function HUD.Init()
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
 		musicButton.Visible = true
+		petsToggle.Visible = inRun -- in the lobby pets only ever follow you
 		leftColumn.Visible = true
 		upgradesButton.LayoutOrder = 1
 		shopButton.LayoutOrder = 2
@@ -29953,6 +30483,15 @@ local function setHidden(slot: Slot, hidden: boolean)
 	for _, part in slot.Model:GetDescendants() do
 		if part:IsA("BasePart") then
 			part.LocalTransparencyModifier = if hidden then 1 else 0
+		elseif part:IsA("ParticleEmitter") or part:IsA("Trail") or part:IsA("Light") then
+			-- Golden / Rainbow sparkles, halo and trail go with the pet (left on, they'd keep
+			-- glowing where it was hidden).
+			part.Enabled = not hidden
+			if hidden and part:IsA("ParticleEmitter") then
+				part:Clear()
+			elseif hidden and part:IsA("Trail") then
+				part:Clear()
+			end
 		end
 	end
 end
@@ -31939,7 +32478,125 @@ function PetsUI.Init()
 end
 
 return PetsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000038"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000038"><Properties><string name="Name">PollUI</string><ProtectedString name="Source">--[[
+	PollUI - the community poll card (admin panel &gt; Global &gt; Poll, AdminServer "GlobalPoll").
+	A card near the bottom of the screen with the question, one button per answer and a countdown.
+	Tap an answer to vote (tap another to change your mind); the card goes when the poll ends and the
+	results come up as a banner everywhere.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Client = script.Parent
+local UIKit = require(Client:WaitForChild("UIKit"))
+
+local PollUI = {}
+
+local Colors = UIKit.Theme.Colors
+
+local initialized = false
+
+function PollUI.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+
+	local _gui, root = UIKit.CreateScreen("PollUI", 12)
+	local card = UIKit.Card({
+		Name = "Poll",
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -130),
+		Size = UDim2.fromOffset(460, 170),
+		Color = Colors.PanelDark,
+		Parent = root,
+	})
+	card.Visible = false
+	UIKit.Stroke(card, Colors.Primary, 3, 0)
+	local title = UIKit.Label({ Text = "POLL", TextSize = 16, TextColor3 = Colors.Primary, Position = UDim2.fromOffset(14, 6), Size = UDim2.fromOffset(120, 20), TextXAlignment = Enum.TextXAlignment.Left, Parent = card })
+	local timer = UIKit.Label({ Text = "", TextSize = 16, TextColor3 = Colors.TextDim, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 6), Size = UDim2.fromOffset(120, 20), TextXAlignment = Enum.TextXAlignment.Right, Parent = card })
+	local question = UIKit.Label({ Text = "", TextSize = 20, TextWrapped = true, TextScaled = true, Position = UDim2.fromOffset(14, 28), Size = UDim2.new(1, -28, 0, 48), Parent = card })
+	local row = Instance.new("Frame")
+	row.Name = "Answers"
+	row.BackgroundTransparency = 1
+	row.Position = UDim2.fromOffset(14, 84)
+	row.Size = UDim2.new(1, -28, 0, 72)
+	row.Parent = card
+	local layout = Instance.new("UIGridLayout")
+	layout.CellPadding = UDim2.fromOffset(8, 8)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = row
+	local _ = title
+
+	local currentId: string? = nil
+	local endsAt = 0
+	local buttons: { TextButton } = {}
+
+	local voteRemote = ReplicatedStorage:WaitForChild("GlobalPollVote", 30)
+	local pollRemote = ReplicatedStorage:WaitForChild("GlobalPoll", 30)
+	if not pollRemote or not voteRemote then
+		return
+	end
+
+	local function show(id: string, text: string, options: { string }, closesAt: number)
+		currentId = id
+		endsAt = closesAt
+		question.Text = text
+		for _, b in buttons do
+			b:Destroy()
+		end
+		table.clear(buttons)
+		local count = math.max(1, #options)
+		-- Two answers side by side; three or four in two rows of two.
+		layout.CellSize = if count &lt;= 2 then UDim2.new(1 / count, -8, 0, 64) else UDim2.new(0.5, -4, 0, 32)
+		for i, option in options do
+			local b = UIKit.Button({
+				Text = tostring(option),
+				Color = Colors.PanelLight,
+				TextSize = 16,
+				LayoutOrder = i,
+				Parent = row,
+				OnClick = function()
+					if currentId ~= id then
+						return
+					end
+					voteRemote:FireServer(id, i)
+					for j, other in buttons do
+						UIKit.SetButtonColor(other, if j == i then Colors.Good else Colors.PanelLight)
+					end
+				end,
+			})
+			table.insert(buttons, b)
+		end
+		card.Visible = true
+		UIKit.Bounce(card)
+	end
+
+	pollRemote.OnClientEvent:Connect(function(kind, id, text, options, closesAt)
+		if kind == "Start" and type(id) == "string" and type(options) == "table" then
+			show(id, tostring(text), options, tonumber(closesAt) or os.time())
+		elseif kind == "End" and id == currentId then
+			currentId = nil
+			card.Visible = false
+		end
+	end)
+
+	task.spawn(function()
+		while true do
+			if card.Visible then
+				local left = math.max(0, endsAt - os.time())
+				timer.Text = string.format("%d s left", left)
+				if left &lt;= 0 and currentId then
+					timer.Text = "Counting votes..."
+				end
+			end
+			task.wait(0.5)
+		end
+	end)
+end
+
+return PollUI</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000039"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
 	RanksUI - the "Ranks" window (Rank Shrine in the lobby, the HUD's Ranks button, R / gamepad RB).
 
 	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
@@ -32756,7 +33413,7 @@ function RanksUI.Init()
 end
 
 return RanksUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000039"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003A"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
 	RebirthUI - the "Rebirth" window (the Rebirth Fountain in the lobby).
 
 	The endgame loop: once you've cleaned the last dishwasher, trade your Bubbles, unlocked
@@ -32909,7 +33566,7 @@ function RebirthUI.Init()
 end
 
 return RebirthUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003A"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003B"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
 	RewardsUI - two small windows opened from the buttons on the left of the lobby HUD.
 
 	  * "Codes" (🎟️): type a code (Config.Codes) and redeem it. "Look out for codes in the game's
@@ -32923,7 +33580,9 @@ return RebirthUI</ProtectedString></Properties></Item>
 ]]
 
 local AvatarEditorService = game:GetService("AvatarEditorService")
+local ExperienceNotificationService = game:GetService("ExperienceNotificationService")
 local GroupService = game:GetService("GroupService")
+local SocialService = game:GetService("SocialService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -32937,6 +33596,7 @@ local UIKit = require(Client:WaitForChild("UIKit"))
 
 local Colors = UIKit.Theme.Colors
 local Fonts = UIKit.Theme.Fonts
+local LocalPlayer = Players.LocalPlayer
 
 local RewardsUI = {}
 
@@ -33192,10 +33852,20 @@ local function buildFree(screenRoot: Instance)
 		Size = Vector2.new(720, 470),
 		Parent = screenRoot,
 	})
-	local list = Instance.new("Frame")
+	-- Scrolls: five reward cards don't all fit at once.
+	local list = Instance.new("ScrollingFrame")
 	list.BackgroundTransparency = 1
+	list.BorderSizePixel = 0
 	list.Size = UDim2.new(1, 0, 1, 0)
+	list.CanvasSize = UDim2.new()
+	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	list.ScrollBarThickness = 8
+	list.ScrollBarImageColor3 = Colors.Primary
 	list.Parent = content
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 4)
+	pad.PaddingBottom = UDim.new(0, 8)
+	pad.Parent = list
 	local layout = Instance.new("UIListLayout")
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
@@ -33249,18 +33919,91 @@ local function buildFree(screenRoot: Instance)
 		end
 	end)
 
+	-- Invite friends (Roblox's invite prompt; the invite carries your UserId so the game knows who
+	-- brought them in: SocialService pays you both when a NEW player joins through it).
+	local referral = Config.Social.ReferralReward
+	local invite = card(list, 4, "🤝", "Invite friends", string.format("A friend who's new joins from your invite: you get %s, they get %s.", Config.RewardText(referral), Config.RewardText(Config.Social.ReferredReward)))
+	UIKit.Button({
+		Text = "INVITE",
+		Size = UDim2.fromOffset(210, 52),
+		Position = UDim2.new(1, -14, 0.5, -10),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Color = Colors.Good,
+		TextSize = 20,
+		Parent = invite,
+		OnClick = function()
+			task.spawn(function()
+				local okCan, can = pcall(function()
+					return SocialService:CanSendGameInviteAsync(LocalPlayer)
+				end)
+				if okCan and can == false then
+					UIKit.Toast("Invites aren't available on this account.", "Info")
+					return
+				end
+				local ok = pcall(function()
+					local options = Instance.new("ExperienceInviteOptions")
+					options.PromptMessage = "Come clean dishes with me in Rinse Cycle!"
+					options.LaunchData = tostring(LocalPlayer.UserId)
+					SocialService:PromptGameInvite(LocalPlayer, options)
+				end)
+				if not ok then
+					UIKit.Toast("Couldn't open the invite. Try again!", "Info")
+				end
+			end)
+		end,
+	})
+	local inviteStatus = UIKit.Label({ Text = "", TextSize = 15, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(230, 20), Position = UDim2.new(1, -4, 1, -8), AnchorPoint = Vector2.new(1, 1), Parent = invite })
+	local function refreshInvite()
+		local meta = ClientState.Meta :: any
+		local n = meta and tonumber(meta.Referrals) or 0
+		inviteStatus.Text = if n &gt; 0 then string.format("Friends joined: %d", n) else ""
+	end
+
+	-- Notifications: Roblox's own opt-in prompt (experience notifications, e.g. "your daily reward is
+	-- ready"). Roblox decides when it may be shown again.
+	local notify = card(list, 5, "🔔", "Turn on notifications", "Get a Roblox notification when your next daily reward is ready.")
+	UIKit.Button({
+		Text = "NOTIFY ME",
+		Size = UDim2.fromOffset(210, 52),
+		Position = UDim2.new(1, -14, 0.5, -10),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Color = Colors.Primary,
+		TextSize = 20,
+		Parent = notify,
+		OnClick = function()
+			task.spawn(RewardsUI.PromptNotifications, true)
+		end,
+	})
+
 	UIKit.RegisterWindow("Free", {
 		Open = function()
 			refreshGroup()
 			refreshSocial()
+			refreshInvite()
 		end,
 	})
 	ClientState.Changed:Connect(function(kind)
 		if kind == "Meta" and UIKit.IsWindowOpen("Free") then
 			refreshGroup()
 			refreshSocial()
+			refreshInvite()
 		end
 	end)
+end
+
+-- Roblox's notification opt-in prompt, if Roblox allows it right now. `fromButton`: say so when
+-- it can't be shown (already on, or asked too recently).
+function RewardsUI.PromptNotifications(fromButton: boolean?)
+	local okCan, can = pcall(function()
+		return ExperienceNotificationService:CanPromptOptInAsync()
+	end)
+	if okCan and can then
+		pcall(function()
+			ExperienceNotificationService:PromptOptIn()
+		end)
+	elseif fromButton then
+		UIKit.Toast("Notifications are already on, or Roblox can't ask again just yet.", "Info")
+	end
 end
 
 function RewardsUI.Init()
@@ -33274,7 +34017,7 @@ function RewardsUI.Init()
 end
 
 return RewardsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003B"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003C"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
 	ShopUI - the lobby "Shop" window: Perks (bought with Bubbles, permanent) and Robux (game passes).
 	Opened from the Soap Shop ProximityPrompt (routed by Effects via OpenWindow="Shop"), the HUD [🛒 Shop]
 	button, or the G key - all outside our scope, they just call UIKit.OpenWindow("Shop").
@@ -33993,7 +34736,7 @@ function ShopUI.Init()
 end
 
 return ShopUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003C"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
+<Item class="ModuleScript" referent="RBX0000003D"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
 -- Aim comes from the mouse on PC, the finger on touch (tap / hold the dirt), or the screen centre
@@ -34949,7 +35692,7 @@ function SprayController.Init()
 end
 
 return SprayController</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003D"><Properties><string name="Name">StayOffer</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003E"><Properties><string name="Name">StayOffer</string><ProtectedString name="Source">--[[
 	StayOffer - "WAIT! Don't leave yet!" When a player opens the Roblox menu (usually on the way to
 	Leave), they're offered a free x2 cleaning boost for 15 minutes, once a day
 	(DataService.ClaimStayBoost; saved to their data, so leaving and rejoining can't claim it twice).
@@ -35212,7 +35955,7 @@ function StayOffer.Init()
 end
 
 return StayOffer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003E"><Properties><string name="Name">TradeUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003F"><Properties><string name="Name">TradeUI</string><ProtectedString name="Source">--[[
 	TradeUI - pet trading (lobby only; TradeService on the server checks everything).
 
 	  * The 🤝 Trade button (HUD) opens the Trade window: everyone in the server with a Request
@@ -35752,7 +36495,7 @@ function TradeUI.Init()
 end
 
 return TradeUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003F"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000040"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -38316,7 +39059,7 @@ function UIKit.Init()
 end
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000040"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000041"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button
@@ -38792,7 +39535,7 @@ function UpgradesUI.Init()
 end
 
 return UpgradesUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000041"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000042"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
 	WaterFX - the water coming out of your own hose and pressure washer, built from real parts so
 	it looks solid from every angle (a camera-facing Beam flattens to nothing when you look straight
 	down it, which is exactly the first-person view).
@@ -39032,7 +39775,7 @@ end
 
 return WaterFX</ProtectedString></Properties></Item>
 </Item>
-<Item class="LocalScript" referent="RBX00000042"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
+<Item class="LocalScript" referent="RBX00000043"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
 	AdminClient - Rinse Cycle's admin panel and the admin effects every player can see.
 
 	Everyone:
@@ -39699,9 +40442,9 @@ local COMMANDS: { Command } = ({
 	{ Name = "bring", Icon = "⬅️", Label = "Bring", Desc = "Teleports them to you.", Group = "Move", Target = "player" },
 	{ Name = "spectate", Icon = "👁️", Label = "Spectate", Desc = "Watch them. Stop from the bar at the bottom.", Group = "Move", Target = "player" },
 	{ Name = "controlplayer", Icon = "🎮", Label = "Control", Desc = "Move their character with your controls.", Group = "Move", Target = "player" },
-	{ Name = "serverlist", Icon = "🌍", Label = "All servers", Desc = "Everyone in every server: Join them (you arrive invisible) or Bring them here.", Group = "Move", Target = "none" },
-	{ Name = "joinserver", Icon = "🛰️", Label = "Join server", Desc = "Teleport to that player's server, wherever they are (type their username).", Group = "Move", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
-	{ Name = "bringserver", Icon = "🧲", Label = "Bring (any server)", Desc = "Pull that player from their server into yours (type their username).", Group = "Move", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
+	{ Name = "serverlist", Icon = "🌍", Label = "All servers", Desc = "Everyone in every server: Join them (you arrive invisible) or Bring them here.", Group = "Global", Target = "none" },
+	{ Name = "joinserver", Icon = "🛰️", Label = "Join server", Desc = "Teleport to that player's server, wherever they are (type their username).", Group = "Global", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
+	{ Name = "bringserver", Icon = "🧲", Label = "Bring (any server)", Desc = "Pull that player from their server into yours (type their username).", Group = "Global", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
 	{ Name = "viewpets", Icon = "🐾", Label = "Pets", Desc = "See their pets. Remove any, or add new ones.", Group = "Game", Target = "player" },
 	-- Game
 	{ Name = "givecoins", Icon = "💰", Label = "Give coins", Desc = "Coins for their current run.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
@@ -39748,7 +40491,7 @@ local COMMANDS: { Command } = ({
 	{ Name = "demote", Icon = "⬇️", Label = "Demote", Desc = "Next more common rank.", Group = "Game", Target = "player" },
 	-- Server
 	{ Name = "announce", Icon = "📢", Label = "Announce", Desc = "A banner on everyone's screen.", Group = "Server", Target = "none", Inputs = { { Kind = "text", Placeholder = "Announcement", Required = true } } },
-	{ Name = "globalannounce", Icon = "🌍", Label = "Global announce", Desc = "A banner on everyone's screen in EVERY server of the game.", Group = "Server", Target = "none", Inputs = { { Kind = "text", Placeholder = "Announcement", Required = true } } },
+	{ Name = "globalannounce", Icon = "🌍", Label = "Global announce", Desc = "A banner on everyone's screen in EVERY server of the game.", Group = "Global", Target = "none", Inputs = { { Kind = "text", Placeholder = "Announcement", Required = true } } },
 	{ Name = "leaderboards", Icon = "🏆", Label = "Leaderboards", Desc = "See everyone on every leaderboard; reset someone's spot (they keep their stats).", Group = "Server", Target = "none" },
 	{ Name = "givegamepass", Icon = "🎟️", Label = "Gift pass", Desc = "Gives them a game pass for free (saved).", Group = "Server", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = function()
 		local out = {}
@@ -39769,6 +40512,18 @@ local COMMANDS: { Command } = ({
 	{ Name = "wipelogs", Icon = "🧹", Label = "Wipe logs", Desc = "Deletes the whole command log.", Group = "Server", Target = "none", Danger = true },
 	{ Name = "setadminrank", Icon = "🛡️", Label = "Staff tier", Desc = "Make them Moderator, Admin or Developer (saved, works straight away), or clear it.", Group = "Server", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = opts({ "Moderator", "Admin", "Developer", "clear" }) } } },
 	{ Name = "stafflist", Icon = "📋", Label = "Staff list", Desc = "Everyone with a staff rank, online or not. Remove anyone.", Group = "Server", Target = "none" },
+	{ Name = "globalpoll", Icon = "📊", Label = "Poll", Desc = "A poll in EVERY server. Type: Question | answer | answer (2 to 4 answers). Results go up as a banner when it ends.", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+		return { { Label = "30 seconds", Value = "30" }, { Label = "1 minute", Value = "60" }, { Label = "2 minutes", Value = "120" } }
+	end }, { Kind = "text", Placeholder = "Which level next? | Pizzeria | Castle", Required = true } } },
+	{ Name = "globalgive", Icon = "🎁", Label = "Give everyone", Desc = "Everyone online in EVERY server gets this much (Coins only reach people inside a dishwasher).", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "Bubbles", "Gems", "Coins" }) }, { Kind = "number", Placeholder = "Amount", Required = true } } },
+	{ Name = "globalpassdrop", Icon = "🎟️", Label = "Pass drop", Desc = "Random players across EVERY server win a game pass. Already own it? They get another one they don't have.", Group = "Global", Target = "none", Inputs = { { Kind = "number", Placeholder = "Winners (1-25)", Required = true }, { Kind = "choice", Required = true, Options = function()
+		local out = { { Label = "Random pass each", Value = "random" } }
+		for _, pass in Config.GamePasses do
+			table.insert(out, { Label = pass.Name, Value = pass.Key })
+		end
+		return out
+	end } } },
+	{ Name = "globalboost", Icon = "⚡", Label = "x2 boost", Desc = "x2 Cleaning for everyone online in EVERY server, for this many minutes.", Group = "Global", Target = "none", Inputs = { { Kind = "number", Placeholder = "Minutes (1-180)", Required = true } } },
 }) :: any
 local GROUPS = {
 	{ Name = "Punish", Icon = "🔨" },
@@ -39776,6 +40531,7 @@ local GROUPS = {
 	{ Name = "Move", Icon = "🧭" },
 	{ Name = "Game", Icon = "🧼" },
 	{ Name = "Server", Icon = "📢" },
+	{ Name = "Global", Icon = "🌍" },
 }
 local DURATIONS = { "1h", "6h", "24h", "3d", "7d", "30d" }
 local PRESETS = {
@@ -40933,5 +41689,5 @@ task.spawn(function()
 end)</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="TextChatService" referent="RBX00000043"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
+<Item class="TextChatService" referent="RBX00000044"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
 </roblox>

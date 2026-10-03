@@ -1418,6 +1418,28 @@ walls instead of clipping through. All gameplay queries use Include filters.
   don't clean. Saved in the profile (PetsResting), mirrored on the player attribute PetService
   reads; MetaRequest "SetPetsResting".
 
+## 6z. Global admin events, referrals, notifications (v1.9.0)
+- Pets On / Off shows only in runs (in the lobby pets only follow). Hidden pets (invisible admin)
+  also switch off their particles, trail and light (PetRenderer.setHidden).
+- Admin panel > Global (new tab): Global announce, All servers / Join / Bring (moved here), and:
+  - Poll (Developer+): 30 s / 1 min / 2 min, "Question | answer | answer" (2-4 answers, chat
+    filtered). Every server shows a vote card (PollUI); each server counts its own votes and sends
+    the counts back to the admin's server, which banners the results everywhere.
+  - Give everyone (owner): Bubbles / Gems / Coins (coins only reach people in a dishwasher).
+  - Pass drop (owner): 1-25 random players across every server (from the server list, hidden
+    staff left out) win a pass; already own it = another pass they don't have, or 50 Gems.
+  - x2 boost (owner): x2 Cleaning for everyone for 1-180 minutes (DataService.AddBoost).
+  All ride one MessagingService topic, "RinseCycle_GlobalEvent"; without it (Studio) they run in
+  this server only and the admin is told so.
+- Referrals: Free Rewards > Invite friends opens Roblox's invite prompt with LaunchData = your
+  UserId. A NEW player (no runs, dishes or rebirths, never referred) joining through it gets
+  Config.Social.ReferredReward; the inviter gets ReferralReward (straight away in the same server;
+  otherwise queued in "RinseCycle_ReferralPending" and paid via MessagingService or on next join),
+  up to MaxReferrals.
+- Notifications: Free Rewards > Turn on notifications, and once a session after a daily claim,
+  shows Roblox's experience-notification opt-in (when Roblox allows). Sending notifications is
+  done outside the game (Creator Hub notification string + Open Cloud).
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

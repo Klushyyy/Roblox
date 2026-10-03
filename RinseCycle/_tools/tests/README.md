@@ -47,3 +47,5 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
   - `scen_touchspray`: on a phone, holding a finger on dirt cleans it (no SPRAY button).
   - `scen_petsrest`: Pets Off stops pets earning (and it's saved); back on, they earn again.
   - `scen_touchfly`: on a phone, holding jump in the air flies.
+  - `scen_global`: admin Global tab: a poll (vote, results banner), give everyone, x2 boost, pass drop.
+  - `scen_referral`: referral payouts (new player once, inviter, cap) and the Free window's cards.

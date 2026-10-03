@@ -101,6 +101,8 @@ export type Profile = {
 	BoostUntil: number, -- os.time() until which cleaning is x2 (the "stay" boost); 0 = none
 	StayBoostDay: string, -- UTC date ("2026-10-03") the stay boost was last claimed: once a day
 	PetsResting: boolean, -- the player switched their pets off: they follow but don't clean
+	ReferredBy: number, -- UserId of the friend whose invite brought them in (0 = nobody)
+	Referrals: number, -- new players who joined through this player's invites (paid out)
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
@@ -170,6 +172,8 @@ local TEMPLATE: Profile = {
 	BoostUntil = 0,
 	StayBoostDay = "",
 	PetsResting = false,
+	ReferredBy = 0,
+	Referrals = 0,
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
 }
@@ -368,6 +372,8 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.BoostUntil = toCount(p.BoostUntil, 0)
 	p.StayBoostDay = if type(p.StayBoostDay) == "string" then p.StayBoostDay else ""
 	p.PetsResting = p.PetsResting == true
+	p.ReferredBy = toCount(p.ReferredBy, 0)
+	p.Referrals = toCount(p.Referrals, 0)
 	p.DailyDay = toCount(p.DailyDay, 0)
 	p.DailyLast = toCount(p.DailyLast, 0)
 	if p.DailyLast == 0 and p.DailyDay > 0 then
@@ -626,6 +632,7 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		BoostUntil = profile.BoostUntil,
 		StayBoostReady = profile.StayBoostDay ~= os.date("!%Y-%m-%d"),
 		PetsResting = profile.PetsResting,
+		Referrals = profile.Referrals,
 		Stats = {
 			Runs = stats.Runs,
 			DishesCleaned = stats.DishesCleaned,
@@ -1334,6 +1341,64 @@ function DataService.ClaimStayBoost(player: Player): (boolean, string)
 	DataService.PassesChanged:Fire(player) -- run stats pick up the x2 now
 	watchBoostEnd(player)
 	return true, "x2 Cleaning for 15 minutes! Enjoy!"
+end
+
+-- Adds `seconds` of x2 cleaning (the stay boost) on top of whatever's left. Admin events use this.
+function DataService.AddBoost(player: Player, seconds: number): boolean
+	local profile = DataService.Get(player)
+	if not profile or not isFinite(seconds) or seconds <= 0 then
+		return false
+	end
+	profile.BoostUntil = math.max(os.time(), profile.BoostUntil) + math.floor(seconds)
+	DataService.PushMeta(player)
+	DataService.PassesChanged:Fire(player) -- run stats pick up the x2 now
+	watchBoostEnd(player)
+	return true
+end
+
+-- Referrals (SocialService). The new player's side: only for someone who hasn't really played yet
+-- (no runs, dishes or rebirths) and wasn't referred before. Returns true if it paid out.
+function DataService.ClaimReferred(player: Player, inviterId: number): boolean
+	local profile = DataService.Get(player)
+	if not profile or profile.ReferredBy ~= 0 or inviterId == player.UserId or inviterId <= 0 then
+		return false
+	end
+	if profile.Stats.Runs > 0 or profile.Stats.DishesCleaned > 0 or profile.Rebirths > 0 then
+		return false
+	end
+	profile.ReferredBy = inviterId
+	local reward = Config.Social.ReferredReward
+	profile.Gems += reward.Gems or 0
+	applyBubbles(profile, reward.Bubbles or 0)
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + 2)
+	end
+	DataService.PushMeta(player)
+	return true
+end
+
+-- The inviter's side: `count` new friends joined through their invites. Returns how many paid out
+-- (capped at Config.Social.MaxReferrals in total).
+function DataService.AddReferrals(player: Player, count: number): number
+	local profile = DataService.Get(player)
+	if not profile or not isFinite(count) or count <= 0 then
+		return 0
+	end
+	local paid = math.min(math.floor(count), math.max(0, Config.Social.MaxReferrals - profile.Referrals))
+	if paid <= 0 then
+		return 0
+	end
+	profile.Referrals += paid
+	local reward = Config.Social.ReferralReward
+	profile.Gems += (reward.Gems or 0) * paid
+	applyBubbles(profile, (reward.Bubbles or 0) * paid)
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + 2)
+	end
+	DataService.PushMeta(player)
+	return paid
 end
 
 -- The pets on / off switch: resting pets follow you but don't clean. Saved, so it carries over
