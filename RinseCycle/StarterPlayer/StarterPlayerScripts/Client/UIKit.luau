@@ -1875,8 +1875,11 @@ local TOAST_STYLES = {
 local toastHolder: Frame? = nil
 local toasts: { ToastRecord } = {} -- newest first
 
+-- Toasts start under the topbar, or lower when something owns the space (UIKit.SetToastTop: the
+-- HUD's progress bar during a run).
+local toastMinTop = 0
 local function toastTop(): number
-	return math.floor(insetPx / scale + 12)
+	return math.max(math.floor(insetPx / scale + 12), toastMinTop)
 end
 
 local function getToastHolder(): Frame
@@ -1901,6 +1904,14 @@ table.insert(layoutHooks, function()
 		toastHolder.Position = UDim2.new(0.5, 0, 0, toastTop())
 	end
 end)
+
+-- The lowest point toasts may start at (canvas units); 0 = right under the topbar.
+function UIKit.SetToastTop(y: number?)
+	toastMinTop = math.max(0, math.floor(tonumber(y) or 0))
+	if toastHolder then
+		toastHolder.Position = UDim2.new(0.5, 0, 0, toastTop())
+	end
+end
 
 local function fadeToast(t: ToastRecord, hidden: boolean, time: number)
 	for _, f in t.Fades do

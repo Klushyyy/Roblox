@@ -633,7 +633,7 @@ function HUD.Init()
 			leftY = math.min(leftY, canvas.Y - 300 - leftH / 2)
 		end
 		-- Money block: bottom-left on desktop/console; above the thumbstick on touch.
-		local bottom = if touch then canvas.Y - 330 else canvas.Y - 16 - safe.Bottom
+		local bottom = canvas.Y - (if touch then 20 else 16) - safe.Bottom
 		moneyBlock.Position = UDim2.new(0, 20 + safe.Left, 0, math.floor(bottom))
 		-- In a run the column (the owner's Admin button) stays clear above the money block.
 		if moneyBlock.Visible then
@@ -652,14 +652,18 @@ function HUD.Init()
 
 		-- Timer: bottom-right on desktop/console; top-right under the topbar on touch.
 		if touch then
-			timerLabel.AnchorPoint = Vector2.new(1, 0)
-			timerLabel.TextSize = 34
-			timerLabel.Position = UDim2.new(1, -(16 + safe.Right), 0, math.floor(inset + 10))
+			-- Phones: centred under the progress bar (the corners hold Roblox's buttons and the
+			-- jump button).
+			timerLabel.AnchorPoint = Vector2.new(0.5, 0)
+			timerLabel.TextSize = 30
+			timerLabel.Position = UDim2.new(0.5, 0, 0, 72 + 70 + 2)
 		else
 			timerLabel.AnchorPoint = Vector2.new(1, 1)
 			timerLabel.TextSize = 48
 			timerLabel.Position = UDim2.new(1, -(20 + safe.Right), 1, -(12 + safe.Bottom))
 		end
+		-- Pop-ups start below the progress bar (and the phone timer) while cleaning.
+		UIKit.SetToastTop(if topBar.Visible then (if touch then 182 else 146) else 0)
 		refreshHints()
 	end
 	rightColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)

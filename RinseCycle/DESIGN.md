@@ -1406,6 +1406,12 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - v1.8.5: the gold trail is striped too (four gold shades stacked), like the rainbow one.
 - v1.8.6: boost badges fill columns of four (then a second column to the right), so the stack
   above Daily is never taller than four badges.
+- v1.8.7 (phones): tap or hold on the dirt to clean exactly there (SprayController aims from the
+  finger with ScreenPointToRay; touches on buttons / the thumbstick are ignored); no SPRAY button
+  and no centre dot (gamepad keeps the dot). The washer's TURN button sits bottom right, left of
+  the jump button. Coins / tank / fly bar are bottom-left on phones too; the run timer is centred
+  under the progress bar on phones. Toasts start below the progress bar while cleaning
+  (UIKit.SetToastTop), on every device.
 
 ## 7. Balance knobs (all in Config)
 

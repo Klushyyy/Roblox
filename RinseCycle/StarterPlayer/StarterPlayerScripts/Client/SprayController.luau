@@ -1,7 +1,8 @@
 -- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
--- Aim comes from the mouse on PC, or the screen centre (with a crosshair) on touch/gamepad, cast
+-- Aim comes from the mouse on PC, the finger on touch (tap / hold the dirt), or the screen centre
+-- (with a crosshair) on gamepad, cast
 -- as a ray Include-filtered to just the arena Model. One Heartbeat connection drives everything so
 -- there is exactly one place that decides whether to send, one place that moves the visuals, and
 -- one place that cleans up (run end, character death, respawn).
@@ -44,6 +45,7 @@ local SPLASH_EMIT_COUNT = 6
 local TOUCH_BUTTON_SIZE = 132
 local TOUCH_BUTTON_MARGIN = 20
 local JUMP_ZONE_CLEARANCE = 300 -- keep the SPRAY button above Roblox's bottom-right jump button
+local JUMP_ZONE_WIDTH = 270 -- the TURN button sits just left of the jump button
 
 ----------------------------------------------------------------------------------------------------
 -- State
@@ -60,6 +62,7 @@ raycastParams.IgnoreWater = true
 local mouseHeld = false
 local r2Held = false
 local touchHeld = false
+local touchInput: InputObject? = nil -- the finger that's spraying (touch screens)
 
 local clickCount = 0
 local lastSendAt = 0
@@ -463,7 +466,8 @@ local function ensureTouchUI()
 		)
 		;(sprayButton :: TextButton).Position = pos
 		if turnButton then
-			turnButton.Position = pos - UDim2.fromOffset(TOUCH_BUTTON_SIZE + 14, 0)
+			-- Bottom right, just left of Roblox's jump button (clear of Shop / Upgrades above).
+			turnButton.Position = UDim2.new(1, -(JUMP_ZONE_WIDTH + insets.Right), 1, -(TOUCH_BUTTON_MARGIN + insets.Bottom))
 		end
 	end
 	turnButton = UIKit.IconButton({
@@ -491,6 +495,7 @@ local function ensureTouchUI()
 	button.InputEnded:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
 			touchHeld = false
+			touchInput = nil
 		end
 	end)
 end
@@ -501,8 +506,9 @@ local function updateTouchUIVisibility()
 	end
 	local touch = UIKit.IsTouch()
 	local gamepad = UIKit.IsGamepad()
-	sprayButton.Visible = active and touch
-	crosshair.Visible = active and (touch or gamepad)
+	-- Touch sprays wherever you tap, so there's no SPRAY button and no centre dot.
+	sprayButton.Visible = false
+	crosshair.Visible = active and gamepad
 	local line = active and currentMode == "Line"
 	if turnButton then
 		turnButton.Visible = line and touch
@@ -511,8 +517,9 @@ local function updateTouchUIVisibility()
 		turnHint.Visible = line and not touch
 		turnHint.Text = string.format("%s  %s: turn the line", if washerVertical then "Up and down" else "Across", if gamepad then "D-pad ↑" else "T")
 	end
-	if not sprayButton.Visible then
+	if not active then
 		touchHeld = false
+		touchInput = nil
 	end
 end
 
@@ -548,6 +555,7 @@ local function cleanupForRunEnd()
 	mouseHeld = false
 	r2Held = false
 	touchHeld = false
+	touchInput = nil
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -570,9 +578,17 @@ local function aimTargets(arena: Model): { Instance }
 	return targets
 end
 
-local function aimRay(camera: Camera): Ray
-	local touchOrGamepad = UIKit.IsTouch() or UIKit.IsGamepad()
-	if touchOrGamepad then
+-- Touch: wherever the finger is (tap or hold on the dirt itself). Nil when no finger is down, so
+-- nothing is aimed at (no dot stuck in the middle of the screen).
+local function aimRay(camera: Camera): Ray?
+	if UIKit.IsTouch() and not UIKit.IsGamepad() then
+		local touch = touchInput
+		if not touch then
+			return nil
+		end
+		return camera:ScreenPointToRay(touch.Position.X, touch.Position.Y)
+	end
+	if UIKit.IsGamepad() then
 		local size = camera.ViewportSize
 		return camera:ViewportPointToRay(size.X * 0.5, size.Y * 0.5)
 	end
@@ -628,6 +644,10 @@ local function onHeartbeat(dt: number)
 
 	raycastParams.FilterDescendantsInstances = aimTargets(arenaModel :: Model)
 	local ray = aimRay(camera)
+	if not ray then
+		hideVisuals()
+		return
+	end
 	local result = workspace:Raycast(ray.Origin, ray.Direction.Unit * MAX_AIM_DISTANCE, raycastParams)
 
 	local pressed = mouseHeld or r2Held or touchHeld
@@ -784,6 +804,9 @@ local function onPressBegan()
 	end
 	raycastParams.FilterDescendantsInstances = aimTargets(arenaModel :: Model)
 	local ray = aimRay(camera)
+	if not ray then
+		return
+	end
 	local result = workspace:Raycast(ray.Origin, ray.Direction.Unit * MAX_AIM_DISTANCE, raycastParams)
 	if not result then
 		return
@@ -826,6 +849,12 @@ local function onInputBegan(input: InputObject, processed: boolean)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		mouseHeld = true
 		onPressBegan()
+	elseif input.UserInputType == Enum.UserInputType.Touch and active and touchInput == nil then
+		-- A finger on the world (not on a button or the thumbstick): spray right there, and keep
+		-- spraying wherever it moves until it lifts.
+		touchInput = input
+		touchHeld = true
+		onPressBegan()
 	elseif input.KeyCode == Enum.KeyCode.ButtonR2 then
 		r2Held = true
 		onPressBegan()
@@ -835,6 +864,9 @@ end
 local function onInputEnded(input: InputObject, _processed: boolean)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		mouseHeld = false
+	elseif input == touchInput then
+		touchInput = nil
+		touchHeld = false
 	elseif input.KeyCode == Enum.KeyCode.ButtonR2 then
 		r2Held = false
 	end

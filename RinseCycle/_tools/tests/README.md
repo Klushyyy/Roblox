@@ -44,3 +44,4 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
   - `scen_hatchshop`: hatch buttons say "(50 Bubbles)"; short of Bubbles a click opens the Bubbles shop.
   - `scen_mergeview`: merge mode shows only mergeable pets, and a message when there are none.
   - `scen_coinstab`: the Shop's Coins tab is hidden in the lobby.
+  - `scen_touchspray`: on a phone, holding a finger on dirt cleans it (no SPRAY button).
