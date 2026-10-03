@@ -601,7 +601,7 @@ function HUD.Init()
 		topCurrency.Position = UDim2.new(0.5, 0, 0, 2)
 		gemsPill.Position = UDim2.new(0.5, 133, 0, 7)
 		hotbar.Position = UDim2.new(0.5, 0, 1, -(if touch then 24 else 12) - safe.Bottom)
-		topBar.Position = UDim2.new(0.5, 0, 0, 72)
+		topBar.Position = UDim2.new(0.5, 0, 0, 90) -- under the boost badges (StayOffer)
 
 		-- Right column: vertically centred, but on touch kept above the jump button.
 		local colH = rightColumn.AbsoluteSize.Y / UIKit.GetScale()

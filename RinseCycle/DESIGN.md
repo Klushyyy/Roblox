@@ -1318,6 +1318,11 @@ walls instead of clipping through. All gameplay queries use Include filters.
   server and hidden admins aren't listed or counted.
 - An admin joining a run server is a guest: invisible, put into the run (JoinLate) once it's
   going, and sent home when the run ends or every real player has left.
+- v1.6.8: the stay popup is near full-screen and loud ("WAIT! DON'T LEAVE YET!", pulsing claim
+  button). A claim is saved within 2 s, so leaving and rejoining can't claim twice; the boost ends
+  (stats recomputed) on whichever server the player is on. Boost badges sit under the Bubbles
+  pill: the x2 Cleaning timer plus one chip per owned multiplier pass. The run progress bar moved
+  down to y 90 to make room.
 
 ## 7. Balance knobs (all in Config)
 

@@ -892,6 +892,23 @@ local function loadFromStore(session: Session): (string, any)
 	end
 end
 
+
+-- When a stay boost runs out, run stats drop back to normal (on whichever server they're on now).
+local function watchBoostEnd(player: Player)
+	local profile = DataService.Get(player)
+	local untilTime = profile and profile.BoostUntil or 0
+	if untilTime <= os.time() then
+		return
+	end
+	task.delay(untilTime - os.time() + 1, function()
+		local p = DataService.Get(player)
+		if p and p.BoostUntil == untilTime then
+			DataService.PushMeta(player)
+			DataService.PassesChanged:Fire(player)
+		end
+	end)
+end
+
 local function loadSession(session: Session)
 	local player = session.Player
 
@@ -957,6 +974,7 @@ local function loadSession(session: Session)
 	end
 	DataService.ProfileLoaded:Fire(player, profile)
 	pushNow(player)
+	task.defer(watchBoostEnd, player)
 
 	if shuttingDown then
 		finalize(session)
@@ -1302,16 +1320,14 @@ function DataService.ClaimStayBoost(player: Player): (boolean, string)
 	end
 	profile.StayBoostDay = today
 	profile.BoostUntil = math.max(os.time(), profile.BoostUntil) + STAY_BOOST_SECONDS
+	-- Saved within seconds, so leaving and rejoining can't claim it again.
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + 2)
+	end
 	DataService.PushMeta(player)
 	DataService.PassesChanged:Fire(player) -- run stats pick up the x2 now
-	local untilTime = profile.BoostUntil
-	task.delay(untilTime - os.time() + 1, function()
-		local p = DataService.Get(player)
-		if p and p.BoostUntil == untilTime then
-			DataService.PushMeta(player)
-			DataService.PassesChanged:Fire(player) -- and drop it when it runs out
-		end
-	end)
+	watchBoostEnd(player)
 	return true, "x2 Cleaning for 15 minutes! Enjoy!"
 end
 

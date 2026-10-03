@@ -36,4 +36,5 @@ Paths assume the repo lives at /home/user/Roblox. The mock is permissive: a pass
 
 Also run `python3 _tools/check_locals.py` before sending scripts: Roblox refuses a script with more
 than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch that.
-  - `scen_staff`: staff tiers (Moderator / Admin / Developer / clear), their tags, the staff list, and staff can't target higher ranks.  - `scen_boost`: the stay boost (claim once a day, x2 timer reaches the client) and level 1's start.
+  - `scen_staff`: staff tiers (Moderator / Admin / Developer / clear), their tags, the staff list, and staff can't target higher ranks.  - `scen_boost`: the stay boost (claim once a day, x2 timer reaches the client), level 1's start,
+    the daily streak (24 h continues, over 48 h restarts) and the boost/pass badges.
