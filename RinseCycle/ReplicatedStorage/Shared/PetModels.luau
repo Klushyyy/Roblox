@@ -1029,40 +1029,44 @@ local function applyTier(model: Model, tier: number)
 		return
 	end
 	local golden = tier == 2
+	-- Rainbow particles run through every colour over their life, so the cloud is all colours at once.
 	local colors = if golden then ColorSequence.new(GOLD_GLOW) else RAINBOW_GLOW
-	-- A soft halo that stays on the pet.
+	-- A big soft halo around the pet.
 	local aura = Instance.new("ParticleEmitter")
 	aura.Name = "TierAura"
 	aura.Texture = "rbxasset://textures/particles/sparkles_main.dds"
 	aura.Color = colors
 	aura.LightEmission = 1
 	aura.LockedToPart = true
-	aura.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 2.6), NumberSequenceKeypoint.new(1, 3.2) })
-	aura.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0.82), NumberSequenceKeypoint.new(1, 1) })
-	aura.Lifetime = NumberRange.new(1.2, 1.6)
-	aura.Rate = 3
+	aura.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 5), NumberSequenceKeypoint.new(1, 6.5) })
+	aura.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.4, 0.55), NumberSequenceKeypoint.new(1, 1) })
+	aura.Lifetime = NumberRange.new(1, 1.4)
+	aura.Rate = 8
 	aura.Speed = NumberRange.new(0)
 	aura.Rotation = NumberRange.new(0, 360)
-	aura.RotSpeed = NumberRange.new(-30, 30)
+	aura.RotSpeed = NumberRange.new(-40, 40)
 	aura.Parent = root
-	-- Little sparkles drifting off it.
+	-- Lots of sparkles bursting off it.
 	local sparkle = Instance.new("ParticleEmitter")
 	sparkle.Name = "TierSparkle"
 	sparkle.Texture = "rbxasset://textures/particles/sparkles_main.dds"
 	sparkle.Color = colors
-	sparkle.LightEmission = 0.8
-	sparkle.Size = NumberSequence.new(0.4, 0)
-	sparkle.Lifetime = NumberRange.new(0.7, 1.2)
-	sparkle.Rate = if golden then 6 else 10
-	sparkle.Speed = NumberRange.new(0.6, 1.6)
+	sparkle.LightEmission = 1
+	sparkle.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.9), NumberSequenceKeypoint.new(1, 0) })
+	sparkle.Lifetime = NumberRange.new(0.8, 1.4)
+	sparkle.Rate = if golden then 28 else 40
+	sparkle.Speed = NumberRange.new(2, 4)
+	sparkle.Drag = 3
 	sparkle.SpreadAngle = Vector2.new(180, 180)
+	sparkle.Rotation = NumberRange.new(0, 360)
+	sparkle.RotSpeed = NumberRange.new(-120, 120)
 	sparkle.Parent = root
-	-- And a real glow on whatever's around it.
+	-- A real glow on whatever's around it.
 	local light = Instance.new("PointLight")
 	light.Name = "TierGlow"
 	light.Color = if golden then GOLD_GLOW else Color3.fromRGB(230, 170, 255)
-	light.Brightness = 1.2
-	light.Range = 7
+	light.Brightness = 2.5
+	light.Range = 12
 	light.Parent = root
 end
 

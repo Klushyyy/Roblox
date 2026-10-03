@@ -42,3 +42,4 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
     and the admin viewer answering from the cache.
   - `scen_back`: the gift window's Back button (PassBuy -> Shop) and Roll with too few gems (Gems shop, plain X).
   - `scen_hatchshop`: hatch buttons say "(50 Bubbles)"; short of Bubbles a click opens the Bubbles shop.
+  - `scen_mergeview`: merge mode shows only mergeable pets, and a message when there are none.

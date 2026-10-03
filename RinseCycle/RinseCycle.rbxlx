@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.7.7"
+Config.Version = "1.7.8"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -2069,40 +2069,44 @@ local function applyTier(model: Model, tier: number)
 		return
 	end
 	local golden = tier == 2
+	-- Rainbow particles run through every colour over their life, so the cloud is all colours at once.
 	local colors = if golden then ColorSequence.new(GOLD_GLOW) else RAINBOW_GLOW
-	-- A soft halo that stays on the pet.
+	-- A big soft halo around the pet.
 	local aura = Instance.new("ParticleEmitter")
 	aura.Name = "TierAura"
 	aura.Texture = "rbxasset://textures/particles/sparkles_main.dds"
 	aura.Color = colors
 	aura.LightEmission = 1
 	aura.LockedToPart = true
-	aura.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 2.6), NumberSequenceKeypoint.new(1, 3.2) })
-	aura.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0.82), NumberSequenceKeypoint.new(1, 1) })
-	aura.Lifetime = NumberRange.new(1.2, 1.6)
-	aura.Rate = 3
+	aura.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 5), NumberSequenceKeypoint.new(1, 6.5) })
+	aura.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.4, 0.55), NumberSequenceKeypoint.new(1, 1) })
+	aura.Lifetime = NumberRange.new(1, 1.4)
+	aura.Rate = 8
 	aura.Speed = NumberRange.new(0)
 	aura.Rotation = NumberRange.new(0, 360)
-	aura.RotSpeed = NumberRange.new(-30, 30)
+	aura.RotSpeed = NumberRange.new(-40, 40)
 	aura.Parent = root
-	-- Little sparkles drifting off it.
+	-- Lots of sparkles bursting off it.
 	local sparkle = Instance.new("ParticleEmitter")
 	sparkle.Name = "TierSparkle"
 	sparkle.Texture = "rbxasset://textures/particles/sparkles_main.dds"
 	sparkle.Color = colors
-	sparkle.LightEmission = 0.8
-	sparkle.Size = NumberSequence.new(0.4, 0)
-	sparkle.Lifetime = NumberRange.new(0.7, 1.2)
-	sparkle.Rate = if golden then 6 else 10
-	sparkle.Speed = NumberRange.new(0.6, 1.6)
+	sparkle.LightEmission = 1
+	sparkle.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.9), NumberSequenceKeypoint.new(1, 0) })
+	sparkle.Lifetime = NumberRange.new(0.8, 1.4)
+	sparkle.Rate = if golden then 28 else 40
+	sparkle.Speed = NumberRange.new(2, 4)
+	sparkle.Drag = 3
 	sparkle.SpreadAngle = Vector2.new(180, 180)
+	sparkle.Rotation = NumberRange.new(0, 360)
+	sparkle.RotSpeed = NumberRange.new(-120, 120)
 	sparkle.Parent = root
-	-- And a real glow on whatever's around it.
+	-- A real glow on whatever's around it.
 	local light = Instance.new("PointLight")
 	light.Name = "TierGlow"
 	light.Color = if golden then GOLD_GLOW else Color3.fromRGB(230, 170, 255)
-	light.Brightness = 1.2
-	light.Range = 7
+	light.Brightness = 2.5
+	light.Range = 12
 	light.Parent = root
 end
 
@@ -30231,6 +30235,7 @@ local mergeResult: TextLabel
 local mergeGo: TextButton
 local mergePreview: Frame
 local mergeViewport: ViewportFrame
+local mergeEmpty: TextLabel
 local detailsCard: Frame
 
 -- Eggs window
@@ -30735,9 +30740,20 @@ function PetsUI._refreshGrid()
 		local key = entry.Id .. "#" .. (entry.Tier or 1)
 		copies[key] = (copies[key] or 0) + 1
 	end
+	-- Merge mode only shows pets you can merge right now: ones you have MERGE_COUNT+ of (same pet,
+	-- same tier, not Rainbow yet), and once you've picked one, only that pet.
+	local first = if mergeMode then petOf(mergeSel[1]) else nil
+	local shown = 0
 	for _, entry in list do
-		buildPetCard(gridScroll, entry, isEquipped(meta, entry.Uid), selectPet, copies[entry.Id .. "#" .. (entry.Tier or 1)])
+		local key = entry.Id .. "#" .. (entry.Tier or 1)
+		local mergeable = (copies[key] or 0) &gt;= MERGE_COUNT and (entry.Tier or 1) &lt; #Config.PetTiers
+		if mergeMode and (not mergeable or (first and not canMergeWith(first, entry))) then
+			continue
+		end
+		shown += 1
+		buildPetCard(gridScroll, entry, isEquipped(meta, entry.Uid), selectPet, copies[key])
 	end
+	mergeEmpty.Visible = mergeMode and shown == 0
 	local equippedCount = math.min(#meta.Equipped, meta.PetSlots)
 	equippedLabel.Text = string.format("Equipped %d/%d   Coins %s", equippedCount, meta.PetSlots, coinText(1 + Config.PetCoinBonus(meta.Pets, meta.Equipped)))
 	countLabel.Text = string.format("%d/%d", #meta.Pets, meta.MaxPets)
@@ -30823,6 +30839,20 @@ local function buildPetsWindow()
 	UIKit.Corner(gridScroll, 12)
 	gridScroll.Parent = body
 
+	-- Merge mode with nothing to merge.
+	mergeEmpty = UIKit.Label({
+		Text = string.format("You don't have %d of the same pet yet.\nHatch more eggs, then come back to merge!", MERGE_COUNT),
+		Size = UDim2.new(0, 520, 0, 80),
+		Position = UDim2.new(0, 273, 0.5, 0),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		TextSize = 20,
+		TextWrapped = true,
+		TextColor3 = C.TextDim,
+		Visible = false,
+		ZIndex = 3,
+		Parent = body,
+	})
+
 	local gridLayout = Instance.new("UIGridLayout")
 	gridLayout.CellSize = UDim2.fromOffset(GRID_CELL.X, GRID_CELL.Y)
 	gridLayout.CellPadding = UDim2.fromOffset(GRID_GAP, GRID_GAP)
@@ -30906,6 +30936,16 @@ local function buildPetsWindow()
 			refreshMergePanel()
 			PetsUI._refreshGrid()
 		end,
+	})
+	UIKit.Label({
+		Text = string.format("Only pets you have %d or more of are shown.", MERGE_COUNT),
+		Size = UDim2.new(1, -24, 0, 34),
+		Position = UDim2.new(0.5, 0, 0, 374),
+		AnchorPoint = Vector2.new(0.5, 0),
+		TextSize = 14,
+		TextWrapped = true,
+		TextColor3 = C.TextDim,
+		Parent = mergePanel,
 	})
 
 	detailEmpty = Instance.new("Frame")

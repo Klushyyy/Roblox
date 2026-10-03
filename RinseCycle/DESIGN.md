@@ -1377,6 +1377,11 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - v1.7.7: hatch buttons read "Hatch 1 (50 Bubbles)". Short of Bubbles they're grey but still
   clickable: a click opens the Bubbles shop (locked eggs stay disabled; a full pet bag says so).
   Only the gift window (PassBuy) keeps a Back button; the Gems shop opened from Ranks has a plain X.
+- v1.7.8: Golden / Rainbow pets: a big halo (size 5-6.5, 8/s), 28-40 sparkles a second bursting
+  off them, and a brighter light (2.5, range 12); rainbow particles run through every colour.
+  Merge mode hides pets you can't merge (fewer than 3 of that pet and tier, or Rainbow already);
+  after the first pick only that pet shows. Nothing to merge: "You don't have 3 of the same pet
+  yet..." over the grid; the merge panel notes "Only pets you have 3 or more of are shown."
 
 ## 7. Balance knobs (all in Config)
 

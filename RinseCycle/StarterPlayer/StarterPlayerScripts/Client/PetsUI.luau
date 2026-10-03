@@ -118,6 +118,7 @@ local mergeResult: TextLabel
 local mergeGo: TextButton
 local mergePreview: Frame
 local mergeViewport: ViewportFrame
+local mergeEmpty: TextLabel
 local detailsCard: Frame
 
 -- Eggs window
@@ -622,9 +623,20 @@ function PetsUI._refreshGrid()
 		local key = entry.Id .. "#" .. (entry.Tier or 1)
 		copies[key] = (copies[key] or 0) + 1
 	end
+	-- Merge mode only shows pets you can merge right now: ones you have MERGE_COUNT+ of (same pet,
+	-- same tier, not Rainbow yet), and once you've picked one, only that pet.
+	local first = if mergeMode then petOf(mergeSel[1]) else nil
+	local shown = 0
 	for _, entry in list do
-		buildPetCard(gridScroll, entry, isEquipped(meta, entry.Uid), selectPet, copies[entry.Id .. "#" .. (entry.Tier or 1)])
+		local key = entry.Id .. "#" .. (entry.Tier or 1)
+		local mergeable = (copies[key] or 0) >= MERGE_COUNT and (entry.Tier or 1) < #Config.PetTiers
+		if mergeMode and (not mergeable or (first and not canMergeWith(first, entry))) then
+			continue
+		end
+		shown += 1
+		buildPetCard(gridScroll, entry, isEquipped(meta, entry.Uid), selectPet, copies[key])
 	end
+	mergeEmpty.Visible = mergeMode and shown == 0
 	local equippedCount = math.min(#meta.Equipped, meta.PetSlots)
 	equippedLabel.Text = string.format("Equipped %d/%d   Coins %s", equippedCount, meta.PetSlots, coinText(1 + Config.PetCoinBonus(meta.Pets, meta.Equipped)))
 	countLabel.Text = string.format("%d/%d", #meta.Pets, meta.MaxPets)
@@ -710,6 +722,20 @@ local function buildPetsWindow()
 	UIKit.Corner(gridScroll, 12)
 	gridScroll.Parent = body
 
+	-- Merge mode with nothing to merge.
+	mergeEmpty = UIKit.Label({
+		Text = string.format("You don't have %d of the same pet yet.\nHatch more eggs, then come back to merge!", MERGE_COUNT),
+		Size = UDim2.new(0, 520, 0, 80),
+		Position = UDim2.new(0, 273, 0.5, 0),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		TextSize = 20,
+		TextWrapped = true,
+		TextColor3 = C.TextDim,
+		Visible = false,
+		ZIndex = 3,
+		Parent = body,
+	})
+
 	local gridLayout = Instance.new("UIGridLayout")
 	gridLayout.CellSize = UDim2.fromOffset(GRID_CELL.X, GRID_CELL.Y)
 	gridLayout.CellPadding = UDim2.fromOffset(GRID_GAP, GRID_GAP)
@@ -793,6 +819,16 @@ local function buildPetsWindow()
 			refreshMergePanel()
 			PetsUI._refreshGrid()
 		end,
+	})
+	UIKit.Label({
+		Text = string.format("Only pets you have %d or more of are shown.", MERGE_COUNT),
+		Size = UDim2.new(1, -24, 0, 34),
+		Position = UDim2.new(0.5, 0, 0, 374),
+		AnchorPoint = Vector2.new(0.5, 0),
+		TextSize = 14,
+		TextWrapped = true,
+		TextColor3 = C.TextDim,
+		Parent = mergePanel,
 	})
 
 	detailEmpty = Instance.new("Frame")
