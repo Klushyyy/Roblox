@@ -1403,6 +1403,7 @@ walls instead of clipping through. All gameplay queries use Include filters.
   gold stays one tapered trail.
 - v1.8.4: T opens Trade in the lobby (in a run T still turns the pressure washer); the Trade
   button shows a "T" key hint like G / P / R.
+- v1.8.5: the gold trail is striped too (four gold shades stacked), like the rainbow one.
 
 ## 7. Balance knobs (all in Config)
 

@@ -1002,10 +1002,16 @@ end
 -- A cute pet model for Config.Pets[petId] (a placeholder for unknown ids). Unparented; the caller
 -- parents it and moves it with PivotTo. Facing -Z, PrimaryPart "Root" at the centre.
 -- Tier looks (Config.PetTiers): the pet keeps its own colours. Golden gets a soft gold halo and gold
--- sparkles and a small gold trail; Rainbow a rainbow halo, sparkles in six separate colours and a
+-- sparkles and a small striped gold trail; Rainbow a rainbow halo, sparkles in six separate colours and a
 -- rainbow trail. No light (it bleached
 -- pets and floor to yellow). Menus add a GOLD / RAINBOW tag and edge.
 local GOLD_GLOW = Color3.fromRGB(255, 210, 80)
+local GOLD_STRIPES = {
+	Color3.fromRGB(255, 240, 150),
+	Color3.fromRGB(255, 215, 70),
+	Color3.fromRGB(245, 180, 30),
+	Color3.fromRGB(215, 140, 20),
+}
 local RAINBOW_SPARKS = {
 	Color3.fromRGB(255, 70, 70),
 	Color3.fromRGB(255, 160, 40),
@@ -1076,7 +1082,7 @@ local function applyTier(model: Model, tier: number)
 	local _, extents = model:GetBoundingBox()
 	local half = math.clamp(extents.Y * 0.22, 0.25, 0.8)
 	local back = math.clamp(extents.Z * 0.35, 0.3, 1.5)
-	local function makeTrail(name: string, top: number, bottom: number, color: ColorSequence, taper: boolean)
+	local function makeTrail(name: string, top: number, bottom: number, color: ColorSequence)
 		local a0 = Instance.new("Attachment")
 		a0.Name = name .. "Top"
 		a0.Position = Vector3.new(0, top, back)
@@ -1091,24 +1097,19 @@ local function applyTier(model: Model, tier: number)
 		trail.Attachment1 = a1
 		trail.Color = color
 		trail.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(1, 1) })
-		if taper then
-			trail.WidthScale = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.2) })
-		end
 		trail.Lifetime = 0.5
 		trail.MinLength = 0.05
 		trail.LightEmission = 0.4
 		trail.FaceCamera = true
 		trail.Parent = root
 	end
-	if golden then
-		makeTrail("TierTrail", half, -half, ColorSequence.new(Color3.fromRGB(255, 225, 90), Color3.fromRGB(255, 170, 30)), true)
-	else
-		-- Rainbow: one thin stripe per colour, stacked top to bottom, so the whole ribbon is a rainbow.
-		local stripe = (half * 2) / #RAINBOW_SPARKS
-		for i, c in RAINBOW_SPARKS do
-			local top = half - (i - 1) * stripe
-			makeTrail("TierTrail" .. i, top, top - stripe, ColorSequence.new(c), false)
-		end
+	-- Both are striped ribbons: thin single-colour trails stacked top to bottom (gold shades, or
+	-- the rainbow).
+	local stripes = if golden then GOLD_STRIPES else RAINBOW_SPARKS
+	local stripe = (half * 2) / #stripes
+	for i, c in stripes do
+		local top = half - (i - 1) * stripe
+		makeTrail("TierTrail" .. i, top, top - stripe, ColorSequence.new(c))
 	end
 
 	if golden then
