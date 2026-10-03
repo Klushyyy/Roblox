@@ -22,15 +22,16 @@ local StayOffer = {}
 
 local Colors = UIKit.Theme.Colors
 
--- Passes that multiply something, in the order their chips appear.
+-- Passes that multiply something, in the order their chips appear: grouped by colour (green
+-- next to the green x2 Cleaning chip, then yellows, blues, pink).
 local PASS_BADGES = {
-	{ Key = "DoubleCoins", Text = "x2 Coins", Color = Colors.Coin },
-	{ Key = "DoubleBubbles", Text = "x2 Bubbles", Color = Colors.Bubble },
 	{ Key = "DoubleLuck", Text = "x2 Luck", Color = Colors.Good },
+	{ Key = "DoubleCoins", Text = "x2 Coins", Color = Colors.Coin },
 	{ Key = "LuckyCharm", Text = "x2 Gold Dirt", Color = Colors.Coin },
+	{ Key = "VIP", Text = "VIP +25%", Color = Colors.Coin },
 	{ Key = "MegaTank", Text = "x2 Tank", Color = Colors.Primary },
 	{ Key = "SuperScrub", Text = "+50% Clean", Color = Colors.Primary },
-	{ Key = "VIP", Text = "VIP +25%", Color = Colors.Coin },
+	{ Key = "DoubleBubbles", Text = "x2 Bubbles", Color = Colors.Bubble },
 }
 
 local initialized = false
