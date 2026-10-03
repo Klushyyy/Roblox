@@ -380,13 +380,59 @@ local function joinLate(player: Player)
 	end
 end
 
+-- Admins who dropped in from the server list. They play the run like anyone else (invisible),
+-- but they aren't what keeps it going: once every real player has gone, they go home too.
+local guests: { [number]: boolean } = {}
+
+local function realPlayersHere(): boolean
+	for _, p in Players:GetPlayers() do
+		if not guests[p.UserId] and isHere(p) then
+			return true
+		end
+	end
+	return false
+end
+
+local function sendGuestsHome()
+	if realPlayersHere() then
+		return
+	end
+	for _, p in Players:GetPlayers() do
+		if guests[p.UserId] then
+			task.spawn(RunServers.SendHome, p)
+		end
+	end
+end
+
+-- Someone dropping in on a run (an admin from the server list, or a player an admin brought):
+-- into the run as soon as it's going; home if it's already over or nobody's left.
+local function dropIn(player: Player)
+	local waited = 0
+	while not started and waited < 90 and isHere(player) do
+		waited += task.wait(0.5)
+	end
+	if not isHere(player) then
+		return
+	end
+	if guests[player.UserId] and not realPlayersHere() then
+		RunServers.SendHome(player)
+	elseif started then
+		joinLate(player)
+	end
+end
+
 local function onArrive(player: Player)
 	local data: any = nil
 	pcall(function()
 		data = player:GetJoinData().TeleportData
 	end)
-	-- An admin (or someone they pulled over) dropping in: not part of the run, leave them be.
 	if type(data) == "table" and (data.Mode == "AdminJoin" or data.Mode == "AdminBring") then
+		if data.Mode == "AdminJoin" then
+			guests[player.UserId] = true
+		end
+		if plan then
+			dropIn(player)
+		end
 		return
 	end
 	if not plan and type(data) == "table" and data.Mode == "Run" then
@@ -438,6 +484,10 @@ function RunServers.Init()
 	Players.PlayerRemoving:Connect(function(player)
 		pending[player] = nil
 		arrived[player.UserId] = nil
+		guests[player.UserId] = nil
+		if RunServers.IsRunServer and next(guests) ~= nil then
+			task.delay(0.5, sendGuestsHome)
+		end
 	end)
 	if not RunServers.IsRunServer then
 		return

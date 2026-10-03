@@ -4571,25 +4571,29 @@ function ServerList.Send(admin)
 	local rows = {}
 	local busiest, busiestCount = nil, 0
 	for i, server in ipairs(ServerList.Read()) do
-		local count = #server.Players
+		local names, follow = {}, nil
+		for _, p in ipairs(server.Players) do
+			if p.UserId ~= admin.UserId and not p.Hidden then
+				table.insert(names, tostring(p.Name))
+				follow = follow or p.UserId
+			end
+		end
+		local count = #names
 		if not server.Here and not server.Run and count > busiestCount then
 			busiest, busiestCount = server.JobId, count
 		end
-		local where = (if server.Run then "Run" else "Lobby") .. " server " .. i .. " · " .. count .. " player" .. (if count == 1 then "" else "s")
-			.. (if server.Here then " (you're here)" else "")
-		for _, p in ipairs(server.Players) do
-			if p.UserId ~= admin.UserId then
-				table.insert(rows, {
-					Id = p.UserId,
-					JobId = server.JobId,
-					Here = server.Here == true,
-					Line1 = tostring(p.Display) .. "  @" .. tostring(p.Name) .. (if p.Hidden then "  (hidden)" else ""),
-					Line2 = where,
-				})
-			end
+		-- One row (and one Join) per server; your own server isn't listed.
+		if not server.Here and count > 0 then
+			local shown = table.concat(names, ", ", 1, math.min(#names, 6)) .. (if #names > 6 then ", +" .. (#names - 6) .. " more" else "")
+			table.insert(rows, {
+				Id = follow,
+				JobId = server.JobId,
+				Line1 = (if server.Run then "Run" else "Lobby") .. " server " .. i .. " - " .. count .. " player" .. (if count == 1 then "" else "s"),
+				Line2 = shown,
+			})
 		end
 	end
-	Remote.AdminServerList:FireClient(admin, "🌍 Every server (" .. #rows .. " players)", rows, busiest)
+	Remote.AdminServerList:FireClient(admin, "Every server (" .. #rows .. ")", rows, busiest)
 end
 
 -- Teleports the admin into a server, invisible (they arrive hidden: nobody sees them join).

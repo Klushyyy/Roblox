@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.6.5"
+Config.Version = "1.6.6"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -154,7 +154,10 @@ Config.Levels = {
 		Subtitle = "Crumbs, ketchup and a whole lot of gravy.",
 		Icon = "🍝",
 		Place = "Family Kitchen",
-		Toughness = 5.5, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
+		-- Dirt HP multiplier on top of Mult. Progression starts fast and gets slower: the first
+		-- dishwasher is quick to clean (new players see progress straight away), later ones are tougher.
+		Toughness = 1.8,
+		StartCoins = 20, -- every run here starts with enough for a first upgrade straight away
 		Mult = 1,
 		ParTime = 540,
 		Bubbles = 80,
@@ -182,7 +185,7 @@ Config.Levels = {
 		Subtitle = "Greasy pizza trays, sauce everywhere and burnt crust.",
 		Icon = "🍕",
 		Place = "Pizzeria",
-		Toughness = 6.0, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
+		Toughness = 4.5, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 4,
 		ParTime = 1260,
 		Bubbles = 250,
@@ -688,7 +691,8 @@ end
 -- Coins a run starts with (Head Start perk).
 function Config.StartCoins(levelIndex: number, perks): number
 	local lvl = (perks and perks.HeadStart) or 0
-	return math.floor(lvl * Config.GetPerk("HeadStart").PerLevel * Config.GetLevel(levelIndex).Mult)
+	local level = Config.GetLevel(levelIndex) :: any
+	return math.floor(lvl * Config.GetPerk("HeadStart").PerLevel * level.Mult) + (tonumber(level.StartCoins) or 0)
 end
 
 -- Daily rewards: claimed from the 🎁 Daily button. The next one unlocks 24 hours after you claim
@@ -861,6 +865,13 @@ function Config.GetGroupId(): number
 	return if ok and type(id) == "number" then id else 0
 end
 
+-- Background music (MusicPlayer). The track IDs go in StoreIds > Music.
+Config.Music = {
+	Lobby = {} :: { number },
+	Run = {} :: { number },
+	Volume = 0.3,
+}
+
 -- Gifting a game pass: Roblox can't sell a pass to one player for another, so every pass has a
 -- matching developer product ("Gift: VIP", same price). Buying it gives the pass to the friend you
 -- picked (GiftService). The Ids go in StoreIds, under GiftPasses.
@@ -905,6 +916,18 @@ do
 		apply(Config.GamePasses, ids.GamePasses)
 		apply(Config.DevProducts, ids.DevProducts)
 		apply(Config.GiftProducts, ids.GiftPasses)
+		if type(ids.Music) == "table" then
+			for _, key in { "Lobby", "Run" } do
+				local list = {}
+				for _, id in (if type(ids.Music[key]) == "table" then ids.Music[key] else {}) do
+					local n = tonumber(id)
+					if n and n > 0 then
+						table.insert(list, math.floor(n))
+					end
+				end
+				Config.Music[key] = list
+			end
+		end
 		local group = tonumber(ids.GroupId)
 		if group and group > 0 then
 			Config.Social.GroupId = math.floor(group)

@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.6.5"
+Config.Version = "1.6.6"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -158,7 +158,10 @@ Config.Levels = {
 		Subtitle = "Crumbs, ketchup and a whole lot of gravy.",
 		Icon = "🍝",
 		Place = "Family Kitchen",
-		Toughness = 5.5, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
+		-- Dirt HP multiplier on top of Mult. Progression starts fast and gets slower: the first
+		-- dishwasher is quick to clean (new players see progress straight away), later ones are tougher.
+		Toughness = 1.8,
+		StartCoins = 20, -- every run here starts with enough for a first upgrade straight away
 		Mult = 1,
 		ParTime = 540,
 		Bubbles = 80,
@@ -186,7 +189,7 @@ Config.Levels = {
 		Subtitle = "Greasy pizza trays, sauce everywhere and burnt crust.",
 		Icon = "🍕",
 		Place = "Pizzeria",
-		Toughness = 6.0, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
+		Toughness = 4.5, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 4,
 		ParTime = 1260,
 		Bubbles = 250,
@@ -692,7 +695,8 @@ end
 -- Coins a run starts with (Head Start perk).
 function Config.StartCoins(levelIndex: number, perks): number
 	local lvl = (perks and perks.HeadStart) or 0
-	return math.floor(lvl * Config.GetPerk("HeadStart").PerLevel * Config.GetLevel(levelIndex).Mult)
+	local level = Config.GetLevel(levelIndex) :: any
+	return math.floor(lvl * Config.GetPerk("HeadStart").PerLevel * level.Mult) + (tonumber(level.StartCoins) or 0)
 end
 
 -- Daily rewards: claimed from the 🎁 Daily button. The next one unlocks 24 hours after you claim
@@ -865,6 +869,13 @@ function Config.GetGroupId(): number
 	return if ok and type(id) == "number" then id else 0
 end
 
+-- Background music (MusicPlayer). The track IDs go in StoreIds &gt; Music.
+Config.Music = {
+	Lobby = {} :: { number },
+	Run = {} :: { number },
+	Volume = 0.3,
+}
+
 -- Gifting a game pass: Roblox can't sell a pass to one player for another, so every pass has a
 -- matching developer product ("Gift: VIP", same price). Buying it gives the pass to the friend you
 -- picked (GiftService). The Ids go in StoreIds, under GiftPasses.
@@ -909,6 +920,18 @@ do
 		apply(Config.GamePasses, ids.GamePasses)
 		apply(Config.DevProducts, ids.DevProducts)
 		apply(Config.GiftProducts, ids.GiftPasses)
+		if type(ids.Music) == "table" then
+			for _, key in { "Lobby", "Run" } do
+				local list = {}
+				for _, id in (if type(ids.Music[key]) == "table" then ids.Music[key] else {}) do
+					local n = tonumber(id)
+					if n and n &gt; 0 then
+						table.insert(list, math.floor(n))
+					end
+				end
+				Config.Music[key] = list
+			end
+		end
 		local group = tonumber(ids.GroupId)
 		if group and group &gt; 0 then
 			Config.Social.GroupId = math.floor(group)
@@ -2208,6 +2231,13 @@ return {
 		RestoreStreak = 0, -- Restore Streak (29 R$)
 	},
 
+	-- Background music: audio asset IDs (Creator Store &gt; Audio &gt; Music, or the Toolbox's Audio tab;
+	-- right-click a track &gt; Copy Asset ID). Add as many as you like; they play shuffled and loop.
+	Music = {
+		Lobby = { 0 }, -- calm tracks for the lobby, e.g. { 1234567890, 2345678901 }
+		Run = { 0 },   -- upbeat tracks while cleaning a dishwasher
+	},
+
 	-- Gift products: one DEVELOPER PRODUCT per pass (not a game pass!), named "Gift: &lt;pass name&gt;"
 	-- with the same price. Buying one gives that pass to the friend the buyer picked.
 	GiftPasses = {
@@ -2729,6 +2759,8 @@ export type MetaState = {
 	GroupReward: boolean, -- the community reward has been claimed
 	FollowState: string, -- "" / "Pending" (checked when you rejoin) / "Claimed"
 	LikeState: string, -- "" / "Pending" (paid when you rejoin) / "Claimed"
+	BoostUntil: number?, -- os.time() until which cleaning is x2 (the stay boost)
+	StayBoostReady: boolean?, -- today's free stay boost can still be claimed
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
@@ -7504,25 +7536,29 @@ function ServerList.Send(admin)
 	local rows = {}
 	local busiest, busiestCount = nil, 0
 	for i, server in ipairs(ServerList.Read()) do
-		local count = #server.Players
+		local names, follow = {}, nil
+		for _, p in ipairs(server.Players) do
+			if p.UserId ~= admin.UserId and not p.Hidden then
+				table.insert(names, tostring(p.Name))
+				follow = follow or p.UserId
+			end
+		end
+		local count = #names
 		if not server.Here and not server.Run and count &gt; busiestCount then
 			busiest, busiestCount = server.JobId, count
 		end
-		local where = (if server.Run then "Run" else "Lobby") .. " server " .. i .. " · " .. count .. " player" .. (if count == 1 then "" else "s")
-			.. (if server.Here then " (you're here)" else "")
-		for _, p in ipairs(server.Players) do
-			if p.UserId ~= admin.UserId then
-				table.insert(rows, {
-					Id = p.UserId,
-					JobId = server.JobId,
-					Here = server.Here == true,
-					Line1 = tostring(p.Display) .. "  @" .. tostring(p.Name) .. (if p.Hidden then "  (hidden)" else ""),
-					Line2 = where,
-				})
-			end
+		-- One row (and one Join) per server; your own server isn't listed.
+		if not server.Here and count &gt; 0 then
+			local shown = table.concat(names, ", ", 1, math.min(#names, 6)) .. (if #names &gt; 6 then ", +" .. (#names - 6) .. " more" else "")
+			table.insert(rows, {
+				Id = follow,
+				JobId = server.JobId,
+				Line1 = (if server.Run then "Run" else "Lobby") .. " server " .. i .. " - " .. count .. " player" .. (if count == 1 then "" else "s"),
+				Line2 = shown,
+			})
 		end
 	end
-	Remote.AdminServerList:FireClient(admin, "🌍 Every server (" .. #rows .. " players)", rows, busiest)
+	Remote.AdminServerList:FireClient(admin, "Every server (" .. #rows .. ")", rows, busiest)
 end
 
 -- Teleports the admin into a server, invisible (they arrive hidden: nobody sees them join).
@@ -9431,6 +9467,8 @@ export type Profile = {
 	FollowPending: boolean, -- pressed "I followed!": checked on the next join (SocialService)
 	LikePending: boolean, -- pressed "I liked it!": paid on the next join
 	RebirthReady: boolean, -- the last level has been cleared since the last rebirth
+	BoostUntil: number, -- os.time() until which cleaning is x2 (the "stay" boost); 0 = none
+	StayBoostDay: string, -- UTC date ("2026-10-03") the stay boost was last claimed: once a day
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
@@ -9497,6 +9535,8 @@ local TEMPLATE: Profile = {
 	LikeReward = false,
 	FollowPending = false,
 	LikePending = false,
+	BoostUntil = 0,
+	StayBoostDay = "",
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
 }
@@ -9692,6 +9732,8 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.Bubbles = toCount(p.Bubbles, 0)
 	p.Gems = toCount(p.Gems, 0)
 	p.Rebirths = toCount(p.Rebirths, 0)
+	p.BoostUntil = toCount(p.BoostUntil, 0)
+	p.StayBoostDay = if type(p.StayBoostDay) == "string" then p.StayBoostDay else ""
 	p.DailyDay = toCount(p.DailyDay, 0)
 	p.DailyLast = toCount(p.DailyLast, 0)
 	if p.DailyLast == 0 and p.DailyDay &gt; 0 then
@@ -9947,6 +9989,8 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		GroupReward = profile.GroupReward,
 		FollowState = if profile.FollowReward then "Claimed" elseif profile.FollowPending then "Pending" else "",
 		LikeState = if profile.LikeReward then "Claimed" elseif profile.LikePending then "Pending" else "",
+		BoostUntil = profile.BoostUntil,
+		StayBoostReady = profile.StayBoostDay ~= os.date("!%Y-%m-%d"),
 		Stats = {
 			Runs = stats.Runs,
 			DishesCleaned = stats.DishesCleaned,
@@ -10611,6 +10655,33 @@ function DataService.ClaimDaily(player: Player): (number?, string?)
 	end
 	DataService.PushMeta(player)
 	return streak, nil
+end
+
+-- The "stay" boost: offered when a player opens the Roblox menu (often on the way out). x2 cleaning
+-- for STAY_BOOST_SECONDS, claimable once per UTC day. Returns (ok, message).
+local STAY_BOOST_SECONDS = 15 * 60
+function DataService.ClaimStayBoost(player: Player): (boolean, string)
+	local profile = DataService.Get(player)
+	if not profile then
+		return false, "Your data is still loading."
+	end
+	local today = os.date("!%Y-%m-%d")
+	if profile.StayBoostDay == today then
+		return false, "You've had today's free boost already. Come back tomorrow!"
+	end
+	profile.StayBoostDay = today
+	profile.BoostUntil = math.max(os.time(), profile.BoostUntil) + STAY_BOOST_SECONDS
+	DataService.PushMeta(player)
+	DataService.PassesChanged:Fire(player) -- run stats pick up the x2 now
+	local untilTime = profile.BoostUntil
+	task.delay(untilTime - os.time() + 1, function()
+		local p = DataService.Get(player)
+		if p and p.BoostUntil == untilTime then
+			DataService.PushMeta(player)
+			DataService.PassesChanged:Fire(player) -- and drop it when it runs out
+		end
+	end)
+	return true, "x2 Cleaning for 15 minutes! Enjoy!"
 end
 
 -- RestoreStreak product: a missed day is forgiven, so the next claim (available now) carries on
@@ -18400,7 +18471,13 @@ local function computeStats(levelIndex: number, player: Player, pr: PlayerRun): 
 	end
 	local rank = profile and profile.Rank or nil
 	local rebirths = profile and profile.Rebirths or 0
-	return Config.GetRunStats(levelIndex, effectiveUpgrades(pr), pr.ToolIndex, perks, getPasses(player), petBonus, rank, rebirths)
+	local stats = Config.GetRunStats(levelIndex, effectiveUpgrades(pr), pr.ToolIndex, perks, getPasses(player), petBonus, rank, rebirths)
+	-- The stay boost: x2 cleaning (you and your pets) while it lasts.
+	if profile and (tonumber(profile.BoostUntil) or 0) &gt; os.time() then
+		stats.Power *= 2
+		stats.PetPower *= 2
+	end
+	return stats
 end
 
 -- Recomputes a member's stats from their upgrades, tool, perks, passes and pets, and re-applies
@@ -20060,13 +20137,59 @@ local function joinLate(player: Player)
 	end
 end
 
+-- Admins who dropped in from the server list. They play the run like anyone else (invisible),
+-- but they aren't what keeps it going: once every real player has gone, they go home too.
+local guests: { [number]: boolean } = {}
+
+local function realPlayersHere(): boolean
+	for _, p in Players:GetPlayers() do
+		if not guests[p.UserId] and isHere(p) then
+			return true
+		end
+	end
+	return false
+end
+
+local function sendGuestsHome()
+	if realPlayersHere() then
+		return
+	end
+	for _, p in Players:GetPlayers() do
+		if guests[p.UserId] then
+			task.spawn(RunServers.SendHome, p)
+		end
+	end
+end
+
+-- Someone dropping in on a run (an admin from the server list, or a player an admin brought):
+-- into the run as soon as it's going; home if it's already over or nobody's left.
+local function dropIn(player: Player)
+	local waited = 0
+	while not started and waited &lt; 90 and isHere(player) do
+		waited += task.wait(0.5)
+	end
+	if not isHere(player) then
+		return
+	end
+	if guests[player.UserId] and not realPlayersHere() then
+		RunServers.SendHome(player)
+	elseif started then
+		joinLate(player)
+	end
+end
+
 local function onArrive(player: Player)
 	local data: any = nil
 	pcall(function()
 		data = player:GetJoinData().TeleportData
 	end)
-	-- An admin (or someone they pulled over) dropping in: not part of the run, leave them be.
 	if type(data) == "table" and (data.Mode == "AdminJoin" or data.Mode == "AdminBring") then
+		if data.Mode == "AdminJoin" then
+			guests[player.UserId] = true
+		end
+		if plan then
+			dropIn(player)
+		end
 		return
 	end
 	if not plan and type(data) == "table" and data.Mode == "Run" then
@@ -20118,6 +20241,10 @@ function RunServers.Init()
 	Players.PlayerRemoving:Connect(function(player)
 		pending[player] = nil
 		arrived[player.UserId] = nil
+		guests[player.UserId] = nil
+		if RunServers.IsRunServer and next(guests) ~= nil then
+			task.delay(0.5, sendGuestsHome)
+		end
 	end)
 	if not RunServers.IsRunServer then
 		return
@@ -20507,8 +20634,18 @@ local function socialDone(player: Player, value: any): Types.RequestResult
 	return { Ok = true, Message = message }
 end
 
+-- The free x2 cleaning boost offered when a player opens the Roblox menu (once a day).
+local function claimStayBoost(player: Player, _value: any): Types.RequestResult
+	local ok, message = DataService.ClaimStayBoost(player)
+	if not ok then
+		return fail(message)
+	end
+	return { Ok = true, Message = message }
+end
+
 local HANDLERS: { [string]: (Player, any) -&gt; Types.RequestResult } = {
 	ClaimDaily = claimDaily,
+	ClaimStayBoost = claimStayBoost,
 	SocialDone = socialDone,
 	RedeemCode = redeemCode,
 	ClaimGroup = claimGroup,
@@ -21920,6 +22057,8 @@ local LevelNPCs = require(Client:WaitForChild("LevelNPCs"))
 local ChatNames = require(Client:WaitForChild("ChatNames"))
 local Celebrate = require(Client:WaitForChild("Celebrate"))
 local TradeUI = require(Client:WaitForChild("TradeUI"))
+local StayOffer = require(Client:WaitForChild("StayOffer"))
+local MusicPlayer = require(Client:WaitForChild("MusicPlayer"))
 
 local function step(name: string, fn: () -&gt; ())
 	local ok, err = xpcall(fn, debug.traceback)
@@ -21955,7 +22094,9 @@ step("WaterFX", WaterFX.Init)
 step("LevelNPCs", LevelNPCs.Init)
 step("ChatNames", ChatNames.Init)
 step("Celebrate", Celebrate.Init)
-step("TradeUI", TradeUI.Init)</ProtectedString></Properties></Item>
+step("TradeUI", TradeUI.Init)
+step("StayOffer", StayOffer.Init)
+step("MusicPlayer", MusicPlayer.Init)</ProtectedString></Properties></Item>
 <Item class="ModuleScript" referent="RBX0000002B"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
 -- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
 -- Changed instead of each hooking the remotes themselves.
@@ -23987,6 +24128,27 @@ function HUD.Init()
 	local codesButton = leftButton(2, "@Ticket", "Codes", Colors.Primary, "Codes")
 	local freeButton = leftButton(3, "@Heart", "Free", Colors.Good, "Free")
 	local tradeButton = leftButton(4, "🤝", "Trade", Colors.Accent, "Trade")
+	-- Music on / off (MusicPlayer). Under Trade; the staff Admin button goes below it.
+	local musicButton: TextButton
+	musicButton = UIKit.IconButton({
+		Name = "MusicButton",
+		Icon = "♪",
+		Label = "Music",
+		Color = Colors.PanelLight,
+		Size = UDim2.fromOffset(80, 80),
+		LayoutOrder = 5,
+		Parent = leftColumn,
+		OnClick = function()
+			local MusicPlayer = require(script.Parent:WaitForChild("MusicPlayer")) :: any
+			local on = not MusicPlayer.IsEnabled()
+			MusicPlayer.SetEnabled(on)
+			local label = musicButton:FindFirstChild("Label", true)
+			if label and label:IsA("TextLabel") then
+				label.Text = if on then "Music" else "Muted"
+			end
+			UIKit.SetButtonColor(musicButton, if on then Colors.PanelLight else Colors.Disabled)
+		end,
+	})
 	local function makeAdminButton()
 		if adminButton or not adminClick then
 			return
@@ -23997,7 +24159,7 @@ function HUD.Init()
 			Label = "Admin",
 			Color = Colors.PanelLight,
 			Size = UDim2.fromOffset(80, 80),
-			LayoutOrder = 5, -- under Trade in the left column (and alone there in a run, clear of the timer)
+			LayoutOrder = 6, -- under Trade / Music in the left column (and alone there in a run, clear of the timer)
 			Parent = leftColumn,
 			OnClick = function()
 				if adminClick then
@@ -24010,6 +24172,7 @@ function HUD.Init()
 		codesButton.Visible = not inRun
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
+		musicButton.Visible = not inRun
 		leftColumn.Visible = true
 	end
 	addAdminButton = makeAdminButton
@@ -24874,6 +25037,7 @@ function HUD.Init()
 		codesButton.Visible = not inRun
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
+		musicButton.Visible = not inRun
 		leftColumn.Visible = not inRun or (adminButton ~= nil and adminButton.Visible)
 		upgradesButton.LayoutOrder = 1
 		shopButton.LayoutOrder = 2
@@ -28158,7 +28322,129 @@ LevelNPCs.Kit = {
 }
 
 return LevelNPCs</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000033"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000033"><Properties><string name="Name">MusicPlayer</string><ProtectedString name="Source">--[[
+	MusicPlayer - background music. The lobby and dishwasher runs each have their own playlist
+	(Config.Music, IDs from StoreIds &gt; Music), played shuffled, one track after another, with a
+	short fade when switching between lobby and run. A "Music" button in the left column turns it
+	off / on (remembered for this session). Plays nothing until track IDs are filled in.
+]]
+
+local SoundService = game:GetService("SoundService")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+
+local Client = script.Parent
+local ClientState = require(Client:WaitForChild("ClientState"))
+
+local MusicPlayer = {}
+
+local FADE = 1.2
+
+local initialized = false
+local enabled = true
+local current: Sound? = nil
+local currentList = ""
+local token = 0
+
+local function fadeOut(sound: Sound)
+	TweenService:Create(sound, TweenInfo.new(FADE), { Volume = 0 }):Play()
+	task.delay(FADE + 0.1, function()
+		sound:Destroy()
+	end)
+end
+
+-- Plays the given playlist, shuffled, until something else is chosen.
+local function playList(name: string)
+	local ids = (Config.Music :: any)[name] or {}
+	if name == currentList and current then
+		return
+	end
+	currentList = name
+	token += 1
+	local myToken = token
+	if current then
+		fadeOut(current)
+		current = nil
+	end
+	if not enabled or #ids == 0 then
+		return
+	end
+	task.spawn(function()
+		local order = table.clone(ids)
+		local index = 0
+		while myToken == token do
+			index += 1
+			if index &gt; #order then
+				-- reshuffle for the next round
+				for i = #order, 2, -1 do
+					local j = math.random(1, i)
+					order[i], order[j] = order[j], order[i]
+				end
+				index = 1
+			end
+			local sound = Instance.new("Sound")
+			sound.Name = "Music"
+			sound.SoundId = "rbxassetid://" .. tostring(order[index])
+			sound.Volume = 0
+			sound.Parent = SoundService
+			current = sound
+			sound:Play()
+			TweenService:Create(sound, TweenInfo.new(FADE), { Volume = Config.Music.Volume }):Play()
+			-- Wait for the track to finish (or something else to take over); a track that never
+			-- loads is skipped after a while.
+			local started = os.clock()
+			while myToken == token and sound.Parent do
+				if sound.IsLoaded and not sound.IsPlaying and os.clock() - started &gt; 2 then
+					break
+				end
+				if not sound.IsLoaded and os.clock() - started &gt; 15 then
+					break
+				end
+				task.wait(0.5)
+			end
+			if myToken == token and sound.Parent then
+				sound:Destroy()
+			end
+		end
+	end)
+end
+
+local function refresh()
+	playList(if ClientState.Run then "Run" else "Lobby")
+end
+
+function MusicPlayer.IsEnabled(): boolean
+	return enabled
+end
+
+function MusicPlayer.SetEnabled(on: boolean)
+	enabled = on
+	currentList = ""
+	if current then
+		fadeOut(current)
+		current = nil
+	end
+	token += 1
+	refresh()
+end
+
+function MusicPlayer.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+	ClientState.Changed:Connect(function(kind)
+		if kind == "Run" then
+			refresh()
+		end
+	end)
+	refresh()
+end
+
+return MusicPlayer</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000034"><Properties><string name="Name">PartyUI</string><ProtectedString name="Source">--[[
 	PartyUI - everything shown while ClientState.Party ~= nil (standing in a lobby pad).
 
 	Two screens, Search-for-the-Needle style:
@@ -28876,7 +29162,7 @@ function PartyUI.Init()
 end
 
 return PartyUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000034"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
+<Item class="ModuleScript" referent="RBX00000035"><Properties><string name="Name">PetRenderer</string><ProtectedString name="Source">-- PetRenderer: client-side visuals for every player's equipped pets. The server only replicates
 -- state (EquippedPets/&lt;slot&gt; StringValue = pet id, its Target ObjectValue = the grime part being
 -- cleaned); this module is the only thing that actually builds and moves pet models. See
 -- DESIGN.md section 6 ("PetRenderer") and section 4 ("Equipped pets for rendering").
@@ -29321,7 +29607,7 @@ function PetRenderer.Init()
 end
 
 return PetRenderer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000035"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
+<Item class="ModuleScript" referent="RBX00000036"><Properties><string name="Name">PetsUI</string><ProtectedString name="Source">-- PetsUI: the "Pets" inventory window and the "Eggs" hatchery window, plus the full-screen hatch
 -- reveal animation. Everything here is built with UIKit; see DESIGN.md section 6 ("PetsUI") for
 -- the contract. Both windows rebuild their contents from ClientState.Meta whenever it changes and
 -- the relevant window is open, so a purchase/hatch/equip anywhere refreshes what's on screen.
@@ -30656,7 +30942,7 @@ function PetsUI.Init()
 end
 
 return PetsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000036"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000037"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
 	RanksUI - the "Ranks" window (Rank Shrine in the lobby, the HUD's Ranks button, R / gamepad RB).
 
 	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
@@ -31426,7 +31712,7 @@ function RanksUI.Init()
 end
 
 return RanksUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000037"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000038"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
 	RebirthUI - the "Rebirth" window (the Rebirth Fountain in the lobby).
 
 	The endgame loop: once you've cleaned the last dishwasher, trade your Bubbles, unlocked
@@ -31579,7 +31865,7 @@ function RebirthUI.Init()
 end
 
 return RebirthUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000038"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000039"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
 	RewardsUI - two small windows opened from the buttons on the left of the lobby HUD.
 
 	  * "Codes" (🎟️): type a code (Config.Codes) and redeem it. "Look out for codes in the game's
@@ -31943,7 +32229,7 @@ function RewardsUI.Init()
 end
 
 return RewardsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000039"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003A"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
 	ShopUI - the lobby "Shop" window: Perks (bought with Bubbles, permanent) and Robux (game passes).
 	Opened from the Soap Shop ProximityPrompt (routed by Effects via OpenWindow="Shop"), the HUD [🛒 Shop]
 	button, or the G key - all outside our scope, they just call UIKit.OpenWindow("Shop").
@@ -32656,7 +32942,7 @@ function ShopUI.Init()
 end
 
 return ShopUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003A"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
+<Item class="ModuleScript" referent="RBX0000003B"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
 -- Aim comes from the mouse on PC, or the screen centre (with a crosshair) on touch/gamepad, cast
@@ -33580,7 +33866,135 @@ function SprayController.Init()
 end
 
 return SprayController</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003B"><Properties><string name="Name">TradeUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003C"><Properties><string name="Name">StayOffer</string><ProtectedString name="Source">--[[
+	StayOffer - "Don't go yet!" When a player opens the Roblox menu (usually on the way to Leave),
+	they're offered a free x2 cleaning boost for 15 minutes, once a day (DataService.ClaimStayBoost).
+	The popup is behind Roblox's menu, so it's what they see the moment they close it.
+
+	While a boost runs, a small "x2 Cleaning 14:32" timer sits under the currency pills.
+]]
+
+local GuiService = game:GetService("GuiService")
+
+local Client = script.Parent
+local UIKit = require(Client:WaitForChild("UIKit"))
+local ClientState = require(Client:WaitForChild("ClientState"))
+
+local StayOffer = {}
+
+local Colors = UIKit.Theme.Colors
+
+local initialized = false
+local offeredThisSession = false
+
+local function boostLeft(): number
+	local meta = ClientState.Meta :: any
+	local untilTime = meta and tonumber(meta.BoostUntil) or 0
+	return math.max(0, untilTime - os.time())
+end
+
+local function claim()
+	local result = ClientState.MetaRequest("ClaimStayBoost")
+	UIKit.CloseWindow("StayOffer")
+	if result.Ok then
+		UIKit.Confetti(60)
+		UIKit.Toast(result.Message or "x2 Cleaning for 15 minutes!", "Good")
+	else
+		UIKit.Toast(result.Error or "Couldn't claim that.", "Info")
+	end
+end
+
+function StayOffer.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+
+	local _gui, root = UIKit.CreateScreen("StayOffer", 35)
+	local _window, content = UIKit.Window({
+		Name = "StayOffer",
+		Title = "Don't go yet!",
+		Size = Vector2.new(520, 320),
+		Parent = root,
+	})
+	UIKit.Label({
+		Text = "Stay and play: FREE x2 Cleaning Speed",
+		TextSize = 28,
+		TextScaled = true,
+		TextColor3 = Colors.Warning,
+		Size = UDim2.new(1, -20, 0, 44),
+		Position = UDim2.fromOffset(10, 4),
+		Parent = content,
+	})
+	UIKit.Label({
+		Text = "Everything you and your pets clean counts double for the next 15 minutes.",
+		TextSize = 20,
+		TextWrapped = true,
+		TextScaled = true,
+		Size = UDim2.new(1, -40, 0, 60),
+		Position = UDim2.fromOffset(20, 56),
+		Parent = content,
+	})
+	UIKit.Button({
+		Text = "Claim x2 Boost!",
+		Color = Colors.Good,
+		TextSize = 26,
+		Size = UDim2.new(1, -60, 0, 64),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 130),
+		Parent = content,
+		OnClick = function()
+			task.spawn(claim)
+		end,
+	})
+	UIKit.Button({
+		Text = "No thanks",
+		Color = Colors.PanelLight,
+		TextSize = 18,
+		Size = UDim2.fromOffset(180, 40),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 206),
+		Parent = content,
+		OnClick = function()
+			UIKit.CloseWindow("StayOffer")
+		end,
+	})
+	UIKit.RegisterWindow("StayOffer", { Open = function() end })
+
+	-- The timer chip while the boost runs.
+	local chip = UIKit.Card({
+		Size = UDim2.fromOffset(190, 34),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 52),
+		Color = Colors.Good,
+		Parent = root,
+	})
+	chip.Visible = false
+	local chipLabel = UIKit.Label({ Text = "", TextSize = 18, Size = UDim2.fromScale(1, 1), Parent = chip })
+	task.spawn(function()
+		while true do
+			local left = boostLeft()
+			chip.Visible = left &gt; 0
+			if left &gt; 0 then
+				chipLabel.Text = string.format("x2 Cleaning %d:%02d", left // 60, left % 60)
+			end
+			task.wait(1)
+		end
+	end)
+
+	-- Opening the Roblox menu: offer today's boost (once a session, and only if it's still free).
+	GuiService.MenuOpened:Connect(function()
+		local meta = ClientState.Meta :: any
+		if offeredThisSession or not meta or meta.StayBoostReady ~= true or boostLeft() &gt; 0 then
+			return
+		end
+		offeredThisSession = true
+		UIKit.OpenWindow("StayOffer")
+	end)
+end
+
+return StayOffer</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX0000003D"><Properties><string name="Name">TradeUI</string><ProtectedString name="Source">--[[
 	TradeUI - pet trading (lobby only; TradeService on the server checks everything).
 
 	  * The 🤝 Trade button (HUD) opens the Trade window: everyone in the server with a Request
@@ -34120,7 +34534,7 @@ function TradeUI.Init()
 end
 
 return TradeUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003C"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003E"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -36632,7 +37046,7 @@ function UIKit.Init()
 end
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003D"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000003F"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button
@@ -37108,7 +37522,7 @@ function UpgradesUI.Init()
 end
 
 return UpgradesUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000003E"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000040"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
 	WaterFX - the water coming out of your own hose and pressure washer, built from real parts so
 	it looks solid from every angle (a camera-facing Beam flattens to nothing when you look straight
 	down it, which is exactly the first-person view).
@@ -37348,7 +37762,7 @@ end
 
 return WaterFX</ProtectedString></Properties></Item>
 </Item>
-<Item class="LocalScript" referent="RBX0000003F"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
+<Item class="LocalScript" referent="RBX00000041"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
 	AdminClient - Rinse Cycle's admin panel and the admin effects every player can see.
 
 	Everyone:
@@ -38942,7 +39356,7 @@ local function buildPanel(info: any)
 			})
 		end
 	end
-	-- All servers: every player everywhere, Join (arrive invisible) and, if allowed, Bring.
+	-- All servers: one row per server (its players underneath) with a single Join (arrive invisible).
 	AdminServerList.OnClientEvent:Connect(function(title, entries, busiestJobId)
 		local extra = nil
 		if type(busiestJobId) == "string" then
@@ -38956,13 +39370,6 @@ local function buildPanel(info: any)
 		showList(tostring(title), entries, "Join", function(entry)
 			AdminServerAction:FireServer("Join", entry.JobId, entry.Id)
 		end, nil, extra)
-		if allowed["bringserver"] then
-			currentAction2 = "Bring"
-			currentOnAction2 = function(entry)
-				AdminServerAction:FireServer("Bring", entry.JobId, entry.Id)
-			end
-			drawRows()
-		end
 	end)
 
 	AdminStaffList.OnClientEvent:Connect(function(title, entries)
@@ -39235,5 +39642,5 @@ task.spawn(function()
 end)</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="TextChatService" referent="RBX00000040"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
+<Item class="TextChatService" referent="RBX00000042"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
 </roblox>

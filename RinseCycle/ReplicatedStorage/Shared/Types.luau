@@ -126,6 +126,8 @@ export type MetaState = {
 	GroupReward: boolean, -- the community reward has been claimed
 	FollowState: string, -- "" / "Pending" (checked when you rejoin) / "Claimed"
 	LikeState: string, -- "" / "Pending" (paid when you rejoin) / "Claimed"
+	BoostUntil: number?, -- os.time() until which cleaning is x2 (the stay boost)
+	StayBoostReady: boolean?, -- today's free stay boost can still be claimed
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,

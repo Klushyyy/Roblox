@@ -356,8 +356,18 @@ local function socialDone(player: Player, value: any): Types.RequestResult
 	return { Ok = true, Message = message }
 end
 
+-- The free x2 cleaning boost offered when a player opens the Roblox menu (once a day).
+local function claimStayBoost(player: Player, _value: any): Types.RequestResult
+	local ok, message = DataService.ClaimStayBoost(player)
+	if not ok then
+		return fail(message)
+	end
+	return { Ok = true, Message = message }
+end
+
 local HANDLERS: { [string]: (Player, any) -> Types.RequestResult } = {
 	ClaimDaily = claimDaily,
+	ClaimStayBoost = claimStayBoost,
 	SocialDone = socialDone,
 	RedeemCode = redeemCode,
 	ClaimGroup = claimGroup,

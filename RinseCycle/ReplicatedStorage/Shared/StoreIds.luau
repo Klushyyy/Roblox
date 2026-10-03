@@ -45,6 +45,13 @@ return {
 		RestoreStreak = 0, -- Restore Streak (29 R$)
 	},
 
+	-- Background music: audio asset IDs (Creator Store > Audio > Music, or the Toolbox's Audio tab;
+	-- right-click a track > Copy Asset ID). Add as many as you like; they play shuffled and loop.
+	Music = {
+		Lobby = { 0 }, -- calm tracks for the lobby, e.g. { 1234567890, 2345678901 }
+		Run = { 0 },   -- upbeat tracks while cleaning a dishwasher
+	},
+
 	-- Gift products: one DEVELOPER PRODUCT per pass (not a game pass!), named "Gift: <pass name>"
 	-- with the same price. Buying one gives that pass to the friend the buyer picked.
 	GiftPasses = {

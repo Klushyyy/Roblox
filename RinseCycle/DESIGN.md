@@ -1301,9 +1301,22 @@ walls instead of clipping through. All gameplay queries use Include filters.
   leave players with AdminInvis out.
 - :serverlist ("All servers"): each server writes its players to the "RinseCycle_ServerList"
   MemoryStore sorted map every 30 s (90 s expiry). The admin sees everyone everywhere with Join
-  (and Bring for ranks that have it), plus "Busiest server".
+  plus "Busiest server".
 - Joining another server (the list or :joinserver) always arrives invisible (AdminInvis), so
   nobody sees you join; :invis brings you back.
+
+## 6w. Music, the stay boost, a faster start, guest admins (v1.6.6)
+- Music: MusicPlayer plays the Lobby or Run playlist (StoreIds > Music, shuffled, faded). A
+  "Music" button in the left column (lobby only) mutes it for the session.
+- Stay boost: opening the Roblox menu shows "Don't go yet!" (once a session) offering a free
+  x2 Cleaning boost for 15 minutes, once per UTC day (Profile.BoostUntil / StayBoostDay). It
+  doubles Power and PetPower in computeStats. A timer chip shows while it runs.
+- Faster start: Family Dinner Toughness 5.5 -> 1.8 plus 20 starting coins; level 2 6.0 -> 4.5.
+  Ads showed ~56 s average play, so the first minute has to pay out fast.
+- Server list: one row and one Join per server (its players listed underneath); your own
+  server and hidden admins aren't listed or counted.
+- An admin joining a run server is a guest: invisible, put into the run (JoinLate) once it's
+  going, and sent home when the run ends or every real player has left.
 
 ## 7. Balance knobs (all in Config)
 

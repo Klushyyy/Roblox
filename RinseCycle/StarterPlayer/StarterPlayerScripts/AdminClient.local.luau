@@ -1592,7 +1592,7 @@ local function buildPanel(info: any)
 			})
 		end
 	end
-	-- All servers: every player everywhere, Join (arrive invisible) and, if allowed, Bring.
+	-- All servers: one row per server (its players underneath) with a single Join (arrive invisible).
 	AdminServerList.OnClientEvent:Connect(function(title, entries, busiestJobId)
 		local extra = nil
 		if type(busiestJobId) == "string" then
@@ -1606,13 +1606,6 @@ local function buildPanel(info: any)
 		showList(tostring(title), entries, "Join", function(entry)
 			AdminServerAction:FireServer("Join", entry.JobId, entry.Id)
 		end, nil, extra)
-		if allowed["bringserver"] then
-			currentAction2 = "Bring"
-			currentOnAction2 = function(entry)
-				AdminServerAction:FireServer("Bring", entry.JobId, entry.Id)
-			end
-			drawRows()
-		end
 	end)
 
 	AdminStaffList.OnClientEvent:Connect(function(title, entries)

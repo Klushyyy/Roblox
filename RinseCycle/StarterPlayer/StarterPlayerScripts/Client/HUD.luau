@@ -265,6 +265,27 @@ function HUD.Init()
 	local codesButton = leftButton(2, "@Ticket", "Codes", Colors.Primary, "Codes")
 	local freeButton = leftButton(3, "@Heart", "Free", Colors.Good, "Free")
 	local tradeButton = leftButton(4, "🤝", "Trade", Colors.Accent, "Trade")
+	-- Music on / off (MusicPlayer). Under Trade; the staff Admin button goes below it.
+	local musicButton: TextButton
+	musicButton = UIKit.IconButton({
+		Name = "MusicButton",
+		Icon = "♪",
+		Label = "Music",
+		Color = Colors.PanelLight,
+		Size = UDim2.fromOffset(80, 80),
+		LayoutOrder = 5,
+		Parent = leftColumn,
+		OnClick = function()
+			local MusicPlayer = require(script.Parent:WaitForChild("MusicPlayer")) :: any
+			local on = not MusicPlayer.IsEnabled()
+			MusicPlayer.SetEnabled(on)
+			local label = musicButton:FindFirstChild("Label", true)
+			if label and label:IsA("TextLabel") then
+				label.Text = if on then "Music" else "Muted"
+			end
+			UIKit.SetButtonColor(musicButton, if on then Colors.PanelLight else Colors.Disabled)
+		end,
+	})
 	local function makeAdminButton()
 		if adminButton or not adminClick then
 			return
@@ -275,7 +296,7 @@ function HUD.Init()
 			Label = "Admin",
 			Color = Colors.PanelLight,
 			Size = UDim2.fromOffset(80, 80),
-			LayoutOrder = 5, -- under Trade in the left column (and alone there in a run, clear of the timer)
+			LayoutOrder = 6, -- under Trade / Music in the left column (and alone there in a run, clear of the timer)
 			Parent = leftColumn,
 			OnClick = function()
 				if adminClick then
@@ -288,6 +309,7 @@ function HUD.Init()
 		codesButton.Visible = not inRun
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
+		musicButton.Visible = not inRun
 		leftColumn.Visible = true
 	end
 	addAdminButton = makeAdminButton
@@ -1152,6 +1174,7 @@ function HUD.Init()
 		codesButton.Visible = not inRun
 		freeButton.Visible = not inRun
 		tradeButton.Visible = not inRun
+		musicButton.Visible = not inRun
 		leftColumn.Visible = not inRun or (adminButton ~= nil and adminButton.Visible)
 		upgradesButton.LayoutOrder = 1
 		shopButton.LayoutOrder = 2

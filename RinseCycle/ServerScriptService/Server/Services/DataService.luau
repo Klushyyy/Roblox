@@ -98,6 +98,8 @@ export type Profile = {
 	FollowPending: boolean, -- pressed "I followed!": checked on the next join (SocialService)
 	LikePending: boolean, -- pressed "I liked it!": paid on the next join
 	RebirthReady: boolean, -- the last level has been cleared since the last rebirth
+	BoostUntil: number, -- os.time() until which cleaning is x2 (the "stay" boost); 0 = none
+	StayBoostDay: string, -- UTC date ("2026-10-03") the stay boost was last claimed: once a day
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
@@ -164,6 +166,8 @@ local TEMPLATE: Profile = {
 	LikeReward = false,
 	FollowPending = false,
 	LikePending = false,
+	BoostUntil = 0,
+	StayBoostDay = "",
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
 }
@@ -359,6 +363,8 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.Bubbles = toCount(p.Bubbles, 0)
 	p.Gems = toCount(p.Gems, 0)
 	p.Rebirths = toCount(p.Rebirths, 0)
+	p.BoostUntil = toCount(p.BoostUntil, 0)
+	p.StayBoostDay = if type(p.StayBoostDay) == "string" then p.StayBoostDay else ""
 	p.DailyDay = toCount(p.DailyDay, 0)
 	p.DailyLast = toCount(p.DailyLast, 0)
 	if p.DailyLast == 0 and p.DailyDay > 0 then
@@ -614,6 +620,8 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		GroupReward = profile.GroupReward,
 		FollowState = if profile.FollowReward then "Claimed" elseif profile.FollowPending then "Pending" else "",
 		LikeState = if profile.LikeReward then "Claimed" elseif profile.LikePending then "Pending" else "",
+		BoostUntil = profile.BoostUntil,
+		StayBoostReady = profile.StayBoostDay ~= os.date("!%Y-%m-%d"),
 		Stats = {
 			Runs = stats.Runs,
 			DishesCleaned = stats.DishesCleaned,
@@ -1278,6 +1286,33 @@ function DataService.ClaimDaily(player: Player): (number?, string?)
 	end
 	DataService.PushMeta(player)
 	return streak, nil
+end
+
+-- The "stay" boost: offered when a player opens the Roblox menu (often on the way out). x2 cleaning
+-- for STAY_BOOST_SECONDS, claimable once per UTC day. Returns (ok, message).
+local STAY_BOOST_SECONDS = 15 * 60
+function DataService.ClaimStayBoost(player: Player): (boolean, string)
+	local profile = DataService.Get(player)
+	if not profile then
+		return false, "Your data is still loading."
+	end
+	local today = os.date("!%Y-%m-%d")
+	if profile.StayBoostDay == today then
+		return false, "You've had today's free boost already. Come back tomorrow!"
+	end
+	profile.StayBoostDay = today
+	profile.BoostUntil = math.max(os.time(), profile.BoostUntil) + STAY_BOOST_SECONDS
+	DataService.PushMeta(player)
+	DataService.PassesChanged:Fire(player) -- run stats pick up the x2 now
+	local untilTime = profile.BoostUntil
+	task.delay(untilTime - os.time() + 1, function()
+		local p = DataService.Get(player)
+		if p and p.BoostUntil == untilTime then
+			DataService.PushMeta(player)
+			DataService.PassesChanged:Fire(player) -- and drop it when it runs out
+		end
+	end)
+	return true, "x2 Cleaning for 15 minutes! Enjoy!"
 end
 
 -- RestoreStreak product: a missed day is forgiven, so the next claim (available now) carries on

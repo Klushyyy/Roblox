@@ -472,7 +472,13 @@ local function computeStats(levelIndex: number, player: Player, pr: PlayerRun): 
 	end
 	local rank = profile and profile.Rank or nil
 	local rebirths = profile and profile.Rebirths or 0
-	return Config.GetRunStats(levelIndex, effectiveUpgrades(pr), pr.ToolIndex, perks, getPasses(player), petBonus, rank, rebirths)
+	local stats = Config.GetRunStats(levelIndex, effectiveUpgrades(pr), pr.ToolIndex, perks, getPasses(player), petBonus, rank, rebirths)
+	-- The stay boost: x2 cleaning (you and your pets) while it lasts.
+	if profile and (tonumber(profile.BoostUntil) or 0) > os.time() then
+		stats.Power *= 2
+		stats.PetPower *= 2
+	end
+	return stats
 end
 
 -- Recomputes a member's stats from their upgrades, tool, perks, passes and pets, and re-applies
