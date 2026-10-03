@@ -1265,7 +1265,8 @@ walls instead of clipping through. All gameplay queries use Include filters.
   refresh every 60 s, and the board SurfaceGuis draw from 5000 studs.
 - Free rewards: Follow is only paid when the follow is actually seen (needs "Allow HTTP Requests");
   "Like the game" became "Favorite the game", checked with AvatarEditorService (likes can't be
-  checked by any game).
+  checked by any game). Since v1.6.7 the card reads "Favorite & Like the game"; only the
+  favorite is checked.
 - Faster hops: 3 s handoff cap, 12 s party arrival wait (late members join the run going),
   bigger build steps in run servers, shorter fade-in.
 

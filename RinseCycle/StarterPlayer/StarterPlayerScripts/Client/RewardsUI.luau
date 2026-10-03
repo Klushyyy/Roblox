@@ -144,7 +144,7 @@ local function refreshSocial()
 			UIKit.SetButtonColor(rowParts.Button, Colors.Warning)
 			rowParts.Status.Text = "Not working? Leave and rejoin."
 		else
-			rowParts.Button.Text = if kind == "Follow" then "I followed!" else "Favorite"
+			rowParts.Button.Text = if kind == "Follow" then "I followed!" else "Favorite & Like"
 			UIKit.SetButtonColor(rowParts.Button, Colors.Good)
 			rowParts.Status.Text = "Reward: " .. Config.RewardText(reward :: any)
 		end
@@ -196,7 +196,7 @@ local function markDone(kind: string)
 	end
 	if kind == "Favorite" and not favoriteGame() then
 		busy = false
-		UIKit.Toast("Favorite the game (the ⭐ on its page or the prompt) to get this reward!", "Info")
+		UIKit.Toast("Favorite and like the game to get this reward!", "Info")
 		refreshSocial()
 		return
 	end
@@ -307,9 +307,10 @@ local function buildFree(screenRoot: Instance)
 	})
 	groupStatus = UIKit.Label({ Text = "", TextSize = 15, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(230, 20), Position = UDim2.new(1, -4, 1, -8), AnchorPoint = Vector2.new(1, 1), Parent = group })
 
-	-- Favorite the game (checked on this device; likes can't be checked by any game).
+	-- "Favorite & Like the game". Only the favorite is checked (on this device); likes can't be
+	-- checked by any game, so the text asks for both.
 	if Config.Social.LikeReward then
-		local fav = card(list, 2, "⭐", "Favorite the game", "Tap Favorite and confirm. We check it straight away.")
+		local fav = card(list, 2, "⭐", "Favorite & Like the game", "Favorite and like the game, then tap the button. We check it straight away.")
 		socialButton(fav, "Favorite")
 	end
 

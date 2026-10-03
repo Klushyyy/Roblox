@@ -98,7 +98,7 @@ function SocialService.CheckNow(player: Player, kind: string): (boolean, string)
 			return false, "You already got this reward. Thank you!"
 		end
 		DataService.GrantSocialReward(player, "Like")
-		return true, "Thanks for favoriting the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!"
+		return true, "Thanks for favoriting and liking the game! You got " .. Config.RewardText(Config.Social.LikeReward :: any) .. "!"
 	elseif kind == "Follow" then
 		if profile.FollowReward then
 			return false, "You already got this reward. Thank you!"
