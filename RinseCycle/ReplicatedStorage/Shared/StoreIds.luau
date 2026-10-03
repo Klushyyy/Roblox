@@ -45,6 +45,16 @@ return {
 		RestoreStreak = 0, -- Restore Streak (29 R$)
 	},
 
+	-- Developer products for the Treasure Chest event and the luck ad. Create each one in Creator
+	-- Dashboard > Monetization > Developer Products with the name and price shown.
+	Events = {
+		ChestOne = 0,   -- Treasure Chest x1 (49 R$)
+		ChestThree = 0, -- Treasure Chest x3 (139 R$)
+		ChestTen = 0,   -- Treasure Chest x10 (349 R$)
+		AdLuck = 0,     -- Luck Ad Reward (any price, e.g. 5 R$): the reward a rewarded video ad gives.
+		                -- Also turn ads on: Creator Dashboard > Monetization > Ads (rewarded video ads).
+	},
+
 	-- Background music: audio asset IDs (Creator Store > Audio > Music, or the Toolbox's Audio tab;
 	-- right-click a track > Copy Asset ID). Add as many as you like; they play shuffled and loop.
 	Music = {

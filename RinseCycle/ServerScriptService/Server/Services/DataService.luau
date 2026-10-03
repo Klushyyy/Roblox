@@ -102,6 +102,8 @@ export type Profile = {
 	StayBoostDay: string, -- UTC date ("2026-10-03") the stay boost was last claimed: once a day
 	PetsResting: boolean, -- the player switched their pets off: they follow but don't clean
 	ReferredBy: number, -- UserId of the friend whose invite brought them in (0 = nobody)
+	AdLuckStacks: number, -- rewarded ads watched for rank luck (each +PerAd), while AdLuckUntil lasts
+	AdLuckUntil: number, -- os.time() the ad luck runs out
 	Referrals: number, -- new players who joined through this player's invites (paid out)
 	Stats: {
 		Runs: number,
@@ -173,6 +175,8 @@ local TEMPLATE: Profile = {
 	StayBoostDay = "",
 	PetsResting = false,
 	ReferredBy = 0,
+	AdLuckStacks = 0,
+	AdLuckUntil = 0,
 	Referrals = 0,
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
@@ -373,6 +377,8 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.StayBoostDay = if type(p.StayBoostDay) == "string" then p.StayBoostDay else ""
 	p.PetsResting = p.PetsResting == true
 	p.ReferredBy = toCount(p.ReferredBy, 0)
+	p.AdLuckStacks = toCount(p.AdLuckStacks, 0)
+	p.AdLuckUntil = toCount(p.AdLuckUntil, 0)
 	p.Referrals = toCount(p.Referrals, 0)
 	p.DailyDay = toCount(p.DailyDay, 0)
 	p.DailyLast = toCount(p.DailyLast, 0)
@@ -633,6 +639,8 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		StayBoostReady = profile.StayBoostDay ~= os.date("!%Y-%m-%d"),
 		PetsResting = profile.PetsResting,
 		Referrals = profile.Referrals,
+		AdLuckStacks = DataService.AdLuckStacks(profile),
+		AdLuckUntil = profile.AdLuckUntil,
 		Stats = {
 			Runs = stats.Runs,
 			DishesCleaned = stats.DishesCleaned,
@@ -1399,6 +1407,27 @@ function DataService.AddReferrals(player: Player, count: number): number
 	end
 	DataService.PushMeta(player)
 	return paid
+end
+
+-- Ad luck (rank rolls): active stacks, 0 once AdLuckUntil has passed.
+function DataService.AdLuckStacks(profile: any): number
+	if not profile or (tonumber(profile.AdLuckUntil) or 0) <= os.time() then
+		return 0
+	end
+	return math.clamp(math.floor(tonumber(profile.AdLuckStacks) or 0), 0, Config.RankRoll.AdLuck.MaxAds)
+end
+
+-- One rewarded ad watched: +1 stack (up to MaxAds) and the timer starts again.
+function DataService.AddAdLuck(player: Player): boolean
+	local profile = DataService.Get(player)
+	if not profile then
+		return false
+	end
+	local ad = Config.RankRoll.AdLuck
+	profile.AdLuckStacks = math.min(ad.MaxAds, DataService.AdLuckStacks(profile) + 1)
+	profile.AdLuckUntil = os.time() + ad.Minutes * 60
+	DataService.PushMeta(player)
+	return true
 end
 
 -- The pets on / off switch: resting pets follow you but don't clean. Saved, so it carries over

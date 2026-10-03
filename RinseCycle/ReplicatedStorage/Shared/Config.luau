@@ -415,7 +415,16 @@ Config.Gems = {
 Config.RankRoll = {
 	Cost = 30, -- gems per roll
 	LuckMult = 2, -- x2 Luck pass: Rare and better are this many times as likely
+	-- Rewarded video ads (Roblox AdService): each ad adds PerAd to your luck for Minutes, up to
+	-- MaxAds stacked (+100%). The x2 Luck pass doubles the total: 5 ads = x2 luck, x4 with the pass.
+	AdLuck = { PerAd = 0.2, MaxAds = 5, Minutes = 15 },
 }
+
+-- Your total luck: (1 + ad stacks x PerAd) x (2 with the x2 Luck pass).
+function Config.LuckMult(hasPass: boolean?, adStacks: number?): number
+	local ads = math.clamp(math.floor(tonumber(adStacks) or 0), 0, Config.RankRoll.AdLuck.MaxAds)
+	return (1 + ads * Config.RankRoll.AdLuck.PerAd) * (if hasPass then Config.RankRoll.LuckMult else 1)
+end
 
 Config.RankRarities = {
 	Common = { Order = 1, Color = Color3.fromRGB(190, 200, 210) },
@@ -459,7 +468,9 @@ end
 -- Roll weights, with the x2 Luck pass applied. Returns { { Rank = def, Weight = n } }, total.
 -- With x2 Luck, Rare and better are truly LuckMult times as likely (Mythic 0.5% -> 1%): the
 -- extra chance is taken from Common and Uncommon, so the total stays the same.
-function Config.RankWeights(doubleLuck: boolean?)
+-- `luck`: true = the x2 Luck pass alone, or a number (Config.LuckMult). Rare and better are that
+-- many times as likely, capped so Common / Uncommon never go below zero.
+function Config.RankWeights(luck: (boolean | number)?)
 	local list, total = {}, 0
 	local boosted, rest = 0, 0
 	for _, r in Config.Ranks do
@@ -469,7 +480,9 @@ function Config.RankWeights(doubleLuck: boolean?)
 			rest += r.Chance
 		end
 	end
-	local mult = Config.RankRoll.LuckMult
+	local mult = if luck == true then Config.RankRoll.LuckMult elseif type(luck) == "number" then luck else 1
+	mult = math.clamp(mult, 1, (boosted + rest) / math.max(boosted, 0.0001))
+	local doubleLuck = mult > 1
 	local restScale = 1
 	if doubleLuck and rest > 0 then
 		restScale = math.max(0, (boosted + rest - boosted * mult) / rest)
@@ -940,6 +953,9 @@ function Config.GetGiftProduct(passKey: string)
 	return nil
 end
 
+-- Event developer products (StoreIds > Events): Treasure Chest packs and the luck ad reward.
+Config.EventProducts = { ChestOne = 0, ChestThree = 0, ChestTen = 0, AdLuck = 0 }
+
 -- The IDs pasted into StoreIds (ReplicatedStorage > Shared > StoreIds), the one script to edit
 -- once the passes and products exist on Roblox. A number there replaces the matching Id here.
 do
@@ -971,6 +987,14 @@ do
 					end
 				end
 				Config.Music[key] = list
+			end
+		end
+		if type(ids.Events) == "table" then
+			for key in Config.EventProducts do
+				local n = tonumber(ids.Events[key])
+				if n and n > 0 then
+					Config.EventProducts[key] = math.floor(n)
+				end
 			end
 		end
 		local group = tonumber(ids.GroupId)

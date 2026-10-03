@@ -41,6 +41,22 @@ local rollButton: TextButton
 local gemsLabel: TextLabel
 local luckButton: TextButton
 local luckActive: Frame? = nil
+local adButton: TextButton
+local luckSummary: TextLabel
+local watchingAd = false
+
+-- Your luck right now: the total multiplier (Config.LuckMult), ad stacks and seconds left on them.
+local function currentLuck(meta: any): (number, number, number)
+	local hasPass = meta ~= nil and meta.Passes.DoubleLuck == true
+	local left = if meta then math.max(0, (tonumber(meta.AdLuckUntil) or 0) - os.time()) else 0
+	local stacks = if left > 0 then math.clamp(tonumber(meta.AdLuckStacks) or 0, 0, Config.RankRoll.AdLuck.MaxAds) else 0
+	return Config.LuckMult(hasPass, stacks), stacks, left
+end
+
+local function multText(mult: number): string
+	local s = string.format("%.1f", mult)
+	return "x" .. (string.gsub(s, "%.0$", ""))
+end
 
 local function rarityColor(rarity: string): Color3
 	local r = Config.RankRarities[rarity]
@@ -100,13 +116,33 @@ local function renderGems()
 	if luckActive then
 		luckActive.Visible = luck
 	end
+	if adButton then
+		local mult, stacks, left = currentLuck(meta)
+		local ad = Config.RankRoll.AdLuck
+		local label = adButton:FindFirstChildWhichIsA("TextLabel", true)
+		if label then
+			label.Text = if watchingAd
+				then "Loading ad..."
+				else string.format("+%d%% Luck  WATCH AD (%d/%d)", math.floor(ad.PerAd * 100 + 0.5), stacks, ad.MaxAds)
+		end
+		UIKit.SetDisabled(adButton, watchingAd)
+		if mult > 1 then
+			luckSummary.Text = if left > 0
+				then string.format("LUCK %s  •  ads end in %d:%02d", multText(mult), left // 60, left % 60)
+				else string.format("LUCK %s", multText(mult))
+			luckSummary.TextColor3 = Colors.Good
+		else
+			luckSummary.Text = string.format("Watch %d ads for x2 luck (x4 with the pass)", ad.MaxAds)
+			luckSummary.TextColor3 = Colors.TextDim
+		end
+	end
 	if luckButton then
 		local pass = Config.GetPass("DoubleLuck")
 		luckButton.Visible = not luck
 		local label = luckButton:FindFirstChildWhichIsA("TextLabel", true)
 		if label and pass then
 			ShopUI.WatchPrice(pass, true, function(price)
-				label.Text = string.format("x2 Luck pass  •  R$ %d", price)
+				label.Text = string.format("x2 Luck  R$ %d", price)
 			end)
 		end
 	end
@@ -123,8 +159,9 @@ end
 local function renderList()
 	clear(list)
 	local meta = ClientState.Meta :: Types.MetaState?
-	local luck = meta ~= nil and meta.Passes.DoubleLuck == true
-	local weights, total = Config.RankWeights(luck)
+	local mult = currentLuck(meta)
+	local luck = mult > 1
+	local weights, total = Config.RankWeights(mult)
 	-- The chances both ways, so a boosted rank can show what it was / what it would be.
 	local plain, plainTotal = Config.RankWeights(false)
 	local lucky, luckyTotal = Config.RankWeights(true)
@@ -167,8 +204,8 @@ local function renderList()
 			Parent = row,
 		})
 		if boosted then
-			-- With x2 Luck: a green "x2" on the row and what the chance was without it. Without:
-			-- what it would be with the pass.
+			-- With luck (pass and/or ads): a green "x2.6" on the row and what the chance was without
+			-- it. Without: what it would be with the pass.
 			local other = if luck then plain[i].Weight / plainTotal * 100 else lucky[i].Weight / luckyTotal * 100
 			UIKit.Label({
 				Text = if luck then "was " .. pct(other) else "x2 Luck: " .. pct(other),
@@ -183,11 +220,11 @@ local function renderList()
 				local tag = Instance.new("Frame")
 				tag.Name = "LuckTag"
 				tag.Position = UDim2.fromOffset(4, 4)
-				tag.Size = UDim2.fromOffset(30, 18)
+				tag.Size = UDim2.fromOffset(36, 18)
 				tag.BackgroundColor3 = Colors.Good
 				tag.ZIndex = 3
 				UIKit.Corner(tag, 9)
-				UIKit.Label({ Text = "x2", TextSize = 13, Size = UDim2.fromScale(1, 1), ZIndex = 4, Parent = tag })
+				UIKit.Label({ Text = multText(mult), TextSize = 13, Size = UDim2.fromScale(1, 1), ZIndex = 4, Parent = tag })
 				tag.Parent = row
 			end
 		end
@@ -612,9 +649,8 @@ local function roll_()
 	rolling = true
 	renderGems()
 	local meta = ClientState.Meta :: Types.MetaState?
-	local luck = meta ~= nil and meta.Passes.DoubleLuck == true
 	local instant = meta ~= nil and meta.Passes.InstaRoll == true
-	local weights, total = Config.RankWeights(luck)
+	local weights, total = Config.RankWeights((currentLuck(meta)))
 	showPopup(instant)
 
 	-- Ask the server in the background; the reel spins until it answers.
@@ -742,12 +778,13 @@ function RanksUI.Init()
 		Parent = leftPanel,
 	})
 
+	-- Two side by side: the x2 Luck pass (or "x2 LUCK OWNED") and the rewarded ad.
 	luckButton = UIKit.Button({
 		Text = "x2 Luck pass",
-		Size = UDim2.new(1, 0, 0, 46),
+		Size = UDim2.new(0.5, -4, 0, 46),
 		Position = UDim2.fromOffset(0, 330),
 		Color = Color3.fromRGB(90, 190, 110),
-		TextSize = 20,
+		TextSize = 15,
 		Parent = leftPanel,
 		OnClick = function()
 			ShopUI.BuyPass("DoubleLuck")
@@ -756,22 +793,58 @@ function RanksUI.Init()
 	-- When you own x2 Luck: a clear green badge where the buy button was.
 	local active = Instance.new("Frame")
 	active.Name = "LuckActive"
-	active.Size = UDim2.new(1, 0, 0, 46)
+	active.Size = UDim2.new(0.5, -4, 0, 46)
 	active.Position = UDim2.fromOffset(0, 330)
 	active.BackgroundColor3 = Colors.Good
 	active.Visible = false
 	UIKit.Corner(active, 12)
 	UIKit.Stroke(active, Color3.fromRGB(220, 255, 230), 3, 0)
-	UIKit.Label({ Text = "x2 LUCK ACTIVE", TextSize = 24, Size = UDim2.fromScale(1, 1), Parent = active })
+	UIKit.Label({ Text = "x2 LUCK OWNED", TextSize = 18, Size = UDim2.fromScale(1, 1), Parent = active })
 	active.Parent = leftPanel
 	luckActive = active
+	adButton = UIKit.Button({
+		Text = "WATCH AD",
+		Size = UDim2.new(0.5, -4, 0, 46),
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, 0, 0, 330),
+		Color = Colors.Primary,
+		TextSize = 14,
+		Parent = leftPanel,
+		OnClick = function()
+			if watchingAd then
+				return
+			end
+			watchingAd = true
+			renderGems()
+			task.spawn(function()
+				local result = ClientState.MetaRequest("WatchLuckAd")
+				watchingAd = false
+				if result.Ok then
+					UIKit.PlaySound("Sparkle")
+					UIKit.Toast(result.Message or "+20% Luck!", "Good")
+				else
+					UIKit.Toast(result.Error or "No ad available right now.", "Info")
+				end
+				render()
+			end)
+		end,
+	})
+	luckSummary = UIKit.Label({
+		Name = "LuckSummary",
+		Text = "",
+		TextSize = 16,
+		TextScaled = true,
+		Position = UDim2.fromOffset(0, 380),
+		Size = UDim2.new(1, 0, 0, 22),
+		Parent = leftPanel,
+	})
 	UIKit.Label({
-		Text = "A roll replaces your current rank! Rare ranks and higher are 2x as likely with x2 Luck.",
+		Text = "A roll replaces your current rank! Luck makes Rare ranks and higher more likely.",
 		TextSize = 14,
 		TextColor3 = Colors.Warning,
 		TextWrapped = true,
 		TextScaled = true,
-		Position = UDim2.fromOffset(0, 386),
+		Position = UDim2.fromOffset(0, 408),
 		Size = UDim2.new(1, 0, 0, 38),
 		Parent = leftPanel,
 	})
@@ -810,6 +883,21 @@ function RanksUI.Init()
 	ClientState.Changed:Connect(function(kind)
 		if kind == "Meta" and UIKit.IsWindowOpen("Ranks") and not rolling then
 			render()
+		end
+	end)
+	-- The ad luck countdown; the odds change back when it runs out.
+	task.spawn(function()
+		local wasActive = false
+		while true do
+			task.wait(1)
+			if UIKit.IsWindowOpen("Ranks") and not rolling then
+				local _mult, stacks = currentLuck(ClientState.Meta)
+				renderGems()
+				if wasActive and stacks == 0 then
+					renderList()
+				end
+				wasActive = stacks > 0
+			end
 		end
 	end)
 end

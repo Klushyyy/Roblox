@@ -50,6 +50,16 @@ type Receipt = {
 --   end,
 local PRODUCTS: { [number]: (Player, any, Receipt) -> () } = {}
 
+-- Other services' developer products (Treasure Chests, the luck ad): `grant` runs once per real
+-- purchase, never yields, and errors to have Roblox retry later.
+function MarketService.RegisterProduct(productId: number, grant: (Player) -> ())
+	if type(productId) == "number" and productId > 0 then
+		PRODUCTS[productId] = function(player: Player, _profile: any, _receipt: Receipt)
+			grant(player)
+		end
+	end
+end
+
 -- Gives a developer product's goods. Never yields. Coins only make sense inside a run; bought
 -- anywhere else (e.g. the run ended while the prompt was open) they turn into Bubbles instead.
 function MarketService.GrantProduct(player: Player, product: any): boolean
@@ -333,6 +343,16 @@ function MarketService.Init()
 			task.spawn(onProfileLoaded, player)
 		end
 	end
+
+	-- The "+20% Luck" rewarded ad's product (ShopService "WatchLuckAd").
+	MarketService.RegisterProduct(Config.EventProducts.AdLuck, function(player)
+		if not DataService.AddAdLuck(player) then
+			error("profile not loaded")
+		end
+		if player.Parent == Players then
+			notifyRemote:FireClient(player, "+20% Luck for your rank rolls!", "Good")
+		end
+	end)
 
 	MarketplaceService.PromptGamePassPurchaseFinished:Connect(onPassPurchaseFinished)
 	MarketplaceService.ProcessReceipt = processReceipt

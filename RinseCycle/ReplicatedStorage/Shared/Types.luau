@@ -130,6 +130,8 @@ export type MetaState = {
 	StayBoostReady: boolean?, -- today's free stay boost can still be claimed
 	PetsResting: boolean?, -- pets switched off: they follow you but don't clean
 	Referrals: number?, -- friends who joined through your invites (paid out)
+	AdLuckStacks: number?, -- rewarded ads stacked for rank luck (0..MaxAds), while AdLuckUntil lasts
+	AdLuckUntil: number?,
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
