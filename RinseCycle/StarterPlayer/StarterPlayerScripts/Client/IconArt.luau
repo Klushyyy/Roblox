@@ -515,6 +515,51 @@ ART.Lock = {
 	{ "rect", x = 0.25, y = 0.52, w = 0.12, h = 0.05, r = 0.5, fill = WHITE, t = 0.35 },
 }
 
+-- A treasure chest (the Treasure Chest event): wooden box and lid, gold bands and lock.
+do
+	local wood = { rgb(196, 120, 64), rgb(130, 70, 34) }
+	local gold = { rgb(255, 236, 130), rgb(230, 160, 30) }
+	ART.Chest = {
+		{ "rect", x = 0.5, y = 0.66, w = 0.86, h = 0.46, r = 0.14, fill = wood, o = true },
+		{ "rect", x = 0.5, y = 0.34, w = 0.86, h = 0.34, r = 0.45, fill = { rgb(214, 136, 74), rgb(160, 90, 44) }, o = true },
+		{ "rect", x = 0.25, y = 0.56, w = 0.09, h = 0.74, r = 0.2, fill = gold },
+		{ "rect", x = 0.75, y = 0.56, w = 0.09, h = 0.74, r = 0.2, fill = gold },
+		{ "rect", x = 0.5, y = 0.47, w = 0.86, h = 0.07, r = 0.3, fill = gold },
+		{ "rect", x = 0.5, y = 0.24, w = 0.5, h = 0.04, r = 0.5, fill = WHITE, t = 0.5 },
+		"|",
+		{ "rect", x = 0.5, y = 0.52, w = 0.18, h = 0.22, r = 0.25, fill = gold, o = true },
+		{ "disc", x = 0.5, y = 0.5, d = 0.07, fill = INK },
+		{ "rect", x = 0.5, y = 0.56, w = 0.035, h = 0.07, r = 0.5, fill = INK },
+	}
+end
+
+-- A club crest: blue shield with a bubble in the middle.
+do
+	local blue = { rgb(120, 200, 255), rgb(40, 100, 220) }
+	ART.Club = {
+		{ "rect", x = 0.5, y = 0.34, w = 0.76, h = 0.5, r = 0.16, fill = blue, o = true },
+		{ "diamond", x = 0.5, y = 0.5, hd = 0.44, clip = { 0.12, 0.5, 0.88, 0.96 }, fill = { rgb(70, 140, 235), rgb(40, 100, 220) }, o = true },
+		"|",
+		{ "rect", x = 0.5, y = 0.13, w = 0.6, h = 0.05, r = 0.5, fill = rgb(255, 214, 80) },
+		{ "disc", x = 0.5, y = 0.5, d = 0.36, fill = { rgb(230, 248, 255), rgb(150, 210, 255) }, o = true },
+		{ "disc", x = 0.44, y = 0.44, d = 0.1, fill = WHITE, t = 0.1 },
+		{ "disc", x = 0.6, y = 0.6, d = 0.05, fill = WHITE, t = 0.4 },
+	}
+end
+
+-- A calendar page (events).
+ART.Calendar = {
+	{ "rect", x = 0.5, y = 0.56, w = 0.8, h = 0.72, r = 0.14, fill = { rgb(255, 255, 255), rgb(214, 224, 240) }, o = true },
+	{ "rect", x = 0.5, y = 0.3, w = 0.8, h = 0.2, r = 0.3, fill = { rgb(255, 110, 120), rgb(220, 50, 70) }, o = true },
+	{ "rect", x = 0.32, y = 0.18, w = 0.08, h = 0.18, r = 0.5, fill = rgb(70, 84, 110), o = true },
+	{ "rect", x = 0.68, y = 0.18, w = 0.08, h = 0.18, r = 0.5, fill = rgb(70, 84, 110), o = true },
+	{ "rect", x = 0.32, y = 0.54, w = 0.13, h = 0.1, r = 0.2, fill = rgb(120, 140, 175) },
+	{ "rect", x = 0.5, y = 0.54, w = 0.13, h = 0.1, r = 0.2, fill = rgb(120, 140, 175) },
+	{ "rect", x = 0.68, y = 0.54, w = 0.13, h = 0.1, r = 0.2, fill = { rgb(255, 214, 80), rgb(240, 160, 30) } },
+	{ "rect", x = 0.32, y = 0.72, w = 0.13, h = 0.1, r = 0.2, fill = rgb(120, 140, 175) },
+	{ "rect", x = 0.5, y = 0.72, w = 0.13, h = 0.1, r = 0.2, fill = rgb(120, 140, 175) },
+}
+
 -- Puts the whole icon on one ZIndex (for ScreenGuis that use Global ZIndex ordering).
 -- Moves a drawn icon to layer z. Its shapes keep their own stacking order inside it (every
 -- ScreenGui here uses Sibling ZIndex, so they only order among themselves).

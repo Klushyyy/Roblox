@@ -1440,6 +1440,31 @@ walls instead of clipping through. All gameplay queries use Include filters.
   shows Roblox's experience-notification opt-in (when Roblox allows). Sending notifications is
   done outside the game (Creator Hub notification string + Open Cloud).
 
+## 6za. Clubs, Treasure Chests, ad luck, Next Event (v2.0.0)
+- HUD: the right-hand buttons are a grid two wide (lobby: Event, Shop, Pets, Ranks, Clubs, Trade;
+  run: Upgrades, Shop, Pets, Leave). C opens Clubs.
+- Rank luck from ads (RanksUI "+20% Luck WATCH AD (n/5)"): ShopService "WatchLuckAd" shows a
+  Roblox rewarded video ad (AdService) whose reward is the developer product
+  Config.EventProducts.AdLuck; its receipt adds a stack (DataService.AddAdLuck, 15 minutes, up to
+  5). Luck = (1 + 0.2 x ads) x 2 with the x2 Luck pass (Config.LuckMult): 5 ads = x2, x4 with the
+  pass. Studio without a product Id: a free stack.
+- Treasure Chest event (Config.ChestEvent, EventService, ChestUI, the lobby chest): 1 free chest
+  per event (profile ChestEventId / ChestFreeUsed), then x1 49 / x3 139 / x10 349 R$ developer
+  products (cinema-popcorn pricing: x3 barely cheaper per chest, x10 the big BEST VALUE). Odds
+  are listed beside the packs. Rewards: Bubbles, Gems, x2 Cleaning, two event-only pets (Coral
+  Crab, Treasure Turtle, Golden too) and a 0.5% random game pass (saved like a gift). A full bag
+  turns a pet into Gems. Bought chests open on the receipt and are revealed via ChestResult.
+- Clubs (ClubService, ClubsUI): CLUB / TOP CLUBS / FIND tabs. Make one for 500 Gems: name and tag
+  (letters / numbers, Roblox-filtered, unique names), public or private (club code), requirements
+  (level beaten 0-3, rebirths). Max 25. Owner: settings, new code, kick; leaving passes ownership
+  to the longest member, the last one out closes it. Points = Bubbles members earn while in it
+  (flushed every minute); TOP CLUBS = top 25 (OrderedDataStore). The tag shows after members'
+  names. 60 s cooldown between joins. Kicks reach other servers over MessagingService, and the
+  membership is re-checked on join. Studio without API access: clubs live in server memory.
+- Next Event spot (LobbyBuilder ring + banner, EventZone): walking in shows the next event from
+  Config.UpcomingEvents with a countdown and Notify Me (Roblox's event RSVP when RobloxEventId is
+  set, otherwise the experience-notification opt-in).
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

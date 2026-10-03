@@ -18,6 +18,8 @@ Remotes.Events = {
 	"Celebrate", -- S->C (title: string, text: string, icon: string?) a centred popup with confetti
 	"TradeAction", -- C->S (action: string, value: any)
 	"TradeState", -- S->C (state: TradeState?) / ("Request", fromUserId, fromName) for an invite
+	"ChestResult", -- S->C (rewards: { { Index: number, Text: string } }) bought chests opened
+	"ClubState", -- S->C (club: ClubInfo?) your club changed (joined, left, kicked, edited)
 }
 
 Remotes.Functions = {
@@ -25,6 +27,8 @@ Remotes.Functions = {
 	"MetaRequest", -- C->S (action: string, value: any) -> { Ok: boolean, Error: string?, ... }
 	"GetMeta", -- C->S () -> MetaState?
 	"GiftRequest", -- C->S (passKey: string, toUserId: number) -> { Ok: boolean, Error: string?, ProductId: number? }
+	"ChestRequest", -- C->S ("Free" | "Test", count?) -> { Ok, Error?, Rewards? } (EventService)
+	"ClubRequest", -- C->S (action: string, value: any) -> { Ok, Error?, ... } (ClubService)
 }
 
 local FOLDER_NAME = "Remotes"

@@ -44,7 +44,12 @@ DS.SetPass(p, "DoubleCoins", true)
 DS.SetPass(p, "VIP", true)
 DS.PushMeta(p)
 pump(1.5, G.frame)
-local row = p.PlayerGui.StayOffer:FindFirstChild("BoostBadges", true)
+local row
+for _, d in p.PlayerGui:GetDescendants() do
+	if d.Name == "BoostBadges" and d:IsA("Frame") then
+		row = d
+	end
+end
 local shown = {}
 for _, c in row:GetChildren() do
 	if c:IsA("Frame") and c.Visible then

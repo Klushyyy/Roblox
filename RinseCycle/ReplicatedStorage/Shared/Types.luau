@@ -132,6 +132,10 @@ export type MetaState = {
 	Referrals: number?, -- friends who joined through your invites (paid out)
 	AdLuckStacks: number?, -- rewarded ads stacked for rank luck (0..MaxAds), while AdLuckUntil lasts
 	AdLuckUntil: number?,
+	ChestFreeLeft: number?, -- free Treasure Chests left in the current event
+	ChestsOpened: number?,
+	ClubId: string?, -- "" = not in a club
+	LevelsBeaten: number?, -- highest level ever cleared (club requirements)
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,

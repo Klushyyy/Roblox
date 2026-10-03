@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.9.0"
+Config.Version = "2.0.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -303,6 +303,9 @@ Config.Pets = {
 	CrystalTurtle = { Name = "Crystal Turtle", Rarity = "Rare", PowerShare = 0.72, Capacity = 57, CoinBonus = 0.18, Model = "Turtle", Colors = { Body = Color3.fromRGB(120, 230, 200), Accent = Color3.fromRGB(200, 255, 255) } },
 	TidalDragon = { Name = "Tidal Dragon", Rarity = "Epic", PowerShare = 1.02, Capacity = 84, CoinBonus = 0.25, Model = "Dragon", Colors = { Body = Color3.fromRGB(60, 150, 255), Accent = Color3.fromRGB(180, 240, 255) } },
 	KrakenKing = { Name = "Kraken King", Rarity = "Legendary", PowerShare = 1.56, Capacity = 121, CoinBonus = 0.38, Model = "Kraken", Colors = { Body = Color3.fromRGB(120, 40, 160), Accent = Color3.fromRGB(255, 210, 60) }, Shiny = true },
+	-- Treasure Chest event only (Config.ChestEvent): no egg has them.
+	CoralCrab = { Name = "Coral Crab", Rarity = "Epic", PowerShare = 0.78, Capacity = 66, CoinBonus = 0.21, Model = "Crab", Event = true, Colors = { Body = Color3.fromRGB(255, 120, 140), Accent = Color3.fromRGB(255, 215, 120) } },
+	TreasureTurtle = { Name = "Treasure Turtle", Rarity = "Legendary", PowerShare = 1.26, Capacity = 100, CoinBonus = 0.32, Model = "Turtle", Event = true, Colors = { Body = Color3.fromRGB(60, 170, 150), Accent = Color3.fromRGB(255, 205, 60) }, Shiny = true },
 }
 
 -- Eggs cost Bubbles. Bubbles can never be bought with Robux, so eggs are not "paid random items";
@@ -955,6 +958,113 @@ end
 
 -- Event developer products (StoreIds > Events): Treasure Chest packs and the luck ad reward.
 Config.EventProducts = { ChestOne = 0, ChestThree = 0, ChestTen = 0, AdLuck = 0 }
+
+----------------------------------------------------------------------------------------------------
+-- TREASURE CHEST EVENT (limited time, the chest in the lobby). Everyone gets FreeOpens free, then
+-- packs of chests for Robux (developer products in StoreIds > Events). Priced like cinema popcorn:
+-- x3 is barely cheaper per chest than x1, so x10 is the obvious deal.
+-- Chances add up to 100 and are always shown beside the chest (paid random items must show odds).
+-- New event: change Id (everyone gets their free chest again), Name and Ends.
+Config.ChestEvent = {
+	Id = "SunkenTreasure",
+	Name = "Sunken Treasure",
+	Ends = 1793491200, -- os.time() it ends: 1 November 2026 00:00 UTC (unixtimestamp.com)
+	FreeOpens = 1,
+	Packs = {
+		{ Key = "ChestOne", Count = 1, Price = 49 },
+		{ Key = "ChestThree", Count = 3, Price = 139 },
+		{ Key = "ChestTen", Count = 10, Price = 349, Tag = "BEST VALUE" },
+	},
+	Rewards = {
+		{ Kind = "Bubbles", Amount = 300, Chance = 30 },
+		{ Kind = "Bubbles", Amount = 750, Chance = 15 },
+		{ Kind = "Gems", Amount = 25, Chance = 20 },
+		{ Kind = "Gems", Amount = 75, Chance = 10 },
+		{ Kind = "Boost", Minutes = 15, Chance = 10 }, -- x2 Cleaning
+		{ Kind = "Pet", Pet = "CoralCrab", Chance = 9 },
+		{ Kind = "Pet", Pet = "TreasureTurtle", Chance = 4.5 },
+		{ Kind = "Pet", Pet = "TreasureTurtle", Tier = 2, Chance = 1 }, -- Golden
+		{ Kind = "Pass", Chance = 0.5, Fallback = 150 }, -- a random pass you don't own (or 150 Gems)
+	},
+}
+
+do
+	local chestSum = 0
+	for _, r in Config.ChestEvent.Rewards do
+		assert(r.Kind ~= "Pet" or Config.Pets[r.Pet], "Config: chest reward has unknown pet " .. tostring(r.Pet))
+		chestSum += r.Chance
+	end
+	assert(math.abs(chestSum - 100) < 0.001, "Config: chest chances add to " .. chestSum)
+end
+
+-- What a chest reward is called ("750 Bubbles", "Golden Treasure Turtle", ...).
+function Config.ChestRewardName(r: any): string
+	if r.Kind == "Bubbles" or r.Kind == "Gems" then
+		return string.format("%d %s", r.Amount, r.Kind)
+	elseif r.Kind == "Boost" then
+		return string.format("x2 Cleaning %d min", r.Minutes)
+	elseif r.Kind == "Pet" then
+		local pet = Config.Pets[r.Pet]
+		local tier = Config.PetTiers[r.Tier or 1]
+		local name = if pet then pet.Name else tostring(r.Pet)
+		return if (r.Tier or 1) > 1 and tier then tier.Name .. " " .. name else name
+	elseif r.Kind == "Pass" then
+		return "Random Game Pass"
+	end
+	return "?"
+end
+
+function Config.ChestEventLive(now: number?): boolean
+	return (now or os.time()) < Config.ChestEvent.Ends
+end
+
+----------------------------------------------------------------------------------------------------
+-- UPCOMING EVENTS (the "Next Event" spot in the lobby). The first one that hasn't ended is shown,
+-- with a countdown, or LIVE NOW between Starts and Ends.
+-- RobloxEventId: optional. Create the event on Roblox (Creator Dashboard > your experience >
+-- Engagement > Events), copy its ID from the URL and paste it here: the button then becomes Roblox's
+-- own "Notify Me" (players get a notification when it starts). 0 = a "remind me" toast instead.
+Config.UpcomingEvents = {
+	{
+		Name = "Admin Abuse Bubble Bash",
+		Desc = "x2 Cleaning for everyone, surprise game pass drops and giveaways all hour!",
+		Starts = 1791993600, -- 14 October 2026 16:00 UTC
+		Ends = 1791997200,
+		RobloxEventId = "0",
+	},
+	{
+		Name = "Sunken Treasure Finale",
+		Desc = "Last day of the Treasure Chest event. Big giveaways and polls!",
+		Starts = 1793397600, -- 30 October 2026 22:00 UTC
+		Ends = 1793404800,
+		RobloxEventId = "0",
+	},
+}
+
+function Config.NextEvent(now: number?): any
+	local t = now or os.time()
+	local best = nil
+	for _, e in Config.UpcomingEvents do
+		if e.Ends > t and (best == nil or e.Starts < best.Starts) then
+			best = e
+		end
+	end
+	return best
+end
+
+----------------------------------------------------------------------------------------------------
+-- CLUBS (the Clubs button). Make one for Gems, name it (and a short tag shown by members' names),
+-- public (anyone who meets the requirements joins) or private (join with the club code).
+Config.Clubs = {
+	CreateCost = 500, -- Gems
+	MaxMembers = 25,
+	NameLength = { 3, 20 },
+	TagLength = { 2, 4 },
+	MaxRebirthReq = 50,
+	MaxLevelReq = 3, -- "must have beaten level N" (0 = anyone)
+	CodeLength = 6,
+	JoinCooldown = 60, -- seconds between joining / leaving clubs
+}
 
 -- The IDs pasted into StoreIds (ReplicatedStorage > Shared > StoreIds), the one script to edit
 -- once the passes and products exist on Roblox. A number there replaces the matching Id here.

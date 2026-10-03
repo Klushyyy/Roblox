@@ -49,3 +49,5 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
   - `scen_touchfly`: on a phone, holding jump in the air flies.
   - `scen_global`: admin Global tab: a poll (vote, results banner), give everyone, x2 boost, pass drop.
   - `scen_referral`: referral payouts (new player once, inviter, cap) and the Free window's cards.
+  - `scen_adluck`: luck from ads (+20% each, max 5, x2 / x4 with the pass), the Ranks window's luck line and odds tag, expiry.
+  - `scen_events`: Treasure Chests (free once, packs, 400-open odds), Clubs (create rules, settings, code, points, leave, join requirements, cooldown), the button grid, the Next Event ring and the lobby chest.

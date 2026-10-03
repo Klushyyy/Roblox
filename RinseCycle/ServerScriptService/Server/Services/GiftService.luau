@@ -113,6 +113,23 @@ local function saveGrant(userId: number, key: string)
 	end)
 end
 
+-- Gives a pass for good (Treasure Chest prizes): saved like a gift, with a popup. Never yields.
+function GiftService.GrantPass(player: Player, key: string, title: string, text: string): boolean
+	local pass = passByKey(key)
+	if not pass or not isHere(player) then
+		return false
+	end
+	saveGrant(player.UserId, key)
+	player:SetAttribute("GP_" .. key, true)
+	DataService.SetPass(player, key, true)
+	GiftService.Celebrate(player, title, text, pass.Icon)
+	return true
+end
+
+function GiftService.Owns(player: Player, key: string): boolean
+	return owns(player, key)
+end
+
 -- Called when a gift product purchase is confirmed. Never yields. Returns true when handled.
 function GiftService.Deliver(buyer: Player, key: string): boolean
 	local pass = passByKey(key)

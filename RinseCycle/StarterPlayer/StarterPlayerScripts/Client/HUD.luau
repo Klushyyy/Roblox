@@ -177,20 +177,25 @@ function HUD.Init()
 	end
 
 	--------------------------------------------------------------------------------------------------
-	-- Right column: big square buttons (Shop/Pets in the lobby; Upgrades/Pets/Leave in a run), each
-	-- with a small key hint for keyboard or gamepad.
+	-- Right side: a grid of square buttons two wide (Event / Shop / Pets / Ranks / Clubs / Trade in
+	-- the lobby; Upgrades / Shop / Pets / Leave in a run), each with a small key hint for keyboard
+	-- or gamepad.
 	--------------------------------------------------------------------------------------------------
+	local SIDE_CELL = 86
+	local SIDE_GAP = 10
 	local rightColumn = Instance.new("Frame")
 	rightColumn.Name = "RightColumn"
 	rightColumn.AnchorPoint = Vector2.new(1, 0.5)
-	rightColumn.Size = UDim2.fromOffset(104, 0)
+	rightColumn.Size = UDim2.fromOffset(SIDE_CELL * 2 + SIDE_GAP, 0)
 	rightColumn.AutomaticSize = Enum.AutomaticSize.Y
 	rightColumn.BackgroundTransparency = 1
 	rightColumn.Parent = root
-	local rightLayout = Instance.new("UIListLayout")
+	local rightLayout = Instance.new("UIGridLayout")
 	rightLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	rightLayout.CellSize = UDim2.fromOffset(SIDE_CELL, SIDE_CELL)
+	rightLayout.CellPadding = UDim2.fromOffset(SIDE_GAP, SIDE_GAP + 4)
+	rightLayout.FillDirectionMaxCells = 2
 	rightLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-	rightLayout.Padding = UDim.new(0, 12)
 	rightLayout.Parent = rightColumn
 
 	local hints: { [TextButton]: { Key: string, Pad: string } } = {}
@@ -199,7 +204,7 @@ function HUD.Init()
 			Icon = icon,
 			Label = label,
 			Color = color,
-			Size = UDim2.fromOffset(100, 100),
+			Size = UDim2.fromOffset(SIDE_CELL, SIDE_CELL),
 			Parent = rightColumn,
 			OnClick = onClick,
 		})
@@ -233,6 +238,25 @@ function HUD.Init()
 	local leaveButton = sideButton("🚪", "Leave", Colors.PanelLight, "", "", function()
 		UIKit.OpenWindow("LeaveConfirm")
 	end)
+	local clubsButton = sideButton("@Club", "Clubs", Colors.Primary, "C", "", function()
+		UIKit.ToggleWindow("Clubs")
+	end)
+	-- The Treasure Chest event (only while it runs), with a "FREE" tag while a free chest waits.
+	local eventButton = sideButton("@Chest", "Event", Colors.Coin, "", "", function()
+		UIKit.ToggleWindow("Chest")
+	end)
+	local freeTag = Instance.new("Frame")
+	freeTag.Name = "FreeTag"
+	freeTag.AnchorPoint = Vector2.new(0.5, 0.5)
+	freeTag.Position = UDim2.new(0.5, 0, 1, 0)
+	freeTag.Size = UDim2.fromOffset(56, 22)
+	freeTag.BackgroundColor3 = Colors.Bad
+	freeTag.ZIndex = 8
+	freeTag.Visible = false
+	UIKit.Corner(freeTag, 11)
+	UIKit.Stroke(freeTag, Colors.Ink, 2)
+	UIKit.Label({ Text = "FREE", TextSize = 15, Size = UDim2.fromScale(1, 1), ZIndex = 9, Parent = freeTag })
+	freeTag.Parent = eventButton
 
 	--------------------------------------------------------------------------------------------------
 	-- Left column (lobby only): Daily reward (with a "!" when one is waiting), Codes, Free Rewards.
@@ -1238,6 +1262,10 @@ function HUD.Init()
 		upgradesButton.Visible = inRun
 		leaveButton.Visible = inRun
 		ranksButton.Visible = not inRun
+		clubsButton.Visible = not inRun
+		eventButton.Visible = not inRun and Config.ChestEventLive()
+		local meta = ClientState.Meta :: any
+		freeTag.Visible = meta ~= nil and (tonumber(meta.ChestFreeLeft) or 0) > 0
 		-- In a run the left column keeps Daily (its "!" shows when a reward is ready) and Music.
 		dailyButton.Visible = true
 		codesButton.Visible = not inRun
@@ -1246,12 +1274,14 @@ function HUD.Init()
 		musicButton.Visible = true
 		petsToggle.Visible = inRun -- in the lobby pets only ever follow you
 		leftColumn.Visible = true
+		eventButton.LayoutOrder = 0
 		upgradesButton.LayoutOrder = 1
 		shopButton.LayoutOrder = 2
 		petsButton.LayoutOrder = 3
 		ranksButton.LayoutOrder = 4
-		tradeButton.LayoutOrder = 5
-		leaveButton.LayoutOrder = 6
+		clubsButton.LayoutOrder = 5
+		tradeButton.LayoutOrder = 6
+		leaveButton.LayoutOrder = 7
 		plusButton.Visible = true
 		hotbar.Visible = playing
 		local key = hotbarKey()
@@ -1326,6 +1356,8 @@ function HUD.Init()
 			checkRunStartBanner()
 		elseif kind == "Meta" then
 			updateCurrencyValues()
+			local meta = ClientState.Meta :: any
+			freeTag.Visible = meta ~= nil and (tonumber(meta.ChestFreeLeft) or 0) > 0
 		end
 	end)
 
@@ -1388,6 +1420,8 @@ function HUD.Init()
 			UIKit.ToggleWindow(if inRun then "Upgrades" else "Shop")
 		elseif (key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonR1) and not inRun then
 			UIKit.ToggleWindow("Ranks")
+		elseif key == Enum.KeyCode.C and not inRun then
+			UIKit.ToggleWindow("Clubs")
 		elseif key == Enum.KeyCode.T and not inRun then
 			-- (In a run T turns the pressure washer: SprayController.)
 			UIKit.ToggleWindow("Trade")

@@ -104,6 +104,12 @@ export type Profile = {
 	ReferredBy: number, -- UserId of the friend whose invite brought them in (0 = nobody)
 	AdLuckStacks: number, -- rewarded ads watched for rank luck (each +PerAd), while AdLuckUntil lasts
 	AdLuckUntil: number, -- os.time() the ad luck runs out
+	ChestEventId: string, -- the Treasure Chest event ChestFreeUsed counts for (a new event resets it)
+	ChestFreeUsed: number, -- free chests opened in that event
+	ChestsOpened: number, -- every chest ever opened (free and bought)
+	ClubId: string, -- the club they're in ("" = none); ClubService keeps the club's own record
+	ClubTag: string, -- that club's tag, for the name tag (refreshed from the club on join)
+	ClubMovedAt: number, -- os.time() they last joined / left a club (Config.Clubs.JoinCooldown)
 	Referrals: number, -- new players who joined through this player's invites (paid out)
 	Stats: {
 		Runs: number,
@@ -177,6 +183,12 @@ local TEMPLATE: Profile = {
 	ReferredBy = 0,
 	AdLuckStacks = 0,
 	AdLuckUntil = 0,
+	ChestEventId = "",
+	ChestFreeUsed = 0,
+	ChestsOpened = 0,
+	ClubId = "",
+	ClubTag = "",
+	ClubMovedAt = 0,
 	Referrals = 0,
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
@@ -379,6 +391,12 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.ReferredBy = toCount(p.ReferredBy, 0)
 	p.AdLuckStacks = toCount(p.AdLuckStacks, 0)
 	p.AdLuckUntil = toCount(p.AdLuckUntil, 0)
+	p.ChestEventId = if type(p.ChestEventId) == "string" then p.ChestEventId else ""
+	p.ChestFreeUsed = toCount(p.ChestFreeUsed, 0)
+	p.ChestsOpened = toCount(p.ChestsOpened, 0)
+	p.ClubId = if type(p.ClubId) == "string" and #p.ClubId <= 40 then p.ClubId else ""
+	p.ClubTag = if type(p.ClubTag) == "string" and #p.ClubTag <= 20 then p.ClubTag else ""
+	p.ClubMovedAt = toCount(p.ClubMovedAt, 0)
 	p.Referrals = toCount(p.Referrals, 0)
 	p.DailyDay = toCount(p.DailyDay, 0)
 	p.DailyLast = toCount(p.DailyLast, 0)
@@ -641,6 +659,10 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		Referrals = profile.Referrals,
 		AdLuckStacks = DataService.AdLuckStacks(profile),
 		AdLuckUntil = profile.AdLuckUntil,
+		ChestFreeLeft = DataService.FreeChestsLeft(profile),
+		ChestsOpened = profile.ChestsOpened,
+		ClubId = profile.ClubId,
+		LevelsBeaten = DataService.LevelsBeaten(profile),
 		Stats = {
 			Runs = stats.Runs,
 			DishesCleaned = stats.DishesCleaned,
@@ -992,6 +1014,7 @@ local function loadSession(session: Session)
 		queueNotice(session, notice, noticeKind)
 	end
 	player:SetAttribute("PetsResting", profile.PetsResting == true) -- PetService reads this
+	player:SetAttribute("ClubTag", if profile.ClubTag ~= "" then profile.ClubTag else nil) -- NameTags
 	DataService.ProfileLoaded:Fire(player, profile)
 	pushNow(player)
 	task.defer(watchBoostEnd, player)
@@ -1407,6 +1430,76 @@ function DataService.AddReferrals(player: Player, count: number): number
 	end
 	DataService.PushMeta(player)
 	return paid
+end
+
+-- Treasure Chest event: free chests still to open in the current event.
+function DataService.FreeChestsLeft(profile: any): number
+	local event = Config.ChestEvent
+	if not profile or not Config.ChestEventLive() then
+		return 0
+	end
+	local used = if profile.ChestEventId == event.Id then profile.ChestFreeUsed else 0
+	return math.max(0, event.FreeOpens - used)
+end
+
+-- Uses one free chest. False when there are none left.
+function DataService.UseFreeChest(player: Player): boolean
+	local profile = DataService.Get(player)
+	if not profile or DataService.FreeChestsLeft(profile) <= 0 then
+		return false
+	end
+	if profile.ChestEventId ~= Config.ChestEvent.Id then
+		profile.ChestEventId = Config.ChestEvent.Id
+		profile.ChestFreeUsed = 0
+	end
+	profile.ChestFreeUsed += 1
+	return true
+end
+
+-- Counts opened chests (after the rewards are given) and saves soon.
+function DataService.CountChests(player: Player, count: number)
+	local session = sessions[player]
+	local profile = session and session.Profile
+	if not profile then
+		return
+	end
+	profile.ChestsOpened += math.max(0, math.floor(count))
+	session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
+	DataService.PushMeta(player)
+end
+
+-- The highest level this player has ever cleared (club requirements). Rebirthing means every level.
+function DataService.LevelsBeaten(profile: any): number
+	if not profile then
+		return 0
+	end
+	if (profile.Rebirths or 0) > 0 then
+		return #Config.Levels
+	end
+	local best = 0
+	for i = 1, #Config.Levels do
+		if (tonumber(profile.BestTimes and profile.BestTimes[i]) or 0) > 0 then
+			best = i
+		end
+	end
+	return best
+end
+
+-- Club membership on the profile (ClubService owns the clubs themselves).
+function DataService.SetClub(player: Player, clubId: string, tag: string, moved: boolean?)
+	local session = sessions[player]
+	local profile = session and session.Profile
+	if not profile then
+		return
+	end
+	profile.ClubId = clubId
+	profile.ClubTag = tag
+	if moved then
+		profile.ClubMovedAt = os.time()
+	end
+	player:SetAttribute("ClubTag", if tag ~= "" then tag else nil)
+	session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
+	DataService.PushMeta(player)
 end
 
 -- Ad luck (rank rolls): active stacks, 0 once AdLuckUntil has passed.

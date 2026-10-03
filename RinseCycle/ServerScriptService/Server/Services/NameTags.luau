@@ -31,6 +31,7 @@ local NAME_MAX_TEXT = 30
 local RANK_MAX_TEXT = 24
 local DEFAULT_COLOR = Color3.fromRGB(200, 205, 215)
 local GOLD = Color3.fromRGB(255, 210, 74)
+local CLUB_COLOR = Color3.fromRGB(110, 225, 255)
 
 local function makeLabel(name: string, parent: Instance, y: number, h: number, maxText: number): TextLabel
 	local label = Instance.new("TextLabel")
@@ -128,6 +129,12 @@ local function refresh(player: Player)
 		else
 			nameLabel.Text = safe
 		end
+		-- Their club's tag after the name (ClubService sets the attribute; filtered when the club was made).
+		local club = player:GetAttribute("ClubTag")
+		if type(club) == "string" and club ~= "" then
+			local safeClub = string.gsub(string.gsub(string.gsub(club, "&", "&amp;"), "<", "&lt;"), ">", "&gt;")
+			nameLabel.Text ..= string.format(' <font color="#%s">[%s]</font>', CLUB_COLOR:ToHex(), safeClub)
+		end
 		nameLabel.TextColor3 = Color3.new(1, 1, 1)
 		-- without a rank line the name sits in the middle of the tag
 		nameLabel.Position = UDim2.fromScale(0, if hasRank then 0 else 0.3)
@@ -177,6 +184,9 @@ local function watch(player: Player)
 		refresh(player)
 	end)
 	player:GetAttributeChangedSignal("StaffTag"):Connect(function()
+		refresh(player)
+	end)
+	player:GetAttributeChangedSignal("ClubTag"):Connect(function()
 		refresh(player)
 	end)
 end

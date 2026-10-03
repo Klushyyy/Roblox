@@ -1576,6 +1576,86 @@ local function buildRankShrine(parent: Instance)
 	prompt:SetAttribute("OpenWindow", "Ranks")
 end
 
+-- The Treasure Chest event (Config.ChestEvent): a big gold-banded chest on a sandy mound. Only
+-- built while the event runs (servers restart with updates, so it goes when the event does).
+local function buildTreasureChest(parent: Instance)
+	if not Config.ChestEventLive() then
+		return
+	end
+	local x, z = 34, 12
+	local wood = Color3.fromRGB(150, 90, 48)
+	local gold = Color3.fromRGB(255, 200, 60)
+	hex(parent, "ChestSand", x, FLOOR_Y, z, 14, 0.8, Color3.fromRGB(240, 214, 150))
+	local y = FLOOR_Y + 0.8
+	local box = mkPart("Part", { Name = "ChestBox", Size = Vector3.new(7, 4, 4.6), CFrame = at(x, y + 2, z) * CFrame.Angles(0, math.rad(200), 0), Color = wood, Material = Enum.Material.Wood }, parent)
+	local lid = mkPart("Part", decor({ Name = "ChestLid", Shape = Enum.PartType.Cylinder, Size = Vector3.new(7, 4.6, 4.6), CFrame = box.CFrame * CFrame.new(0, 2, 0), Color = Color3.fromRGB(170, 104, 56), Material = Enum.Material.Wood }), parent)
+	lid.CanCollide = true
+	for _, dx in { -2.4, 2.4 } do
+		mkPart("Part", decor({ Name = "ChestBand", Size = Vector3.new(0.7, 4.2, 4.8), CFrame = box.CFrame * CFrame.new(dx, 0, 0), Color = gold, Material = Enum.Material.Metal }), parent)
+		mkPart("Part", decor({ Name = "ChestBand", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.7, 4.8, 4.8), CFrame = box.CFrame * CFrame.new(dx, 2, 0), Color = gold, Material = Enum.Material.Metal }), parent)
+	end
+	mkPart("Part", decor({ Name = "ChestLock", Size = Vector3.new(1.2, 1.5, 0.4), CFrame = box.CFrame * CFrame.new(0, 1.2, -2.4), Color = gold, Material = Enum.Material.Metal }), parent)
+	local glow = mkPart("Part", decor({ Name = "ChestGlow", Size = Vector3.new(1, 1, 1), CFrame = at(x, y + 6, z), Transparency = 1, CastShadow = false }), parent)
+	mk("PointLight", { Range = 18, Brightness = 1.2, Color = Color3.fromRGB(255, 210, 120) }, glow)
+	mk("ParticleEmitter", {
+		Texture = "rbxasset://textures/particles/sparkles_main.dds",
+		Color = ColorSequence.new(Color3.fromRGB(255, 225, 120)),
+		Size = NumberSequence.new(0.8, 0),
+		Lifetime = NumberRange.new(0.8, 1.6),
+		Rate = 14,
+		Speed = NumberRange.new(2, 5),
+		SpreadAngle = Vector2.new(60, 60),
+	}, glow)
+	worldSign(box, "TREASURE CHESTS", 12, 2.6, 9, Color3.fromRGB(255, 215, 90))
+	worldSign(box, "1 FREE CHEST!", 8, 1.6, 6.8, Color3.fromRGB(255, 255, 255))
+	local prompt = mk("ProximityPrompt", {
+		ActionText = "Open",
+		ObjectText = "Treasure Chest",
+		RequiresLineOfSight = false,
+		HoldDuration = 0,
+		MaxActivationDistance = 12,
+	}, box) :: ProximityPrompt
+	prompt:SetAttribute("OpenWindow", "Chest")
+end
+
+-- The Next Event spot: a glowing ring on the floor with a sign. Walk in and the client
+-- (EventZone) shows what's coming next, with Roblox's Notify Me (Config.UpcomingEvents).
+local function buildEventZone(parent: Instance)
+	local x, z = 34, -18
+	local ring = mkPart("Part", decor({
+		Name = "EventRing",
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(0.3, 16, 16),
+		CFrame = upright(x, FLOOR_Y + 0.15, z),
+		Color = Color3.fromRGB(255, 120, 160),
+		Material = Enum.Material.Neon,
+		Transparency = 0.25,
+	}), parent)
+	mkPart("Part", decor({ Name = "EventFloor", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.34, 14, 14), CFrame = upright(x, FLOOR_Y + 0.17, z), Color = Color3.fromRGB(60, 40, 90), Material = LOW }), parent)
+	local zone = mkPart("Part", {
+		Name = "NextEventZone",
+		Size = Vector3.new(14, 8, 14),
+		CFrame = at(x, FLOOR_Y + 4, z),
+		Transparency = 1,
+		CanCollide = false,
+		CanQuery = false,
+		CastShadow = false,
+	}, parent)
+	CollectionService:AddTag(zone, "NextEventZone")
+	-- Two posts and a banner across the back.
+	for _, dx in { -6.5, 6.5 } do
+		mkPart("Part", { Name = "EventPost", Shape = Enum.PartType.Cylinder, Size = Vector3.new(11, 0.8, 0.8), CFrame = upright(x + dx, FLOOR_Y + 5.5, z - 6.5), Color = Color3.fromRGB(240, 240, 250), Material = Enum.Material.Metal }, parent)
+	end
+	local banner = mkPart("Part", { Name = "EventBanner", Size = Vector3.new(13, 4, 0.4), CFrame = at(x, FLOOR_Y + 9, z - 6.5), Color = Color3.fromRGB(70, 40, 120), Material = LOW }, parent)
+	local gui = mk("SurfaceGui", { Name = "Sign", Face = Enum.NormalId.Back, CanvasSize = Vector2.new(650, 200), LightInfluence = 0 }, banner) -- faces the spawn (+Z)
+	local title = mk("TextLabel", { Name = "Title", Size = UDim2.fromScale(1, 0.45), BackgroundTransparency = 1, Text = "NEXT EVENT", Font = Enum.Font.FredokaOne, TextScaled = true, TextColor3 = Color3.fromRGB(255, 200, 230) }, gui)
+	mk("UIStroke", { Thickness = 3, Color = Color3.fromRGB(12, 30, 60) }, title)
+	local when = mk("TextLabel", { Name = "When", Position = UDim2.fromScale(0, 0.45), Size = UDim2.fromScale(1, 0.55), BackgroundTransparency = 1, Text = "", Font = Enum.Font.FredokaOne, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, gui)
+	mk("UIStroke", { Thickness = 3, Color = Color3.fromRGB(12, 30, 60) }, when)
+	CollectionService:AddTag(when, "NextEventCountdown")
+	mk("PointLight", { Range = 16, Brightness = 0.8, Color = Color3.fromRGB(255, 150, 200) }, ring)
+end
+
 -- Bubble lamps and bushy planters along the central path.
 local function buildPathDressing(parent: Instance)
 	for _, z in { -52, -22, 8 } do
@@ -1682,6 +1762,8 @@ function LobbyBuilder.Build(): Lobby
 
 	buildRankShrine(model)
 	buildRebirthFountain(model)
+	buildTreasureChest(model)
+	buildEventZone(model)
 	buildPathDressing(model)
 	buildDecorations(model)
 	setupLighting()
