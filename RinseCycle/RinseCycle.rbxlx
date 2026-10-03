@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.8.7"
+Config.Version = "1.8.8"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -2880,6 +2880,7 @@ export type MetaState = {
 	LikeState: string, -- "" / "Pending" (paid when you rejoin) / "Claimed"
 	BoostUntil: number?, -- os.time() until which cleaning is x2 (the stay boost)
 	StayBoostReady: boolean?, -- today's free stay boost can still be claimed
+	PetsResting: boolean?, -- pets switched off: they follow you but don't clean
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
@@ -9614,6 +9615,7 @@ export type Profile = {
 	RebirthReady: boolean, -- the last level has been cleared since the last rebirth
 	BoostUntil: number, -- os.time() until which cleaning is x2 (the "stay" boost); 0 = none
 	StayBoostDay: string, -- UTC date ("2026-10-03") the stay boost was last claimed: once a day
+	PetsResting: boolean, -- the player switched their pets off: they follow but don't clean
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
@@ -9682,6 +9684,7 @@ local TEMPLATE: Profile = {
 	LikePending = false,
 	BoostUntil = 0,
 	StayBoostDay = "",
+	PetsResting = false,
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
 }
@@ -9879,6 +9882,7 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.Rebirths = toCount(p.Rebirths, 0)
 	p.BoostUntil = toCount(p.BoostUntil, 0)
 	p.StayBoostDay = if type(p.StayBoostDay) == "string" then p.StayBoostDay else ""
+	p.PetsResting = p.PetsResting == true
 	p.DailyDay = toCount(p.DailyDay, 0)
 	p.DailyLast = toCount(p.DailyLast, 0)
 	if p.DailyLast == 0 and p.DailyDay &gt; 0 then
@@ -10136,6 +10140,7 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		LikeState = if profile.LikeReward then "Claimed" elseif profile.LikePending then "Pending" else "",
 		BoostUntil = profile.BoostUntil,
 		StayBoostReady = profile.StayBoostDay ~= os.date("!%Y-%m-%d"),
+		PetsResting = profile.PetsResting,
 		Stats = {
 			Runs = stats.Runs,
 			DishesCleaned = stats.DishesCleaned,
@@ -10486,6 +10491,7 @@ local function loadSession(session: Session)
 	if notice then
 		queueNotice(session, notice, noticeKind)
 	end
+	player:SetAttribute("PetsResting", profile.PetsResting == true) -- PetService reads this
 	DataService.ProfileLoaded:Fire(player, profile)
 	pushNow(player)
 	task.defer(watchBoostEnd, player)
@@ -10843,6 +10849,19 @@ function DataService.ClaimStayBoost(player: Player): (boolean, string)
 	DataService.PassesChanged:Fire(player) -- run stats pick up the x2 now
 	watchBoostEnd(player)
 	return true, "x2 Cleaning for 15 minutes! Enjoy!"
+end
+
+-- The pets on / off switch: resting pets follow you but don't clean. Saved, so it carries over
+-- between the lobby and the dishwashers.
+function DataService.SetPetsResting(player: Player, resting: boolean): boolean
+	local profile = DataService.Get(player)
+	if not profile then
+		return false
+	end
+	profile.PetsResting = resting == true
+	player:SetAttribute("PetsResting", profile.PetsResting)
+	DataService.PushMeta(player)
+	return true
 end
 
 -- RestoreStreak product: a missed day is forgiven, so the next claim (available now) carries on
@@ -17693,7 +17712,9 @@ local function think(player: Player, state: OwnerState, now: number)
 	-- An admin who is hidden (invisible, spectating, controlling someone) has their pets put away.
 	local character = player.Character
 	local hidden = character ~= nil and character:GetAttribute("AdminHidden") == true
-	if not root or not grimeFolder or hidden then
+	-- Switched off by the player (the Pets On / Off button): they just follow, no cleaning.
+	local resting = player:GetAttribute("PetsResting") == true
+	if not root or not grimeFolder or hidden or resting then
 		clearTargets(state)
 		return
 	end
@@ -20996,9 +21017,20 @@ local function claimStayBoost(player: Player, _value: any): Types.RequestResult
 	return { Ok = true, Message = message }
 end
 
+local function setPetsResting(player: Player, value: any): Types.RequestResult
+	if type(value) ~= "boolean" then
+		return fail("Bad request.")
+	end
+	if not DataService.SetPetsResting(player, value) then
+		return fail("Your data is still loading.")
+	end
+	return { Ok = true }
+end
+
 local HANDLERS: { [string]: (Player, any) -&gt; Types.RequestResult } = {
 	ClaimDaily = claimDaily,
 	ClaimStayBoost = claimStayBoost,
+	SetPetsResting = setPetsResting,
 	SocialDone = socialDone,
 	RedeemCode = redeemCode,
 	ClaimGroup = claimGroup,
@@ -22055,14 +22087,55 @@ local lastJumpRequest = -1
 local emitAccumulator = 0
 local lastFuelShown: number? = nil
 
-local function jumpHeld(): boolean
+local touchJumpHeld = false -- the on-screen jump button (phones / tablets) is being held
+
+-- Watches Roblox's own touch jump button (PlayerGui.TouchGui...JumpButton) while it's held. On
+-- phones JumpRequest only fires once per press, so it can't tell "held" on its own.
+local function watchTouchJump()
+	local gui = player:WaitForChild("PlayerGui")
+	local function hook(button: Instance)
+		if not button:IsA("GuiButton") or button:GetAttribute("JetHooked") then
+			return
+		end
+		button:SetAttribute("JetHooked", true)
+		button.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.Touch then
+				touchJumpHeld = true
+			end
+		end)
+		button.InputEnded:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.Touch then
+				touchJumpHeld = false
+			end
+		end)
+	end
+	local function scan(root: Instance)
+		for _, d in root:GetDescendants() do
+			if d.Name == "JumpButton" then
+				hook(d)
+			end
+		end
+	end
+	scan(gui)
+	gui.DescendantAdded:Connect(function(d)
+		if d.Name == "JumpButton" then
+			hook(d)
+		end
+	end)
+end
+
+local function jumpHeld(humanoid: Humanoid): boolean
 	if UserInputService:GetFocusedTextBox() then
 		return false
 	end
 	if UserInputService:IsKeyDown(Enum.KeyCode.Space) or UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, Enum.KeyCode.ButtonA) then
 		return true
 	end
-	-- Touch (and anything else): JumpRequest keeps firing while the jump button is held.
+	-- Phones: the jump button itself, or the Jump flag Roblox's controls keep on while it's held.
+	if touchJumpHeld or humanoid.Jump then
+		return true
+	end
+	-- Anything else: JumpRequest repeating while jump is held.
 	return os.clock() - lastJumpRequest &lt; HOLD_WINDOW
 end
 
@@ -22114,7 +22187,7 @@ local function step(dt: number)
 	end
 
 	local airborne = humanoid.FloorMaterial == Enum.Material.Air
-	local jetting = airborne and jumpHeld() and fuel &gt; 0
+	local jetting = airborne and jumpHeld(humanoid) and fuel &gt; 0
 	if jetting then
 		fuel = math.max(0, fuel - dt)
 		-- Ease up to the climb speed (a smooth lift-off rather than a snap).
@@ -22140,6 +22213,7 @@ function BubbleJets.Init()
 	UserInputService.JumpRequest:Connect(function()
 		lastJumpRequest = os.clock()
 	end)
+	task.spawn(watchTouchJump)
 	RunService.Heartbeat:Connect(function(dt)
 		local ok, err = pcall(step, dt)
 		if not ok then
@@ -24696,6 +24770,45 @@ function HUD.Init()
 			UIKit.SetButtonColor(musicButton, if on then Colors.PanelLight else Colors.Disabled)
 		end,
 	})
+	-- Pets on / off: switched off, your pets just follow you around instead of cleaning (saved).
+	local petsToggle: TextButton
+	local function paintPetsToggle()
+		local meta = ClientState.Meta :: any
+		local resting = meta ~= nil and meta.PetsResting == true
+		local label = petsToggle:FindFirstChild("Label", true)
+		if label and label:IsA("TextLabel") then
+			label.Text = if resting then "Pets Off" else "Pets On"
+		end
+		UIKit.SetButtonColor(petsToggle, if resting then Colors.Disabled else Colors.Warning)
+	end
+	petsToggle = UIKit.IconButton({
+		Name = "PetsToggle",
+		Icon = "🐾",
+		Label = "Pets On",
+		Color = Colors.Warning,
+		Size = UDim2.fromOffset(80, 80),
+		LayoutOrder = 6,
+		Parent = leftColumn,
+		OnClick = function()
+			local meta = ClientState.Meta :: any
+			local resting = not (meta ~= nil and meta.PetsResting == true)
+			task.spawn(function()
+				local result = ClientState.MetaRequest("SetPetsResting", resting)
+				if result.Ok then
+					UIKit.Toast(if resting then "Pets off: they'll just follow you." else "Pets on: back to cleaning!", "Info")
+				else
+					UIKit.Toast(result.Error or "Couldn't change that.", "Bad")
+				end
+			end)
+		end,
+	})
+	ClientState.Changed:Connect(function(kind)
+		if kind == "Meta" then
+			paintPetsToggle()
+		end
+	end)
+	paintPetsToggle()
+
 	local function makeAdminButton()
 		if adminButton or not adminClick then
 			return
@@ -24706,7 +24819,7 @@ function HUD.Init()
 			Label = "Admin",
 			Color = Colors.PanelLight,
 			Size = UDim2.fromOffset(80, 80),
-			LayoutOrder = 6, -- under Trade / Music in the left column (under Daily / Music in a run)
+			LayoutOrder = 7, -- bottom of the left column, under Music / Pets On
 			Parent = leftColumn,
 			OnClick = function()
 				if adminClick then

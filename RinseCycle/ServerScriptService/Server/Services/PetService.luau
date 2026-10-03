@@ -496,7 +496,9 @@ local function think(player: Player, state: OwnerState, now: number)
 	-- An admin who is hidden (invisible, spectating, controlling someone) has their pets put away.
 	local character = player.Character
 	local hidden = character ~= nil and character:GetAttribute("AdminHidden") == true
-	if not root or not grimeFolder or hidden then
+	-- Switched off by the player (the Pets On / Off button): they just follow, no cleaning.
+	local resting = player:GetAttribute("PetsResting") == true
+	if not root or not grimeFolder or hidden or resting then
 		clearTargets(state)
 		return
 	end

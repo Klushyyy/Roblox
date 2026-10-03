@@ -1,4 +1,5 @@
--- Pets pay straight to coins (no bag), hide for a hidden admin, and the admin pets view.
+-- Pets pay straight to coins (no bag), hide for a hidden admin, and the admin pets view. Stands by
+-- the dirt first: the sim doesn't move you into the dishwasher.
 local M = G.modules
 local R = "/home/user/Roblox/RinseCycle/"
 local RS = M[R .. "ServerScriptService/Server/Services/RoundService.luau"]
@@ -17,6 +18,13 @@ call("server", RS.StartRound, { p }, 1)
 pump(1, G.frame)
 call("client", function() return Remotes.Function("RunRequest"):InvokeServer("Loaded") end)
 pump(1, G.frame)
+-- Stand by the dirt (the sim doesn't move you into the dishwasher), so the pets have work.
+for _, d in RS.GetGrimeFolder(p):GetDescendants() do
+	if d:IsA("BasePart") then
+		p.Character.HumanoidRootPart.CFrame = CFrame.new(d.Position + Vector3.new(0, 2, 3))
+		break
+	end
+end
 local c0 = CS.Run and CS.Run.Coins or 0
 pump(8, G.frame)
 local c1 = CS.Run and CS.Run.Coins or 0

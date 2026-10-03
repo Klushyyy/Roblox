@@ -843,6 +843,9 @@ rawget(UIS, "__p").GetNavigationGamepads = function()
 end
 rawget(service("ContentProvider"), "__p").PreloadAsync = function() end
 rawget(service("SoundService"), "__p").PlayLocalSound = function() end
+rawget(UIS, "__p").IsGamepadButtonDown = function()
+	return false
+end
 rawget(UIS, "__p").IsKeyDown = function()
 	return false
 end

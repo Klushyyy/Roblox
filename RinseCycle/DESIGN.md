@@ -1412,6 +1412,11 @@ walls instead of clipping through. All gameplay queries use Include filters.
   the jump button. Coins / tank / fly bar are bottom-left on phones too; the run timer is centred
   under the progress bar on phones. Toasts start below the progress bar while cleaning
   (UIKit.SetToastTop), on every device.
+- v1.8.8: hold-jump-to-fly works on phones (JumpRequest only fires once per tap there, so
+  BubbleJets also reads Humanoid.Jump and Roblox's touch JumpButton being held). New "Pets On /
+  Off" button in the left column (all devices, lobby and runs): off, pets just follow you and
+  don't clean. Saved in the profile (PetsResting), mirrored on the player attribute PetService
+  reads; MetaRequest "SetPetsResting".
 
 ## 7. Balance knobs (all in Config)
 

@@ -289,6 +289,45 @@ function HUD.Init()
 			UIKit.SetButtonColor(musicButton, if on then Colors.PanelLight else Colors.Disabled)
 		end,
 	})
+	-- Pets on / off: switched off, your pets just follow you around instead of cleaning (saved).
+	local petsToggle: TextButton
+	local function paintPetsToggle()
+		local meta = ClientState.Meta :: any
+		local resting = meta ~= nil and meta.PetsResting == true
+		local label = petsToggle:FindFirstChild("Label", true)
+		if label and label:IsA("TextLabel") then
+			label.Text = if resting then "Pets Off" else "Pets On"
+		end
+		UIKit.SetButtonColor(petsToggle, if resting then Colors.Disabled else Colors.Warning)
+	end
+	petsToggle = UIKit.IconButton({
+		Name = "PetsToggle",
+		Icon = "🐾",
+		Label = "Pets On",
+		Color = Colors.Warning,
+		Size = UDim2.fromOffset(80, 80),
+		LayoutOrder = 6,
+		Parent = leftColumn,
+		OnClick = function()
+			local meta = ClientState.Meta :: any
+			local resting = not (meta ~= nil and meta.PetsResting == true)
+			task.spawn(function()
+				local result = ClientState.MetaRequest("SetPetsResting", resting)
+				if result.Ok then
+					UIKit.Toast(if resting then "Pets off: they'll just follow you." else "Pets on: back to cleaning!", "Info")
+				else
+					UIKit.Toast(result.Error or "Couldn't change that.", "Bad")
+				end
+			end)
+		end,
+	})
+	ClientState.Changed:Connect(function(kind)
+		if kind == "Meta" then
+			paintPetsToggle()
+		end
+	end)
+	paintPetsToggle()
+
 	local function makeAdminButton()
 		if adminButton or not adminClick then
 			return
@@ -299,7 +338,7 @@ function HUD.Init()
 			Label = "Admin",
 			Color = Colors.PanelLight,
 			Size = UDim2.fromOffset(80, 80),
-			LayoutOrder = 6, -- under Trade / Music in the left column (under Daily / Music in a run)
+			LayoutOrder = 7, -- bottom of the left column, under Music / Pets On
 			Parent = leftColumn,
 			OnClick = function()
 				if adminClick then

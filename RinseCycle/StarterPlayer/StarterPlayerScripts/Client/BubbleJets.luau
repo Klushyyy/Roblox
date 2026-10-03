@@ -27,14 +27,55 @@ local lastJumpRequest = -1
 local emitAccumulator = 0
 local lastFuelShown: number? = nil
 
-local function jumpHeld(): boolean
+local touchJumpHeld = false -- the on-screen jump button (phones / tablets) is being held
+
+-- Watches Roblox's own touch jump button (PlayerGui.TouchGui...JumpButton) while it's held. On
+-- phones JumpRequest only fires once per press, so it can't tell "held" on its own.
+local function watchTouchJump()
+	local gui = player:WaitForChild("PlayerGui")
+	local function hook(button: Instance)
+		if not button:IsA("GuiButton") or button:GetAttribute("JetHooked") then
+			return
+		end
+		button:SetAttribute("JetHooked", true)
+		button.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.Touch then
+				touchJumpHeld = true
+			end
+		end)
+		button.InputEnded:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.Touch then
+				touchJumpHeld = false
+			end
+		end)
+	end
+	local function scan(root: Instance)
+		for _, d in root:GetDescendants() do
+			if d.Name == "JumpButton" then
+				hook(d)
+			end
+		end
+	end
+	scan(gui)
+	gui.DescendantAdded:Connect(function(d)
+		if d.Name == "JumpButton" then
+			hook(d)
+		end
+	end)
+end
+
+local function jumpHeld(humanoid: Humanoid): boolean
 	if UserInputService:GetFocusedTextBox() then
 		return false
 	end
 	if UserInputService:IsKeyDown(Enum.KeyCode.Space) or UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, Enum.KeyCode.ButtonA) then
 		return true
 	end
-	-- Touch (and anything else): JumpRequest keeps firing while the jump button is held.
+	-- Phones: the jump button itself, or the Jump flag Roblox's controls keep on while it's held.
+	if touchJumpHeld or humanoid.Jump then
+		return true
+	end
+	-- Anything else: JumpRequest repeating while jump is held.
 	return os.clock() - lastJumpRequest < HOLD_WINDOW
 end
 
@@ -86,7 +127,7 @@ local function step(dt: number)
 	end
 
 	local airborne = humanoid.FloorMaterial == Enum.Material.Air
-	local jetting = airborne and jumpHeld() and fuel > 0
+	local jetting = airborne and jumpHeld(humanoid) and fuel > 0
 	if jetting then
 		fuel = math.max(0, fuel - dt)
 		-- Ease up to the climb speed (a smooth lift-off rather than a snap).
@@ -112,6 +153,7 @@ function BubbleJets.Init()
 	UserInputService.JumpRequest:Connect(function()
 		lastJumpRequest = os.clock()
 	end)
+	task.spawn(watchTouchJump)
 	RunService.Heartbeat:Connect(function(dt)
 		local ok, err = pcall(step, dt)
 		if not ok then

@@ -100,6 +100,7 @@ export type Profile = {
 	RebirthReady: boolean, -- the last level has been cleared since the last rebirth
 	BoostUntil: number, -- os.time() until which cleaning is x2 (the "stay" boost); 0 = none
 	StayBoostDay: string, -- UTC date ("2026-10-03") the stay boost was last claimed: once a day
+	PetsResting: boolean, -- the player switched their pets off: they follow but don't clean
 	Stats: {
 		Runs: number,
 		DishesCleaned: number,
@@ -168,6 +169,7 @@ local TEMPLATE: Profile = {
 	LikePending = false,
 	BoostUntil = 0,
 	StayBoostDay = "",
+	PetsResting = false,
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
 }
@@ -365,6 +367,7 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.Rebirths = toCount(p.Rebirths, 0)
 	p.BoostUntil = toCount(p.BoostUntil, 0)
 	p.StayBoostDay = if type(p.StayBoostDay) == "string" then p.StayBoostDay else ""
+	p.PetsResting = p.PetsResting == true
 	p.DailyDay = toCount(p.DailyDay, 0)
 	p.DailyLast = toCount(p.DailyLast, 0)
 	if p.DailyLast == 0 and p.DailyDay > 0 then
@@ -622,6 +625,7 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		LikeState = if profile.LikeReward then "Claimed" elseif profile.LikePending then "Pending" else "",
 		BoostUntil = profile.BoostUntil,
 		StayBoostReady = profile.StayBoostDay ~= os.date("!%Y-%m-%d"),
+		PetsResting = profile.PetsResting,
 		Stats = {
 			Runs = stats.Runs,
 			DishesCleaned = stats.DishesCleaned,
@@ -972,6 +976,7 @@ local function loadSession(session: Session)
 	if notice then
 		queueNotice(session, notice, noticeKind)
 	end
+	player:SetAttribute("PetsResting", profile.PetsResting == true) -- PetService reads this
 	DataService.ProfileLoaded:Fire(player, profile)
 	pushNow(player)
 	task.defer(watchBoostEnd, player)
@@ -1329,6 +1334,19 @@ function DataService.ClaimStayBoost(player: Player): (boolean, string)
 	DataService.PassesChanged:Fire(player) -- run stats pick up the x2 now
 	watchBoostEnd(player)
 	return true, "x2 Cleaning for 15 minutes! Enjoy!"
+end
+
+-- The pets on / off switch: resting pets follow you but don't clean. Saved, so it carries over
+-- between the lobby and the dishwashers.
+function DataService.SetPetsResting(player: Player, resting: boolean): boolean
+	local profile = DataService.Get(player)
+	if not profile then
+		return false
+	end
+	profile.PetsResting = resting == true
+	player:SetAttribute("PetsResting", profile.PetsResting)
+	DataService.PushMeta(player)
+	return true
 end
 
 -- RestoreStreak product: a missed day is forgiven, so the next claim (available now) carries on

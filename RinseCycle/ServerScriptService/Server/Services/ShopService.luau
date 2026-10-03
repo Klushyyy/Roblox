@@ -365,9 +365,20 @@ local function claimStayBoost(player: Player, _value: any): Types.RequestResult
 	return { Ok = true, Message = message }
 end
 
+local function setPetsResting(player: Player, value: any): Types.RequestResult
+	if type(value) ~= "boolean" then
+		return fail("Bad request.")
+	end
+	if not DataService.SetPetsResting(player, value) then
+		return fail("Your data is still loading.")
+	end
+	return { Ok = true }
+end
+
 local HANDLERS: { [string]: (Player, any) -> Types.RequestResult } = {
 	ClaimDaily = claimDaily,
 	ClaimStayBoost = claimStayBoost,
+	SetPetsResting = setPetsResting,
 	SocialDone = socialDone,
 	RedeemCode = redeemCode,
 	ClaimGroup = claimGroup,
