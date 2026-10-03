@@ -1401,6 +1401,8 @@ walls instead of clipping through. All gameplay queries use Include filters.
   (LocalPlayer attribute BadgeStackHeight); where there's no room (phones) they go beside it.
   The rainbow trail is six thin single-colour trails stacked top to bottom (a striped ribbon);
   gold stays one tapered trail.
+- v1.8.4: T opens Trade in the lobby (in a run T still turns the pressure washer); the Trade
+  button shows a "T" key hint like G / P / R.
 
 ## 7. Balance knobs (all in Config)
 

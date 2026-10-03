@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "1.8.3"
+Config.Version = "1.8.4"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -24671,7 +24671,7 @@ function HUD.Init()
 	local codesButton = leftButton(2, "@Ticket", "Codes", Colors.Primary, "Codes")
 	local freeButton = leftButton(3, "@Heart", "Free", Colors.Good, "Free")
 	-- Trade lives in the right column (under Ranks), leaving room above Daily for the boost badges.
-	local tradeButton = sideButton("🤝", "Trade", Colors.Accent, "", "", function()
+	local tradeButton = sideButton("🤝", "Trade", Colors.Accent, "T", "", function()
 		UIKit.ToggleWindow("Trade")
 	end)
 	-- Music on / off (MusicPlayer). Under Trade; the staff Admin button goes below it.
@@ -25749,6 +25749,9 @@ function HUD.Init()
 			UIKit.ToggleWindow(if inRun then "Upgrades" else "Shop")
 		elseif (key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonR1) and not inRun then
 			UIKit.ToggleWindow("Ranks")
+		elseif key == Enum.KeyCode.T and not inRun then
+			-- (In a run T turns the pressure washer: SprayController.)
+			UIKit.ToggleWindow("Trade")
 		elseif inRun and (key == Enum.KeyCode.DPadLeft or key == Enum.KeyCode.DPadRight) then
 			local run = ClientState.Run :: Types.RunState?
 			if run and run.OwnedTools then
