@@ -713,6 +713,40 @@ ART.Love = {
 	{ "disc", x = 0.36, y = 0.24, d = 0.06, fill = WHITE, t = 0.45 },
 }
 
+-- Upgrades: a green book with a big up arrow on the cover.
+do
+	local a = 0.2
+	local arrowFill = rgb(255, 236, 130)
+	ART.Book = {
+		{ "rect", x = 0.55, y = 0.52, w = 0.74, h = 0.86, r = 0.1, fill = rgb(236, 240, 250), o = true }, -- pages behind the cover
+		"|",
+		{ "rect", x = 0.46, y = 0.5, w = 0.74, h = 0.86, r = 0.1, fill = { rgb(90, 220, 140), rgb(34, 160, 96) }, o = true },
+		{ "rect", x = 0.17, y = 0.5, w = 0.1, h = 0.86, r = 0.5, fill = rgb(24, 120, 72) },
+		{ "rect", x = 0.36, y = 0.2, w = 0.14, h = 0.05, r = 0.5, fill = WHITE, t = 0.45 },
+		"|",
+		{ "rect", x = 0.5, y = 0.62, w = 0.14, h = 0.34, r = 0.5, fill = arrowFill, o = true },
+		{ "tri", x = 0.5 - a / 2 + 0.002, y = 0.37, s = a, keep = "br", fill = arrowFill, o = true },
+		{ "tri", x = 0.5 + a / 2 - 0.002, y = 0.37, s = a, keep = "bl", fill = arrowFill, o = true },
+	}
+end
+
+-- Leave: an open door with an arrow going out.
+do
+	local a = 0.18
+	local red = { rgb(255, 120, 120), rgb(226, 60, 70) }
+	ART.Door = {
+		{ "rect", x = 0.36, y = 0.5, w = 0.56, h = 0.88, r = 0.1, fill = rgb(120, 78, 46), o = true },
+		{ "rect", x = 0.36, y = 0.55, w = 0.42, h = 0.78, r = 0.08, fill = rgb(34, 48, 84) },
+		"|",
+		{ "rect", x = 0.25, y = 0.55, w = 0.2, h = 0.74, r = 0.18, fill = { rgb(214, 150, 92), rgb(160, 100, 56) }, o = true },
+		{ "disc", x = 0.31, y = 0.57, d = 0.07, fill = rgb(255, 214, 90) },
+		"|",
+		{ "rect", x = 0.66, y = 0.5, w = 0.3, h = 0.11, r = 0.5, fill = red, o = true },
+		{ "tri", x = 0.77 + a / 2, y = 0.5 - a / 2 + 0.002, s = a, keep = "bl", fill = red, o = true },
+		{ "tri", x = 0.77 + a / 2, y = 0.5 + a / 2 - 0.002, s = a, keep = "tl", fill = red, o = true },
+	}
+end
+
 -- Puts the whole icon on one ZIndex (for ScreenGuis that use Global ZIndex ordering).
 -- Moves a drawn icon to layer z. Its shapes keep their own stacking order inside it (every
 -- ScreenGui here uses Sibling ZIndex, so they only order among themselves).
@@ -735,6 +769,8 @@ local HI_RES: { [string]: boolean } = {
 	Love = true,
 	Club = true,
 	Chest = true,
+	Book = true,
+	Door = true,
 }
 local HI_RES_SIZE = 120
 

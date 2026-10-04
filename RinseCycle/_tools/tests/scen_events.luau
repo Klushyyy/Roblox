@@ -134,11 +134,28 @@ club("Find", "soap")
 club("Chat", "hello club")
 club("ChatHistory")
 club("NewCode")
-Club.FlushPoints()
-prof.Stats.BubblesEarned += 1234
-Club.FlushPoints()
+prof.Bubbles = 50000
+local d = club("Donate", 1234)
+out("bubbles after donate: " .. prof.Bubbles .. "  club points: " .. tostring(d.Club and d.Club.Points) .. "  mine: " .. tostring(d.Club and d.Club.Members and d.Club.Members[1].Points))
+club("Donate", 99999999)
+club("Info", d.Club and d.Club.Id)
 local r = club("Mine")
-out("points: " .. tostring(r.Club and r.Club.Points))
+out("points: " .. tostring(r.Club and r.Club.Points) .. "  season: " .. tostring(r.Club and r.Club.Season.Label))
+local top = club("Top")
+-- Next month: points are zero again, the old month closes with the club in 1st place and pays out.
+local realNow = os.time()
+Club.NowFn = function()
+	return realNow + 32 * 86400
+end
+local r2 = club("Mine")
+out("next month: points " .. tostring(r2.Club and r2.Club.Points) .. " season " .. tostring(r2.Club and r2.Club.Season.Label))
+Club.EnsureSeasonClosed()
+local gemsBefore, petsBefore = prof.Gems, #prof.Pets
+Club.ClaimPrize(p)
+out(string.format("prize: gems +%d pets +%d (last pet %s) prizeSeason=%s", prof.Gems - gemsBefore, #prof.Pets - petsBefore, tostring(prof.Pets[#prof.Pets] and prof.Pets[#prof.Pets].Id), tostring(prof.ClubPrizeSeason)))
+Club.ClaimPrize(p)
+out("second claim gems unchanged: " .. tostring(prof.Gems - gemsBefore))
+Club.NowFn = nil
 club("Leave")
 out("after leave: club '" .. prof.ClubId .. "' tag " .. tostring(p:GetAttribute("ClubTag")))
 prof.ClubMovedAt = 0

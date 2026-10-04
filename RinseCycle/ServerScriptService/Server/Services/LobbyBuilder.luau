@@ -1576,11 +1576,12 @@ local function buildRankShrine(parent: Instance)
 	prompt:SetAttribute("OpenWindow", "Ranks")
 end
 
--- The Treasure Chest event (Config.ChestEvent): a big gold-banded chest on a sandy mound, facing
--- the spawn. Only built while the event runs (servers restart with updates, so it goes when the
--- event does). There's no prompt: walking up to it shows the Open buttons and the odds (ChestUI,
--- which finds the chest by its "EventChest" tag and animates the lid).
--- Every piece is a separate size (no two faces in the same plane), so nothing z-fights.
+-- The Treasure Chest event (Config.ChestEvent): a big gold-banded chest on stone steps inside a glowing
+-- ring on the floor, facing the spawn. Only built while the event runs (servers restart with updates,
+-- so it goes when the event does). No prompt: stepping INTO the ring shows the Open buttons and the odds
+-- (ChestUI, which finds the chest by its "EventChest" tag and animates the lid; the ring's radius is
+-- the model's ZoneRadius attribute). Every piece has its own size and height, so nothing z-fights.
+local CHEST_ZONE_RADIUS = 11
 local function buildTreasureChest(parent: Instance)
 	if not Config.ChestEventLive() then
 		return
@@ -1588,44 +1589,87 @@ local function buildTreasureChest(parent: Instance)
 	local x, z = 34, 12
 	local wood = Color3.fromRGB(150, 90, 48)
 	local gold = Color3.fromRGB(255, 200, 60)
-	hex(parent, "ChestSand", x, FLOOR_Y, z, 15, 0.8, Color3.fromRGB(240, 214, 150))
-	local y = FLOOR_Y + 0.8
-	-- Face the spawn: the chest's front (-Z, where the lock is) points at it.
-	local look = CFrame.lookAt(Vector3.new(x, 0, z), Vector3.new(SPAWN.X, 0, SPAWN.Z))
-	local base = CFrame.new(x, y, z) * (look - look.Position)
+	local stone = Color3.fromRGB(226, 214, 190)
 	local model = Instance.new("Model")
 	model.Name = "TreasureChest"
 	model.Parent = parent
-	local W, H, D = 7, 4, 4.6
+	local function disc(name: string, d: number, thickness: number, centerY: number, color: Color3, material: Enum.Material?)
+		return mkPart("Part", decor({ Name = name, Shape = Enum.PartType.Cylinder, Size = Vector3.new(thickness, d, d), CFrame = upright(x, centerY, z), Color = color, Material = material or LOW, CastShadow = false }), parent)
+	end
+	-- The zone: a glowing gold ring, then a darker floor inside it.
+	local ring = disc("ChestRing", CHEST_ZONE_RADIUS * 2 + 1.2, 0.3, FLOOR_Y + 0.15, gold, Enum.Material.Neon)
+	ring.Transparency = 0.2
+	disc("ChestFloor", CHEST_ZONE_RADIUS * 2 - 0.4, 0.3, FLOOR_Y + 0.2, Color3.fromRGB(40, 70, 90), LOW)
+	-- Stone steps up to the chest.
+	local y = FLOOR_Y + 0.35
+	for k, step in { { 15, 0.5 }, { 12.5, 0.5 }, { 10, 0.6 } } do
+		mkPart("Part", { Name = "ChestStep" .. k, Shape = Enum.PartType.Cylinder, Size = Vector3.new(step[2], step[1], step[1]), CFrame = upright(x, y + step[2] / 2, z), Color = stone, Material = Enum.Material.Marble }, parent)
+		y += step[2]
+	end
+	-- Face the spawn: the chest's front (-Z, where the lock is) points at it.
+	local look = CFrame.lookAt(Vector3.new(x, 0, z), Vector3.new(SPAWN.X, 0, SPAWN.Z))
+	local base = CFrame.new(x, y, z) * (look - look.Position)
+	local W, H, D = 8.4, 4.8, 5.4
 	local box = mkPart("Part", { Name = "ChestBox", Size = Vector3.new(W, H, D), CFrame = base * CFrame.new(0, H / 2, 0), Color = wood, Material = Enum.Material.Wood }, model)
 	-- The lid: a half-round (cylinder) a touch shorter than the box, hinged at the back.
 	local lid = mkPart("Part", { Name = "ChestLid", Shape = Enum.PartType.Cylinder, Size = Vector3.new(W - 0.1, D, D), CFrame = base * CFrame.new(0, H, 0), Color = Color3.fromRGB(170, 104, 56), Material = Enum.Material.Wood }, model)
 	CollectionService:AddTag(lid, "EventChestLid")
 	-- Gold bands stand proud of every face (0.15 out), so they never share a plane with the wood.
-	for _, dx in { -2.3, 2.3 } do
-		mkPart("Part", decor({ Name = "ChestBand", Size = Vector3.new(0.6, H + 0.3, D + 0.3), CFrame = base * CFrame.new(dx, H / 2, 0), Color = gold, Material = Enum.Material.Metal }), model)
-		local band = mkPart("Part", decor({ Name = "LidBand", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.6, D + 0.3, D + 0.3), CFrame = base * CFrame.new(dx, H, 0), Color = gold, Material = Enum.Material.Metal }), model)
+	for _, dx in { -2.7, 2.7 } do
+		mkPart("Part", decor({ Name = "ChestBand", Size = Vector3.new(0.7, H + 0.3, D + 0.3), CFrame = base * CFrame.new(dx, H / 2, 0), Color = gold, Material = Enum.Material.Metal }), model)
+		local band = mkPart("Part", decor({ Name = "LidBand", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.7, D + 0.3, D + 0.3), CFrame = base * CFrame.new(dx, H, 0), Color = gold, Material = Enum.Material.Metal }), model)
 		band:SetAttribute("LidPart", true)
 	end
-	mkPart("Part", decor({ Name = "ChestTrim", Size = Vector3.new(W + 0.4, 0.4, D + 0.4), CFrame = base * CFrame.new(0, 0.2, 0), Color = gold, Material = Enum.Material.Metal }), model)
-	local lock = mkPart("Part", decor({ Name = "ChestLock", Size = Vector3.new(1.2, 1.5, 0.4), CFrame = base * CFrame.new(0, H - 0.6, -D / 2 - 0.15), Color = gold, Material = Enum.Material.Metal }), model)
+	mkPart("Part", decor({ Name = "ChestTrim", Size = Vector3.new(W + 0.4, 0.5, D + 0.4), CFrame = base * CFrame.new(0, 0.25, 0), Color = gold, Material = Enum.Material.Metal }), model)
+	-- Corner studs on the base.
+	for _, cx in { -1, 1 } do
+		for _, cz in { -1, 1 } do
+			mkPart("Part", decor({ Name = "ChestStud", Shape = Enum.PartType.Ball, Size = Vector3.new(0.9, 0.9, 0.9), CFrame = base * CFrame.new(cx * (W / 2 + 0.05), 0.6, cz * (D / 2 + 0.05)), Color = gold, Material = Enum.Material.Metal }), model)
+		end
+	end
+	local lock = mkPart("Part", decor({ Name = "ChestLock", Size = Vector3.new(1.4, 1.7, 0.4), CFrame = base * CFrame.new(0, H - 0.6, -D / 2 - 0.15), Color = gold, Material = Enum.Material.Metal }), model)
 	lock:SetAttribute("LidPart", true)
-	mkPart("Part", decor({ Name = "Keyhole", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.1, 0.4, 0.4), CFrame = lock.CFrame * CFrame.new(0, 0.1, -0.22) * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(40, 25, 15), Material = LOW }), model):SetAttribute("LidPart", true)
+	mkPart("Part", decor({ Name = "Keyhole", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.1, 0.45, 0.45), CFrame = lock.CFrame * CFrame.new(0, 0.1, -0.22) * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(40, 25, 15), Material = LOW }), model):SetAttribute("LidPart", true)
+	-- Spilled treasure on the steps: coin stacks and gems, all at their own heights.
+	local rng = Random.new(77)
+	for k = 1, 9 do
+		local a = rng:NextNumber(0, math.pi * 2)
+		local r = rng:NextNumber(5.3, 6.0) -- on the second step (its top is FLOOR_Y + 1.35)
+		local cx, cz = x + math.cos(a) * r, z + math.sin(a) * r
+		local stack = rng:NextInteger(2, 4)
+		for n = 1, stack do
+			mkPart("Part", decor({ Name = "Coin", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.18, 1.1, 1.1), CFrame = upright(cx, FLOOR_Y + 1.35 + 0.09 + (n - 1) * 0.2 + k * 0.001, cz), Color = gold, Material = Enum.Material.Metal }), parent)
+		end
+	end
+	for k, c in { Color3.fromRGB(255, 90, 140), Color3.fromRGB(90, 200, 255), Color3.fromRGB(150, 255, 150), Color3.fromRGB(190, 120, 255) } do
+		local a = k * 1.57 + 0.5
+		local gx, gz = x + math.cos(a) * 5.65, z + math.sin(a) * 5.65
+		mkPart("Part", decor({ Name = "Gem", Size = Vector3.new(0.9, 1.2, 0.9), CFrame = CFrame.new(gx, FLOOR_Y + 1.35 + 0.6 + k * 0.01, gz) * CFrame.Angles(math.rad(20), a, math.rad(25)), Color = c, Material = Enum.Material.Neon, CastShadow = false }), parent)
+	end
+	-- Two lantern posts either side of the steps.
+	for _, side in { -1, 1 } do
+		local pxp = x + side * 9.2
+		mkPart("Part", { Name = "LanternPost", Shape = Enum.PartType.Cylinder, Size = Vector3.new(6.5, 0.7, 0.7), CFrame = upright(pxp, FLOOR_Y + 3.6, z - 3), Color = Color3.fromRGB(80, 60, 50), Material = Enum.Material.Metal }, parent)
+		local bulb = mkPart("Part", decor({ Name = "Lantern", Shape = Enum.PartType.Ball, Size = Vector3.new(1.6, 1.6, 1.6), CFrame = at(pxp, FLOOR_Y + 7.3, z - 3), Color = Color3.fromRGB(255, 190, 90), Material = Enum.Material.Neon, Transparency = 0.1 }), parent)
+		mk("PointLight", { Range = 16, Brightness = 0.9, Color = Color3.fromRGB(255, 200, 120) }, bulb)
+	end
 	-- The glow inside, seen when the lid opens.
-	local glow = mkPart("Part", decor({ Name = "ChestGlow", Size = Vector3.new(1, 1, 1), CFrame = base * CFrame.new(0, H + 1.5, 0), Transparency = 1, CastShadow = false }), model)
-	mk("PointLight", { Range = 18, Brightness = 1.2, Color = Color3.fromRGB(255, 210, 120) }, glow)
+	local glow = mkPart("Part", decor({ Name = "ChestGlow", Size = Vector3.new(1, 1, 1), CFrame = base * CFrame.new(0, H + 1.8, 0), Transparency = 1, CastShadow = false }), model)
+	mk("PointLight", { Range = 20, Brightness = 1.3, Color = Color3.fromRGB(255, 210, 120) }, glow)
 	mk("ParticleEmitter", {
 		Texture = "rbxasset://textures/particles/sparkles_main.dds",
 		Color = ColorSequence.new(Color3.fromRGB(255, 225, 120)),
-		Size = NumberSequence.new(0.8, 0),
-		Lifetime = NumberRange.new(0.8, 1.6),
-		Rate = 14,
+		Size = NumberSequence.new(0.9, 0),
+		Lifetime = NumberRange.new(0.9, 1.8),
+		Rate = 16,
 		Speed = NumberRange.new(2, 5),
 		SpreadAngle = Vector2.new(60, 60),
 	}, glow)
 	model.PrimaryPart = box
+	model:SetAttribute("ZoneRadius", CHEST_ZONE_RADIUS)
 	CollectionService:AddTag(model, "EventChest")
-	worldSign(box, "TREASURE CHEST", 12, 2.4, 14.5, Color3.fromRGB(255, 215, 90))
+	worldSign(box, "LIMITED TREASURE CHEST", 15, 2.8, 19, Color3.fromRGB(255, 215, 90))
+	worldSign(box, "Sunken Treasure event", 9, 1.4, 16.2, Color3.fromRGB(190, 235, 255))
 end
 
 -- The Next Event spot: a glowing ring on the floor with a sign. Walk in and the client

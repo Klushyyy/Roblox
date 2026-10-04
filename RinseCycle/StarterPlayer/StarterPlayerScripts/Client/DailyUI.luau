@@ -106,7 +106,6 @@ local function render()
 	end
 end
 
-local askedNotifications = false
 
 local function claim()
 	if claiming or not DailyUI.Ready() then
@@ -123,15 +122,7 @@ local function claim()
 	UIKit.Confetti(50)
 	UIKit.Toast(string.format("Day %d: %s!", result.Day or 1, result.Message or ""), "Good")
 	render()
-	-- A good moment to offer Roblox notifications ("your next daily reward is ready"): once a session.
-	if not askedNotifications then
-		askedNotifications = true
-		task.delay(2, function()
-			pcall(function()
-				(require(script.Parent:WaitForChild("RewardsUI")) :: any).PromptNotifications(false)
-			end)
-		end)
-	end
+	-- (No notification pop-up here: it's only offered from the Free window and the Next Event spot.)
 end
 
 function DailyUI.Init()

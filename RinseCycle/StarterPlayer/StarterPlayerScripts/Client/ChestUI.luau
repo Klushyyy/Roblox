@@ -37,7 +37,7 @@ local ChestUI = {}
 local Colors = UIKit.Theme.Colors
 local LocalPlayer = Players.LocalPlayer
 
-local NEAR = 16 -- studs from the chest for the Open boxes
+local DEFAULT_ZONE = 11 -- studs: the glowing ring around the chest (the model's ZoneRadius attribute)
 local CARD_W, CARD_H = 150, 180
 
 local initialized = false
@@ -135,7 +135,7 @@ local function buildBoard(model: Model): boolean
 	gui.Name = "OddsBoard"
 	gui.Adornee = box
 	gui.Size = UDim2.fromScale(10, 9)
-	gui.StudsOffsetWorldSpace = Vector3.new(0, 8.5, 0) -- above the lid, under the title sign
+	gui.StudsOffsetWorldSpace = Vector3.new(0, 11, 0) -- well above the lid, under the title sign
 	gui.MaxDistance = 70
 	gui.LightInfluence = 0
 	gui.ResetOnSpawn = false
@@ -225,7 +225,8 @@ local function paintCard(card: Frame, r: any, landed: boolean)
 	name.Text = Config.ChestRewardName(r)
 	name.TextColor3 = color
 	local tierLabel = card:FindFirstChild("Tier") :: TextLabel
-	tierLabel.Text = if landed then (tierOf(r)) else ""
+	local limitedPet = r.Kind == "Pet" and Config.Pets[r.Pet] ~= nil and Config.Pets[r.Pet].Limited ~= nil
+	tierLabel.Text = if landed then (if limitedPet then "LIMITED PET" else (tierOf(r))) else ""
 	tierLabel.TextColor3 = color
 end
 
@@ -624,11 +625,13 @@ function ChestUI.Init()
 			local pivot = chestPivot()
 			local character = LocalPlayer.Character
 			local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+			-- Inside the ring (flat distance from the chest), not just somewhere close by.
+			local radius = (model and tonumber(model:GetAttribute("ZoneRadius"))) or DEFAULT_ZONE
 			local isNear = pivot ~= nil
 				and rootPart ~= nil
 				and rootPart:IsA("BasePart")
 				and ClientState.Run == nil
-				and (rootPart.Position - pivot.Position).Magnitude <= NEAR
+				and Vector3.new(rootPart.Position.X - pivot.Position.X, 0, rootPart.Position.Z - pivot.Position.Z).Magnitude <= radius - 0.5
 			if isNear ~= near then
 				near = isNear
 				refresh()

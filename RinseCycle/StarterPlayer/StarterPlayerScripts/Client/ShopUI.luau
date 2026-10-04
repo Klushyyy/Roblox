@@ -699,15 +699,50 @@ function ShopUI.Init()
 
 	-- Celebrate a purchase the moment it happens, never just because a pass you already own showed
 	-- up (ownership is re-checked on every join and server hop). MarketService sends the message.
-	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, _passId, purchased)
+	-- Roblox's own "purchase complete" box takes a few seconds to go away, so we show dots meanwhile
+	-- ("Confirming your purchase...") and congratulate once it has.
+	local function confirmPurchase(name: string?)
+		local done = UIKit.Busy("Confirming your purchase", true)
+		task.delay(5, function()
+			done()
+			UIKit.PlaySound("Sparkle")
+			UIKit.Confetti(120)
+			UIKit.Toast(if name then string.format("Purchase complete: %s! Thank you!", name) else "Purchase complete! Thank you!", "Good")
+		end)
+	end
+	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, purchased)
 		if player == LocalPlayer and purchased then
-			UIKit.Confetti()
+			local name: string? = nil
+			for _, pass in Config.GamePasses do
+				if pass.Id == passId then
+					name = pass.Name
+				end
+			end
+			confirmPurchase(name)
 		end
 	end)
-	MarketplaceService.PromptProductPurchaseFinished:Connect(function(userId, _productId, purchased)
-		if userId == LocalPlayer.UserId and purchased then
-			UIKit.Confetti(50)
+	MarketplaceService.PromptProductPurchaseFinished:Connect(function(userId, productId, purchased)
+		if userId ~= LocalPlayer.UserId or not purchased then
+			return
 		end
+		for _, product in Config.DevProducts do
+			if product.Id == productId then
+				confirmPurchase(product.Name)
+				return
+			end
+		end
+		-- Gifts, chests and the luck ad have their own celebration.
+		for _, id in Config.EventProducts do
+			if id == productId then
+				return
+			end
+		end
+		for _, gift in Config.GiftProducts do
+			if gift.Id == productId then
+				return
+			end
+		end
+		confirmPurchase(nil)
 	end)
 	ClientState.Changed:Connect(function(kind)
 		if kind == "Meta" and UIKit.IsWindowOpen("Shop") then

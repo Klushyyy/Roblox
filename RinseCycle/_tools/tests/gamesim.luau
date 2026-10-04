@@ -843,6 +843,7 @@ rawget(UIS, "__p").GetNavigationGamepads = function()
 end
 rawget(service("ContentProvider"), "__p").PreloadAsync = function() end
 rawget(service("SoundService"), "__p").PlayLocalSound = function() end
+rawget(service("SocialService"), "__p").PromptRsvpToEventAsync = function() end
 rawget(service("BadgeService"), "__p").AwardBadge = function()
 	return true
 end

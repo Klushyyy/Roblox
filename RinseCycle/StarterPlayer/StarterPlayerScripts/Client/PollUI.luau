@@ -25,11 +25,69 @@ local TAB_H = 34
 
 local initialized = false
 
+-- The event countdown pill (admin panel > Global > Event countdown): top-left, under every window.
+-- "ADMIN ABUSE starts in 23:59:30", then "ADMIN ABUSE IS LIVE NOW!" for the hour after.
+local function setupCountdown()
+	local remote = ReplicatedStorage:WaitForChild("GlobalCountdown", 30)
+	if not remote then
+		return
+	end
+	local _gui, root = UIKit.CreateScreen("EventCountdown", 7)
+	local pill = Instance.new("Frame")
+	pill.Name = "Countdown"
+	pill.Size = UDim2.fromOffset(300, 46)
+	pill.BackgroundColor3 = Colors.PanelDark
+	pill.Visible = false
+	UIKit.Corner(pill, 14)
+	local stroke = UIKit.Stroke(pill, Colors.Coin, 3, 0)
+	pill.Parent = root
+	local title = UIKit.Label({ Text = "", TextSize = 15, TextScaled = true, TextColor3 = Colors.Coin, Position = UDim2.fromOffset(8, 3), Size = UDim2.new(1, -16, 0, 18), Parent = pill })
+	local clock = UIKit.Label({ Text = "", TextSize = 22, Position = UDim2.fromOffset(8, 20), Size = UDim2.new(1, -16, 0, 24), Parent = pill })
+	local info: { Name: string, EndsAt: number, Live: number }? = nil
+	remote.OnClientEvent:Connect(function(kind, name, endsAt, liveMinutes)
+		if kind == "Set" and type(name) == "string" and type(endsAt) == "number" then
+			info = { Name = string.upper(name), EndsAt = endsAt, Live = (tonumber(liveMinutes) or 60) * 60 }
+		else
+			info = nil
+		end
+	end)
+	task.spawn(function()
+		while true do
+			local current = info
+			local nowT = os.time()
+			if current and nowT < current.EndsAt + current.Live then
+				local inset = UIKit.TopInset()
+				local safe = UIKit.SafeInsets()
+				pill.Position = UDim2.fromOffset(16 + math.floor(safe.Left * 0.5), math.floor(inset + 8))
+				pill.Visible = true
+				if nowT < current.EndsAt then
+					local left = current.EndsAt - nowT
+					title.Text = current.Name .. " STARTS IN"
+					title.TextColor3 = Colors.Coin
+					stroke.Color = Colors.Coin
+					clock.Text = if left >= 86400
+						then string.format("%dd %02d:%02d:%02d", left // 86400, (left % 86400) // 3600, (left % 3600) // 60, left % 60)
+						else string.format("%02d:%02d:%02d", left // 3600, (left % 3600) // 60, left % 60)
+				else
+					title.Text = current.Name
+					title.TextColor3 = Colors.Good
+					stroke.Color = Colors.Good
+					clock.Text = "IS LIVE NOW!"
+				end
+			else
+				pill.Visible = false
+			end
+			task.wait(0.5)
+		end
+	end)
+end
+
 function PollUI.Init()
 	if initialized then
 		return
 	end
 	initialized = true
+	task.spawn(setupCountdown)
 
 	-- Display order 8: under every window (10+), over the HUD.
 	local _gui, root = UIKit.CreateScreen("PollUI", 8)

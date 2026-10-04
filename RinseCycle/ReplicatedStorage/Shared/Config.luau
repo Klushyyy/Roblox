@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.1.0"
+Config.Version = "2.2.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -304,8 +304,10 @@ Config.Pets = {
 	TidalDragon = { Name = "Tidal Dragon", Rarity = "Epic", PowerShare = 1.02, Capacity = 84, CoinBonus = 0.25, Model = "Dragon", Colors = { Body = Color3.fromRGB(60, 150, 255), Accent = Color3.fromRGB(180, 240, 255) } },
 	KrakenKing = { Name = "Kraken King", Rarity = "Legendary", PowerShare = 1.56, Capacity = 121, CoinBonus = 0.38, Model = "Kraken", Colors = { Body = Color3.fromRGB(120, 40, 160), Accent = Color3.fromRGB(255, 210, 60) }, Shiny = true },
 	-- Treasure Chest event only (Config.ChestEvent): no egg has them.
-	CoralCrab = { Name = "Coral Crab", Rarity = "Epic", PowerShare = 0.78, Capacity = 66, CoinBonus = 0.21, Model = "Crab", Event = true, Colors = { Body = Color3.fromRGB(255, 120, 140), Accent = Color3.fromRGB(255, 215, 120) } },
-	TreasureTurtle = { Name = "Treasure Turtle", Rarity = "Legendary", PowerShare = 1.26, Capacity = 100, CoinBonus = 0.32, Model = "Turtle", Event = true, Colors = { Body = Color3.fromRGB(60, 170, 150), Accent = Color3.fromRGB(255, 205, 60) }, Shiny = true },
+	CoralCrab = { Name = "Coral Crab", Rarity = "Epic", PowerShare = 0.78, Capacity = 66, CoinBonus = 0.21, Model = "Crab", Event = true, Limited = "Treasure Chest event", Colors = { Body = Color3.fromRGB(255, 120, 140), Accent = Color3.fromRGB(255, 215, 120) } },
+	TreasureTurtle = { Name = "Treasure Turtle", Rarity = "Legendary", PowerShare = 1.26, Capacity = 100, CoinBonus = 0.32, Model = "Turtle", Event = true, Limited = "Treasure Chest event", Colors = { Body = Color3.fromRGB(60, 170, 150), Accent = Color3.fromRGB(255, 205, 60) }, Shiny = true },
+	-- Club contest winners only (the top club each month): no egg or chest has it.
+	ClubChampion = { Name = "Champion Dragon", Rarity = "Legendary", PowerShare = 1.7, Capacity = 130, CoinBonus = 0.4, Model = "Dragon", Event = true, Limited = "Club contest winners", Colors = { Body = Color3.fromRGB(255, 190, 40), Accent = Color3.fromRGB(255, 90, 90) }, Shiny = true },
 }
 
 -- Eggs cost Bubbles. Bubbles can never be bought with Robux, so eggs are not "paid random items";
@@ -1012,7 +1014,8 @@ function Config.ChestRewardName(r: any): string
 		local pet = Config.Pets[r.Pet]
 		local tier = Config.PetTiers[r.Tier or 1]
 		local name = if pet then pet.Name else tostring(r.Pet)
-		return if (r.Tier or 1) > 1 and tier then tier.Name .. " " .. name else name
+		name = if (r.Tier or 1) > 1 and tier then tier.Name .. " " .. name else name
+		return if pet and pet.Limited then name .. " (limited pet)" else name
 	elseif r.Kind == "Pass" then
 		return "Random Game Pass"
 	end
@@ -1063,6 +1066,10 @@ Config.Clubs = {
 	MaxLevelReq = 3, -- "must have beaten level N" (0 = anyone)
 	CodeLength = 6,
 	JoinCooldown = 60, -- seconds between joining / leaving clubs
+	-- Monthly contest: members donate Bubbles; on the 1st of each month (00:00 UTC) every club's
+	-- points start again from zero and the top 3 clubs' members are paid. #1 also gets a limited pet
+	-- that no egg or chest has.
+	Season = { PrizeGems = { 300, 200, 100 }, Pet = "ClubChampion", DonateAmounts = { 100, 1000, 10000 } },
 	RenameDays = 30, -- the name and the prefix can each be changed once in this many days
 	ChatLength = 150, -- letters per chat message
 	ChatKeep = 60, -- chat messages kept per club

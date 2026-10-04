@@ -2561,4 +2561,96 @@ function UIKit.Init()
 	applyLayout(true)
 end
 
+----------------------------------------------------------------------------------------------------
+-- Busy: a small card with bouncing dots ("Deleting...") over everything while something slow happens.
+-- local done = UIKit.Busy("Creating your club") ... done()
+-- It only appears if the wait lasts more than DELAY seconds (unless `immediate`), so quick actions
+-- never flash it. Several
+-- can be active at once; the newest text shows, and it goes when the last one finishes.
+----------------------------------------------------------------------------------------------------
+local BUSY_DELAY = 0.3
+local busyStack: { { Text: string } } = {}
+local busyGui: GuiObject? = nil
+local busyLabel: TextLabel? = nil
+
+local function refreshBusy()
+	if #busyStack == 0 then
+		if busyGui then
+			busyGui.Visible = false
+		end
+		return
+	end
+	if not busyGui then
+		local _gui, root = UIKit.CreateScreen("BusyOverlay", 90)
+		local dim = Instance.new("TextButton") -- eats clicks while it's up
+		dim.Name = "Dim"
+		dim.Text = ""
+		dim.AutoButtonColor = false
+		dim.BackgroundColor3 = Colors.Ink
+		dim.BackgroundTransparency = 0.6
+		dim.Size = UDim2.fromScale(1, 1)
+		dim.BorderSizePixel = 0
+		dim.Parent = root
+		local card = Instance.new("Frame")
+		card.AnchorPoint = Vector2.new(0.5, 0.5)
+		card.Position = UDim2.fromScale(0.5, 0.5)
+		card.Size = UDim2.fromOffset(320, 120)
+		card.BackgroundColor3 = Colors.Panel
+		addCorner(card, UDim.new(0, UIKit.Theme.CornerLarge))
+		addStroke(card, Colors.Primary, 3, 0)
+		card.Parent = dim
+		local label = Instance.new("TextLabel")
+		label.BackgroundTransparency = 1
+		label.Font = Fonts.Title
+		label.TextSize = 24
+		label.TextColor3 = Colors.Text
+		label.Size = UDim2.new(1, -20, 0, 36)
+		label.Position = UDim2.fromOffset(10, 14)
+		label.Parent = card
+		addStroke(label, Colors.Stroke, 2, 0)
+		for i = 1, 3 do
+			local dot = Instance.new("Frame")
+			dot.AnchorPoint = Vector2.new(0.5, 0.5)
+			dot.Position = UDim2.new(0.5, (i - 2) * 30, 0, 84)
+			dot.Size = UDim2.fromOffset(16, 16)
+			dot.BackgroundColor3 = Colors.Primary
+			addCorner(dot, UDim.new(0.5, 0))
+			dot.Parent = card
+			TweenService:Create(dot, TweenInfo.new(0.35, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true, i * 0.12), { Position = UDim2.new(0.5, (i - 2) * 30, 0, 72) }):Play()
+		end
+		busyGui = dim
+		busyLabel = label
+	end
+	(busyLabel :: TextLabel).Text = busyStack[#busyStack].Text
+	;(busyGui :: GuiObject).Visible = true
+end
+
+function UIKit.Busy(text: string?, immediate: boolean?): () -> ()
+	local entry = { Text = tostring(text or "Working") .. "..." }
+	local finished = false
+	if immediate then
+		table.insert(busyStack, entry)
+		refreshBusy()
+	else
+		task.delay(BUSY_DELAY, function()
+			if not finished then
+				table.insert(busyStack, entry)
+				refreshBusy()
+			end
+		end)
+	end
+	return function()
+		if finished then
+			return
+		end
+		finished = true
+		local i = table.find(busyStack, entry)
+		if i then
+			table.remove(busyStack, i)
+			refreshBusy()
+		end
+	end
+end
+
+
 return UIKit

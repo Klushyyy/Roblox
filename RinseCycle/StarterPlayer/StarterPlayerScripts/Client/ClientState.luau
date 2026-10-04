@@ -89,8 +89,37 @@ end
 
 -- Permanent actions: "BuyPerk" (id), "Hatch" ({ Egg = id, Count = 1 | 3 }), "Equip" (uid),
 -- "Unequip" (uid), "EquipBest", "Delete" (uid).
+-- Slow ones get the "Working..." dots (UIKit.Busy: only shown if the wait is over a moment).
+local BUSY_TEXT = {
+	BuyPerk = "Buying",
+	Rebirth = "Rebirthing",
+	ClaimDaily = "Claiming your reward",
+	ClaimStayBoost = "Claiming",
+	RedeemCode = "Checking your code",
+	ClaimGroup = "Checking the community",
+	SocialDone = "Checking",
+	Merge = "Merging",
+	Delete = "Deleting",
+	WatchLuckAd = "Loading the ad",
+	EquipBest = "Equipping",
+}
+
 function ClientState.MetaRequest(action: string, value: any?): Types.RequestResult
-	return request("MetaRequest", action, value)
+	local text = BUSY_TEXT[action]
+	local done: (() -> ())? = nil
+	if text then
+		local ok, UIKit = pcall(function()
+			return require(script.Parent:WaitForChild("UIKit")) :: any
+		end)
+		if ok then
+			done = UIKit.Busy(text)
+		end
+	end
+	local result = request("MetaRequest", action, value)
+	if done then
+		done()
+	end
+	return result
 end
 
 function ClientState.InRun(): boolean

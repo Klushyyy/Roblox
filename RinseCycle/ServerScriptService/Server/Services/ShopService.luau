@@ -383,6 +383,10 @@ end
 -- end, and MarketService gives the stack (DataService.AddAdLuck). This only asks for the ad.
 -- Yields while the ad plays (the player's other requests wait; they're watching anyway).
 local function watchLuckAd(player: Player, _value: any): Types.RequestResult
+	-- Already at the most ads that stack: no ad shown (nothing to gain).
+	if DataService.AdLuckStacks(DataService.Get(player)) >= Config.RankRoll.AdLuck.MaxAds then
+		return fail("You're already at the max ad boost!")
+	end
 	local productId = Config.EventProducts.AdLuck
 	if type(productId) ~= "number" or productId == 0 then
 		-- No product yet: a free stack in Studio (to test the button), "soon" in a live game.

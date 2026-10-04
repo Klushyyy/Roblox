@@ -48,7 +48,7 @@ return {
 	-- > Events > Create Event). Copy the event's ID from its page URL (the long number) and paste it
 	-- in quotes. The start time on Roblox should match Config.UpcomingEvents (17 Oct, 11 pm NZ).
 	EventIds = {
-		AdminAbuse = "", -- e.g. "4987654321098765432"
+		AdminAbuse = "1208558647303602774", -- Creator Hub > Events > Admin Abuse
 	},
 
 	-- "Your daily reward is ready" notification (sent 24 h after a claim, to players who turned

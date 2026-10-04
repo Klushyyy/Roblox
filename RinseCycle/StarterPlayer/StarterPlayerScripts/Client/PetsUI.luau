@@ -136,7 +136,7 @@ local currentEggId: string? = nil
 -- Pets window: grid + details panel
 ----------------------------------------------------------------------------------------------------
 
-local GRID_CELL = Vector2.new(122, 172) -- room for the EQUIPPED tag under the stats line
+local GRID_CELL = Vector2.new(122, 198) -- name, rarity, speed, LIMITED, then the EQUIPPED tag (each on its own line)
 local GRID_GAP = 10
 
 -- Merge rule (same as the server): three of the same pet at the same tier -> that pet, next tier.
@@ -332,15 +332,37 @@ local function buildPetCard(parent: Instance, entry, equipped: boolean, onClick:
 		ZIndex = 2,
 	})
 	UIKit.Label({
-		Text = entry.Def.Rarity .. "  •  " .. speedText(entry.Id, entry.Tier),
+		Text = entry.Def.Rarity,
 		Size = UDim2.new(1, -10, 0, 16),
 		Position = UDim2.new(0.5, 0, 0, 118),
 		AnchorPoint = Vector2.new(0.5, 0),
-		TextSize = 13,
+		TextSize = 14,
 		TextColor3 = UIKit.RarityColor(entry.Def.Rarity),
 		Parent = card,
 		ZIndex = 2,
 	})
+	UIKit.Label({
+		Text = "Speed " .. speedText(entry.Id, entry.Tier),
+		Size = UDim2.new(1, -10, 0, 16),
+		Position = UDim2.new(0.5, 0, 0, 135),
+		AnchorPoint = Vector2.new(0.5, 0),
+		TextSize = 13,
+		TextColor3 = C.TextDim,
+		Parent = card,
+		ZIndex = 2,
+	})
+	if entry.Def.Limited then
+		UIKit.Label({
+			Text = "LIMITED PET",
+			Size = UDim2.new(1, -10, 0, 16),
+			Position = UDim2.new(0.5, 0, 0, 152),
+			AnchorPoint = Vector2.new(0.5, 0),
+			TextSize = 13,
+			TextColor3 = Color3.fromRGB(255, 205, 60),
+			Parent = card,
+			ZIndex = 2,
+		})
+	end
 
 	if equipped then
 		pill(card, "EQUIPPED", C.Good, UDim2.new(0.5, 0, 1, -6), Vector2.new(0.5, 1), "EquippedTag")
@@ -410,6 +432,9 @@ local function refreshDetailPanel(meta: Types.MetaState?)
 	detailName.Text = entry.Def.Name
 	local tierDef = Config.PetTier(entry.Tier)
 	detailRarity.Text = if tierDef.Name ~= "" then tierDef.Name .. "  •  " .. entry.Def.Rarity else entry.Def.Rarity
+	if entry.Def.Limited then
+		detailRarity.Text ..= "  •  LIMITED (" .. entry.Def.Limited .. ")"
+	end
 	if (entry.Tier or 1) > 1 then
 		paintTierText(detailRarity, entry.Tier or 1)
 	else

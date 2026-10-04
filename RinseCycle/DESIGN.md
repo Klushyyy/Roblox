@@ -1507,6 +1507,38 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - Pets On / Off only shows in a run when you have pets out. Music: lobby track and two run tracks
   that crossfade into each other.
 
+## 6zd. Club contest, loading dots, notifications, event countdown (v2.2.0)
+- UIKit.Busy("Deleting"): a card with three bouncing dots over everything while something slow
+  happens (only if it lasts over 0.3 s; `immediate` skips the wait). ClientState.MetaRequest uses it
+  for the slow actions; Clubs uses it for create / join / leave / rename / donate. After buying a
+  pass or product the dots say "Confirming your purchase" for 5 s (Roblox's own box takes that long
+  to go), then the congratulations (ShopUI).
+- Clubs: the window knows you're in a club from the save (meta.ClubId) and shows dots, never the
+  Create page, while the club's details load. The "?" for the prefix sits inside the text box.
+  Points = Bubbles DONATED to the club (DONATE BUBBLES on MY CLUB, 100 / 1,000 / 10,000 / all).
+  TOP CLUBS = most donated this month; click any club for its members and what each gave (private
+  clubs show too, they just need a code to join). MY CLUB lists each member's donations; LEADERBOARD
+  ranks them. Monthly contest: on the 1st (00:00 UTC, shown in each player's own time) every club
+  starts from zero (lazily: Club.Season, per-month OrderedDataStore "RinseCycleClubPoints_YYYYMM");
+  the finished month's top 3 clubs are recorded ("season_YYYYMM") and each member is paid on their
+  next join: 300 / 200 / 100 Gems, and #1's members also get the limited Champion Dragon pet
+  (Config.Clubs.Season; profile ClubPrizeSeason says it's been paid).
+- Limited pets (Config.Pets .Limited): Treasure Chest pets and the Champion Dragon are tagged
+  LIMITED in the Pets window, the chest odds and the reveal. The pets cards now have one line each
+  (name / rarity / speed / LIMITED / EQUIPPED) so nothing overlaps.
+- Treasure Chest: stone steps, a glowing ring (11 studs) on the floor: the Open buttons show only
+  while you're inside the ring. Higher, bigger, more detailed ("LIMITED TREASURE CHEST"), odds board
+  higher above it.
+- Notifications are never offered on their own (the one after a daily claim is gone): only from
+  Free Rewards > Turn on notifications and the Next Event spot. One message only ("Notifications are
+  already on"). The Admin Abuse event is linked to the real Roblox event (StoreIds > EventIds), so
+  walking into the ring shows Roblox's own event pop-up.
+- :globalcountdown <time> [name] / :cancelcountdown (owner): a countdown pill top-left on everyone's
+  screen in every server (MemoryStore hash map "RinseCycle_Countdown", re-read each minute), turning
+  into "<NAME> IS LIVE NOW!" for an hour.
+- Ads: at the max stacks the button says MAX AD BOOST and no ad is shown. Upgrades and Leave have
+  drawn icons (Book, Door) like the rest.
+
 ## 7. Balance knobs (all in Config)
 
 - Early pacing target: first purchase within ~30 s, Sponge within 2–3 minutes, and a solo Family

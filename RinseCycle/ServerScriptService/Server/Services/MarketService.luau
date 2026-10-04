@@ -87,10 +87,7 @@ for _, product in Config.DevProducts or {} do
 			if not MarketService.GrantProduct(player, product) then
 				error("grant failed")
 			end
-			-- Only ever runs once per real purchase (the receipt is recorded right after).
-			if player.Parent == Players then
-				Remotes.Event("Notify"):FireClient(player, string.format("Congrats! You bought %s %s", product.Name, product.Icon or ""), "Good")
-			end
+			-- (The client congratulates once Roblox's own purchase box has gone: ShopUI.)
 		end
 	end
 end
@@ -120,12 +117,6 @@ local initialized = false
 
 local function isHere(player: Player): boolean
 	return player.Parent == Players
-end
-
-local function notify(player: Player, text: string, kind: string)
-	if isHere(player) then
-		notifyRemote:FireClient(player, text, kind)
-	end
 end
 
 -- Passes that are actually on sale (a real Id was pasted into Config).
@@ -232,7 +223,7 @@ local function onPassPurchaseFinished(player: Player, passId: number, wasPurchas
 	bought[pass.Key] = true
 	DataService.SetPass(player, pass.Key, true)
 	DataService.PushMeta(player)
-	notify(player, string.format("Congrats! You bought %s %s", pass.Name, pass.Icon or ""), "Good")
+	-- (The client shows the confirmation itself, a few seconds on, once Roblox's own box is gone.)
 end
 
 ----------------------------------------------------------------------------------------------------

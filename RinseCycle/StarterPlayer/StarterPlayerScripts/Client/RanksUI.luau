@@ -122,9 +122,11 @@ local function renderGems()
 		if label then
 			label.Text = if watchingAd
 				then "Loading ad..."
-				else string.format("+%d%% Luck  WATCH AD (%d/%d)", math.floor(ad.PerAd * 100 + 0.5), stacks, ad.MaxAds)
+				elseif stacks >= ad.MaxAds then "MAX AD BOOST"
+			else string.format("+%d%% Luck  WATCH AD (%d/%d)", math.floor(ad.PerAd * 100 + 0.5), stacks, ad.MaxAds)
 		end
 		UIKit.SetDisabled(adButton, watchingAd)
+		UIKit.SetButtonColor(adButton, if stacks >= ad.MaxAds then Colors.Disabled else Colors.Primary)
 		if mult > 1 then
 			luckSummary.Text = if left > 0
 				then string.format("LUCK %s  •  ads end in %d:%02d", multText(mult), left // 60, left % 60)
@@ -746,6 +748,11 @@ function RanksUI.Init()
 		Parent = leftPanel,
 		OnClick = function()
 			if watchingAd then
+				return
+			end
+			local _mult, stacks = currentLuck(ClientState.Meta)
+			if stacks >= Config.RankRoll.AdLuck.MaxAds then
+				UIKit.Toast("You're already at the max ad boost! It lasts a few more minutes.", "Info")
 				return
 			end
 			watchingAd = true

@@ -11,8 +11,13 @@
 	    longest member); the last one out closes it.
 	  * The owner can rename the club and change the prefix, each once every RenameDays days (each
 	    has its own timer; a brand new club can change straight away).
-	  * Points: every Bubble a member earns while in the club is a point for the club and for that
-	    member (the club leaderboard). TOP CLUBS is the top 25 clubs.
+	  * Points: members DONATE Bubbles to their club (Donate button). Every donated Bubble is a point
+	    for the club and for that member (the club leaderboard). TOP CLUBS is the top 25 clubs this
+	    month.
+	  * Monthly contest: on the 1st of every month (00:00 UTC) every club's points start again from
+	    zero. The top 3 clubs' members each get Gems (Config.Clubs.Season.PrizeGems) and the winning
+	    club's members also get a limited pet (Config.Clubs.Season.Pet). Prizes are claimed the next
+	    time each member is in the game (profile ClubPrizeSeason says which month they got).
 	  * Club chat: members only, filtered by Roblox's text filter, the last ChatKeep messages kept.
 
 	Storage (DataStores; in Studio without API access everything lives in memory):
@@ -22,12 +27,13 @@
 	                         "dir_<c>"     { [id] = summary } every club whose name starts with c
 	                                       (FIND lists them alphabetically)
 	                         "chat_<id>"   the club's chat history
-	  RinseCycleClubPoints   OrderedDataStore id -> points (TOP CLUBS)
+	  RinseCycleClubPoints_<YYYYMM>  OrderedDataStore id -> points (TOP CLUBS, one per month)
+	                         "season_<YYYYMM>" the finished month's top 3 clubs and their members
 	Other servers hear about kicks and chat over MessagingService ("RinseCycle_Club"); a player's club
 	is also checked against the record every time they join.
 
 	ClubRequest (C->S, action, value) -> { Ok, Error?, Club?, Clubs?, Messages? }:
-	  "Mine"  "Top"  "Find" (text)  "Create" ({Name, Tag, Public, ReqLevel, ReqRebirths})
+	  "Mine"  "Top"  "Info" (club id)  "Donate" (bubbles)  "Find" (text)  "Create" ({Name, Tag, Public, ReqLevel, ReqRebirths})
 	  "Join" (club id)  "JoinCode" (code)  "Leave"  "Kick" (userId)  "Promote" / "Demote" (userId)
 	  "Settings" ({Public, ReqLevel, ReqRebirths})  "Rename" ({Name?, Tag?})  "NewCode"
 	  "Chat" (text)  "ChatHistory"
@@ -52,7 +58,6 @@ local ClubService = {}
 local STORE = "RinseCycleClubs"
 local POINTS_STORE = "RinseCycleClubPoints"
 local TOPIC = "RinseCycle_Club"
-local POINTS_FLUSH = 60 -- seconds between writing earned points
 local TOP_REFRESH = 120 -- seconds the TOP CLUBS list is cached
 local DIR_REFRESH = 60 -- seconds a FIND directory shard is cached
 local TOP_COUNT = 25
@@ -62,16 +67,16 @@ local CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" -- no 0/O or 1/I
 
 local initialized = false
 local clubStore: DataStore? = nil
-local pointsStore: OrderedDataStore? = nil
+local pointsStores: { [string]: OrderedDataStore } = {}
 local memory: { [string]: any } = {} -- Studio / no API access
-local memoryPoints: { [string]: number? } = {}
+local memoryPoints: { [string]: { [string]: number? } } = {} -- season -> club id -> points
 local lastRequest: { [Player]: number } = {}
 local lastChat: { [Player]: number } = {}
-local seenBubbles: { [Player]: number } = {}
-local pendingPoints: { [string]: { [string]: number } } = {} -- club id -> userId -> points
 local topCache: { any } = {}
 local topAt = -math.huge
 local dirCache: { [string]: { At: number, Entries: any } } = {}
+local donate: (Player, any) -> any
+local info: (Player, string) -> any
 local stateRemote: RemoteEvent
 local chatRemote: RemoteEvent
 
@@ -138,12 +143,83 @@ local function remove(key: string)
 	end)
 end
 
-local function setPoints(id: string, points: number?)
+----------------------------------------------------------------------------------------------------
+-- Seasons (one per calendar month, UTC)
+----------------------------------------------------------------------------------------------------
+
+local function now(): number
+	local fn = (ClubService :: any).NowFn
+	return if fn then fn() else os.time()
+end
+
+-- Days since 1970-01-01 for a civil date (no timezone involved).
+local function daysFromCivil(y: number, m: number, d: number): number
+	y -= if m <= 2 then 1 else 0
+	local era = (if y >= 0 then y else y - 399) // 400
+	local yoe = y - era * 400
+	local doy = (153 * (m + (if m > 2 then -3 else 9)) + 2) // 5 + d - 1
+	local doe = yoe * 365 + yoe // 4 - yoe // 100 + doy
+	return era * 146097 + doe - 719468
+end
+
+local function monthStart(y: number, m: number): number
+	while m > 12 do
+		m -= 12
+		y += 1
+	end
+	while m < 1 do
+		m += 12
+		y -= 1
+	end
+	return daysFromCivil(y, m, 1) * 86400
+end
+
+local function seasonOf(t: number): string
+	return os.date("!%Y%m", t)
+end
+
+local function currentSeason(): string
+	return seasonOf(now())
+end
+
+local function previousSeason(): string
+	local d = os.date("!*t", now())
+	return seasonOf(monthStart(d.year, d.month - 1))
+end
+
+local function nextResetAt(): number
+	local d = os.date("!*t", now())
+	return monthStart(d.year, d.month + 1)
+end
+
+-- What the client shows about the contest: "October 2026", when it resets (unix, shown in the
+-- player's own time), and the prizes.
+local function seasonInfo(): any
+	return { Label = os.date("!%B %Y", now()), ResetAt = nextResetAt(), Id = currentSeason() }
+end
+
+local function pointsStoreFor(season: string): OrderedDataStore?
+	if pointsStores[season] then
+		return pointsStores[season]
+	end
+	local ok, store = pcall(function()
+		return DataStoreService:GetOrderedDataStore(POINTS_STORE .. "_" .. season)
+	end)
+	if ok then
+		pointsStores[season] = store
+		return store
+	end
+	return nil
+end
+
+local function setPoints(id: string, points: number?, season: string?)
+	local key = season or currentSeason()
 	if useMemory() then
-		memoryPoints[id] = points
+		memoryPoints[key] = memoryPoints[key] or {}
+		memoryPoints[key][id] = points
 		return
 	end
-	local store = pointsStore
+	local store = pointsStoreFor(key)
 	if not store then
 		return
 	end
@@ -157,31 +233,36 @@ local function setPoints(id: string, points: number?)
 	end)
 end
 
-local function topIds(): { string }
+local function topIds(season: string?, count: number?): { string }
+	local key = season or currentSeason()
+	local limit = count or TOP_COUNT
 	local ids: { string } = {}
 	if useMemory() then
 		local pairsList: { { any } } = {}
-		for id, points in memoryPoints do
+		local bucket: { [string]: number? } = memoryPoints[key] or {}
+		for id, points in bucket do
 			table.insert(pairsList, { id :: any, points })
 		end
 		table.sort(pairsList, function(a, b)
 			return a[2] > b[2]
 		end)
-		for i = 1, math.min(TOP_COUNT, #pairsList) do
+		for i = 1, math.min(limit, #pairsList) do
 			ids[i] = pairsList[i][1]
 		end
 		return ids
 	end
-	local store = pointsStore
+	local store = pointsStoreFor(key)
 	if not store then
 		return ids
 	end
 	local ok, page = pcall(function()
-		return store:GetSortedAsync(false, TOP_COUNT):GetCurrentPage()
+		return store:GetSortedAsync(false, limit):GetCurrentPage()
 	end)
 	if ok and type(page) == "table" then
 		for _, entry in page do
-			table.insert(ids, entry.key)
+			if entry.value > 0 then
+				table.insert(ids, entry.key)
+			end
 		end
 	end
 	return ids
@@ -295,9 +376,10 @@ end
 local ROLE_ORDER = { Owner = 1, CoLeader = 2, Member = 3 }
 
 -- What the client is shown. Members see the code, the member list and their own role.
-local function view(club: any, forUserId: number?): any
+local function view(club: any, forUserId: number?, withMembers: boolean?): any
 	local members = {}
 	local memberIds = {}
+	local thisSeason = club.Season == currentSeason() -- last month's points count for nothing
 	for uid, m in club.Members do
 		local id = tonumber(uid) or 0
 		table.insert(memberIds, id)
@@ -305,7 +387,7 @@ local function view(club: any, forUserId: number?): any
 			UserId = id,
 			Name = m.Name,
 			Role = m.Role or "Member",
-			Points = math.floor(tonumber(m.Points) or 0),
+			Points = if thisSeason then math.floor(tonumber(m.Points) or 0) else 0,
 			Online = Players:GetPlayerByUserId(id) ~= nil,
 		})
 	end
@@ -324,14 +406,15 @@ local function view(club: any, forUserId: number?): any
 		Public = club.Public,
 		ReqLevel = club.ReqLevel,
 		ReqRebirths = club.ReqRebirths,
-		Points = club.Points,
+		Points = if thisSeason then math.floor(tonumber(club.Points) or 0) else 0,
+		Season = seasonInfo(),
 		Count = #members,
 		Max = Config.Clubs.MaxMembers,
 		Owner = club.Owner,
 		OwnerName = club.OwnerName,
 		MemberIds = memberIds,
 		Code = if me then club.Code else nil,
-		Members = if me then members else nil,
+		Members = if me or withMembers then members else nil,
 		Mine = me ~= nil,
 		MyRole = if me then me.Role or "Member" else nil,
 		NameWait = if me then renameWait(club, "NameChangedAt") else nil,
@@ -387,7 +470,6 @@ end
 -- Puts the membership on the player's profile (tag over their head) and tells their client.
 local function setMembership(player: Player, club: any?, moved: boolean)
 	DataService.SetClub(player, if club then club.Id else "", if club then club.Tag else "", moved)
-	seenBubbles[player] = nil
 	pushState(player, club)
 end
 
@@ -564,6 +646,7 @@ local function create(player: Player, value: any)
 		ReqRebirths = reqRebirths,
 		Code = code,
 		Points = 0,
+		Season = currentSeason(),
 		Created = os.time(),
 		NameChangedAt = 0, -- 0: the first change is free straight away
 		TagChangedAt = 0,
@@ -950,7 +1033,7 @@ local function top(player: Player)
 		v.Mine = profile ~= nil and profile.ClubId == c.Id
 		table.insert(list, v)
 	end
-	return { Ok = true, Clubs = list }
+	return { Ok = true, Clubs = list, Season = seasonInfo() }
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -1030,6 +1113,10 @@ local function onRequest(player: Player, action: any, value: any): any
 			return { Ok = true, Club = if club and club.Members[tostring(player.UserId)] then view(club, player.UserId) else nil }
 		elseif action == "Top" then
 			return top(player)
+		elseif action == "Info" and type(value) == "string" and #value <= 40 then
+			return info(player, value)
+		elseif action == "Donate" then
+			return donate(player, value)
 		elseif action == "Find" then
 			return find(player, value)
 		elseif action == "Create" then
@@ -1077,70 +1164,159 @@ end
 -- Points and membership checks
 ----------------------------------------------------------------------------------------------------
 
-local function addPending(clubId: string, userId: number, amount: number)
-	local byUser = pendingPoints[clubId]
-	if not byUser then
-		byUser = {}
-		pendingPoints[clubId] = byUser
+-- Donate Bubbles to your club: each one is a point for the club and for you this month.
+function donate(player: Player, value: any): any
+	local amount = math.floor(tonumber(value) or 0)
+	if amount < 1 or amount > 1e9 then
+		return fail("Pick an amount to donate.")
 	end
-	local key = tostring(userId)
-	byUser[key] = (byUser[key] or 0) + amount
-end
-
--- Bubbles members earned since the last look become club points (written every POINTS_FLUSH).
-local function collectPoints()
-	for _, player in Players:GetPlayers() do
-		local profile = DataService.Get(player)
-		if profile and profile.ClubId ~= "" then
-			local earned = tonumber(profile.Stats and profile.Stats.BubblesEarned) or 0
-			local last = seenBubbles[player]
-			seenBubbles[player] = earned
-			if last and earned > last then
-				addPending(profile.ClubId, player.UserId, earned - last)
+	local id = clubOf(player)
+	if not id then
+		return fail("You're not in a club.")
+	end
+	if not DataService.SpendBubbles(player, amount) then
+		return fail("You don't have that many Bubbles.")
+	end
+	local season = currentSeason()
+	local uid = tostring(player.UserId)
+	local ok, club = update("club_" .. id, function(old)
+		if type(old) ~= "table" or not old.Members[uid] then
+			return nil
+		end
+		if old.Season ~= season then -- a new month: everyone starts again from zero
+			old.Season = season
+			old.Points = 0
+			for _, m in old.Members do
+				m.Points = 0
 			end
 		end
+		old.Points = (old.Points or 0) + amount
+		old.Members[uid].Points = (tonumber(old.Members[uid].Points) or 0) + amount
+		return old
+	end)
+	if not ok or not club then
+		DataService.AddBubbles(player, amount, "ClubRefund")
+		return fail("Couldn't donate right now. Your Bubbles were given back.")
 	end
+	setPoints(id, club.Points, season)
+	topAt = -math.huge
+	pushToMembers(club)
+	return { Ok = true, Club = view(club, player.UserId), Message = string.format("Donated %d Bubbles!", amount) }
 end
 
-local function flushPoints()
-	collectPoints()
-	local batch = pendingPoints
-	pendingPoints = {}
-	for id, byUser in batch do
-		local ok, club = update("club_" .. id, function(old)
-			if type(old) ~= "table" then
-				return nil
-			end
-			for uid, add in byUser do
-				old.Points = (old.Points or 0) + add
-				local m = old.Members[uid]
-				if m then
-					m.Points = (tonumber(m.Points) or 0) + add
-				end
-			end
-			return old
-		end)
-		if ok and club then
-			setPoints(id, club.Points)
-		end
+-- Any club's details and members (TOP CLUBS / FIND rows open it). Only members see the code.
+function info(player: Player, id: string): any
+	local ok, club = get("club_" .. id)
+	if not ok then
+		return fail("Clubs are busy. Try again in a moment.")
 	end
+	if type(club) ~= "table" then
+		return fail("That club doesn't exist any more.")
+	end
+	return { Ok = true, Club = view(club, player.UserId, true) }
 end
 
--- On join: is the club still there, and are they still in it? The prefix is refreshed from it.
-local function checkOnJoin(player: Player)
-	local profile = DataService.Get(player)
-	if not profile or profile.ClubId == "" then
+----------------------------------------------------------------------------------------------------
+-- The monthly contest: closing a month and paying the winners
+----------------------------------------------------------------------------------------------------
+
+local closedSeasons: { [string]: boolean } = {}
+
+-- Once per month (whichever server notices first): record the finished month's top 3 clubs and who
+-- was in them.
+local function ensureSeasonClosed()
+	local prev = previousSeason()
+	if closedSeasons[prev] then
 		return
 	end
-	local okGet, club = get("club_" .. profile.ClubId)
-	if not okGet then
-		return -- can't tell right now; keep it
+	local ok, existing = get("season_" .. prev)
+	if not ok then
+		return
 	end
-	if type(club) ~= "table" or not club.Members[tostring(player.UserId)] then
-		setMembership(player, nil, false)
-	elseif club.Tag ~= profile.ClubTag then
-		DataService.SetClub(player, club.Id, club.Tag, false)
+	if existing then
+		closedSeasons[prev] = true
+		return
 	end
+	local clubs = {}
+	for _, id in topIds(prev, 3) do
+		local okClub, club = get("club_" .. id)
+		if okClub and type(club) == "table" then
+			local members = {}
+			for uid in club.Members do
+				table.insert(members, tonumber(uid))
+			end
+			table.insert(clubs, { Id = id, Name = club.Name, Tag = club.Tag, Rank = #clubs + 1, Members = members })
+		end
+	end
+	update("season_" .. prev, function(old)
+		if old then
+			return nil
+		end
+		return { Season = prev, Clubs = clubs }
+	end)
+	closedSeasons[prev] = true
+end
+
+local function seasonName(season: string): string
+	local y, m = tonumber(string.sub(season, 1, 4)) or 1970, tonumber(string.sub(season, 5, 6)) or 1
+	return os.date("!%B %Y", daysFromCivil(y, m, 1) * 86400)
+end
+
+-- Pays last month's prize to a member of one of the top 3 clubs (once).
+local function claimPrize(player: Player)
+	local profile = DataService.Get(player)
+	local prev = previousSeason()
+	if not profile or profile.ClubPrizeSeason == prev then
+		return
+	end
+	local ok, doc = get("season_" .. prev)
+	if not ok or type(doc) ~= "table" then
+		return
+	end
+	DataService.MarkClubPrize(player, prev)
+	local rules = Config.Clubs.Season
+	for _, c in doc.Clubs or {} do
+		if table.find(c.Members or {}, player.UserId) then
+			local gems = rules.PrizeGems[c.Rank] or 0
+			local text = string.format("%s finished #%d in %s: +%d Gems", tostring(c.Name), c.Rank, seasonName(prev), gems)
+			DataService.AddGems(player, gems)
+			if c.Rank == 1 and rules.Pet then
+				local okPet = (require(script.Parent:WaitForChild("PetService")) :: any).GivePet(player, rules.Pet)
+				if okPet then
+					text ..= " and the limited " .. Config.Pets[rules.Pet].Name .. " pet!"
+				else
+					DataService.AddGems(player, 150)
+					text ..= " (pet bag full: +150 Gems instead of the pet)"
+				end
+			end
+			;(require(script.Parent:WaitForChild("GiftService")) :: any).Celebrate(player, "Club contest prize!", text, "Gem")
+			return
+		end
+	end
+end
+
+-- On join: is the club still there, and are they still in it? The prefix is refreshed from it, and
+-- the client is told (so the Clubs window never has to guess). Then last month's prize, if any.
+local function checkOnJoin(player: Player)
+	local profile = DataService.Get(player)
+	if not profile then
+		return
+	end
+	if profile.ClubId ~= "" then
+		local okGet, club = get("club_" .. profile.ClubId)
+		if okGet then
+			if type(club) ~= "table" or not club.Members[tostring(player.UserId)] then
+				setMembership(player, nil, false)
+			else
+				if club.Tag ~= profile.ClubTag then
+					DataService.SetClub(player, club.Id, club.Tag, false)
+				end
+				pushState(player, club)
+			end
+		end
+	end
+	pcall(ensureSeasonClosed)
+	pcall(claimPrize, player)
 end
 
 -- MessagingService messages (and the Studio fallback).
@@ -1172,7 +1348,7 @@ function ClubService.Init()
 	initialized = true
 	pcall(function()
 		clubStore = DataStoreService:GetDataStore(STORE)
-		pointsStore = DataStoreService:GetOrderedDataStore(POINTS_STORE)
+		pointsStoreFor(currentSeason())
 	end)
 	stateRemote = Remotes.Event("ClubState")
 	chatRemote = Remotes.Event("ClubChat")
@@ -1181,15 +1357,8 @@ function ClubService.Init()
 		task.spawn(checkOnJoin, player)
 	end)
 	Players.PlayerRemoving:Connect(function(player)
-		local profile = DataService.Get(player)
-		local earned = profile and tonumber(profile.Stats and profile.Stats.BubblesEarned)
-		local last = seenBubbles[player]
-		if profile and profile.ClubId ~= "" and earned and last and earned > last then
-			addPending(profile.ClubId, player.UserId, earned - last)
-		end
 		lastRequest[player] = nil
 		lastChat[player] = nil
-		seenBubbles[player] = nil
 	end)
 	pcall(function()
 		MessagingService:SubscribeAsync(TOPIC, function(message)
@@ -1201,16 +1370,15 @@ end
 function ClubService.Start()
 	task.spawn(function()
 		while true do
-			task.wait(POINTS_FLUSH)
-			pcall(flushPoints)
+			task.wait(600)
+			pcall(ensureSeasonClosed)
 		end
-	end)
-	game:BindToClose(function()
-		pcall(flushPoints)
 	end)
 end
 
--- For tests: write pending points now.
-ClubService.FlushPoints = flushPoints
+-- For tests.
+ClubService.EnsureSeasonClosed = ensureSeasonClosed
+ClubService.ClaimPrize = claimPrize
+function ClubService.FlushPoints() end
 
 return ClubService

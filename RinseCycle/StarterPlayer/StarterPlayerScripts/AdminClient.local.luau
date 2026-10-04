@@ -746,6 +746,8 @@ local COMMANDS: { Command } = ({
 		end
 		return out
 	end } } },
+	{ Name = "globalcountdown", Icon = "⏳", Label = "Event countdown", Desc = "A countdown on everyone's screen in EVERY server (and for anyone who joins later), then LIVE NOW for an hour. Pick the time, then type the event's name (blank = Admin Abuse).", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "1h", "6h", "12h", "24h", "48h", "3d", "7d" }) }, { Kind = "text", Placeholder = "Event name (blank = Admin Abuse)" } } },
+	{ Name = "cancelcountdown", Icon = "🛑", Label = "Cancel countdown", Desc = "Removes the event countdown from everyone's screen, in every server.", Group = "Global", Target = "none", Danger = true },
 	{ Name = "globalboost", Icon = "⚡", Label = "x2 boost", Desc = "x2 Cleaning for everyone online in EVERY server, for this many minutes.", Group = "Global", Target = "none", Inputs = { { Kind = "number", Placeholder = "Minutes (1-180)", Required = true } } },
 }) :: any
 local GROUPS = {

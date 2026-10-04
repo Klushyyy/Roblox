@@ -223,7 +223,7 @@ function HUD.Init()
 		return b
 	end
 
-	local upgradesButton = sideButton("📖", "Upgrades", Colors.Good, "Tab", "Y", function()
+	local upgradesButton = sideButton("@Book", "Upgrades", Colors.Good, "Tab", "Y", function()
 		UIKit.ToggleWindow("Upgrades")
 	end)
 	local shopButton = sideButton("@Bag", "Shop", Colors.Bad, "G", "Y", function()
@@ -235,7 +235,7 @@ function HUD.Init()
 	local ranksButton = sideButton("@Medal", "Ranks", Colors.Accent, "R", "RB", function()
 		UIKit.ToggleWindow("Ranks")
 	end)
-	local leaveButton = sideButton("🚪", "Leave", Colors.PanelLight, "", "", function()
+	local leaveButton = sideButton("@Door", "Leave", Colors.PanelLight, "", "", function()
 		UIKit.OpenWindow("LeaveConfirm")
 	end)
 	local clubsButton = sideButton("@Group", "Clubs", Colors.Primary, "C", "", function()

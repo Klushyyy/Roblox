@@ -403,7 +403,11 @@ local function buildFree(screenRoot: Instance)
 		TextSize = 20,
 		Parent = notify,
 		OnClick = function()
-			task.spawn(RewardsUI.PromptNotifications, true)
+			task.spawn(function()
+				if RewardsUI.PromptNotifications() == "AlreadyOn" then
+					UIKit.Toast("Notifications are already on!", "Info")
+				end
+			end)
 		end,
 	})
 
@@ -425,7 +429,9 @@ end
 
 -- Roblox's notification opt-in prompt, if Roblox allows it right now. `fromButton`: say so when
 -- it can't be shown (already on, or asked too recently).
-function RewardsUI.PromptNotifications(fromButton: boolean?)
+-- Shows Roblox's notification opt-in. Returns "Asked" (the pop-up was shown) or "AlreadyOn" (can't
+-- ask: they're on already, or Roblox won't ask again yet). The CALLER says something about it, once.
+function RewardsUI.PromptNotifications(): string
 	local okCan, can = pcall(function()
 		return ExperienceNotificationService:CanPromptOptInAsync()
 	end)
@@ -433,9 +439,9 @@ function RewardsUI.PromptNotifications(fromButton: boolean?)
 		pcall(function()
 			ExperienceNotificationService:PromptOptIn()
 		end)
-	elseif fromButton then
-		UIKit.Toast("Notifications are already on, or Roblox can't ask again just yet.", "Info")
+		return "Asked"
 	end
+	return "AlreadyOn"
 end
 
 function RewardsUI.Init()

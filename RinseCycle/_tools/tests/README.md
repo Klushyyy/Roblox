@@ -54,3 +54,4 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
   - `scen_badges`: every badge rule, awarding only badges with an ID and never twice, and the daily-notification queue (queued 24 h out, sent once when due, removed).
   - `scen_autocomplete`: the admin command line's suggestions (commands, players, durations, options) and Tab completion.
   - `scen_icons2`, `scen_hudshot`, `scen_winshots`: dumps for guirender.py (new icons; the HUD grid; Clubs tabs and the chest boxes). guirender.py now lays out UIGridLayout too.
+  - `scen_events` now also covers donating, the club's info, the monthly reset (a fake clock) and the prize claim; `scen_winshots` dumps the Clubs tabs and dialogs; `scen_icons3` the HUD icons.

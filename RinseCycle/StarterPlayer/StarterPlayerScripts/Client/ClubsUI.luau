@@ -4,19 +4,21 @@
 	Tabs (not in a club):  CREATE CLUB  |  TOP CLUBS  |  FIND CLUBS
 	Tabs (in a club):      MY CLUB  |  TOP CLUBS  |  FIND CLUBS  |  LEADERBOARD  |  CHAT
 
-	  CREATE CLUB  Name, prefix (the [TAG] in front of members' names; the ? explains it), public /
-	               private, requirements, CREATE (Gems, with a "Creating..." overlay). Or join with
-	               a club code.
+	  CREATE CLUB  Name, prefix (the [TAG] in front of members' names; the ? inside its box explains
+	               it), public / private, requirements, CREATE (Gems, with a "Creating..." overlay).
+	               Or join with a club code.
 	  MY CLUB      The banner (prefix, name, points, members, requirements, the club code). The
 	               owner can edit the name and prefix (each once every 30 days, with a warning
 	               first) and the settings. Click a member for their options: Promote to Co-Leader
 	               (owner, with a warning), Demote, Kick (owner: anyone; co-leaders: members).
 	               Leave / Close club ask first.
-	  TOP CLUBS    The top 25 by points: FULL, INVITE ONLY, LOCKED, JOIN or YOURS.
+	  TOP CLUBS    The top 25 by Bubbles donated this month: FULL, INVITE ONLY, LOCKED, JOIN or YOURS.
+	               Click a club to see its members and what each has given.
 	  FIND CLUBS   Type and the clubs starting with it come up, A to Z (a club code finds that club).
 	               The filter button opens filters (public / private, friends in it, ones you can
 	               join, ones with space); Back returns to the results.
-	  LEADERBOARD  Your club's members by the points they've earned for it.
+	  LEADERBOARD  Your club's members by the Bubbles they've donated this month, and when the monthly
+	               contest resets (in your own time). DONATE BUBBLES is on MY CLUB.
 	  CHAT         The club's chat (filtered, kept between sessions).
 
 	Everything goes through ClubRequest (ClubService); ClubState pushes changes, ClubChat messages.
@@ -55,6 +57,8 @@ local filters = { Type = "Any", Friends = false, CanJoin = false, Space = false 
 local findText = ""
 local renderToken = 0
 local render: () -> ()
+local inClubPerMeta: () -> boolean
+local fetchMine: () -> ()
 
 local ROLE_NAMES = { Owner = "Owner", CoLeader = "Co-Leader", Member = "Member" }
 
@@ -62,14 +66,19 @@ local ROLE_NAMES = { Owner = "Owner", CoLeader = "Co-Leader", Member = "Member" 
 -- Small helpers
 ----------------------------------------------------------------------------------------------------
 
-local function request(action: string, value: any?): any
+-- `busyText`: shows the bouncing dots over the window ("Creating your club...") while it waits.
+local function request(action: string, value: any?, busyText: string?): any
 	if busy then
 		return { Ok = false, Error = "One moment..." }
 	end
 	busy = true
+	local done = if busyText then UIKit.Busy(busyText, true) else nil
 	local ok, result = pcall(function()
 		return Remotes.Function("ClubRequest"):InvokeServer(action, value)
 	end)
+	if done then
+		done()
+	end
 	busy = false
 	if not ok or type(result) ~= "table" then
 		return { Ok = false, Error = "Couldn't reach the server." }
@@ -117,14 +126,18 @@ local function daysText(seconds: number): string
 	return if days <= 1 then "1 day" else days .. " days"
 end
 
-local function textBox(parent: Instance, placeholder: string, props: { [string]: any }, maxLength: number?): TextBox
+-- `help`: { Title, Text } puts a small "?" at the right end of the box that explains the field.
+local showInfo: (string, string) -> ()
+local applyResult: (any, string?) -> ()
+
+local function textBox(parent: Instance, placeholder: string, props: { [string]: any }, maxLength: number?, help: { string }?): TextBox
 	local frame = UIKit.Card({ Color = Colors.PanelDark, Parent = parent })
 	for k, v in props do
 		(frame :: any)[k] = v
 	end
 	local box = Instance.new("TextBox")
 	box.BackgroundTransparency = 1
-	box.Size = UDim2.new(1, -20, 1, 0)
+	box.Size = UDim2.new(1, if help then -52 else -20, 1, 0)
 	box.Position = UDim2.fromOffset(10, 0)
 	box.Font = Fonts.Title
 	box.TextSize = 20
@@ -135,6 +148,21 @@ local function textBox(parent: Instance, placeholder: string, props: { [string]:
 	box.ClearTextOnFocus = false
 	box.TextXAlignment = Enum.TextXAlignment.Left
 	box.Parent = frame
+	if help then
+		UIKit.Button({
+			Text = "?",
+			Color = Colors.Accent,
+			TextSize = 16,
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -8, 0.5, 0),
+			Size = UDim2.fromOffset(28, 28),
+			CornerRadius = 14,
+			Parent = frame,
+			OnClick = function()
+				showInfo(help[1], help[2])
+			end,
+		})
+	end
 	if maxLength then
 		box:GetPropertyChangedSignal("Text"):Connect(function()
 			if #box.Text > maxLength then
@@ -190,7 +218,7 @@ local function closeDialog()
 end
 
 -- A dialog card; returns the card to fill. `height` in pixels.
-local function dialog(title: string, height: number): Frame
+local function dialog(title: string, height: number, width: number?): Frame
 	clear(overlay)
 	overlay.Visible = true
 	local card = UIKit.Card({
@@ -198,7 +226,7 @@ local function dialog(title: string, height: number): Frame
 		Color = Colors.Panel,
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromOffset(460, height),
+		Size = UDim2.fromOffset(width or 460, height),
 		Parent = overlay,
 	})
 	UIKit.Stroke(card, Colors.Primary, 3, 0)
@@ -236,7 +264,7 @@ local function confirm(title: string, message: string, yesText: string, yesColor
 	})
 end
 
-local function info(title: string, message: string)
+function showInfo(title: string, message: string)
 	local card = dialog(title, 210)
 	UIKit.Label({ Text = message, TextSize = 17, TextWrapped = true, Position = UDim2.fromOffset(20, 48), Size = UDim2.new(1, -40, 0, 90), Parent = card })
 	UIKit.Button({
@@ -251,25 +279,140 @@ local function info(title: string, message: string)
 	})
 end
 
--- "Creating club..." over the window while something slow happens.
-local function loading(text: string)
-	clear(overlay)
-	overlay.Visible = true
-	local card = UIKit.Card({ Name = "Loading", Color = Colors.Panel, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(320, 130), Parent = overlay })
-	UIKit.Stroke(card, Colors.Primary, 3, 0)
-	UIKit.Label({ Text = text, TextSize = 22, Position = UDim2.fromOffset(0, 18), Size = UDim2.new(1, 0, 0, 30), Parent = card })
-	-- Three bouncing bubbles.
+----------------------------------------------------------------------------------------------------
+-- The monthly contest: text, donating, and a club's details
+----------------------------------------------------------------------------------------------------
+
+-- Bouncing dots in the middle of a page while its data loads ("Loading your club...").
+local function dotsPage(page: Instance, text: string)
+	local holder = Instance.new("Frame")
+	holder.Name = "Loading"
+	holder.BackgroundTransparency = 1
+	holder.Size = UDim2.fromScale(1, 1)
+	holder.Parent = page
+	UIKit.Label({ Text = text, TextSize = 24, TextColor3 = Colors.TextDim, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, -26), Size = UDim2.new(1, 0, 0, 36), Parent = holder })
 	for i = 1, 3 do
 		local dot = Instance.new("Frame")
 		dot.AnchorPoint = Vector2.new(0.5, 0.5)
-		dot.Position = UDim2.new(0.5, (i - 2) * 30, 0, 86)
+		dot.Position = UDim2.new(0.5, (i - 2) * 30, 0.5, 22)
 		dot.Size = UDim2.fromOffset(16, 16)
 		dot.BackgroundColor3 = Colors.Primary
 		UIKit.Corner(dot, 8)
-		dot.Parent = card
-		local tween = TweenService:Create(dot, TweenInfo.new(0.35, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true, i * 0.12), { Position = UDim2.new(0.5, (i - 2) * 30, 0, 74) })
-		tween:Play()
+		dot.Parent = holder
+		TweenService:Create(dot, TweenInfo.new(0.35, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true, i * 0.12), { Position = UDim2.new(0.5, (i - 2) * 30, 0.5, 10) }):Play()
 	end
+end
+
+local POINTS_HELP = "Points are Bubbles donated to your club (DONATE BUBBLES on MY CLUB). Every month the clubs with the most points win prizes: the top 3 clubs' members get Gems, and the #1 club's members also get a limited pet nothing else gives. On the 1st of every month everyone's points start again from zero."
+
+-- "Resets 1 November 2026, 1:00 PM (your time)" from the server's UTC reset time.
+local function resetText(season: any): string
+	if type(season) ~= "table" or type(season.ResetAt) ~= "number" then
+		return ""
+	end
+	local day = tonumber(os.date("%d", season.ResetAt)) or 1
+	local rest = os.date("%B %Y, %I:%M %p", season.ResetAt)
+	local cleaned = string.gsub(rest, "^(%a+ %d+, )0", "%1")
+	return string.format("Resets %d %s (your time)", day, cleaned)
+end
+
+local function prizeText(): string
+	local rules = Config.Clubs.Season
+	local pet = Config.Pets[rules.Pet]
+	return string.format(
+		"Prizes: #1 %d Gems + the limited %s pet, #2 %d Gems, #3 %d Gems (for every member).",
+		rules.PrizeGems[1],
+		if pet then pet.Name else "pet",
+		rules.PrizeGems[2],
+		rules.PrizeGems[3]
+	)
+end
+
+local function donateDialog()
+	local meta = ClientState.Meta :: any
+	local have = if meta then tonumber(meta.Bubbles) or 0 else 0
+	local card = dialog("Donate Bubbles", 300)
+	UIKit.Label({
+		Text = string.format("You have %s Bubbles. Donated Bubbles can't be taken back: they become points for your club this month.", UIKit.Commas(have)),
+		TextSize = 16,
+		TextWrapped = true,
+		Position = UDim2.fromOffset(20, 46),
+		Size = UDim2.new(1, -40, 0, 60),
+		Parent = card,
+	})
+	local amounts: { number } = table.clone(Config.Clubs.Season.DonateAmounts)
+	table.insert(amounts, -1) -- "ALL"
+	for i, amount in amounts do
+		local all = amount < 0
+		local value = if all then have else amount
+		UIKit.Button({
+			Text = if all then string.format("ALL (%s)", UIKit.Commas(have)) else UIKit.Commas(amount),
+			Color = if value > 0 and value <= have then Colors.Good else Colors.Disabled,
+			TextSize = 18,
+			Position = UDim2.new(0, 20 + ((i - 1) % 2) * 210, 0, 116 + ((i - 1) // 2) * 58),
+			Size = UDim2.fromOffset(200, 50),
+			Parent = card,
+			OnClick = function()
+				if value <= 0 or value > have then
+					UIKit.Toast(if have <= 0 then "You don't have any Bubbles to donate yet." else "You don't have that many Bubbles.", "Info")
+					return
+				end
+				closeDialog()
+				task.spawn(function()
+					local result = request("Donate", value, "Donating")
+					if result.Ok then
+						UIKit.Confetti(40)
+					end
+					applyResult(result)
+				end)
+			end,
+		})
+	end
+	UIKit.Button({ Text = "Close", Color = Colors.PanelLight, TextSize = 16, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -12), Size = UDim2.fromOffset(140, 40), Parent = card, OnClick = closeDialog })
+end
+
+-- A club's details: who's in it and what each has given this month (scrolls). Opened from TOP CLUBS /
+-- FIND. Private clubs show too: private only means you need the code to join.
+local function clubInfoDialog(summary: any)
+	local card = dialog(string.format("[%s] %s", summary.Tag, summary.Name), 500, 560)
+	UIKit.Label({ Name = "Status", Text = "Loading...", TextSize = 14, TextWrapped = true, TextColor3 = Colors.TextDim, Position = UDim2.fromOffset(16, 40), Size = UDim2.new(1, -32, 0, 34), Parent = card })
+	local list = scrollList(card, 74)
+	list.Position = UDim2.fromOffset(16, 74)
+	list.Size = UDim2.new(1, -32, 1, -150)
+	UIKit.Button({ Text = "Close", Color = Colors.PanelLight, TextSize = 18, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -12), Size = UDim2.fromOffset(160, 46), Parent = card, OnClick = closeDialog })
+	task.spawn(function()
+		local result = request("Info", summary.Id)
+		if not card.Parent then
+			return
+		end
+		if not result.Ok then
+			(card:FindFirstChild("Status") :: TextLabel).Text = result.Error or "Couldn't load that club."
+			return
+		end
+		local club = result.Club
+		;(card:FindFirstChild("Status") :: TextLabel).Text = string.format(
+			"%s Bubbles donated this month  •  %d/%d members  •  %s  •  %s",
+			UIKit.Commas(club.Points or 0),
+			club.Count or 0,
+			club.Max or Config.Clubs.MaxMembers,
+			if club.Public then "Public" else "Private (needs a code)",
+			reqText(club)
+		)
+		local members: { any } = table.clone(club.Members or {})
+		table.sort(members, function(a, b)
+			if (a.Points or 0) ~= (b.Points or 0) then
+				return (a.Points or 0) > (b.Points or 0)
+			end
+			return string.lower(a.Name) < string.lower(b.Name)
+		end)
+		for i, m in members do
+			local row = UIKit.Card({ Name = "Entry", Size = UDim2.new(1, 0, 0, 40), LayoutOrder = i, Parent = list })
+			local rankColor = if i == 1 then Colors.Coin elseif i == 2 then Color3.fromRGB(210, 220, 235) elseif i == 3 then Color3.fromRGB(230, 150, 90) else Colors.TextDim
+			UIKit.Label({ Text = "#" .. i, TextSize = 18, TextColor3 = rankColor, Position = UDim2.fromOffset(6, 0), Size = UDim2.fromOffset(46, 40), Parent = row })
+			UIKit.Label({ Text = m.Name .. (if m.Role == "Owner" then "  (Owner)" elseif m.Role == "CoLeader" then "  (Co-Leader)" else ""), TextSize = 16, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(56, 0), Size = UDim2.new(1, -200, 1, 0), Parent = row })
+			UIKit.Label({ Text = UIKit.Commas(m.Points or 0), TextSize = 16, TextColor3 = Colors.Coin, TextXAlignment = Enum.TextXAlignment.Right, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 0), Size = UDim2.fromOffset(130, 40), Parent = row })
+		end
+	end)
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -278,8 +421,7 @@ end
 
 local function joinClub(club: any)
 	task.spawn(function()
-		loading("Joining...")
-		local result = if club.ByCode then request("JoinCode", club.Code or findText) else request("Join", club.Id)
+		local result = if club.ByCode then request("JoinCode", club.Code or findText, "Joining the club") else request("Join", club.Id, "Joining the club")
 		closeDialog()
 		toast(result)
 		if result.Ok then
@@ -295,6 +437,16 @@ local function clubRow(parent: Instance, club: any, order: number)
 	if club.Mine then
 		UIKit.Stroke(row, Colors.Coin, 3, 0)
 	end
+	-- The whole row opens the club's members (the JOIN button, added last, sits on top of this).
+	local hit = Instance.new("TextButton")
+	hit.Name = "Open"
+	hit.Text = ""
+	hit.BackgroundTransparency = 1
+	hit.Size = UDim2.fromScale(1, 1)
+	hit.Parent = row
+	hit.Activated:Connect(function()
+		clubInfoDialog(club)
+	end)
 	local left = 12
 	if club.Rank then
 		local rankColor = if club.Rank == 1 then Colors.Coin elseif club.Rank == 2 then Color3.fromRGB(210, 220, 235) elseif club.Rank == 3 then Color3.fromRGB(230, 150, 90) else Colors.TextDim
@@ -311,7 +463,7 @@ local function clubRow(parent: Instance, club: any, order: number)
 		Parent = row,
 	})
 	UIKit.Label({
-		Text = string.format("%s pts  •  %d/%d  •  %s  •  %s", UIKit.Commas(club.Points or 0), club.Count or 0, club.Max or Config.Clubs.MaxMembers, if club.Public then "Public" else "Private", reqText(club)),
+		Text = string.format("%s donated  •  %d/%d  •  %s  •  %s", UIKit.Commas(club.Points or 0), club.Count or 0, club.Max or Config.Clubs.MaxMembers, if club.Public then "Public" else "Private (code)", reqText(club)),
 		TextSize = 14,
 		TextScaled = true,
 		TextColor3 = Colors.TextDim,
@@ -400,23 +552,6 @@ end
 
 local PREFIX_HELP = "The prefix is the short tag shown in front of every member's name, so everyone can see which club they're in. Example: [SOAP] YourName."
 
--- A small round "?" button.
-local function helpButton(parent: Instance, position: UDim2, title: string, text: string)
-	UIKit.Button({
-		Text = "?",
-		Color = Colors.Accent,
-		TextSize = 18,
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = position,
-		Size = UDim2.fromOffset(34, 34),
-		CornerRadius = 17,
-		Parent = parent,
-		OnClick = function()
-			info(title, text)
-		end,
-	})
-end
-
 local function renderCreate(page: Frame)
 	local rules = Config.Clubs
 	local create = UIKit.Card({ Name = "Create", Color = Colors.PanelDark, Size = UDim2.new(0.6, -8, 1, 0), Parent = page })
@@ -427,11 +562,10 @@ local function renderCreate(page: Frame)
 		Size = UDim2.new(1, -32, 0, 44),
 	}, rules.NameLength[2])
 	UIKit.Label({ Text = "Club prefix", TextSize = 14, TextColor3 = Colors.TextDim, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(18, 106), Size = UDim2.new(0.4, 0, 0, 16), Parent = create })
-	helpButton(create, UDim2.new(0, 120, 0, 114), "What's a prefix?", PREFIX_HELP)
 	local tagBox = textBox(create, string.format("%d-%d letters", rules.TagLength[1], rules.TagLength[2]), {
 		Position = UDim2.fromOffset(16, 132),
 		Size = UDim2.new(0.5, -22, 0, 44),
-	}, rules.TagLength[2])
+	}, rules.TagLength[2], { "What's a prefix?", PREFIX_HELP })
 	tagBox:GetPropertyChangedSignal("Text"):Connect(function()
 		local upper = string.upper(tagBox.Text)
 		if upper ~= tagBox.Text then
@@ -444,12 +578,12 @@ local function renderCreate(page: Frame)
 	local getLevel = cycler(create, levelValues(), levelText, 1, { Position = UDim2.fromOffset(16, 186), Size = UDim2.new(0.5, -22, 0, 44) })
 	local getRebirths = cycler(create, REBIRTH_STEPS, rebirthText, 1, { Position = UDim2.new(0.5, 6, 0, 186), Size = UDim2.new(0.5, -22, 0, 44) })
 	UIKit.Label({
-		Text = string.format("Up to %d members. Members earn points for the club with every Bubble they collect.", rules.MaxMembers),
+		Text = string.format("Up to %d members. Donate Bubbles to earn club points: the top 3 clubs win prizes every month!", rules.MaxMembers),
 		TextSize = 14,
 		TextWrapped = true,
 		TextColor3 = Colors.TextDim,
-		Position = UDim2.fromOffset(16, 238),
-		Size = UDim2.new(1, -32, 0, 36),
+		Position = UDim2.fromOffset(16, 236),
+		Size = UDim2.new(1, -32, 0, 40),
 		Parent = create,
 	})
 	UIKit.Button({
@@ -468,14 +602,13 @@ local function renderCreate(page: Frame)
 				return
 			end
 			task.spawn(function()
-				loading("Creating your club...")
 				local result = request("Create", {
 					Name = nameBox.Text,
 					Tag = tagBox.Text,
 					Public = getPublic(),
 					ReqLevel = getLevel(),
 					ReqRebirths = getRebirths(),
-				})
+				}, "Creating your club")
 				closeDialog()
 				toast(result)
 				if result.Ok then
@@ -526,7 +659,7 @@ end
 -- MY CLUB
 ----------------------------------------------------------------------------------------------------
 
-local function applyResult(result: any, good: string?)
+function applyResult(result: any, good: string?)
 	toast(result, good)
 	if result.Ok and result.Club then
 		myClub = result.Club
@@ -544,7 +677,7 @@ local function editField(field: string)
 	local wait = if isName then club.NameWait or 0 else club.TagWait or 0
 	local what = if isName then "club name" else "prefix"
 	if wait > 0 then
-		info("Not yet", string.format("You can change the %s again in %s.", what, daysText(wait)))
+		showInfo("Not yet", string.format("You can change the %s again in %s.", what, daysText(wait)))
 		return
 	end
 	local rules = Config.Clubs
@@ -580,8 +713,7 @@ local function editField(field: string)
 		OnClick = function()
 			local text = box.Text
 			task.spawn(function()
-				loading("Saving...")
-				local result = request("Rename", if isName then { Name = text } else { Tag = text })
+				local result = request("Rename", if isName then { Name = text } else { Tag = text }, "Saving")
 				closeDialog()
 				applyResult(result)
 			end)
@@ -607,7 +739,7 @@ local function memberOptions(m: any)
 			Run = function()
 				confirm("Promote to Co-Leader?", string.format("%s will become a Co-Leader. Co-Leaders can kick members from the club.", m.Name), "PROMOTE", Colors.Good, function()
 					task.spawn(function()
-						applyResult(request("Promote", m.UserId), m.Name .. " is now a Co-Leader!")
+						applyResult(request("Promote", m.UserId, "Promoting"), m.Name .. " is now a Co-Leader!")
 					end)
 				end)
 			end,
@@ -618,7 +750,7 @@ local function memberOptions(m: any)
 			Color = Colors.Warning,
 			Run = function()
 				task.spawn(function()
-					applyResult(request("Demote", m.UserId), m.Name .. " is a Member again.")
+					applyResult(request("Demote", m.UserId, "Updating"), m.Name .. " is a Member again.")
 				end)
 			end,
 		})
@@ -630,7 +762,7 @@ local function memberOptions(m: any)
 			Run = function()
 				confirm("Kick " .. m.Name .. "?", string.format("%s will be removed from %s.", m.Name, club.Name), "KICK", Colors.Bad, function()
 					task.spawn(function()
-						applyResult(request("Kick", m.UserId), m.Name .. " was removed.")
+						applyResult(request("Kick", m.UserId, "Removing them"), m.Name .. " was removed.")
 					end)
 				end)
 			end,
@@ -691,7 +823,7 @@ local function renderMyClub(page: Frame, club: any)
 		end })
 	end
 	UIKit.Label({
-		Text = string.format("%s points  •  %d/%d members  •  %s", UIKit.Commas(club.Points or 0), club.Count or 0, club.Max, if club.Public then "Public" else "Private"),
+		Text = string.format("%s points this month  •  %d/%d members  •  %s", UIKit.Commas(club.Points or 0), club.Count or 0, club.Max, if club.Public then "Public" else "Private"),
 		TextSize = 16,
 		TextScaled = true,
 		TextColor3 = Colors.TextDim,
@@ -736,7 +868,7 @@ local function renderMyClub(page: Frame, club: any)
 			OnClick = function()
 				confirm("New club code?", "The old code stops working straight away.", "NEW CODE", Colors.Primary, function()
 					task.spawn(function()
-						applyResult(request("NewCode"), "New club code made.")
+						applyResult(request("NewCode", nil, "Making a new code"), "New club code made.")
 					end)
 				end)
 			end,
@@ -751,10 +883,33 @@ local function renderMyClub(page: Frame, club: any)
 		Size = UDim2.new(if isOwner then 0.62 else 1, if isOwner then -8 else 0, 1, -124),
 		Parent = page,
 	})
-	UIKit.Label({ Text = "MEMBERS  (click one for options)", TextSize = 16, Position = UDim2.fromOffset(0, 6), Size = UDim2.new(1, 0, 0, 22), Parent = membersCard })
+	UIKit.Label({ Text = "MEMBERS", TextSize = 16, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(14, 8), Size = UDim2.fromOffset(110, 26), Parent = membersCard })
+	UIKit.Button({
+		Text = "?",
+		Color = Colors.Accent,
+		TextSize = 16,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -8, 0, 6),
+		Size = UDim2.fromOffset(30, 30),
+		CornerRadius = 15,
+		Parent = membersCard,
+		OnClick = function()
+			showInfo("What are points?", POINTS_HELP)
+		end,
+	})
+	UIKit.Button({
+		Text = "DONATE BUBBLES",
+		Color = Colors.Good,
+		TextSize = 14,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -44, 0, 6),
+		Size = UDim2.fromOffset(160, 30),
+		Parent = membersCard,
+		OnClick = donateDialog,
+	})
 	local list = scrollList(membersCard, 34)
 	list.Size = UDim2.new(1, -12, 1, -94)
-	list.Position = UDim2.fromOffset(6, 34)
+	list.Position = UDim2.fromOffset(6, 40)
 	for i, m in club.Members or {} do
 		local row = Instance.new("TextButton")
 		row.Name = "Member"
@@ -772,8 +927,9 @@ local function renderMyClub(page: Frame, club: any)
 		UIKit.Corner(dot, 6)
 		dot.Parent = row
 		local roleColor = if m.Role == "Owner" then Colors.Coin elseif m.Role == "CoLeader" then Colors.Primary else Colors.Text
-		UIKit.Label({ Text = m.Name, TextSize = 17, TextColor3 = roleColor, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(30, 0), Size = UDim2.new(1, -150, 1, 0), Parent = row })
-		UIKit.Label({ Text = ROLE_NAMES[m.Role] or "Member", TextSize = 14, TextColor3 = roleColor, TextXAlignment = Enum.TextXAlignment.Right, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 0), Size = UDim2.fromOffset(110, 40), Parent = row })
+		UIKit.Label({ Text = m.Name, TextSize = 17, TextColor3 = roleColor, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Position = UDim2.fromOffset(30, 0), Size = UDim2.new(1, -250, 1, 0), Parent = row })
+		UIKit.Label({ Text = ROLE_NAMES[m.Role] or "Member", TextSize = 13, TextColor3 = roleColor, TextXAlignment = Enum.TextXAlignment.Right, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -112, 0, 0), Size = UDim2.fromOffset(80, 40), Parent = row })
+		UIKit.Label({ Text = UIKit.Commas(m.Points or 0), TextSize = 15, TextColor3 = Colors.Coin, TextXAlignment = Enum.TextXAlignment.Right, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 0), Size = UDim2.fromOffset(96, 40), Parent = row })
 		row.Activated:Connect(function()
 			memberOptions(m)
 		end)
@@ -795,7 +951,7 @@ local function renderMyClub(page: Frame, club: any)
 				else string.format("You'll leave %s. You can join another club after a minute.", club.Name)
 			confirm(title, message, if closing then "CLOSE CLUB" else "LEAVE", Colors.Bad, function()
 				task.spawn(function()
-					local result = request("Leave")
+					local result = request("Leave", nil, if closing then "Closing your club" else "Leaving the club")
 					toast(result)
 					if result.Ok then
 						myClub = nil
@@ -829,7 +985,7 @@ local function renderMyClub(page: Frame, club: any)
 			Parent = settingsCard,
 			OnClick = function()
 				task.spawn(function()
-					applyResult(request("Settings", { Public = getPublic(), ReqLevel = getLevel(), ReqRebirths = getRebirths() }), "Club settings saved.")
+					applyResult(request("Settings", { Public = getPublic(), ReqLevel = getLevel(), ReqRebirths = getRebirths() }, "Saving"), "Club settings saved.")
 				end)
 			end,
 		})
@@ -841,8 +997,23 @@ end
 ----------------------------------------------------------------------------------------------------
 
 local function renderLeaderboard(page: Frame, club: any)
-	UIKit.Label({ Text = string.format("[%s] %s  -  who's earned the most points", club.Tag, club.Name), TextSize = 18, Size = UDim2.new(1, 0, 0, 26), Parent = page })
-	local list = scrollList(page, 34)
+	UIKit.Label({ Text = string.format("[%s] %s  -  Bubbles donated this month (%s)", club.Tag, club.Name, tostring(if club.Season then club.Season.Label else "")), TextSize = 18, Size = UDim2.new(1, -44, 0, 26), Parent = page })
+	UIKit.Button({
+		Text = "?",
+		Color = Colors.Accent,
+		TextSize = 16,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.fromScale(1, 0),
+		Size = UDim2.fromOffset(30, 30),
+		CornerRadius = 15,
+		Parent = page,
+		OnClick = function()
+			showInfo("Monthly contest", POINTS_HELP)
+		end,
+	})
+	UIKit.Label({ Text = resetText(club.Season) .. "  •  every club starts again from zero", TextSize = 14, TextColor3 = Colors.Warning, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(4, 30), Size = UDim2.new(1, -8, 0, 18), Parent = page })
+	UIKit.Label({ Text = prizeText(), TextSize = 13, TextColor3 = Colors.TextDim, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(4, 48), Size = UDim2.new(1, -8, 0, 18), Parent = page })
+	local list = scrollList(page, 74)
 	local members: { any } = table.clone(club.Members or {})
 	table.sort(members, function(a, b)
 		if (a.Points or 0) ~= (b.Points or 0) then
@@ -1156,10 +1327,34 @@ end
 ----------------------------------------------------------------------------------------------------
 
 local function tabList(): { { string } }
-	if myClub then
+	if myClub or inClubPerMeta() then
 		return { { "Club", "MY CLUB" }, { "Top", "TOP CLUBS" }, { "Find", "FIND CLUBS" }, { "Board", "LEADERBOARD" }, { "Chat", "CHAT" } }
 	end
 	return { { "Club", "CREATE CLUB" }, { "Top", "TOP CLUBS" }, { "Find", "FIND CLUBS" } }
+end
+
+-- Does your save say you're in a club? (Known from login, before the club's details arrive.)
+function inClubPerMeta(): boolean
+	local meta = ClientState.Meta :: any
+	return meta ~= nil and type(meta.ClubId) == "string" and meta.ClubId ~= ""
+end
+
+local fetching = false
+function fetchMine()
+	if fetching then
+		return
+	end
+	fetching = true
+	task.spawn(function()
+		local result = request("Mine")
+		fetching = false
+		if result.Ok then
+			myClub = result.Club
+			if UIKit.IsWindowOpen("Clubs") and (tab == "Club" or tab == "Board") then
+				render()
+			end
+		end
+	end)
 end
 
 render = function()
@@ -1199,18 +1394,40 @@ render = function()
 	if tab == "Club" then
 		if myClub then
 			renderMyClub(page, myClub)
+		elseif inClubPerMeta() then
+			-- We know you're in a club but haven't got its details yet: dots, never the Create page.
+			dotsPage(page, "Loading your club")
+			fetchMine()
 		else
 			renderCreate(page)
 		end
 	elseif tab == "Top" then
-		UIKit.Label({ Name = "Loading", Text = "Loading...", TextSize = 22, TextColor3 = Colors.TextDim, Size = UDim2.fromScale(1, 1), Parent = page })
+		dotsPage(page, "Loading clubs")
 		task.spawn(function()
 			local result = request("Top")
 			if token ~= renderToken then
 				return
 			end
 			clear(page)
-			local list = scrollList(page, 0)
+			if result.Ok then
+				UIKit.Label({ Text = string.format("%s CONTEST  -  clubs with the most Bubbles donated", string.upper(tostring(if result.Season then result.Season.Label else ""))), TextSize = 17, TextColor3 = Colors.Coin, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(4, 0), Size = UDim2.new(1, -44, 0, 24), Parent = page })
+				UIKit.Button({
+					Text = "?",
+					Color = Colors.Accent,
+					TextSize = 16,
+					AnchorPoint = Vector2.new(1, 0),
+					Position = UDim2.fromScale(1, 0),
+					Size = UDim2.fromOffset(30, 30),
+					CornerRadius = 15,
+					Parent = page,
+					OnClick = function()
+						showInfo("Monthly contest", POINTS_HELP)
+					end,
+				})
+				UIKit.Label({ Text = resetText(result.Season) .. "  •  every club starts again from zero", TextSize = 13, TextColor3 = Colors.Warning, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(4, 24), Size = UDim2.new(1, -8, 0, 16), Parent = page })
+				UIKit.Label({ Text = prizeText(), TextSize = 13, TextColor3 = Colors.TextDim, TextXAlignment = Enum.TextXAlignment.Left, TextScaled = true, Position = UDim2.fromOffset(4, 42), Size = UDim2.new(1, -8, 0, 16), Parent = page })
+			end
+			local list = scrollList(page, 66)
 			if not result.Ok or #(result.Clubs or {}) == 0 then
 				UIKit.Label({ Text = if result.Ok then "No clubs yet. Be the first to make one!" else (result.Error or "Couldn't load clubs."), TextSize = 20, TextColor3 = Colors.TextDim, Size = UDim2.new(1, 0, 0, 60), Parent = list })
 				return
@@ -1278,15 +1495,31 @@ function ClubsUI.Init()
 			task.spawn(function()
 				local result = request("Mine")
 				if result.Ok then
-					local changed = (myClub == nil) ~= (result.Club == nil)
-					myClub = result.Club
-					if changed or tab == "Club" or tab == "Board" then
+					local old, new = myClub, result.Club
+					local same = (old == nil and new == nil)
+						or (old ~= nil and new ~= nil and old.Id == new.Id and old.Points == new.Points and old.Count == new.Count and old.MyRole == new.MyRole and old.Name == new.Name and old.Tag == new.Tag)
+					myClub = new
+					-- Only redraw when something actually changed (no flicker).
+					if not same and not overlay.Visible then
 						render()
 					end
 				end
 			end)
 		end,
 	})
+	-- Know your club before you open the window (so it never has to show the Create page first).
+	ClientState.Changed:Connect(function(kind)
+		if kind == "Meta" then
+			if inClubPerMeta() and not myClub then
+				fetchMine()
+			elseif not inClubPerMeta() and myClub and not busy then
+				myClub = nil
+			end
+		end
+	end)
+	if inClubPerMeta() then
+		fetchMine()
+	end
 	Remotes.Event("ClubState").OnClientEvent:Connect(function(club)
 		local joinedOrLeft = (myClub == nil) ~= (club == nil) or (myClub and club and myClub.Id ~= club.Id)
 		myClub = club

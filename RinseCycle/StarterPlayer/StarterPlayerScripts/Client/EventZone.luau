@@ -62,10 +62,12 @@ local function notify(event: any)
 		end
 		warn("[EventZone] RSVP prompt failed: " .. tostring(err))
 	end
-	-- No Roblox event set up: experience notifications instead.
+	-- No Roblox event linked yet: just ask for notifications, and say ONE thing about it.
 	local RewardsUI = require(Client:WaitForChild("RewardsUI")) :: any
-	RewardsUI.PromptNotifications(true)
-	UIKit.Toast("We'll let you know when " .. (if event then event.Name else "the next event") .. " starts!", "Good")
+	local name = if event then event.Name else "the next event"
+	if RewardsUI.PromptNotifications() == "AlreadyOn" then
+		UIKit.Toast("Notifications are already on. We'll let you know when " .. name .. " starts!", "Good")
+	end
 end
 
 local lastPrompt = 0
@@ -96,7 +98,7 @@ local function show(event: any)
 	whenLabel.Text = EventZone.WhenText(event)
 	whenLabel.TextColor3 = if event and os.time() >= event.Starts then Colors.Good else Colors.Coin
 	local label = notifyButton:FindFirstChild("Label", true)
-	local text = if event and os.time() >= event.Starts then "IT'S ON!" else "NOTIFY ME"
+	local text = if event and os.time() >= event.Starts then "IT'S ON!" else "TURN ON NOTIFICATIONS"
 	if label and label:IsA("TextLabel") then
 		label.Text = text
 	end
@@ -138,12 +140,12 @@ function EventZone.Init()
 	whenLabel = UIKit.Label({ Text = "", TextSize = 20, TextColor3 = Colors.Coin, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(104, 64), Size = UDim2.new(1, -120, 0, 24), Parent = card })
 	descLabel = UIKit.Label({ Text = "", TextSize = 15, TextWrapped = true, TextColor3 = Colors.TextDim, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(16, 98), Size = UDim2.new(1, -32, 0, 40), Parent = card })
 	notifyButton = UIKit.Button({
-		Text = "NOTIFY ME",
+		Text = "TURN ON NOTIFICATIONS",
 		Color = Color3.fromRGB(240, 90, 140),
 		TextSize = 22,
 		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(0.5, -6, 1, -12),
-		Size = UDim2.fromOffset(220, 52),
+		Position = UDim2.new(0.5, 30, 1, -12),
+		Size = UDim2.fromOffset(310, 52),
 		Parent = card,
 		OnClick = function()
 			card.Visible = false
@@ -155,8 +157,8 @@ function EventZone.Init()
 		Color = Colors.PanelLight,
 		TextSize = 20,
 		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0.5, 6, 1, -12),
-		Size = UDim2.fromOffset(180, 52),
+		Position = UDim2.new(0.5, 40, 1, -12),
+		Size = UDim2.fromOffset(150, 52),
 		Parent = card,
 		OnClick = function()
 			card.Visible = false

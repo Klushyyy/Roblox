@@ -110,6 +110,7 @@ export type Profile = {
 	ClubId: string, -- the club they're in ("" = none); ClubService keeps the club's own record
 	ClubTag: string, -- that club's tag, for the name tag (refreshed from the club on join)
 	ClubMovedAt: number, -- os.time() they last joined / left a club (Config.Clubs.JoinCooldown)
+	ClubPrizeSeason: string, -- the club contest month (YYYYMM) whose prize they've been paid
 	BadgesGot: { [string]: boolean }, -- Config.Badges keys already awarded (BadgeAwards)
 	DailyNotifyAt: number, -- os.time() the "daily reward ready" notification is queued for (0 = none)
 	Referrals: number, -- new players who joined through this player's invites (paid out)
@@ -191,6 +192,7 @@ local TEMPLATE: Profile = {
 	ClubId = "",
 	ClubTag = "",
 	ClubMovedAt = 0,
+	ClubPrizeSeason = "",
 	BadgesGot = {},
 	DailyNotifyAt = 0,
 	Referrals = 0,
@@ -401,6 +403,7 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.ClubId = if type(p.ClubId) == "string" and #p.ClubId <= 40 then p.ClubId else ""
 	p.ClubTag = if type(p.ClubTag) == "string" and #p.ClubTag <= 20 then p.ClubTag else ""
 	p.ClubMovedAt = toCount(p.ClubMovedAt, 0)
+	p.ClubPrizeSeason = if type(p.ClubPrizeSeason) == "string" and #p.ClubPrizeSeason <= 8 then p.ClubPrizeSeason else ""
 	local badges = {}
 	for key, got in (if type(p.BadgesGot) == "table" then p.BadgesGot else {}) do
 		if type(key) == "string" and #key <= 30 and got == true then
@@ -1495,6 +1498,17 @@ function DataService.LevelsBeaten(profile: any): number
 		end
 	end
 	return best
+end
+
+-- Notes that this club-contest month's prize was dealt with (saved soon).
+function DataService.MarkClubPrize(player: Player, season: string)
+	local session = sessions[player]
+	local profile = session and session.Profile
+	if not profile then
+		return
+	end
+	profile.ClubPrizeSeason = season
+	session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
 end
 
 -- Club membership on the profile (ClubService owns the clubs themselves).

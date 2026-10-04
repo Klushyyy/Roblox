@@ -220,7 +220,7 @@ local TIER_COMMANDS = {
 		for _, name in ipairs(FOUNDER_ONLY_COMMANDS) do
 			table.insert(list, name)
 		end
-		for _, name in ipairs({ "setadminrank", "stafflist", "wipelogs", "givegamepass", "removegamepass", "globalgive", "globalpassdrop", "globalboost" }) do
+		for _, name in ipairs({ "setadminrank", "stafflist", "wipelogs", "givegamepass", "removegamepass", "globalgive", "globalpassdrop", "globalboost", "globalcountdown", "cancelcountdown" }) do
 			table.insert(list, name)
 		end
 		return list
@@ -4694,6 +4694,9 @@ Remote.GlobalPoll.Parent = ReplicatedStorage
 Remote.GlobalPollVote = Instance.new("RemoteEvent")
 Remote.GlobalPollVote.Name = "GlobalPollVote"
 Remote.GlobalPollVote.Parent = ReplicatedStorage
+Remote.GlobalCountdown = Instance.new("RemoteEvent") -- S->C ("Set", name, endsAt, liveMinutes) / ("Clear")
+Remote.GlobalCountdown.Name = "GlobalCountdown"
+Remote.GlobalCountdown.Parent = ReplicatedStorage
 do
 	local TextService = game:GetService("TextService")
 	local Format = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Format"))
@@ -4971,6 +4974,107 @@ do
 		local ok = publish({ Kind = "PassDrop", W = winners, Text = banner })
 		sendFeedback(admin, string.format("%d winner(s): %s%s", #winners, shown, if ok then "" else " (this server only)"), false)
 		logCommand(admin, "globalpassdrop", nil, if chosen then chosen.Name else "random", admin.Name .. " ran a pass drop: " .. shown)
+	end
+
+	----------------------------------------------------------------- event countdown
+	-- :globalcountdown <time> [name]: a countdown banner on everyone's screen, in every server, and
+	-- for anyone who joins later (it lives in a MemoryStore hash map, every server re-reads it each
+	-- minute). At zero it turns into "<NAME> IS LIVE NOW!" for LIVE_MINUTES, then goes. :cancelcountdown
+	-- removes it. Time: 90m, 24h, 2d (plain numbers are minutes), from 1 minute to 14 days.
+	local LIVE_MINUTES = 60
+	local countdown = nil -- { Name, EndsAt, LiveMinutes }
+	local countdownMap = nil
+	pcall(function()
+		countdownMap = game:GetService("MemoryStoreService"):GetHashMap("RinseCycle_Countdown")
+	end)
+	local function sendCountdown(plr)
+		if countdown and os.time() < countdown.EndsAt + countdown.LiveMinutes * 60 then
+			Remote.GlobalCountdown:FireClient(plr, "Set", countdown.Name, countdown.EndsAt, countdown.LiveMinutes)
+		else
+			Remote.GlobalCountdown:FireClient(plr, "Clear")
+		end
+	end
+	handlers.CountdownSet = function(d)
+		if type(d.Name) ~= "string" or type(d.EndsAt) ~= "number" then
+			return
+		end
+		countdown = { Name = string.sub(d.Name, 1, 40), EndsAt = d.EndsAt, LiveMinutes = tonumber(d.LiveMinutes) or LIVE_MINUTES }
+		for _, plr in ipairs(Players:GetPlayers()) do
+			sendCountdown(plr)
+		end
+	end
+	handlers.CountdownClear = function()
+		countdown = nil
+		for _, plr in ipairs(Players:GetPlayers()) do
+			sendCountdown(plr)
+		end
+	end
+	Players.PlayerAdded:Connect(function(plr)
+		task.defer(sendCountdown, plr)
+	end)
+	-- Servers that started after the command (or missed the message) catch up from the store.
+	local function syncCountdown()
+		if not countdownMap then
+			return
+		end
+		local ok, value = pcall(function()
+			return countdownMap:GetAsync("current")
+		end)
+		if not ok then
+			return
+		end
+		if type(value) == "table" and type(value.EndsAt) == "number" then
+			if not countdown or countdown.EndsAt ~= value.EndsAt or countdown.Name ~= value.Name then
+				handlers.CountdownSet(value)
+			end
+		elseif countdown then
+			handlers.CountdownClear()
+		end
+	end
+	task.spawn(function()
+		while true do
+			syncCountdown()
+			task.wait(60)
+		end
+	end)
+	Commands.globalcountdown = function(admin, text)
+		local num, unit, rest = string.match(text, "^%s*(%d+%.?%d*)%s*([smhdSMHD]?)%s*(.*)$")
+		local mult = ({ s = 1, m = 60, h = 3600, d = 86400 })[string.lower(unit or "")] or 60
+		local seconds = (tonumber(num) or 0) * mult
+		if seconds < 60 or seconds > 14 * 86400 then
+			sendFeedback(admin, "Usage: :globalcountdown <time 1m-14d, like 24h> [event name]", true)
+			return
+		end
+		local name = string.match(rest or "", "^%s*(.-)%s*$")
+		if not name or name == "" then
+			name = "Admin Abuse"
+		end
+		local okFilter, filtered = pcall(function()
+			return TextService:FilterStringAsync(name, admin.UserId):GetNonChatStringForBroadcastAsync()
+		end)
+		if okFilter and type(filtered) == "string" then
+			name = filtered
+		end
+		name = string.sub(name, 1, 40)
+		local data = { Kind = "CountdownSet", Name = name, EndsAt = os.time() + math.floor(seconds), LiveMinutes = LIVE_MINUTES }
+		if countdownMap then
+			pcall(function()
+				countdownMap:SetAsync("current", data, math.min(math.floor(seconds) + LIVE_MINUTES * 60 + 600, 3888000))
+			end)
+		end
+		local ok = publish(data)
+		sendFeedback(admin, string.format("Countdown for %s set (%s)%s", name, Format.Time and Format.Time(seconds) or tostring(math.floor(seconds / 60)) .. " min", if ok then " in every server" else " (this server only)"), false)
+		logCommand(admin, "globalcountdown", nil, name, string.format("%s started a countdown for %s (%d min)", admin.Name, name, math.floor(seconds / 60)))
+	end
+	Commands.cancelcountdown = function(admin, _text)
+		if countdownMap then
+			pcall(function()
+				countdownMap:RemoveAsync("current")
+			end)
+		end
+		local ok = publish({ Kind = "CountdownClear" })
+		sendFeedback(admin, "Event countdown cancelled" .. (if ok then " in every server" else " (this server only)"), false)
+		logCommand(admin, "cancelcountdown", nil, "", admin.Name .. " cancelled the event countdown")
 	end
 
 	----------------------------------------------------------------- x2 boost
