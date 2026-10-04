@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.2.0"
+Config.Version = "2.3.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -188,7 +188,7 @@ Config.Levels = {
 		Name = "Pizza Party",
 		Subtitle = "Greasy pizza trays, sauce everywhere and burnt crust.",
 		Icon = "🍕",
-		Place = "Pizzeria",
+		Place = "Backyard",
 		Toughness = 4.5, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 4,
 		ParTime = 1260,
@@ -8672,19 +8672,21 @@ local ROOM_STYLES: { RoomStyle } = {
 		Lamp = Color3.fromRGB(255, 248, 225),
 		Bench = "Home",
 	},
-	-- 2: Pizzeria: brick walls, black and white floor, steel cabinets, butcher-block counter.
+	-- 2: Backyard pizza party: an outdoor kitchen counter of whitewashed wood under open sky.
 	{
-		Floor = Color3.fromRGB(240, 238, 232), Floor2 = Color3.fromRGB(38, 38, 42), FloorMat = Enum.Material.SmoothPlastic,
-		Wall = Color3.fromRGB(165, 78, 58), WallMat = Enum.Material.Brick,
-		Ceiling = Color3.fromRGB(60, 50, 46),
-		Cabinet = Color3.fromRGB(188, 193, 200), CabinetDoor = Color3.fromRGB(205, 210, 216), CabMat = Enum.Material.Metal,
-		Counter = Color3.fromRGB(200, 204, 210), CounterMat = Enum.Material.Metal,
-		Tile = Color3.fromRGB(245, 245, 240), TileMat = Enum.Material.CeramicTiles,
+		Outdoor = true,
+		Floor = Color3.fromRGB(176, 170, 160), FloorMat = Enum.Material.Slate,
+		Wall = Color3.fromRGB(120, 112, 100), WallMat = Enum.Material.Cobblestone,
+		Ceiling = Color3.fromRGB(190, 225, 255),
+		Cabinet = Color3.fromRGB(150, 108, 72), CabinetDoor = Color3.fromRGB(176, 130, 90), CabMat = Enum.Material.WoodPlanks,
+		Counter = Color3.fromRGB(190, 186, 178), CounterMat = Enum.Material.Slate,
+		Tile = Color3.fromRGB(150, 142, 130), TileMat = Enum.Material.Cobblestone,
 		Handle = Color3.fromRGB(60, 60, 66), HandleMat = Enum.Material.Metal,
-		Kick = Color3.fromRGB(40, 40, 44),
+		Kick = Color3.fromRGB(70, 56, 44),
 		Lamp = Color3.fromRGB(255, 214, 150),
-		Bench = "Steel",
+		Bench = "Home",
 	},
+	-- (level 2 is the Backyard: see buildYard; this entry only supplies the outdoor kitchen counter)
 	-- 3: Castle banquet hall: stone, dark wood, gold, a red carpet.
 	{
 		Floor = Color3.fromRGB(128, 122, 116), FloorMat = Enum.Material.Slate,
@@ -8748,13 +8750,25 @@ local function buildKitchen(b: Builder, k: RoomStyle)
 	else
 		span(b, "KitchenFloor", -ROOM_HALF_X, ROOM_HALF_X, fy - 4, fy, ROOM_Z_FRONT, ROOM_Z_BACK, k.Floor, k.FloorMat)
 	end
-	span(b, "BackWall", -ROOM_HALF_X, ROOM_HALF_X, fy, fy + ROOM_HEIGHT, ROOM_Z_BACK, ROOM_Z_BACK + 4, k.Wall, k.WallMat, shadowless)
-	span(b, "FrontWall", -ROOM_HALF_X, ROOM_HALF_X, fy, fy + ROOM_HEIGHT, ROOM_Z_FRONT - 4, ROOM_Z_FRONT, k.Wall, k.WallMat, shadowless)
-	for _, side in { -1, 1 } do
-		span(b, "SideWall", side * ROOM_HALF_X, side * (ROOM_HALF_X + 4), fy, fy + ROOM_HEIGHT, ROOM_Z_FRONT, ROOM_Z_BACK, k.Wall, k.WallMat, shadowless)
-		span(b, "Skirting", side * (ROOM_HALF_X - 2), side * ROOM_HALF_X, fy, fy + 10, ROOM_Z_FRONT, ROOM_Z_BACK, k.Kick, nil, noCollide())
+	if k.Outdoor then
+		-- Open sky: no walls or ceiling, just invisible barriers (so nobody wanders or flies off
+		-- the patio) at the old room's edges.
+		local inv = { Transparency = 1, CastShadow = false }
+		span(b, "BarrierBack", -ROOM_HALF_X - 4, ROOM_HALF_X + 4, fy, fy + ROOM_HEIGHT, ROOM_Z_BACK, ROOM_Z_BACK + 4, k.Wall, nil, inv)
+		span(b, "BarrierFront", -ROOM_HALF_X - 4, ROOM_HALF_X + 4, fy, fy + ROOM_HEIGHT, ROOM_Z_FRONT - 4, ROOM_Z_FRONT, k.Wall, nil, inv)
+		for _, side in { -1, 1 } do
+			span(b, "BarrierSide", side * ROOM_HALF_X, side * (ROOM_HALF_X + 4), fy, fy + ROOM_HEIGHT, ROOM_Z_FRONT, ROOM_Z_BACK, k.Wall, nil, inv)
+		end
+		span(b, "BarrierTop", -ROOM_HALF_X, ROOM_HALF_X, fy + ROOM_HEIGHT, fy + ROOM_HEIGHT + 4, ROOM_Z_FRONT, ROOM_Z_BACK, k.Wall, nil, inv)
+	else
+		span(b, "BackWall", -ROOM_HALF_X, ROOM_HALF_X, fy, fy + ROOM_HEIGHT, ROOM_Z_BACK, ROOM_Z_BACK + 4, k.Wall, k.WallMat, shadowless)
+		span(b, "FrontWall", -ROOM_HALF_X, ROOM_HALF_X, fy, fy + ROOM_HEIGHT, ROOM_Z_FRONT - 4, ROOM_Z_FRONT, k.Wall, k.WallMat, shadowless)
+		for _, side in { -1, 1 } do
+			span(b, "SideWall", side * ROOM_HALF_X, side * (ROOM_HALF_X + 4), fy, fy + ROOM_HEIGHT, ROOM_Z_FRONT, ROOM_Z_BACK, k.Wall, k.WallMat, shadowless)
+			span(b, "Skirting", side * (ROOM_HALF_X - 2), side * ROOM_HALF_X, fy, fy + 10, ROOM_Z_FRONT, ROOM_Z_BACK, k.Kick, nil, noCollide())
+		end
+		span(b, "Ceiling", -ROOM_HALF_X, ROOM_HALF_X, fy + ROOM_HEIGHT, fy + ROOM_HEIGHT + 4, ROOM_Z_FRONT, ROOM_Z_BACK, k.Ceiling, nil, shadowless)
 	end
-	span(b, "Ceiling", -ROOM_HALF_X, ROOM_HALF_X, fy + ROOM_HEIGHT, fy + ROOM_HEIGHT + 4, ROOM_Z_FRONT, ROOM_Z_BACK, k.Ceiling, nil, shadowless)
 
 	-- The bench either side of the dishwasher. Same solid body and counter height in every level
 	-- (players run along the top); what it's dressed as depends on the room.
@@ -8820,7 +8834,16 @@ local function buildKitchen(b: Builder, k: RoomStyle)
 	end
 
 	-- Countertop across the whole run (including over the dishwasher) with a backsplash.
-	span(b, "Countertop", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, ROOM_Z_BACK, k.Counter, k.CounterMat, shadowless)
+	if k.Outdoor then
+		-- The sink is open to the sky: the counter has a hole over the basin.
+		local hx, hz0, hz1 = TUB_HALF_X + 2, TUB_Z_MIN - 3, TUB_Z_MAX + 2
+		span(b, "Countertop", -ROOM_HALF_X, -hx, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, ROOM_Z_BACK, k.Counter, k.CounterMat, shadowless)
+		span(b, "Countertop", hx, ROOM_HALF_X, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, ROOM_Z_BACK, k.Counter, k.CounterMat, shadowless)
+		span(b, "Countertop", -hx, hx, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, hz0, k.Counter, k.CounterMat, shadowless)
+		span(b, "Countertop", -hx, hx, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, hz1, ROOM_Z_BACK, k.Counter, k.CounterMat, shadowless)
+	else
+		span(b, "Countertop", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, ROOM_Z_BACK, k.Counter, k.CounterMat, shadowless)
+	end
 	if bench == "Stone" then
 		-- A thick oak top: a dark front edge under the planks.
 		span(b, "CounterEdge", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y - 12, COUNTER_TOP_Y - 6, cabFront - 6, cabFront - 2, Color3.fromRGB(80, 50, 30), Enum.Material.Wood, noCollide())
@@ -8830,6 +8853,9 @@ local function buildKitchen(b: Builder, k: RoomStyle)
 	span(b, "Backsplash", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y, COUNTER_TOP_Y + 70, ROOM_Z_BACK - 1, ROOM_Z_BACK, k.Tile, k.TileMat, noCollide())
 
 	-- Up the wall, leaving a gap over the sink area for each room's centrepiece.
+	if k.Outdoor then
+		return
+	end
 	local upperY0, upperY1 = COUNTER_TOP_Y + 120, COUNTER_TOP_Y + 270
 	for _, seg in { { -ROOM_HALF_X, -220 }, { -40, ROOM_HALF_X } } do
 		local w = seg[2] - seg[1]
@@ -8973,11 +8999,13 @@ local function pizzeriaProps(b: Builder, k: RoomStyle)
 	local red = Color3.fromRGB(205, 45, 40)
 	local cream = Color3.fromRGB(250, 244, 230)
 
-	-- Neon sign in the gap over the counter.
-	span(b, "SignBack", -214, -46, COUNTER_TOP_Y + 110, COUNTER_TOP_Y + 240, ROOM_Z_BACK - 3, ROOM_Z_BACK, Color3.fromRGB(30, 26, 26), nil, noCollide())
-	roomSign(b, "PIZZA", Vector3.new(150, 70, 2), -130, COUNTER_TOP_Y + 175, ROOM_Z_BACK - 4, Color3.fromRGB(30, 26, 26), Color3.fromRGB(255, 120, 70), Enum.NormalId.Back)
-	for _, y in { COUNTER_TOP_Y + 132, COUNTER_TOP_Y + 218 } do
-		span(b, "NeonStrip", -200, -60, y - 1.5, y + 1.5, ROOM_Z_BACK - 6, ROOM_Z_BACK - 4, Color3.fromRGB(255, 90, 60), Enum.Material.Neon, noCollide())
+	if not k.Outdoor then
+		-- Neon sign in the gap over the counter.
+		span(b, "SignBack", -214, -46, COUNTER_TOP_Y + 110, COUNTER_TOP_Y + 240, ROOM_Z_BACK - 3, ROOM_Z_BACK, Color3.fromRGB(30, 26, 26), nil, noCollide())
+		roomSign(b, "PIZZA", Vector3.new(150, 70, 2), -130, COUNTER_TOP_Y + 175, ROOM_Z_BACK - 4, Color3.fromRGB(30, 26, 26), Color3.fromRGB(255, 120, 70), Enum.NormalId.Back)
+		for _, y in { COUNTER_TOP_Y + 132, COUNTER_TOP_Y + 218 } do
+			span(b, "NeonStrip", -200, -60, y - 1.5, y + 1.5, ROOM_Z_BACK - 6, ROOM_Z_BACK - 4, Color3.fromRGB(255, 90, 60), Enum.Material.Neon, noCollide())
+		end
 	end
 
 	-- Brick pizza oven standing on the floor on the right: a box base and a stepped dome, with a
@@ -8990,7 +9018,7 @@ local function pizzeriaProps(b: Builder, k: RoomStyle)
 	dome.Size = Vector3.new(170, 170, 170)
 	span(b, "OvenLip", ox - 92, ox + 92, fy + 104, fy + 112, oz - 82, oz + 82, Color3.fromRGB(200, 185, 170), Enum.Material.Concrete)
 	-- The chimney grows out of the top of the dome (its foot is buried in the ball) up to the ceiling.
-	span(b, "OvenChimney", ox - 14, ox + 14, fy + 186, fy + ROOM_HEIGHT, oz - 14, oz + 14, Color3.fromRGB(120, 58, 44), Enum.Material.Brick)
+	span(b, "OvenChimney", ox - 14, ox + 14, fy + 186, fy + (if k.Outdoor then 300 else ROOM_HEIGHT), oz - 14, oz + 14, Color3.fromRGB(120, 58, 44), Enum.Material.Brick)
 	span(b, "ChimneyCollar", ox - 17, ox + 17, fy + 214, fy + 222, oz - 17, oz + 17, Color3.fromRGB(200, 185, 170), Enum.Material.Concrete)
 	span(b, "OvenMouth", ox - 44, ox + 44, fy + 124, fy + 184, oz - 80.5, oz - 76, Color3.fromRGB(255, 130, 40), Enum.Material.Neon, noCollide())
 	cyl(b, "OvenArch", 4.8, 88, ox, fy + 184, oz - 78.5, Color3.fromRGB(255, 150, 60), Enum.Material.Neon, noCollide()).CFrame = footprint(b.origin, ox, fy + 184, oz - 78.5) * CFrame.Angles(0, math.rad(90), 0)
@@ -9054,6 +9082,9 @@ local function pizzeriaProps(b: Builder, k: RoomStyle)
 
 	-- Wooden ceiling beams and strings of warm party lights across the room.
 	for z = ROOM_Z_FRONT + 60, ROOM_Z_BACK - 40, 110 do
+		if k.Outdoor then
+			break
+		end
 		span(b, "Beam", -ROOM_HALF_X, ROOM_HALF_X, fy + ROOM_HEIGHT - 16, fy + ROOM_HEIGHT, z - 8, z + 8, Color3.fromRGB(110, 72, 44), Enum.Material.Wood, noCollide())
 	end
 	local bulbColors = { Color3.fromRGB(255, 200, 90), Color3.fromRGB(255, 120, 90), Color3.fromRGB(120, 220, 140), Color3.fromRGB(255, 240, 200) }
@@ -9074,45 +9105,54 @@ local function pizzeriaProps(b: Builder, k: RoomStyle)
 			end
 		end
 	end
-	-- The front wall: a chalkboard menu, a neon OPEN sign and a glass door.
-	local frontZ = ROOM_Z_FRONT + 3
-	span(b, "MenuFrame", -150, 150, fy + 220, fy + 400, ROOM_Z_FRONT, ROOM_Z_FRONT + 2, Color3.fromRGB(120, 80, 50), Enum.Material.Wood, noCollide())
-	roomSign(b, "MENU\nMargherita  •  Pepperoni\nFour Cheese  •  Hawaiian", Vector3.new(284, 164, 2), 0, fy + 310, frontZ, Color3.fromRGB(35, 40, 38), Color3.fromRGB(245, 240, 225), Enum.NormalId.Front, Enum.Material.Slate)
-	roomSign(b, "OPEN", Vector3.new(110, 44, 2), 260, fy + 330, frontZ, Color3.fromRGB(30, 26, 26), Color3.fromRGB(255, 80, 120), Enum.NormalId.Front)
-	span(b, "DoorFrame", -320, -200, fy, fy + 240, ROOM_Z_FRONT, ROOM_Z_FRONT + 3, Color3.fromRGB(120, 80, 50), Enum.Material.Wood, noCollide())
-	local glass = span(b, "DoorGlass", -310, -210, fy + 10, fy + 230, ROOM_Z_FRONT + 3, ROOM_Z_FRONT + 4, Color3.fromRGB(190, 225, 255), Enum.Material.Neon, noCollide())
-	glass.Transparency = 0.3
-	-- Shelves of ingredients on the left wall: flour sacks, tomato tins, jars of basil.
-	local sx = -ROOM_HALF_X + 3
-	for level, y in { fy + 170, fy + 250 } do
-		span(b, "Shelf", sx, sx + 40, y - 4, y, -460, -300, Color3.fromRGB(140, 95, 60), Enum.Material.Wood)
-		for k = 0, 5 do
-			local z = -450 + k * 26
-			if (k + level) % 3 == 0 then
-				local sack = box(b, "FlourSack", Vector3.new(26, 34, 20), sx + 20, y + 17, z, Color3.fromRGB(240, 232, 215), Enum.Material.Fabric, noCollide())
-				sack.Shape = Enum.PartType.Ball
-			elseif (k + level) % 3 == 1 then
-				cyl(b, "TomatoTin", 22, 16, sx + 20, y + 11, z, Color3.fromRGB(210, 50, 40), Enum.Material.Metal, noCollide())
-			else
-				cyl(b, "BasilJar", 20, 14, sx + 20, y + 10, z, Color3.fromRGB(90, 170, 80), Enum.Material.Glass, noCollide())
+	if not k.Outdoor then
+		-- The front wall: a chalkboard menu, a neon OPEN sign and a glass door.
+		local frontZ = ROOM_Z_FRONT + 3
+		span(b, "MenuFrame", -150, 150, fy + 220, fy + 400, ROOM_Z_FRONT, ROOM_Z_FRONT + 2, Color3.fromRGB(120, 80, 50), Enum.Material.Wood, noCollide())
+		roomSign(b, "MENU\nMargherita  •  Pepperoni\nFour Cheese  •  Hawaiian", Vector3.new(284, 164, 2), 0, fy + 310, frontZ, Color3.fromRGB(35, 40, 38), Color3.fromRGB(245, 240, 225), Enum.NormalId.Front, Enum.Material.Slate)
+		roomSign(b, "OPEN", Vector3.new(110, 44, 2), 260, fy + 330, frontZ, Color3.fromRGB(30, 26, 26), Color3.fromRGB(255, 80, 120), Enum.NormalId.Front)
+		span(b, "DoorFrame", -320, -200, fy, fy + 240, ROOM_Z_FRONT, ROOM_Z_FRONT + 3, Color3.fromRGB(120, 80, 50), Enum.Material.Wood, noCollide())
+		local glass = span(b, "DoorGlass", -310, -210, fy + 10, fy + 230, ROOM_Z_FRONT + 3, ROOM_Z_FRONT + 4, Color3.fromRGB(190, 225, 255), Enum.Material.Neon, noCollide())
+		glass.Transparency = 0.3
+		-- Shelves of ingredients on the left wall: flour sacks, tomato tins, jars of basil.
+		local sx = -ROOM_HALF_X + 3
+		for level, y in { fy + 170, fy + 250 } do
+			span(b, "Shelf", sx, sx + 40, y - 4, y, -460, -300, Color3.fromRGB(140, 95, 60), Enum.Material.Wood)
+			for k = 0, 5 do
+				local z = -450 + k * 26
+				if (k + level) % 3 == 0 then
+					local sack = box(b, "FlourSack", Vector3.new(26, 34, 20), sx + 20, y + 17, z, Color3.fromRGB(240, 232, 215), Enum.Material.Fabric, noCollide())
+					sack.Shape = Enum.PartType.Ball
+				elseif (k + level) % 3 == 1 then
+					cyl(b, "TomatoTin", 22, 16, sx + 20, y + 11, z, Color3.fromRGB(210, 50, 40), Enum.Material.Metal, noCollide())
+				else
+					cyl(b, "BasilJar", 20, 14, sx + 20, y + 10, z, Color3.fromRGB(90, 170, 80), Enum.Material.Glass, noCollide())
+				end
 			end
 		end
-	end
-	-- Potted basil by the tables.
-	for _, px in { -250, 250 } do
-		cyl(b, "Pot", 30, 36, px, fy + 15, -470, Color3.fromRGB(190, 100, 60))
-		for k = 0, 4 do
-			local leaf = box(b, "Basil", Vector3.new(22, 22, 22), px + math.cos(k * 1.3) * 10, fy + 38 + (k % 2) * 8, -470 + math.sin(k * 1.3) * 10, Color3.fromRGB(80, 160, 70), nil, noCollide())
-			leaf.Shape = Enum.PartType.Ball
+		-- Potted basil by the tables.
+		for _, px in { -250, 250 } do
+			cyl(b, "Pot", 30, 36, px, fy + 15, -470, Color3.fromRGB(190, 100, 60))
+			for k = 0, 4 do
+				local leaf = box(b, "Basil", Vector3.new(22, 22, 22), px + math.cos(k * 1.3) * 10, fy + 38 + (k % 2) * 8, -470 + math.sin(k * 1.3) * 10, Color3.fromRGB(80, 160, 70), nil, noCollide())
+				leaf.Shape = Enum.PartType.Ball
+			end
 		end
-	end
 
-	-- Hanging pendant lamps.
-	for _, lx in { -200, 0, 200 } do
-		span(b, "LampCord", lx - 0.8, lx + 0.8, fy + 330, fy + ROOM_HEIGHT, -260 - 0.8, -260 + 0.8, Color3.fromRGB(30, 30, 30), nil, noCollide())
-		cyl(b, "LampShade", 26, 60, lx, fy + 330, -260, Color3.fromRGB(40, 40, 44), Enum.Material.Metal, noCollide())
-		local bulb = cyl(b, "LampBulb", 2, 40, lx, fy + 316, -260, k.Lamp, Enum.Material.Neon, noCollide())
-		bulb.CastShadow = false
+		-- Hanging pendant lamps.
+		for _, lx in { -200, 0, 200 } do
+			span(b, "LampCord", lx - 0.8, lx + 0.8, fy + 330, fy + ROOM_HEIGHT, -260 - 0.8, -260 + 0.8, Color3.fromRGB(30, 30, 30), nil, noCollide())
+			cyl(b, "LampShade", 26, 60, lx, fy + 330, -260, Color3.fromRGB(40, 40, 44), Enum.Material.Metal, noCollide())
+			local bulb = cyl(b, "LampBulb", 2, 40, lx, fy + 316, -260, k.Lamp, Enum.Material.Neon, noCollide())
+			bulb.CastShadow = false
+		end
+	else
+		-- String lights hang from tall wooden poles at both ends of the lines.
+		for _, z in { -440, -300, -160 } do
+			for _, sx in { -1, 1 } do
+				cyl(b, "LightPole", 380, 8, sx * (ROOM_HALF_X - 6), fy + 190, z, Color3.fromRGB(110, 72, 44), Enum.Material.Wood, noCollide())
+			end
+		end
 	end
 end
 
@@ -9290,12 +9330,249 @@ local function castleProps(b: Builder, k: RoomStyle)
 	end
 end
 
+-- Level 2 scenery: the backyard around the patio. Lawn, hills, trees, the house, a picket fence,
+-- a BBQ, parasols and flower beds. All of it is out of reach (the patio is walled by invisible
+-- barriers) so it's non-colliding, and it stays within the slot's own X range (+-490) so
+-- neighbouring arenas never overlap.
+local function buildYard(b: Builder)
+	local fy = KITCHEN_FLOOR_Y
+	local scenery = noCollide()
+	local function ball(name: string, sx: number, sy: number, sz: number, x: number, y: number, z: number, color: Color3, material: Enum.Material?)
+		local p = box(b, name, Vector3.new(sx, sy, sz), x, y, z, color, material, scenery)
+		p.Shape = Enum.PartType.Ball
+		return p
+	end
+	local grass = Color3.fromRGB(104, 168, 76)
+	local grassDark = Color3.fromRGB(84, 146, 64)
+
+	-- Lawn all round the patio, a step lower than it.
+	span(b, "Lawn", -490, 490, fy - 10, fy - 0.6, -1000, 1000, grass, Enum.Material.Grass, scenery)
+	span(b, "PatioEdgeFront", -424, 424, fy - 4, fy + 1.2, ROOM_Z_FRONT - 6, ROOM_Z_FRONT, Color3.fromRGB(150, 144, 136), Enum.Material.Cobblestone, scenery)
+	-- Paving joints: thin dark lines on the patio.
+	for x = -ROOM_HALF_X + 60, ROOM_HALF_X - 1, 120 do
+		span(b, "PaverJoint", x - 0.5, x + 0.5, fy, fy + 0.15, ROOM_Z_FRONT, -64, Color3.fromRGB(120, 114, 106), nil, scenery)
+	end
+	for z = ROOM_Z_FRONT + 60, -64, 120 do
+		span(b, "PaverJoint", -ROOM_HALF_X, ROOM_HALF_X, fy, fy + 0.15, z - 0.5, z + 0.5, Color3.fromRGB(120, 114, 106), nil, scenery)
+	end
+
+	-- Hills: big green balls sunk into the lawn, ringing the yard; far blue mountains behind.
+	local hills = {
+		{ -640, -700, 520 }, { -640, -150, 640 }, { -640, 420, 600 }, { -600, 900, 700 },
+		{ 640, -700, 560 }, { 640, -150, 620 }, { 640, 450, 640 }, { 600, 900, 700 },
+		{ -330, -980, 560 }, { 0, -1050, 720 }, { 330, -980, 600 },
+		{ -250, 1150, 900 }, { 280, 1250, 1000 },
+	}
+	for i, h in hills do
+		local d = h[3]
+		ball("Hill", d, d * 0.8, d, h[1], fy - d * 0.34, h[2], if i % 2 == 0 then grass else grassDark, Enum.Material.Grass)
+	end
+	for _, m in { { -500, 2200, 1500 }, { 150, 2400, 1900 }, { 650, 2100, 1400 } } do
+		local d = m[3]
+		ball("Mountain", d, d * 1.1, d, m[1], fy - d * 0.2, m[2], Color3.fromRGB(122, 140, 170), Enum.Material.Slate)
+		ball("MountainSnow", d * 0.34, d * 0.3, d * 0.34, m[1], fy + d * 0.27, m[2], Color3.fromRGB(245, 248, 252), Enum.Material.SmoothPlastic)
+	end
+
+	-- Trees: a trunk and a cluster of leaf balls (round and tall kinds).
+	local function tree(x: number, z: number, h: number, tall: boolean, tone: number)
+		cyl(b, "Trunk", h * 0.55, h * 0.1, x, fy + h * 0.275, z, Color3.fromRGB(110, 78, 52), Enum.Material.Wood, scenery)
+		local leaf = if tone == 0 then Color3.fromRGB(70, 140, 64) elseif tone == 1 then Color3.fromRGB(96, 160, 70) else Color3.fromRGB(58, 120, 70)
+		if tall then
+			ball("Leaves", h * 0.34, h * 0.7, h * 0.34, x, fy + h * 0.72, z, leaf, Enum.Material.Grass)
+		else
+			ball("Leaves", h * 0.62, h * 0.5, h * 0.62, x, fy + h * 0.68, z, leaf, Enum.Material.Grass)
+			ball("Leaves", h * 0.42, h * 0.36, h * 0.42, x + h * 0.2, fy + h * 0.58, z + h * 0.08, leaf, Enum.Material.Grass)
+			ball("Leaves", h * 0.4, h * 0.34, h * 0.4, x - h * 0.2, fy + h * 0.6, z - h * 0.06, leaf, Enum.Material.Grass)
+		end
+	end
+	local trees: { { any } } = {
+		{ -455, -440, 420, false }, { 455, -420, 380, true }, { -470, -250, 360, true }, { 470, -250, 440, false },
+		{ -460, -40, 400, false }, { 465, -30, 360, true }, { -380, 160, 460, false }, { 390, 150, 420, false },
+		{ -470, 330, 380, true }, { 470, 360, 460, false }, { -250, 620, 480, false }, { 300, 640, 440, true },
+		{ -420, 760, 520, false }, { 440, 800, 500, false }, { -150, -760, 440, false }, { 200, -800, 480, true },
+		{ -400, -820, 420, true }, { 420, -700, 400, false },
+	}
+	for i, t in trees do
+		tree(t[1], t[2], t[3], t[4], i % 3)
+	end
+
+	-- Picket fence round the patio (front and both sides; the counter wall closes the back).
+	local fenceColor = Color3.fromRGB(246, 244, 238)
+	local function fenceRun(x0: number, z0: number, x1: number, z1: number)
+		local len = math.sqrt((x1 - x0) ^ 2 + (z1 - z0) ^ 2)
+		local n = math.floor(len / 14)
+		local along = Vector3.new(x1 - x0, 0, z1 - z0).Unit
+		local horizontal = math.abs(x1 - x0) &gt; math.abs(z1 - z0)
+		for i = 0, n do
+			local x, z = x0 + along.X * len * i / n, z0 + along.Z * len * i / n
+			local sx, sz = if horizontal then 6 else 2.5, if horizontal then 2.5 else 6
+			local pk = box(b, "Picket", Vector3.new(sx, 56, sz), x, fy + 28, z, fenceColor, Enum.Material.SmoothPlastic, scenery)
+			if i % 6 == 0 then
+				pk.Size = Vector3.new(sx + 2, 66, sz + 2)
+			end
+		end
+		for _, y in { 16, 40 } do
+			local cx, cz = (x0 + x1) / 2, (z0 + z1) / 2
+			box(b, "FenceRail", Vector3.new(if horizontal then len else 3, 5, if horizontal then 3 else len), cx, fy + y, cz, fenceColor, Enum.Material.SmoothPlastic, scenery)
+		end
+	end
+	fenceRun(-ROOM_HALF_X + 4, ROOM_Z_FRONT + 4, ROOM_HALF_X - 4, ROOM_Z_FRONT + 4)
+	fenceRun(-ROOM_HALF_X + 4, ROOM_Z_FRONT + 4, -ROOM_HALF_X + 4, -70)
+	fenceRun(ROOM_HALF_X - 4, ROOM_Z_FRONT + 4, ROOM_HALF_X - 4, -70)
+
+	-- The BBQ, mirroring the pizza oven on the left: a black barrel grill on a cart.
+	local gx, gz = -250, -170
+	local steel = Color3.fromRGB(46, 48, 54)
+	local chrome = Color3.fromRGB(190, 196, 204)
+	for _, lx in { -62, 62 } do
+		for _, lz in { -30, 30 } do
+			cyl(b, "BbqLeg", 74, 6, gx + lx, fy + 37, gz + lz, steel, Enum.Material.Metal, scenery)
+		end
+	end
+	span(b, "BbqShelf", gx - 70, gx + 70, fy + 36, fy + 40, gz - 36, gz + 36, chrome, Enum.Material.Metal, scenery)
+	cyl(b, "PropaneTank", 52, 28, gx - 34, fy + 66, gz, Color3.fromRGB(235, 232, 226), Enum.Material.Metal, scenery)
+	span(b, "BbqBase", gx - 78, gx + 78, fy + 74, fy + 124, gz - 40, gz + 40, steel, Enum.Material.Metal, scenery)
+	-- The barrel lid lies along X (its axis), resting on the base.
+	local lid = box(b, "BbqLid", Vector3.new(156, 84, 84), gx, fy + 124, gz, Color3.fromRGB(34, 36, 42), Enum.Material.Metal, scenery)
+	lid.Shape = Enum.PartType.Cylinder
+	lid.CFrame = footprint(b.origin, gx, fy + 124, gz)
+	span(b, "BbqHandle", gx - 50, gx + 50, fy + 150, fy + 154, gz - 52, gz - 48, chrome, Enum.Material.Metal, scenery)
+	span(b, "BbqGlow", gx - 60, gx + 60, fy + 118, fy + 122, gz - 40.5, gz - 38, Color3.fromRGB(255, 120, 40), Enum.Material.Neon, scenery)
+	cyl(b, "BbqStack", 40, 14, gx + 54, fy + 176, gz + 24, steel, Enum.Material.Metal, scenery)
+	span(b, "BbqSideTable", gx + 80, gx + 140, fy + 120, fy + 124, gz - 34, gz + 34, Color3.fromRGB(150, 108, 72), Enum.Material.Wood, scenery)
+	for _, lz in { -30, 30 } do
+		cyl(b, "BbqSideLeg", 120, 4, gx + 134, fy + 60, gz + lz, steel, Enum.Material.Metal, scenery)
+	end
+	for _, dx in { -10, 10 } do
+		span(b, "BbqTool", gx + 100 + dx, gx + 103 + dx, fy + 124, fy + 126, gz - 20, gz + 20, chrome, Enum.Material.Metal, scenery)
+	end
+	local smokeAnchor = box(b, "BbqSmoke", Vector3.new(2, 2, 2), gx + 54, fy + 200, gz + 24, chrome, nil, { Transparency = 1, CanCollide = false, CastShadow = false })
+	local smoke = Instance.new("ParticleEmitter")
+	smoke.Texture = "rbxasset://textures/particles/smoke_main.dds"
+	smoke.Color = ColorSequence.new(Color3.fromRGB(210, 210, 214))
+	smoke.Lifetime = NumberRange.new(4, 6)
+	smoke.Speed = NumberRange.new(10, 18)
+	smoke.Rate = 5
+	smoke.Size = NumberSequence.new(10, 34)
+	smoke.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(1, 1) })
+	smoke.EmissionDirection = Enum.NormalId.Top
+	smoke.SpreadAngle = Vector2.new(12, 12)
+	smoke.Parent = smokeAnchor
+
+	-- Beach parasols on the patio.
+	for _, ux in { -330, 330 } do
+		local uz = -300
+		cyl(b, "ParasolPole", 280, 6, ux, fy + 140, uz, Color3.fromRGB(235, 232, 226), Enum.Material.Metal, scenery)
+		ball("ParasolTop", 230, 80, 230, ux, fy + 280, uz, Color3.fromRGB(215, 60, 55), Enum.Material.Fabric)
+		ball("ParasolStripe", 232, 40, 232, ux, fy + 296, uz, Color3.fromRGB(250, 246, 238), Enum.Material.Fabric)
+		cyl(b, "ParasolBase", 10, 60, ux, fy + 5, uz, Color3.fromRGB(120, 114, 106), Enum.Material.Concrete, scenery)
+	end
+
+	-- The house behind the yard: two storeys, a gabled roof, a porch and flower beds.
+	local hz0, hz1 = 640, 860
+	local siding = Color3.fromRGB(246, 232, 196)
+	local trim = Color3.fromRGB(252, 250, 246)
+	span(b, "HouseWalls", -280, 280, fy - 4, fy + 400, hz0, hz1, siding, Enum.Material.WoodPlanks, scenery)
+	span(b, "HouseBase", -284, 284, fy - 4, fy + 30, hz0 - 3, hz1 + 3, Color3.fromRGB(150, 144, 136), Enum.Material.Cobblestone, scenery)
+	span(b, "HouseBelt", -284, 284, fy + 196, fy + 204, hz0 - 3, hz1 + 3, trim, nil, scenery)
+	for floor = 0, 1 do
+		local wy0, wy1 = fy + 70 + floor * 200, fy + 160 + floor * 200
+		for _, wx in { -200, -100, 100, 200 } do
+			span(b, "WindowFrame", wx - 30, wx + 30, wy0 - 6, wy1 + 6, hz0 - 3, hz0, trim, nil, scenery)
+			local glass = span(b, "WindowGlass", wx - 24, wx + 24, wy0, wy1, hz0 - 3.4, hz0 - 3, Color3.fromRGB(150, 205, 240), Enum.Material.Glass, scenery)
+			glass.Transparency = 0.25
+			span(b, "WindowBar", wx - 2, wx + 2, wy0, wy1, hz0 - 3.8, hz0 - 3.4, trim, nil, scenery)
+			span(b, "WindowBar", wx - 24, wx + 24, (wy0 + wy1) / 2 - 2, (wy0 + wy1) / 2 + 2, hz0 - 3.8, hz0 - 3.4, trim, nil, scenery)
+			for _, sx in { -1, 1 } do
+				span(b, "Shutter", wx + sx * 34 - 6, wx + sx * 34 + 6, wy0 - 6, wy1 + 6, hz0 - 3.4, hz0 - 3, Color3.fromRGB(70, 120, 150), nil, scenery)
+			end
+		end
+	end
+	-- Front door with a porch.
+	span(b, "DoorFrame", -42, 42, fy + 30, fy + 180, hz0 - 3, hz0, trim, nil, scenery)
+	span(b, "FrontDoor", -34, 34, fy + 30, fy + 174, hz0 - 3.6, hz0 - 3, Color3.fromRGB(190, 52, 48), Enum.Material.Wood, scenery)
+	cyl(b, "DoorKnob", 8, 8, 22, fy + 100, hz0 - 6, Color3.fromRGB(230, 190, 90), Enum.Material.Metal, scenery)
+	span(b, "PorchSlab", -90, 90, fy - 2, fy + 10, hz0 - 70, hz0 - 3, Color3.fromRGB(176, 170, 160), Enum.Material.Slate, scenery)
+	span(b, "PorchStep", -60, 60, fy - 2, fy + 4, hz0 - 100, hz0 - 70, Color3.fromRGB(176, 170, 160), Enum.Material.Slate, scenery)
+	span(b, "PorchRoof", -100, 100, fy + 196, fy + 204, hz0 - 80, hz0, Color3.fromRGB(150, 70, 56), Enum.Material.Slate, scenery)
+	for _, px in { -90, 90 } do
+		cyl(b, "PorchPost", 176, 10, px, fy + 103, hz0 - 76, trim, Enum.Material.SmoothPlastic, scenery)
+	end
+	-- Roof: two sloped slabs along X, with stepped gable ends.
+	local roofRed = Color3.fromRGB(150, 70, 56)
+	local slope = math.rad(34)
+	local roofCZ = (hz0 + hz1) / 2
+	for _, side in { -1, 1 } do
+		local half = (hz1 - hz0) / 2 + 28
+		local rise = math.sin(slope) * half / 2
+		local run = math.cos(slope) * half / 2
+		local slab = box(b, "Roof", Vector3.new(600, 10, half), 0, fy + 400 + rise, roofCZ + side * run, roofRed, Enum.Material.Slate, scenery)
+		slab.CFrame = footprint(b.origin, 0, fy + 400 + rise, roofCZ + side * run) * CFrame.Angles(-side * slope, 0, 0)
+	end
+	for step = 0, 5 do
+		local halfZ = (hz1 - hz0) / 2 * (1 - step / 6)
+		for _, sx in { -1, 1 } do
+			span(b, "Gable", sx * 278, sx * 282, fy + 400 + step * 18, fy + 418 + step * 18, roofCZ - halfZ, roofCZ + halfZ, siding, Enum.Material.WoodPlanks, scenery)
+		end
+	end
+	span(b, "Chimney", 170, 220, fy + 380, fy + 600, roofCZ + 20, roofCZ + 70, Color3.fromRGB(150, 70, 52), Enum.Material.Brick, scenery)
+	span(b, "ChimneyCap", 164, 226, fy + 600, fy + 610, roofCZ + 14, roofCZ + 76, Color3.fromRGB(190, 180, 170), Enum.Material.Concrete, scenery)
+	-- Flower beds along the house, and a stepping-stone path to the patio.
+	local blooms = { Color3.fromRGB(235, 80, 110), Color3.fromRGB(250, 200, 60), Color3.fromRGB(180, 110, 230), Color3.fromRGB(250, 250, 250) }
+	for bi, bx in { -200, -130, 130, 200 } do
+		span(b, "FlowerBed", bx - 40, bx + 40, fy - 0.6, fy + 12, hz0 - 40, hz0 - 10, Color3.fromRGB(96, 66, 46), Enum.Material.Ground, scenery)
+		for i = 0, 3 do
+			ball("Flower", 14, 14, 14, bx - 28 + i * 19, fy + 20, hz0 - 25, blooms[(i + bi) % 4 + 1], Enum.Material.SmoothPlastic)
+			cyl(b, "Stem", 10, 2, bx - 28 + i * 19, fy + 12, hz0 - 25, Color3.fromRGB(70, 140, 60), nil, scenery)
+		end
+	end
+	for z = 120, hz0 - 110, 56 do
+		span(b, "StepStone", -26, 26, fy - 0.6, fy + 1, z, z + 40, Color3.fromRGB(176, 170, 160), Enum.Material.Slate, scenery)
+	end
+
+	-- A few high clouds.
+	for i, c in { { -300, 1500 }, { 200, 1800 }, { 520, 1300 }, { -520, 1100 }, { 0, 2300 }, { -150, -1600 }, { 350, -1500 } } do
+		ball("Cloud", 360 + i * 20, 70, 160, c[1], fy + 1300 + (i % 3) * 120, c[2], Color3.fromRGB(255, 255, 255), Enum.Material.SmoothPlastic)
+		ball("Cloud", 220, 80, 130, c[1] + 120, fy + 1330 + (i % 3) * 120, c[2] + 30, Color3.fromRGB(255, 255, 255), Enum.Material.SmoothPlastic)
+	end
+end
+
+-- Level 2's tap over the sink: base, tall gooseneck, nozzle, hot and cold handles and a thin stream.
+local function buildFaucet(b: Builder)
+	local chrome = Color3.fromRGB(205, 210, 218)
+	local base = COUNTER_TOP_Y
+	cyl(b, "FaucetBase", 8, 30, 0, base + 4, 70, chrome, Enum.Material.Metal, noCollide())
+	cyl(b, "FaucetPipe", 150, 12, 0, base + 80, 70, chrome, Enum.Material.Metal, noCollide())
+	cyl(b, "FaucetJoint", 14, 16, 0, base + 156, 70, chrome, Enum.Material.Metal, noCollide())
+	span(b, "FaucetSpout", -6, 6, base + 150, base + 162, 14, 74, chrome, Enum.Material.Metal, noCollide())
+	cyl(b, "FaucetNozzle", 22, 16, 0, base + 150, 14, chrome, Enum.Material.Metal, noCollide())
+	local handles: { { any } } = { { -34, Color3.fromRGB(70, 130, 220) }, { 34, Color3.fromRGB(220, 70, 60) } }
+	for _, h in handles do
+		span(b, "TapStem", h[1] - 3, h[1] + 3, base, base + 22, 68, 74, chrome, Enum.Material.Metal, noCollide())
+		cyl(b, "TapKnob", 6, 22, h[1], base + 26, 71, h[2], Enum.Material.Plastic, noCollide())
+		span(b, "TapLever", h[1] - 14, h[1] + 14, base + 29, base + 33, 69, 73, chrome, Enum.Material.Metal, noCollide())
+	end
+	local stream = cyl(b, "FaucetStream", 120, 5, 0, base + 88, 14, Color3.fromRGB(150, 205, 250), Enum.Material.Glass, { CanCollide = false, CastShadow = false, Transparency = 0.45 })
+	local drops = Instance.new("ParticleEmitter")
+	drops.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	drops.Color = ColorSequence.new(Color3.fromRGB(190, 225, 255))
+	drops.Lifetime = NumberRange.new(0.6, 1)
+	drops.Speed = NumberRange.new(14, 26)
+	drops.Rate = 14
+	drops.Size = NumberSequence.new(4, 1)
+	drops.SpreadAngle = Vector2.new(60, 60)
+	drops.EmissionDirection = Enum.NormalId.Top
+	drops.Parent = stream
+end
+
 -- The whole room for a level: shell + that room's props.
 local function buildRoom(b: Builder, levelIndex: number)
 	local style = ROOM_STYLES[levelIndex] or ROOM_STYLES[1]
 	buildKitchen(b, style)
 	if levelIndex == 2 then
 		pizzeriaProps(b, style)
+		buildYard(b)
+		buildFaucet(b)
 	elseif levelIndex == 3 then
 		castleProps(b, style)
 	else
@@ -9310,11 +9587,14 @@ end
 local function buildTub(b: Builder, theme)
 	local steel = theme.Tub
 	local zMid = (TUB_Z_MIN + TUB_Z_MAX) / 2
+	-- Level 2's basin is a white porcelain sink, open to the sky (no ceiling), with a rolled rim.
+	local sink = theme.Sink == true
+	local tubMat = if sink then Enum.Material.SmoothPlastic else Enum.Material.Metal
 
 	-- Tub floor and walls. They don't cast shadows, so the room's daylight still reaches inside.
-	span(b, "TubFloor", -TUB_HALF_X - 2, TUB_HALF_X + 2, -2, 0, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal)
+	span(b, "TubFloor", -TUB_HALF_X - 2, TUB_HALF_X + 2, -2, 0, TUB_Z_MIN, TUB_Z_MAX, steel, tubMat)
 	for _, side in { -1, 1 } do
-		span(b, "TubWall", side * TUB_HALF_X, side * (TUB_HALF_X + 2), 0, TUB_HEIGHT, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal)
+		span(b, "TubWall", side * TUB_HALF_X, side * (TUB_HALF_X + 2), 0, TUB_HEIGHT, TUB_Z_MIN, TUB_Z_MAX, steel, tubMat)
 		-- Pressed ribs and rack rails on the side walls.
 		for i = 1, 6 do
 			local y = i * (TUB_HEIGHT / 7)
@@ -9326,8 +9606,17 @@ local function buildTub(b: Builder, theme)
 	end
 	-- The tub casts shadows (it's a closed box, like a real machine): the inside is lit by the
 	-- interior lights below rather than blasted by daylight.
-	span(b, "TubBack", -TUB_HALF_X - 2, TUB_HALF_X + 2, 0, TUB_HEIGHT, TUB_Z_MAX, TUB_Z_MAX + 2, steel, Enum.Material.Metal)
-	span(b, "TubCeiling", -TUB_HALF_X - 2, TUB_HALF_X + 2, TUB_HEIGHT, TUB_HEIGHT + 2, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal)
+	span(b, "TubBack", -TUB_HALF_X - 2, TUB_HALF_X + 2, 0, TUB_HEIGHT, TUB_Z_MAX, TUB_Z_MAX + 2, steel, tubMat)
+	if sink then
+		-- Rolled rim round the opening, level with the counter top, and an overflow slot.
+		local rim = Color3.fromRGB(250, 250, 248)
+		span(b, "SinkRim", -TUB_HALF_X - 4, -TUB_HALF_X + 3, TUB_HEIGHT, COUNTER_TOP_Y, TUB_Z_MIN - 3, TUB_Z_MAX + 4, rim, tubMat)
+		span(b, "SinkRim", TUB_HALF_X - 3, TUB_HALF_X + 4, TUB_HEIGHT, COUNTER_TOP_Y, TUB_Z_MIN - 3, TUB_Z_MAX + 4, rim, tubMat)
+		span(b, "SinkRim", -TUB_HALF_X - 4, TUB_HALF_X + 4, TUB_HEIGHT, COUNTER_TOP_Y, TUB_Z_MAX - 3, TUB_Z_MAX + 4, rim, tubMat)
+		span(b, "OverflowSlot", -12, 12, TUB_HEIGHT - 14, TUB_HEIGHT - 6, TUB_Z_MAX - 0.6, TUB_Z_MAX, Color3.fromRGB(120, 130, 140), nil, noCollide())
+	else
+		span(b, "TubCeiling", -TUB_HALF_X - 2, TUB_HALF_X + 2, TUB_HEIGHT, TUB_HEIGHT + 2, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal)
+	end
 
 	-- Filter cup in the floor at the back, heating element loop.
 	cyl(b, "Filter", 0.4, 14, 0, 0.2, 30, Color3.fromRGB(120, 125, 130), Enum.Material.DiamondPlate, noCollide())
@@ -9867,7 +10156,14 @@ function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeSc
 		Metal = Color3.fromRGB(190, 195, 200),
 		Accent = Color3.fromRGB(80, 170, 255),
 		Light = Color3.fromRGB(215, 235, 255),
+		Sink = false,
 	}, { __index = dishTheme }) :: any
+	if levelIndex == 2 then
+		-- The Backyard's basin is a white porcelain sink.
+		theme.Tub = Color3.fromRGB(238, 240, 242)
+		theme.Rack = Color3.fromRGB(205, 215, 225)
+		theme.Sink = true
+	end
 	local origin = ArenaBuilder.SlotOrigin(slot)
 	local rng = Random.new()
 	local grimeScale = (options and options.GrimeScale) or 1

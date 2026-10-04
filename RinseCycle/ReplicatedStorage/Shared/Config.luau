@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.2.0"
+Config.Version = "2.3.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -184,7 +184,7 @@ Config.Levels = {
 		Name = "Pizza Party",
 		Subtitle = "Greasy pizza trays, sauce everywhere and burnt crust.",
 		Icon = "🍕",
-		Place = "Pizzeria",
+		Place = "Backyard",
 		Toughness = 4.5, -- dirt HP multiplier on top of Mult (later levels are tougher, not just bigger)
 		Mult = 4,
 		ParTime = 1260,

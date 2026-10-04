@@ -55,3 +55,5 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
   - `scen_autocomplete`: the admin command line's suggestions (commands, players, durations, options) and Tab completion.
   - `scen_icons2`, `scen_hudshot`, `scen_winshots`: dumps for guirender.py (new icons; the HUD grid; Clubs tabs and the chest boxes). guirender.py now lays out UIGridLayout too.
   - `scen_events` now also covers donating, the club's info, the monthly reset (a fake clock) and the prize claim; `scen_winshots` dumps the Clubs tabs and dialogs; `scen_icons3` the HUD icons.
+
+  - Level 2 (Backyard Sink, v2.3.0): `lune run harness.luau arena2 out.json`, then `render.py` from outside (e.g. eye 700 600 -900, target 0 100 300) to check the yard, house and sink.

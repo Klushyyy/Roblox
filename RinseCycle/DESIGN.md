@@ -1549,3 +1549,17 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - Eggs cost Bubbles only, and Bubbles can't be bought with Robux, so eggs are not paid random
   items. Odds are shown anyway.
 - No speed boosts are sold for Robux. Sneakers is an in-run coin upgrade only.
+
+## 6ze. Level 2 is the Backyard Sink (v2.3.0)
+
+- Level 2 ("Pizza Party") is no longer a closed pizzeria. It plays outdoors: the basin is a white
+  porcelain **sink** (no ceiling, rolled rim, overflow slot) with a chrome gooseneck tap, hot and
+  cold handles and a running stream; the counter has a hole over it. The racks, lifts and dishes
+  work exactly as before.
+- Around it (ArenaBuilder `buildYard`, `buildFaucet`): lawn, ring of hills and far snowy mountains,
+  18 trees, a picket fence, a two-storey house with porch, roof and flower beds, a barrel BBQ with
+  smoke, parasols, string lights on poles, and clouds. The pizza oven, checkered picnic tables and
+  stools stay where they were so the chef and guests (LevelNPCs) still line up.
+- No walls or ceiling: invisible barriers at the old room edges keep players on the patio. Scenery is
+  non-colliding and stays within +-490 studs of the slot's X so neighbouring arenas never overlap.
+- The Place name is now "Backyard". Level 3 (bigger castle) is next.
