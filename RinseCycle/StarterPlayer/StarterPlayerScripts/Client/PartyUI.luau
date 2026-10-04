@@ -301,6 +301,19 @@ local function renderLevelList()
 		Parent = soon,
 	})
 	soon.Activated:Connect(function()
+		-- Chapter 4 is a Roblox event: open its page so players can RSVP (StoreIds > EventIds > Chapter4).
+		local StoreIds = require(Shared:WaitForChild("StoreIds")) :: any
+		local id = tostring(StoreIds.EventIds and StoreIds.EventIds.Chapter4 or "")
+		if id ~= "" and id ~= "0" then
+			local ok, err = pcall(function()
+				game:GetService("SocialService"):PromptRsvpToEventAsync(id)
+			end)
+			if ok then
+				UIKit.PlaySound("Click")
+				return
+			end
+			warn("[PartyUI] RSVP prompt failed: " .. tostring(err))
+		end
 		UIKit.PlaySound("Error")
 		UIKit.Toast("The next chapter is on its way. Stay tuned!", "Info")
 	end)

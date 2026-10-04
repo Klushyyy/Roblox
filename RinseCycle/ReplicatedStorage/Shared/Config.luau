@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.3.0"
+Config.Version = "2.4.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -22,8 +22,8 @@ Config.World = {
 	-- nobody in the lobby can see other parties' dishwashers (each room is a closed box). Kept within
 	-- ~5,000 studs of the origin (float precision) and far enough apart that parties never see each
 	-- other. The place's FallenPartsDestroyHeight is set well below this (see _tools/build.py).
-	ArenaRowStart = Vector3.new(-3500, -2500, 0),
-	ArenaSpacing = Vector3.new(1000, 0, 0),
+	ArenaRowStart = Vector3.new(-3600, -2500, -1600),
+	ArenaSpacing = Vector3.new(2400, 0, 3200), -- x between columns (4 per row), z between the two rows
 	MaxArenas = 8,
 	LobbyWalkSpeed = 22, -- the lobby is small; this keeps walking between pads and shops snappy
 }
@@ -145,7 +145,7 @@ Config.GrimeTypes = {
 -- Spots = base grime spots per dish of that kind (solo), before PartyGrimeScale.
 -- Theme colours are used by the arena and dish builders.
 ----------------------------------------------------------------------------------------------------
-Config.DishKinds = { "Plate", "Tray", "Bowl", "Cup", "Glass", "Fork", "Knife", "Spoon", "Pan", "Pot" }
+Config.DishKinds = { "Plate", "Tray", "Bowl", "Cup", "Glass", "Fork", "Knife", "Spoon", "Pan", "Pot", "Board", "Cutter" }
 
 Config.Levels = {
 	{
@@ -162,8 +162,8 @@ Config.Levels = {
 		ParTime = 540,
 		Bubbles = 80,
 		GoldenChance = 0.02,
-		Dishes = { Plate = 16, Tray = 0, Bowl = 6, Cup = 6, Glass = 2, Fork = 4, Knife = 3, Spoon = 3, Pan = 0, Pot = 0 },
-		Spots = { Plate = 6, Tray = 8, Bowl = 6, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16 },
+		Dishes = { Plate = 16, Tray = 0, Bowl = 6, Cup = 6, Glass = 2, Fork = 4, Knife = 3, Spoon = 3, Pan = 0, Pot = 0, Board = 0, Cutter = 0 },
+		Spots = { Plate = 6, Tray = 8, Bowl = 6, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16, Board = 8, Cutter = 2 },
 		Grime = { { Type = "Crumbs", Weight = 45 }, { Type = "Ketchup", Weight = 35 }, { Type = "Gravy", Weight = 20 } },
 		Theme = {
 			Tub = Color3.fromRGB(172, 178, 187),
@@ -190,8 +190,8 @@ Config.Levels = {
 		ParTime = 1260,
 		Bubbles = 250,
 		GoldenChance = 0.025,
-		Dishes = { Plate = 12, Tray = 9, Bowl = 8, Cup = 7, Glass = 4, Fork = 5, Knife = 4, Spoon = 4, Pan = 2, Pot = 0 },
-		Spots = { Plate = 5, Tray = 8, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 13, Pot = 15 },
+		Dishes = { Plate = 8, Tray = 5, Bowl = 8, Cup = 7, Glass = 4, Fork = 4, Knife = 3, Spoon = 3, Pan = 2, Pot = 0, Board = 8, Cutter = 4 },
+		Spots = { Plate = 5, Tray = 8, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 13, Pot = 15, Board = 8, Cutter = 2 },
 		Grime = {
 			{ Type = "TomatoSauce", Weight = 32 },
 			{ Type = "MeltedCheese", Weight = 26 },
@@ -224,8 +224,8 @@ Config.Levels = {
 		ParTime = 1860,
 		Bubbles = 700,
 		GoldenChance = 0.035,
-		Dishes = { Plate = 14, Tray = 10, Bowl = 10, Cup = 6, Glass = 10, Fork = 6, Knife = 6, Spoon = 5, Pan = 2, Pot = 2 },
-		Spots = { Plate = 5, Tray = 9, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16 },
+		Dishes = { Plate = 14, Tray = 10, Bowl = 10, Cup = 6, Glass = 10, Fork = 6, Knife = 6, Spoon = 5, Pan = 2, Pot = 2, Board = 0, Cutter = 0 },
+		Spots = { Plate = 5, Tray = 9, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16, Board = 8, Cutter = 2 },
 		Grime = {
 			{ Type = "TruffleGunk", Weight = 30 },
 			{ Type = "CaviarSmear", Weight = 25 },

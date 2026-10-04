@@ -113,7 +113,7 @@ local ALL_COMMANDS = {
 	"kill", "jail", "god", "respawn",
 	"spectate", "controlplayer", "invis",
 	"viewpets", "givepet",
-	"fly",
+	"fly", "noclip", "giant", "abuse",
 	"leaderboards", "globalannounce", "joinserver", "bringserver", "serverlist",
 	"globalpoll",
 }
@@ -2110,6 +2110,114 @@ local function setFlying(target, enabled)
 	return true
 end
 
+
+-- =====================================================================
+-- :noclip (a tool that walks through walls), :giant and :abuse (the Admin Abuse show)
+-- =====================================================================
+-- The No Clip tool is made here (nothing to place in ServerStorage). AdminClient sees it in the
+-- character: while it's held the player flies through walls, and clicking teleports to the mouse.
+local NO_CLIP_TOOL = "No Clip"
+local function toggleNoClipTool(target: Player): boolean
+	local found = false
+	for _, holder in { target:FindFirstChildOfClass("Backpack"), target.Character } do
+		if holder then
+			for _, child in holder:GetChildren() do
+				if child:IsA("Tool") and child:GetAttribute("NoClipTool") then
+					child:Destroy()
+					found = true
+				end
+			end
+		end
+	end
+	if found then
+		return false
+	end
+	local tool = Instance.new("Tool")
+	tool.Name = NO_CLIP_TOOL
+	tool.ToolTip = "Hold to fly through walls. Click to teleport."
+	tool.RequiresHandle = false
+	tool.CanBeDropped = false
+	tool:SetAttribute("NoClipTool", true)
+	tool:SetAttribute("DisplayName", NO_CLIP_TOOL)
+	tool.Parent = target:FindFirstChildOfClass("Backpack") or target
+	return true
+end
+
+-- Scales the whole character (1 = normal). Respawning resets it.
+local function setGiantScale(target: Player, size: number): boolean
+	local character = target.Character
+	if not character then
+		return false
+	end
+	local ok = pcall(function()
+		character:ScaleTo(size)
+	end)
+	return ok
+end
+local function isGiant(target: Player): boolean
+	local character = target.Character
+	if not character then
+		return false
+	end
+	local ok, scale = pcall(function()
+		return character:GetScale()
+	end)
+	return ok and scale > 1.5
+end
+
+-- The Admin Abuse show: huge, glowing, cycling colours, flying and fast, then back to normal.
+local abuseToken: { [number]: number } = {}
+local function runAbuse(target: Player, seconds: number, size: number)
+	local character = target.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not character or not root or not humanoid then
+		return false
+	end
+	local token = (abuseToken[target.UserId] or 0) + 1
+	abuseToken[target.UserId] = token
+	local oldSpeed = humanoid.WalkSpeed
+	setGiantScale(target, size)
+	humanoid.WalkSpeed = oldSpeed * 1.5
+	local sparkles = Instance.new("Sparkles")
+	sparkles.Name = "AbuseSparkles"
+	sparkles.Parent = root
+	local glow = Instance.new("PointLight")
+	glow.Name = "AbuseGlow"
+	glow.Range = 40 * size / 4
+	glow.Brightness = 3
+	glow.Parent = root
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "AbuseHighlight"
+	highlight.FillTransparency = 0.5
+	highlight.OutlineTransparency = 0
+	highlight.Parent = character
+	setFlying(target, true)
+	task.spawn(function()
+		local t0 = os.clock()
+		while os.clock() - t0 < seconds and abuseToken[target.UserId] == token and character.Parent do
+			local color = Color3.fromHSV((os.clock() * 0.5) % 1, 0.8, 1)
+			glow.Color = color
+			sparkles.SparkleColor = color
+			highlight.FillColor = color
+			highlight.OutlineColor = color
+			task.wait(0.05)
+		end
+		if abuseToken[target.UserId] == token then
+			abuseToken[target.UserId] = nil
+			setFlying(target, false)
+			if character.Parent then
+				setGiantScale(target, 1)
+				humanoid.WalkSpeed = oldSpeed
+			end
+		end
+		sparkles:Destroy()
+		glow:Destroy()
+		highlight:Destroy()
+	end)
+	return true
+end
+
 -- =====================================================================
 -- Spectate - the spectating admin is made invisible and frozen for the
 -- duration (so they can't be seen, and can't move/interact with anyone
@@ -3668,7 +3776,7 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 	-- :fly with no name typed targets the issuing admin themselves,
 	-- rather than requiring ":fly MyOwnUsername" every time - :fly [name]
 	-- still works normally for flying someone else.
-	if commandName == "fly" and targetName == "" then
+	if (commandName == "fly" or commandName == "noclip" or commandName == "giant" or commandName == "abuse") and targetName == "" then
 		targetName = admin.Name
 	end
 
@@ -4001,6 +4109,35 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 		logCommand(admin, "fly", target.Name, nowFlying and "enabled" or "disabled",
 			admin.Name .. " " .. (nowFlying and "enabled" or "disabled") .. " flight for " .. target.Name)
 		sendFeedback(admin, (nowFlying and "Enabled" or "Disabled") .. " flight for " .. target.Name, false)
+
+	elseif commandName == "noclip" then
+		local given = toggleNoClipTool(target)
+		logCommand(admin, "noclip", target.Name, given and "given" or "removed",
+			admin.Name .. (given and " gave " or " took ") .. "the No Clip tool " .. (given and "to " or "from ") .. target.Name)
+		sendFeedback(admin, if given then "Gave " .. target.Name .. " the No Clip tool (hold it: fly through walls, click to teleport)" else "Took the No Clip tool from " .. target.Name, false)
+
+	elseif commandName == "giant" then
+		local size = math.clamp(tonumber(extraText:match("^%s*(%S*)") or "") or 8, 2, 30)
+		local makeGiant = not isGiant(target)
+		if not setGiantScale(target, if makeGiant then size else 1) then
+			sendFeedback(admin, target.Name .. " has no character right now", true)
+			return
+		end
+		logCommand(admin, "giant", target.Name, makeGiant and ("x" .. size) or "normal",
+			admin.Name .. " made " .. target.Name .. (makeGiant and (" giant (x" .. size .. ")") or " normal size"))
+		sendFeedback(admin, target.Name .. (makeGiant and (" is now x" .. size .. " size") or " is back to normal size"), false)
+
+	elseif commandName == "abuse" then
+		local seconds = math.clamp(tonumber(extraText:match("^%s*(%S*)") or "") or 60, 10, 600)
+		if not runAbuse(target, seconds, 12) then
+			sendFeedback(admin, target.Name .. " has no character right now", true)
+			return
+		end
+		for _, plr in Players:GetPlayers() do
+			Remote.AdminAnnouncement:FireClient(plr, target.Name .. " is abusing admin!")
+		end
+		logCommand(admin, "abuse", target.Name, seconds .. "s", admin.Name .. " started the Admin Abuse show for " .. target.Name .. " (" .. seconds .. "s)")
+		sendFeedback(admin, "Admin Abuse show for " .. target.Name .. " (" .. seconds .. "s)", false)
 
 	elseif commandName == "give" then
 		if extraText == "" then

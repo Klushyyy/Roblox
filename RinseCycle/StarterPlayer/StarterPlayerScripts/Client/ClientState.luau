@@ -148,4 +148,31 @@ function ClientState.LocalPlayer(): Player
 	return Players.LocalPlayer
 end
 
+-- The lobby is built on every server, a long way above the arenas. The open-air levels (the Backyard)
+-- would show its giant lawn hanging in the sky, so while the player is in a run the lobby's parts are
+-- made invisible for them alone (LocalTransparencyModifier is never replicated).
+task.spawn(function()
+	local hidden = false
+	while true do
+		task.wait(1)
+		local wantHidden = ClientState.Run ~= nil
+		if wantHidden ~= hidden then
+			local lobby = workspace:FindFirstChild("Lobby")
+			if lobby then
+				hidden = wantHidden
+				local n = 0
+				for _, d in lobby:GetDescendants() do
+					if d:IsA("BasePart") then
+						d.LocalTransparencyModifier = if wantHidden then 1 else 0
+					end
+					n += 1
+					if n % 600 == 0 then
+						task.wait()
+					end
+				end
+			end
+		end
+	end
+end)
+
 return ClientState

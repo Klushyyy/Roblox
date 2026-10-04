@@ -265,8 +265,11 @@ local function confirm(title: string, message: string, yesText: string, yesColor
 end
 
 function showInfo(title: string, message: string)
-	local card = dialog(title, 210)
-	UIKit.Label({ Text = message, TextSize = 17, TextWrapped = true, Position = UDim2.fromOffset(20, 48), Size = UDim2.new(1, -40, 0, 90), Parent = card })
+	-- Tall enough for the whole message (about 42 characters a line at this size), never cut off.
+	local lines = math.ceil(#message / 40)
+	local textH = lines * 24 + 8
+	local card = dialog(title, textH + 130)
+	UIKit.Label({ Text = message, TextSize = 17, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(20, 48), Size = UDim2.new(1, -40, 0, textH), Parent = card })
 	UIKit.Button({
 		Text = "Got it",
 		Color = Colors.Primary,

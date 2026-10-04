@@ -567,6 +567,81 @@ player.CharacterAdded:Connect(function()
 	end
 end)
 
+-- The No Clip tool (:noclip): while it's held the character flies and walks through walls; clicking
+-- teleports to where the mouse points.
+local noClipConn: RBXScriptConnection? = nil
+local noClipTool: Tool? = nil
+local function stopNoClip()
+	if noClipConn then
+		noClipConn:Disconnect()
+		noClipConn = nil
+	end
+	noClipTool = nil
+	if flying and not flyAllowed then
+		stopFlying()
+	end
+	local character = player.Character
+	if character then
+		for _, part in character:GetDescendants() do
+			if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+				part.CanCollide = part.Name == "Head" or part.Name == "Torso" or part.Name == "UpperTorso" or part.Name == "LowerTorso"
+			end
+		end
+	end
+end
+local function startNoClip(tool: Tool)
+	stopNoClip()
+	noClipTool = tool
+	if not flying then
+		startFlying()
+	end
+	noClipConn = RunService.Stepped:Connect(function()
+		local character = player.Character
+		if not character then
+			return
+		end
+		for _, part in character:GetDescendants() do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+	end)
+end
+local function watchNoClipCharacter(character: Model)
+	character.ChildAdded:Connect(function(child)
+		if child:IsA("Tool") and child:GetAttribute("NoClipTool") then
+			startNoClip(child)
+			child.Activated:Connect(function()
+				local root = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+				local camera = workspace.CurrentCamera
+				if not root or not camera then
+					return
+				end
+				local mouse = UserInputService:GetMouseLocation()
+				local ray = camera:ViewportPointToRay(mouse.X, mouse.Y)
+				local params = RaycastParams.new()
+				params.FilterDescendantsInstances = { character }
+				params.FilterType = Enum.RaycastFilterType.Exclude
+				local hit = workspace:Raycast(ray.Origin, ray.Direction * 2000, params)
+				local point = if hit then hit.Position + Vector3.new(0, 4, 0) else ray.Origin + ray.Direction * 200
+				root.CFrame = CFrame.new(point) * root.CFrame.Rotation
+			end)
+		end
+	end)
+	character.ChildRemoved:Connect(function(child)
+		if child == noClipTool then
+			stopNoClip()
+		end
+	end)
+end
+if player.Character then
+	watchNoClipCharacter(player.Character)
+end
+player.CharacterAdded:Connect(function(character)
+	stopNoClip()
+	watchNoClipCharacter(character)
+end)
+
 -- Full-screen cover that hides teleports (jail, spectate, control).
 local cover = Instance.new("Frame")
 cover.Name = "TeleportCover"
@@ -659,6 +734,9 @@ local COMMANDS: { Command } = ({
 	{ Name = "god", Icon = "✨", Label = "God mode", Desc = "Can't be hurt. Run it again to turn off.", Group = "Control", Target = "player" },
 	{ Name = "invis", Icon = "👻", Label = "Invisible", Desc = "Hides their character and name tag. Toggles.", Group = "Control", Target = "player" },
 	{ Name = "fly", Icon = "🕊️", Label = "Fly", Desc = "Lets them fly (F to take off / land). Toggles.", Group = "Control", Target = "player" },
+	{ Name = "noclip", Icon = "🚪", Label = "No Clip tool", Desc = "Gives (or takes back) a tool: hold it to fly through walls, click to teleport.", Group = "Control", Target = "player" },
+	{ Name = "giant", Icon = "🗿", Label = "Giant", Desc = "Makes them huge (or back to normal). Toggles.", Group = "Control", Target = "player", Inputs = { { Kind = "number", Placeholder = "Size 2-30 (8)" } } },
+	{ Name = "abuse", Icon = "🎆", Label = "Admin Abuse show", Desc = "Giant, glowing, rainbow, flying, announced to everyone. Ends by itself.", Group = "Control", Target = "player", Inputs = { { Kind = "number", Placeholder = "Seconds (60)" } } },
 	{ Name = "msg", Icon = "💬", Label = "Message", Desc = "Pops a message up on their screen.", Group = "Control", Target = "player", Inputs = { { Kind = "text", Placeholder = "Message", Required = true } } },
 	-- Move
 	{ Name = "goto", Icon = "➡️", Label = "Go to", Desc = "Teleports you to them.", Group = "Move", Target = "player" },

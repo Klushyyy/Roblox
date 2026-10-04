@@ -49,6 +49,7 @@ return {
 	-- in quotes. The start time on Roblox should match Config.UpcomingEvents (17 Oct, 11 pm NZ).
 	EventIds = {
 		AdminAbuse = "1208558647303602774", -- Creator Hub > Events > Admin Abuse
+		Chapter4 = "5239442577127768664", -- the "Chapter 4" card in the party window opens this event's RSVP
 	},
 
 	-- "Your daily reward is ready" notification (sent 24 h after a claim, to players who turned
@@ -83,9 +84,9 @@ return {
 	-- Developer products for the Treasure Chest event and the luck ad. Create each one in Creator
 	-- Dashboard > Monetization > Developer Products with the name and price shown.
 	Events = {
-		ChestOne = 0,   -- Treasure Chest x1 (49 R$)
-		ChestThree = 0, -- Treasure Chest x3 (139 R$)
-		ChestTen = 0,   -- Treasure Chest x10 (349 R$)
+		ChestOne = 3716462768,   -- Treasure Chest x1 (49 R$)
+		ChestThree = 3716462840, -- Treasure Chest x3 (139 R$)
+		ChestTen = 3716462894,   -- Treasure Chest x10 (349 R$)
 		AdLuck = 0,     -- Luck Ad Reward (any price, e.g. 5 R$): the reward a rewarded video ad gives.
 		                -- Also turn ads on: Creator Dashboard > Monetization > Ads (rewarded video ads).
 	},

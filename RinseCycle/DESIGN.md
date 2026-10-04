@@ -1563,3 +1563,24 @@ walls instead of clipping through. All gameplay queries use Include filters.
 - No walls or ceiling: invisible barriers at the old room edges keep players on the patio. Scenery is
   non-colliding and stays within +-490 studs of the slot's X so neighbouring arenas never overlap.
 - The Place name is now "Backyard". Level 3 (bigger castle) is next.
+
+## 6zf. Backyard Sink v2, admin tools, Chapter 4 (v2.4.0)
+
+- Level 2 is a true shallow sink (34 deep) in a low outdoor counter (top at 40). There is no ceiling
+  and no walls; the old top rack is a chrome dish drainer standing over the sink on four posts.
+  The front is a wooden drainboard on legs. A chrome tap with a particle water stream stands on the
+  back of the counter. The shallow basin lets you see the house, trees and mountains over the rim.
+- Three overlapping rings (green hills, rocky mountains, snowy far peaks) close the horizon all round.
+  Trees are oaks (trunk, flare, branches, leaf-ball canopy) and layered pines. The oven is rebuilt
+  (brick base, barrel vault, flat front with an arched mouth, firewood alcove). The BBQ moved so the
+  waiter's route stays clear. Clouds are gone.
+- New dishes: wooden pizza boards (Board) and pizza cutters (Cutter), level 2 only. Kinds can share
+  rack rows now (ArenaBuilder keeps a taken-slot set).
+- Arena slots are a grid (4 per row, ArenaSpacing 2400 x 3200) so mountains never overlap neighbours.
+- The lobby is built on every server, high above the arenas, so while in a run its parts are made
+  invisible locally (ClientState) instead of hanging in the sky.
+- Admin: `:noclip` gives/takes a No Clip tool (hold: fly through walls; click: teleport). `:giant`
+  scales a character (2 to 30). `:abuse` is the Admin Abuse show: huge, glowing, rainbow, flying,
+  announced, auto-ends.
+- Party window: the Chapter 4 card opens the Roblox event RSVP (StoreIds > EventIds > Chapter4).
+- Clubs: the points help dialog grows to fit its text. Chest product IDs are filled in StoreIds.

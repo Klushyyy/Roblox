@@ -57,3 +57,6 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
   - `scen_events` now also covers donating, the club's info, the monthly reset (a fake clock) and the prize claim; `scen_winshots` dumps the Clubs tabs and dialogs; `scen_icons3` the HUD icons.
 
   - Level 2 (Backyard Sink, v2.3.0): `lune run harness.luau arena2 out.json`, then `render.py` from outside (e.g. eye 700 600 -900, target 0 100 300) to check the yard, house and sink.
+
+  - Backyard (v2.4.0): `lune run harness.luau arena2 out.json` then render.py. NOTE: in a dump, world z is the NEGATIVE of arena z (the sink spawn is at world z +100 looking toward -z).
+  - `adminsim` now also runs :noclip, :giant, :abuse (the mock has no Model:ScaleTo, so :giant reports no character there).

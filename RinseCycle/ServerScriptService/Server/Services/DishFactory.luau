@@ -43,6 +43,8 @@ local SIZE = {
 	Spoon = { Height = 18 },
 	Pan = { Diameter = 22, Depth = 4 },
 	Pot = { Diameter = 18, Height = 14 },
+	Board = { Diameter = 22, Thickness = 1.6, Handle = 6 },
+	Cutter = { Height = 18, Wheel = 8 },
 }
 
 local DIRT_SCALE = 1.6 -- Config.GrimeTypes sizes were tuned for the old, smaller dishes
@@ -398,6 +400,46 @@ local function buildSpoon(anchor: CFrame, theme, _rng: Random)
 	return parts, 1
 end
 
+-- Wooden pizza board standing on its edge like a plate: a round board with a darker rim band and a
+-- little handle tab at the top. Spots go on the face (the flat side toward anchor.LookVector).
+local function buildBoard(anchor: CFrame, theme, _rng: Random)
+	local s = SIZE.Board
+	local r = s.Diameter / 2
+	local wood = Color3.fromRGB(196, 146, 92)
+	local woodDark = Color3.fromRGB(150, 104, 62)
+	local center = localPos(anchor, 0, r, 0)
+	local cf = axisCFrame(center, anchor.LookVector, anchor.UpVector)
+	local rot = anchor.Rotation
+	local parts = {
+		newPart(Enum.PartType.Cylinder, Vector3.new(s.Thickness, s.Diameter, s.Diameter), cf, woodDark, Enum.Material.Wood),
+		newPart(Enum.PartType.Cylinder, Vector3.new(s.Thickness + 0.3, s.Diameter * 0.9, s.Diameter * 0.9), cf, wood, Enum.Material.Wood),
+	}
+	-- Handle tab: sits on the rim, same thickness as the band.
+	local tab = newPart(nil, Vector3.new(4.2, s.Handle, s.Thickness), CFrame.new(localPos(anchor, 0, s.Diameter + s.Handle / 2 - 0.8, 0)) * rot, woodDark, Enum.Material.Wood)
+	table.insert(parts, tab)
+	local hole = newPart(Enum.PartType.Cylinder, Vector3.new(s.Thickness + 0.2, 1.8, 1.8), axisCFrame(localPos(anchor, 0, s.Diameter + s.Handle / 2 - 0.2, 0), anchor.LookVector, anchor.UpVector), Color3.fromRGB(40, 30, 24), Enum.Material.Wood)
+	table.insert(parts, decor(hole))
+	return parts, 1
+end
+
+-- Pizza cutter standing handle-down in the basket: a wooden grip, a forked neck and a round blade.
+local function buildCutter(anchor: CFrame, theme, _rng: Random)
+	local s = SIZE.Cutter
+	local rot = anchor.Rotation
+	local gripH = s.Height * 0.5
+	local wheelY = gripH + 3.5
+	local grip = newPart(nil, Vector3.new(1.8, gripH, 1.3), CFrame.new(localPos(anchor, 0, gripH / 2, 0)) * rot, Color3.fromRGB(150, 104, 62), Enum.Material.Wood)
+	local neck = newPart(nil, Vector3.new(0.8, 3.6, 1.2), CFrame.new(localPos(anchor, 0, gripH + 1.8, 0)) * rot, theme.Metal, Enum.Material.Metal)
+	local parts = { grip, neck }
+	for _, side in { -1, 1 } do
+		table.insert(parts, newPart(nil, Vector3.new(0.4, 0.4, 1.6), CFrame.new(localPos(anchor, 0, wheelY, side * 0.8)) * rot, theme.Metal, Enum.Material.Metal))
+	end
+	local wheelCF = axisCFrame(localPos(anchor, 0, wheelY + 1.5, 0), anchor.LookVector, anchor.UpVector)
+	table.insert(parts, newPart(Enum.PartType.Cylinder, Vector3.new(0.35, s.Wheel, s.Wheel), wheelCF, Color3.fromRGB(215, 220, 226), Enum.Material.Metal))
+	table.insert(parts, newPart(Enum.PartType.Cylinder, Vector3.new(0.7, 1.6, 1.6), wheelCF, theme.Metal, Enum.Material.Metal))
+	return parts, 1
+end
+
 local BUILDERS: { [string]: (CFrame, any, Random) -> ({ BasePart }, number) } = {
 	Plate = buildPlate,
 	Tray = buildTray,
@@ -409,6 +451,8 @@ local BUILDERS: { [string]: (CFrame, any, Random) -> ({ BasePart }, number) } = 
 	Spoon = buildSpoon,
 	Pan = buildPan,
 	Pot = buildPot,
+	Board = buildBoard,
+	Cutter = buildCutter,
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -645,8 +689,23 @@ local function candidateTray(rng: Random)
 	return Vector3.new(x, y, 4), Vector3.new(0, 0, -1)
 end
 
+local function candidateBoard(rng: Random)
+	local s = SIZE.Board
+	local r = math.sqrt(rng:NextNumber()) * s.Diameter * 0.36
+	local theta = rng:NextNumber() * math.pi * 2
+	local x, y = r * math.cos(theta), s.Diameter / 2 + r * math.sin(theta)
+	return Vector3.new(x, y, 4), Vector3.new(0, 0, -1)
+end
+
 local CANDIDATES: { [string]: (Random) -> (Vector3, Vector3) } = {
 	Plate = candidatePlate,
+	Board = candidateBoard,
+	Cutter = function(rng)
+		-- the blade and the neck, from either side
+		local side = if rng:NextNumber() < 0.5 then 1 else -1
+		local y = SIZE.Cutter.Height * (0.5 + rng:NextNumber() * 0.42)
+		return Vector3.new((rng:NextNumber() - 0.5) * 2, y, side * 4), Vector3.new(0, 0, -side)
+	end,
 	Tray = candidateTray,
 	Bowl = function(rng)
 		return candidateInside(SIZE.Bowl.Diameter, SIZE.Bowl.Depth, rng)
