@@ -642,26 +642,165 @@ player.CharacterAdded:Connect(function(character)
 	watchNoClipCharacter(character)
 end)
 
--- Admin Abuse show: lines of chat from the giant owner ("[Owner] Name: text") in the chat window. The
--- remote is waited for in the background, so the panel never waits on it.
-task.spawn(function()
-	local AbuseSay = ReplicatedStorage:WaitForChild("AbuseSay", 120)
-	if not AbuseSay then
-		return
+-- Admin Abuse show (for everyone): the countdown in the top right corner, the owner's lines (in chat and in a
+-- speech box at the bottom), and the booms that shake the screen. The remotes are waited for in the
+-- background, so the admin panel never waits on them.
+do
+	local abuse = Config.AbuseShow
+
+	-- Countdown / LIVE pill, very top right.
+	local _, timerRoot = UIKit.CreateScreen("AbuseTimer", 60)
+	local pill = Instance.new("Frame")
+	pill.Name = "Pill"
+	pill.AnchorPoint = Vector2.new(1, 0)
+	pill.Size = UDim2.fromOffset(250, 30)
+	pill.BackgroundColor3 = Colors.PanelDark
+	pill.Visible = false
+	UIKit.Corner(pill, 15)
+	local pillStroke = UIKit.Stroke(pill, Colors.Coin, 2, 0)
+	local pillText = UIKit.Label({ Text = "", TextSize = 16, Size = UDim2.new(1, -16, 1, 0), Position = UDim2.fromOffset(8, 0), Parent = pill })
+	pill.Parent = timerRoot
+	local function placePill()
+		pill.Position = UDim2.new(1, -(8 + UIKit.SafeInsets().Right), 0, 6)
 	end
-	AbuseSay.OnClientEvent:Connect(function(name: any, text: any)
-		if type(name) ~= "string" or type(text) ~= "string" then
-			return
+	placePill()
+	UIKit.LayoutChanged:Connect(placePill)
+	task.spawn(function()
+		while true do
+			local starts = tonumber(ReplicatedStorage:GetAttribute("AbuseStarts"))
+			if not starts then
+				for _, e in Config.UpcomingEvents do
+					if e.Key == abuse.EventKey then
+						starts = e.Starts
+					end
+				end
+			end
+			local now = Config.Now()
+			if starts then
+				local left = starts - now
+				if left > 0 and left <= abuse.PreSeconds then
+					pill.Visible = true
+					pillText.Text = string.format("ADMIN ABUSE IN %d:%02d", left // 60, left % 60)
+					pillStroke.Color = if left <= 60 then Colors.Bad else Colors.Coin
+				elseif left <= 0 and -left < abuse.ShowSeconds then
+					pill.Visible = true
+					pillText.Text = "ADMIN ABUSE IS LIVE!"
+					pillStroke.Color = if math.floor(os.clock() * 2) % 2 == 0 then Colors.Bad else Colors.Coin
+				else
+					pill.Visible = false
+				end
+			end
+			task.wait(0.5)
 		end
-		pcall(function()
-			local channel = TextChatService:FindFirstChild("TextChannels") and TextChatService.TextChannels:FindFirstChild("RBXGeneral")
-			if channel then
-				local safe = string.gsub(string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"), ">", "&gt;")
-				;(channel :: any):DisplaySystemMessage(string.format('<font color="#FFD54A"><b>[Owner] %s:</b></font> %s', name, safe))
+	end)
+
+	-- Speech box: the owner's name and the line, typed out.
+	local _, talkRoot = UIKit.CreateScreen("AbuseTalk", 61)
+	local box = Instance.new("Frame")
+	box.Name = "Box"
+	box.AnchorPoint = Vector2.new(0.5, 1)
+	box.Position = UDim2.new(0.5, 0, 1, -150)
+	box.Size = UDim2.fromOffset(560, 92)
+	box.BackgroundColor3 = Colors.PanelDark
+	box.Visible = false
+	UIKit.Corner(box, 14)
+	UIKit.Stroke(box, Colors.Coin, 3, 0)
+	UIKit.Label({ Text = abuse.OwnerName, TextSize = 20, TextColor3 = Colors.Coin, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(16, 8), Size = UDim2.new(1, -32, 0, 24), Parent = box })
+	local speech = UIKit.Label({ Text = "", TextSize = 19, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(16, 36), Size = UDim2.new(1, -32, 1, -44), Parent = box })
+	box.Parent = talkRoot
+	local talkToken = 0
+	local function speak(text: string)
+		talkToken += 1
+		local mine = talkToken
+		speech.Text = text
+		speech.MaxVisibleGraphemes = 0
+		box.Visible = true
+		task.spawn(function()
+			for i = 1, #text do
+				if talkToken ~= mine then
+					return
+				end
+				speech.MaxVisibleGraphemes = i
+				task.wait(0.03)
+			end
+			task.wait(math.max(3, #text * 0.06))
+			if talkToken == mine then
+				box.Visible = false
 			end
 		end)
+	end
+
+	-- Screen shake (after the camera script, so it never accumulates) and the opening flash + title.
+	local shakeAmp = 0
+	RunService:BindToRenderStep("AbuseShake", Enum.RenderPriority.Camera.Value + 1, function(dt)
+		if shakeAmp > 0.03 then
+			local camera = workspace.CurrentCamera
+			if camera then
+				camera.CFrame = camera.CFrame * CFrame.new((math.random() - 0.5) * shakeAmp, (math.random() - 0.5) * shakeAmp, 0) * CFrame.Angles(0, 0, (math.random() - 0.5) * shakeAmp * 0.03)
+			end
+			shakeAmp *= math.exp(-dt * 6)
+		else
+			shakeAmp = 0
+		end
 	end)
-end)
+	local _, fxRoot = UIKit.CreateScreen("AbuseFx", 62)
+	local flash = Instance.new("Frame")
+	flash.Size = UDim2.fromScale(2, 2)
+	flash.AnchorPoint = Vector2.new(0.5, 0.5)
+	flash.Position = UDim2.fromScale(0.5, 0.5)
+	flash.BackgroundColor3 = Color3.fromRGB(255, 244, 214)
+	flash.BackgroundTransparency = 1
+	flash.Parent = fxRoot
+	local title = UIKit.Label({ Text = "ADMIN ABUSE", TextSize = 64, TextColor3 = Colors.Coin, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.3), Size = UDim2.fromOffset(700, 90), TextTransparency = 1, Parent = fxRoot })
+	local lastIntro = 0
+	local function intro()
+		if os.clock() - lastIntro < 30 then
+			return
+		end
+		lastIntro = os.clock()
+		flash.BackgroundTransparency = 0.15
+		TweenService:Create(flash, TweenInfo.new(0.9), { BackgroundTransparency = 1 }):Play()
+		title.TextTransparency = 0
+		title.Size = UDim2.fromOffset(1100, 150)
+		TweenService:Create(title, TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.fromOffset(700, 90), TextTransparency = 1 }):Play()
+	end
+
+	task.spawn(function()
+		local say = ReplicatedStorage:WaitForChild("AbuseSay", 120)
+		if say then
+			say.OnClientEvent:Connect(function(name: any, text: any)
+				if type(name) ~= "string" or type(text) ~= "string" then
+					return
+				end
+				speak(text)
+				pcall(function()
+					local channel = TextChatService:FindFirstChild("TextChannels") and TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+					if channel then
+						local safe = string.gsub(string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"), ">", "&gt;")
+						;(channel :: any):DisplaySystemMessage(string.format('<font color="#FFD54A"><b>[Owner] %s:</b></font> %s', name, safe))
+					end
+				end)
+			end)
+		end
+	end)
+	task.spawn(function()
+		local remote = ReplicatedStorage:WaitForChild("AbuseBoom", 120)
+		if remote then
+			remote.OnClientEvent:Connect(function(strength: any, pos: any)
+				if type(strength) ~= "number" then
+					return
+				end
+				local camera = workspace.CurrentCamera
+				local distance = if camera and typeof(pos) == "Vector3" then (camera.CFrame.Position - pos).Magnitude else 300
+				local near = math.clamp(1.15 - distance / 1100, 0.2, 1)
+				shakeAmp = math.max(shakeAmp, strength * 1.1 * near)
+				if strength >= 3 then
+					intro()
+				end
+			end)
+		end
+	end)
+end
 
 -- Full-screen cover that hides teleports (jail, spectate, control).
 local cover = Instance.new("Frame")
@@ -845,6 +984,7 @@ local COMMANDS: { Command } = ({
 		return out
 	end } } },
 	{ Name = "globalcountdown", Icon = "⏳", Label = "Event countdown", Desc = "A countdown on everyone's screen in EVERY server (and for anyone who joins later), then LIVE NOW for an hour. Pick the time, then type the event's name (blank = Admin Abuse).", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "1h", "6h", "12h", "24h", "48h", "3d", "7d" }) }, { Kind = "text", Placeholder = "Event name (blank = Admin Abuse)" } } },
+	{ Name = "notifytest", Icon = "🔔", Label = "Notification test", Desc = "Sends the \"daily reward is ready\" notification to you right now and says how it went: is the key found, is HTTP on, are you opted in.", Group = "Studio", Target = "none" },
 	{ Name = "abuseshow", Icon = "🎆", Label = "Admin Abuse show", Desc = "Starts the whole Admin Abuse show in every server: rounds pause, you get a giant lobby copy, chat lines, votes and prizes. Pick when it starts, or put the real time back.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		return {
 			{ Label = "Start in 15 seconds", Value = "0.25" },

@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.7.1"
+Config.Version = "2.8.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -149,7 +149,7 @@ Config.GrimeTypes = {
 -- Spots = base grime spots per dish of that kind (solo), before PartyGrimeScale.
 -- Theme colours are used by the arena and dish builders.
 ----------------------------------------------------------------------------------------------------
-Config.DishKinds = { "Plate", "Tray", "Bowl", "Cup", "Glass", "Fork", "Knife", "Spoon", "Pan", "Pot", "Board", "Cutter" }
+Config.DishKinds = { "Plate", "Tray", "Bowl", "Cup", "Glass", "Fork", "Knife", "Spoon", "Pan", "Pot", "Board", "Cutter", "Goblet" }
 
 Config.Levels = {
 	{
@@ -166,8 +166,8 @@ Config.Levels = {
 		ParTime = 540,
 		Bubbles = 80,
 		GoldenChance = 0.02,
-		Dishes = { Plate = 16, Tray = 0, Bowl = 6, Cup = 6, Glass = 2, Fork = 4, Knife = 3, Spoon = 3, Pan = 0, Pot = 0, Board = 0, Cutter = 0 },
-		Spots = { Plate = 6, Tray = 8, Bowl = 6, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16, Board = 8, Cutter = 2 },
+		Dishes = { Plate = 16, Tray = 0, Bowl = 6, Cup = 6, Glass = 2, Fork = 4, Knife = 3, Spoon = 3, Pan = 0, Pot = 0, Board = 0, Cutter = 0, Goblet = 0 },
+		Spots = { Plate = 6, Tray = 8, Bowl = 6, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16, Board = 8, Cutter = 2, Goblet = 3 },
 		Grime = { { Type = "Crumbs", Weight = 45 }, { Type = "Ketchup", Weight = 35 }, { Type = "Gravy", Weight = 20 } },
 		Theme = {
 			Tub = Color3.fromRGB(172, 178, 187),
@@ -194,8 +194,8 @@ Config.Levels = {
 		ParTime = 1260,
 		Bubbles = 250,
 		GoldenChance = 0.025,
-		Dishes = { Plate = 8, Tray = 5, Bowl = 8, Cup = 7, Glass = 4, Fork = 4, Knife = 3, Spoon = 3, Pan = 2, Pot = 0, Board = 8, Cutter = 4 },
-		Spots = { Plate = 5, Tray = 8, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 13, Pot = 15, Board = 8, Cutter = 2 },
+		Dishes = { Plate = 8, Tray = 5, Bowl = 8, Cup = 7, Glass = 4, Fork = 4, Knife = 3, Spoon = 3, Pan = 2, Pot = 0, Board = 8, Cutter = 4, Goblet = 0 },
+		Spots = { Plate = 5, Tray = 8, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 13, Pot = 15, Board = 8, Cutter = 2, Goblet = 3 },
 		Grime = {
 			{ Type = "TomatoSauce", Weight = 32 },
 			{ Type = "MeltedCheese", Weight = 26 },
@@ -228,8 +228,8 @@ Config.Levels = {
 		ParTime = 1860,
 		Bubbles = 700,
 		GoldenChance = 0.035,
-		Dishes = { Plate = 14, Tray = 10, Bowl = 10, Cup = 6, Glass = 10, Fork = 6, Knife = 6, Spoon = 5, Pan = 2, Pot = 2, Board = 0, Cutter = 0 },
-		Spots = { Plate = 5, Tray = 9, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16, Board = 8, Cutter = 2 },
+		Dishes = { Plate = 14, Tray = 10, Bowl = 10, Cup = 6, Glass = 0, Fork = 6, Knife = 6, Spoon = 5, Pan = 2, Pot = 2, Board = 0, Cutter = 0, Goblet = 10 },
+		Spots = { Plate = 5, Tray = 9, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16, Board = 8, Cutter = 2, Goblet = 3 },
 		Grime = {
 			{ Type = "TruffleGunk", Weight = 30 },
 			{ Type = "CaviarSmear", Weight = 25 },
@@ -767,6 +767,8 @@ Config.Daily = {
 Config.DailyNotify = {
 	MessageId = "", -- the notification string's ID (StoreIds &gt; Notifications &gt; DailyReady)
 	SecretName = "OpenCloudKey", -- the name of the API key secret (Creator Hub &gt; Secrets)
+	-- Other names it is tried under if SecretName isn't found (the first that exists is used).
+	SecretNames = { "OpenCloudKey", "Notification", "Notifications", "NotificationKey", "NotificationsKey", "notification", "notifications", "APIKey", "ApiKey" },
 }
 Config.DailyRewards = {
 	{ Kind = "Bubbles", Amount = 60 },
@@ -1059,17 +1061,25 @@ Config.AbuseShow = {
 	OwnerUserId = 2297538363,
 	OwnerName = "EnderBuilda",
 	GiantScale = 30,
+	AttackEvery = 50, -- seconds between the giant's beam attacks (only for show: it hurts nobody)
+	RemarkEvery = 240, -- after the votes he keeps wandering, and says one of the Remarks this often
 	Lines = {
-		{ 6, "heyyy everyone" },
-		{ 14, "i heard this is admin abuse?" },
-		{ 24, "ok ok ok. who wants free stuff???" },
-		{ 34, "lets vote on it. you have 60 seconds, go go go" },
-		{ 118, "wait wait wait. theres more" },
-		{ 128, "5 random players are about to win a game pass" },
-		{ 215, "ok round 2. vote again, 60 seconds" },
-		{ 330, "ok thats enough chaos for one day" },
-		{ 345, "thank you all for playing Rinse Cycle! more events soon" },
-		{ 358, "i gotta go clean some dishes. bye!!" },
+		{ 8, "hmm. so you all showed up." },
+		{ 18, "im feeling generous today." },
+		{ 30, "have a look at the poll. you get 60 seconds to decide." },
+		{ 118, "interesting choice. fine, you win." },
+		{ 132, "oh and 5 of you are about to win a game pass. dont ask how, its admin abuse" },
+		{ 215, "ok one more. look at the poll again." },
+		{ 330, "that was fun. dont tell the other devs i did that" },
+		{ 346, "im going to keep walking around for a bit. watch your feet." },
+	},
+	Remarks = {
+		"still here. still huge.",
+		"someone get me a snack, im the size of a house",
+		"did anyone see where i put my game pass stash",
+		"hmm. nothing to see here. keep cleaning",
+		"thanks for hanging out, you lot",
+		"careful where you stand. i cant see you down there",
 	},
 	-- Votes: Kind "Bubbles"/"Gems" splits Amount between everyone online in every server; "Passes"
 	-- gives that many random players a game pass.
@@ -3428,6 +3438,7 @@ local RoundService = require(GameServices:WaitForChild("RoundService"))
 local PetService = require(GameServices:WaitForChild("PetService"))
 local LeaderboardService = require(GameServices:WaitForChild("LeaderboardService"))
 local RunServers = require(GameServices:WaitForChild("RunServers"))
+local DailyNotify = require(GameServices:WaitForChild("DailyNotify"))
 local MessagingService = game:GetService("MessagingService")
 local TeleportService = game:GetService("TeleportService")
 
@@ -3525,7 +3536,7 @@ local ALL_COMMANDS = {
 -- enough" - a Developer or a Founder still gets nothing.
 -- Nothing is hidden behind Studio any more: every command belongs to a staff tier (below), and
 -- the owner-only ones (staff ranks, gifted passes, wiping the log) are only on the owner's list.
-local STUDIO_ONLY_COMMANDS = { "abuseshow" }
+local STUDIO_ONLY_COMMANDS = { "abuseshow", "notifytest" }
 
 -- Commands FOUNDER alone gets, on top of everything Developer has.
 --
@@ -4082,6 +4093,9 @@ Remote.AdminMuteStatus.Parent = ReplicatedStorage
 Remote.AbuseSay = Instance.new("RemoteEvent") -- S-&gt;C (ownerName, text): a line of chat from the owner during Admin Abuse
 Remote.AbuseSay.Name = "AbuseSay"
 Remote.AbuseSay.Parent = ReplicatedStorage
+Remote.AbuseBoom = Instance.new("RemoteEvent") -- S-&gt;C (strength, position): a stomp or blast: shakes the screen
+Remote.AbuseBoom.Name = "AbuseBoom"
+Remote.AbuseBoom.Parent = ReplicatedStorage
 Remote.AdminSetFlying = Instance.new("RemoteEvent")
 Remote.AdminSetFlying.Name = "AdminSetFlying"
 Remote.AdminSetFlying.Parent = ReplicatedStorage
@@ -8595,10 +8609,21 @@ do
 			realStarts, realEnds = e.Starts, e.Ends
 		end
 	end
+	-- The schedule is also an attribute on ReplicatedStorage, so every client's countdown follows it
+	-- (including a test start).
+	local function publishSchedule()
+		local e = abuseEvent()
+		if e then
+			ReplicatedStorage:SetAttribute("AbuseStarts", e.Starts)
+			ReplicatedStorage:SetAttribute("AbuseEnds", e.Ends)
+		end
+	end
+	publishSchedule()
 	handlers.AbuseSchedule = function(d)
 		local e = abuseEvent()
 		if e and tonumber(d.Starts) and tonumber(d.Ends) then
 			e.Starts, e.Ends = d.Starts, d.Ends
+			publishSchedule()
 		end
 	end
 
@@ -8688,10 +8713,17 @@ do
 		end
 	end
 
-	-- The giant: a copy of the owner's avatar, scaled up, pacing round the lobby room. Anchored and
-	-- non-colliding (players walk through him), animated with Roblox's default R15 walk and wave.
+	-- The giant: the owner's real avatar (hair and all, built from their HumanoidDescription), scaled up,
+	-- walking round the lobby room on the room floor with Roblox's default R15 animations (only the
+	-- root part is anchored, so the animations really move his limbs). Every stride stomps: dust, a
+	-- shockwave ring and a "boom" that shakes everyone's screen (Remote AbuseBoom). He pauses to
+	-- face the table and wave, and now and then fires a harmless showy beam at the plaza.
+	local Debris = game:GetService("Debris")
+	local ROOM_FLOOR = -130 -- LobbyBuilder's room floor
+	local TABLE_CENTER = Vector3.new(0, ROOM_FLOOR, -18)
 	local giant: Model? = nil
 	local giantConn: RBXScriptConnection? = nil
+	local boom: (number, Vector3) -&gt; () = function() end
 	local function removeGiant()
 		if giantConn then
 			giantConn:Disconnect()
@@ -8702,45 +8734,117 @@ do
 			giant = nil
 		end
 	end
+	local function ringAt(pos: Vector3, size: number, seconds: number, color: Color3)
+		local ring = Instance.new("Part")
+		ring.Shape = Enum.PartType.Cylinder
+		ring.Size = Vector3.new(1, 10, 10)
+		ring.CFrame = CFrame.new(pos.X, pos.Y + 1, pos.Z) * CFrame.Angles(0, 0, math.pi / 2)
+		ring.Anchored = true
+		ring.CanCollide = false
+		ring.CanTouch = false
+		ring.CanQuery = false
+		ring.CastShadow = false
+		ring.Material = Enum.Material.Neon
+		ring.Color = color
+		ring.Transparency = 0.2
+		ring.Parent = workspace
+		TweenService:Create(ring, TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(1, size, size), Transparency = 1 }):Play()
+		Debris:AddItem(ring, seconds + 0.2)
+	end
+	local function dustAt(pos: Vector3)
+		local anchor = Instance.new("Part")
+		anchor.Transparency = 1
+		anchor.Anchored = true
+		anchor.CanCollide = false
+		anchor.CanTouch = false
+		anchor.CanQuery = false
+		anchor.Size = Vector3.new(4, 1, 4)
+		anchor.Position = pos + Vector3.new(0, 4, 0)
+		local dust = Instance.new("ParticleEmitter")
+		dust.Texture = "rbxasset://textures/particles/smoke_main.dds"
+		dust.Color = ColorSequence.new(Color3.fromRGB(200, 190, 175))
+		dust.Lifetime = NumberRange.new(1.2, 2)
+		dust.Speed = NumberRange.new(40, 90)
+		dust.SpreadAngle = Vector2.new(180, 20)
+		dust.Size = NumberSequence.new(25, 70)
+		dust.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.4), NumberSequenceKeypoint.new(1, 1) })
+		dust.Rate = 0
+		dust.EmissionDirection = Enum.NormalId.Top
+		dust.Parent = anchor
+		anchor.Parent = workspace
+		dust:Emit(28)
+		Debris:AddItem(anchor, 3)
+	end
+	boom = function(strength: number, pos: Vector3)
+		ringAt(pos, 120 + 160 * strength, 0.8, Color3.fromRGB(255, 205, 110))
+		dustAt(pos)
+		Remote.AbuseBoom:FireAllClients(strength, pos)
+	end
+
+	local spawning, spawnFailures, nextSpawnTry = false, 0, 0
+	local spawnGiantNow: () -&gt; ()
+	-- Builds him once at a time, and gives up after three failures (each 20 s apart).
 	local function spawnGiant()
-		if giant then
+		if giant or spawning or spawnFailures &gt;= 3 or os.clock() &lt; nextSpawnTry then
 			return
 		end
+		spawning = true
+		spawnGiantNow()
+		spawning = false
+	end
+	spawnGiantNow = function()
 		local ok, model = pcall(function()
-			return Players:CreateHumanoidModelFromUserId(Show.OwnerUserId)
+			local desc = Players:GetHumanoidDescriptionFromUserId(Show.OwnerUserId)
+			return Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
 		end)
 		if not ok or not model then
+			spawnFailures += 1
+			nextSpawnTry = os.clock() + 20
+			warn("[AdminServer] couldn't build the Admin Abuse giant: " .. tostring(model))
 			return
 		end
 		model.Name = "AbuseGiant"
-		for _, part in model:GetDescendants() do
-			if part:IsA("BasePart") then
-				part.CanCollide = false
-				part.CanTouch = false
-				part.CanQuery = false
-				part.Anchored = true
-			end
-		end
 		local root = model:FindFirstChild("HumanoidRootPart") :: BasePart?
 		local humanoid = model:FindFirstChildOfClass("Humanoid")
 		if not root or not humanoid then
 			model:Destroy()
 			return
 		end
+		for _, part in model:GetDescendants() do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+				part.CanTouch = false
+				part.CanQuery = false
+				part.Massless = true
+			end
+		end
+		root.Anchored = true
 		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+		humanoid.PlatformStand = false
+		model.PrimaryPart = root
+		model:PivotTo(CFrame.new(0, ROOM_FLOOR + 50, 330))
 		model.Parent = workspace
 		pcall(function()
 			model:ScaleTo(Show.GiantScale)
 		end)
+		task.wait(0.2)
 		giant = model
-		-- A name tag over his head.
+		-- Height of the root above the soles of his feet (measured once, in the standing pose), so his
+		-- feet are exactly on the floor whatever his proportions or hair do.
+		local footL = model:FindFirstChild("LeftFoot") :: BasePart?
+		local footR = model:FindFirstChild("RightFoot") :: BasePart?
+		local soles = math.min(footL and (footL.Position.Y - footL.Size.Y / 2) or math.huge, footR and (footR.Position.Y - footR.Size.Y / 2) or math.huge)
+		local rootAbove = if soles == math.huge then humanoid.HipHeight + root.Size.Y / 2 else root.Position.Y - soles
+		local rootY = ROOM_FLOOR + rootAbove
+
+		-- Name tag.
 		local head = model:FindFirstChild("Head") :: BasePart?
 		if head then
 			local tag = Instance.new("BillboardGui")
 			tag.Size = UDim2.fromOffset(360, 70)
-			tag.StudsOffsetWorldSpace = Vector3.new(0, 12 * Show.GiantScale / 6, 0)
+			tag.StudsOffsetWorldSpace = Vector3.new(0, head.Size.Y * 1.2, 0)
 			tag.AlwaysOnTop = true
-			tag.MaxDistance = 5000
+			tag.MaxDistance = 6000
 			local label = Instance.new("TextLabel")
 			label.Size = UDim2.fromScale(1, 1)
 			label.BackgroundTransparency = 1
@@ -8752,34 +8856,129 @@ do
 			label.Parent = tag
 			tag.Parent = head
 		end
-		local track: AnimationTrack? = nil
-		pcall(function()
-			local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
-			local anim = Instance.new("Animation")
-			anim.AnimationId = "rbxassetid://507777826" -- default R15 walk
-			track = animator:LoadAnimation(anim)
-			track.Looped = true
-			track:Play()
-		end)
-		-- Round the room, inset from its walls (the lobby room is 840 wide, z -560..400, floor at -130).
-		local floorY = -130
-		local path = { Vector3.new(-320, floorY, 300), Vector3.new(320, floorY, 300), Vector3.new(320, floorY, -460), Vector3.new(-320, floorY, -460) }
-		local seg, pos = 1, path[1]
-		local speed = 70
-		local cf0, size0 = model:GetBoundingBox()
-		local rootY = root.Position.Y + (floorY - (cf0.Position.Y - size0.Y / 2)) -- feet on the floor
-		giantConn = RunService.Heartbeat:Connect(function(dt)
-			local target = path[seg % #path + 1]
-			local dir = target - pos
-			if dir.Magnitude &lt; speed * dt then
-				pos = target
-				seg = seg % #path + 1
-			else
-				pos += dir.Unit * speed * dt
+
+		-- Animations (Roblox's default R15 set).
+		local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+		local function load(id: string, priority: Enum.AnimationPriority, looped: boolean): AnimationTrack?
+			local track: AnimationTrack? = nil
+			pcall(function()
+				local anim = Instance.new("Animation")
+				anim.AnimationId = "rbxassetid://" .. id
+				track = animator:LoadAnimation(anim)
+				if track then
+					track.Priority = priority
+					track.Looped = looped
+				end
+			end)
+			return track
+		end
+		local walkTrack = load("507777826", Enum.AnimationPriority.Movement, true)
+		local idleTrack = load("507766388", Enum.AnimationPriority.Idle, true)
+		local waveTrack = load("507770239", Enum.AnimationPriority.Action, false)
+		local pointTrack = load("507770453", Enum.AnimationPriority.Action, false)
+		local cheerTrack = load("507770677", Enum.AnimationPriority.Action, false)
+		if idleTrack then
+			idleTrack:Play()
+		end
+
+		-- Walk a ring round the table, stopping now and then.
+		local RADIUS, SPEED = 300, 90
+		local ring = {}
+		for i = 0, 11 do
+			local a = i / 12 * math.pi * 2 + math.pi / 2
+			table.insert(ring, Vector3.new(math.cos(a) * RADIUS, ROOM_FLOOR, TABLE_CENTER.Z + math.sin(a) * RADIUS))
+		end
+		local index, pos = 1, ring[1]
+		local state, stateUntil = "arrive", os.clock() + 2.5
+		local nextStomp, nextAttack = 0, os.clock() + Show.AttackEvery * 0.5
+		local facing = Vector3.new(0, 0, -1)
+		local stops = 0
+		local function face(dir: Vector3, dt: number)
+			local flat = Vector3.new(dir.X, 0, dir.Z)
+			if flat.Magnitude &gt; 1e-3 then
+				facing = facing:Lerp(flat.Unit, math.clamp(dt * 3, 0, 1))
 			end
-			local look = path[seg % #path + 1] - pos
-			model:PivotTo(CFrame.lookAt(Vector3.new(pos.X, rootY, pos.Z), Vector3.new(pos.X + look.X, rootY, pos.Z + look.Z)))
+		end
+		local function setWalking(on: boolean)
+			if walkTrack then
+				if on and not walkTrack.IsPlaying then
+					-- A stride on a giant is huge: slow the cycle so his feet don't skate.
+					walkTrack:Play(0.3)
+					walkTrack:AdjustSpeed(SPEED / (16 * Show.GiantScale) * 1.4)
+				elseif not on and walkTrack.IsPlaying then
+					walkTrack:Stop(0.3)
+				end
+			end
+		end
+		local function fireBeam()
+			local from = root.Position + Vector3.new(0, 20 * Show.GiantScale / 6, 0) + facing * (6 * Show.GiantScale / 6)
+			local target = Vector3.new(math.random(-70, 70), 0.2, math.random(-85, 45))
+			local len = (target - from).Magnitude
+			local beam = Instance.new("Part")
+			beam.Anchored = true
+			beam.CanCollide = false
+			beam.CanTouch = false
+			beam.CanQuery = false
+			beam.CastShadow = false
+			beam.Material = Enum.Material.Neon
+			beam.Color = Color3.fromRGB(255, 120, 60)
+			beam.Size = Vector3.new(7, 7, len)
+			beam.CFrame = CFrame.lookAt(from, target) * CFrame.new(0, 0, -len / 2)
+			beam.Parent = workspace
+			TweenService:Create(beam, TweenInfo.new(1.4), { Transparency = 1, Size = Vector3.new(2, 2, len) }):Play()
+			Debris:AddItem(beam, 1.6)
+			local blast = Instance.new("Explosion") -- showy only: no damage, no force
+			blast.BlastPressure = 0
+			blast.BlastRadius = 14
+			blast.DestroyJointRadiusPercent = 0
+			blast.Position = target
+			blast.Parent = workspace
+			boom(2, target)
+			task.delay(0.5, boom, 1.5, target)
+		end
+		giantConn = RunService.Heartbeat:Connect(function(dt)
+			local now = os.clock()
+			if state == "walk" then
+				local target = ring[index % #ring + 1]
+				local dir = target - pos
+				if dir.Magnitude &lt; SPEED * dt then
+					pos = target
+					index = index % #ring + 1
+					state, stateUntil = "pause", now + 4.5
+					stops += 1
+					setWalking(false)
+					if idleTrack then
+						idleTrack:Play(0.3)
+					end
+					local gesture = if stops % 3 == 0 then cheerTrack else waveTrack
+					if gesture then
+						gesture:Play(0.2)
+					end
+				else
+					pos += dir.Unit * SPEED * dt
+					face(dir, dt)
+					if now &gt;= nextStomp then
+						nextStomp = now + 1.7
+						boom(1, Vector3.new(pos.X, ROOM_FLOOR, pos.Z))
+					end
+				end
+			else
+				face(TABLE_CENTER - pos, dt)
+				if state == "pause" and now &gt;= nextAttack and now &gt; stateUntil - 3.5 then
+					nextAttack = now + Show.AttackEvery
+					state, stateUntil = "attack", now + 2.6
+					if pointTrack then
+						pointTrack:Play(0.2)
+					end
+					task.delay(1.0, fireBeam)
+				elseif now &gt;= stateUntil then
+					state = "walk"
+					setWalking(true)
+				end
+			end
+			root.CFrame = CFrame.lookAt(Vector3.new(pos.X, rootY, pos.Z), Vector3.new(pos.X + facing.X, rootY, pos.Z + facing.Z))
 		end)
+		boom(3, Vector3.new(0, ROOM_FLOOR, 330)) -- the arrival
 	end
 
 	-- The clock. Each step happens once per server, a second or so after its time comes.
@@ -8817,8 +9016,16 @@ do
 						RoundService.RemoveFromRun(plr)
 					end
 				end
-				if not RunServers.IsRunServer and t &gt;= 2 then
-					spawnGiant()
+				if t &gt;= 0 and once("intro" .. tag) then
+					-- boom, boom, boom: the lobby shakes before he arrives
+					for i = 0, 2 do
+						task.delay(i * 0.9, function()
+							Remote.AbuseBoom:FireAllClients(3, Vector3.new(0, ROOM_FLOOR, 330))
+						end)
+					end
+				end
+				if not RunServers.IsRunServer and t &gt;= 3 then
+					task.spawn(spawnGiant)
 				end
 				for i, line in ipairs(Show.Lines) do
 					if t &gt;= line[1] and t &lt; line[1] + 30 and once("line" .. i .. tag) then
@@ -8831,12 +9038,30 @@ do
 					end
 				end
 			elseif t &gt;= Show.ShowSeconds then
-				if giant then
+				-- The lockdown is over; the giant keeps wandering (and muttering) until the event itself ends.
+				if os.time() &lt; e.Ends then
+					if not RunServers.IsRunServer and not giant and t &lt; e.Ends - e.Starts and once("again" .. tag .. math.floor(t / 600)) then
+						task.spawn(spawnGiant)
+					end
+					local k = math.floor((t - Show.ShowSeconds) / Show.RemarkEvery)
+					if k &gt;= 0 and #Show.Remarks &gt; 0 and once("remark" .. k .. tag) then
+						say(Show.Remarks[k % #Show.Remarks + 1])
+					end
+				elseif giant then
 					removeGiant()
 				end
 			end
 		end
 	end)
+
+	-- :notifytest (Studio tab): sends the "daily reward ready" notification to you right now and tells you how
+	-- it went (secret found? HTTP on? are you opted in to notifications for this experience?).
+	Commands.notifytest = function(admin, _text)
+		task.spawn(function()
+			local result = DailyNotify.TestNow(admin)
+			sendFeedback(admin, "Notification test: " .. result, not string.find(result, "^Sent"))
+		end)
+	end
 
 	Commands.abuseshow = function(admin, text)
 		local e = abuseEvent()
@@ -9151,6 +9376,7 @@ local ROOM_STYLES: { RoomStyle } = {
 		Handle = Color3.fromRGB(230, 190, 90), HandleMat = Enum.Material.Metal,
 		Kick = Color3.fromRGB(50, 34, 24),
 		Lamp = Color3.fromRGB(255, 205, 140),
+		TroughHole = true,
 		Bench = "Stone",
 	},
 }
@@ -9294,15 +9520,18 @@ local function buildKitchen(b: Builder, k: RoomStyle)
 	end
 
 	-- Countertop across the whole run (including over the dishwasher) with a backsplash.
-	if k.Outdoor then
-		-- The sink is open to the sky: the counter has a hole over the basin (butting against its rim).
+	if k.Outdoor or k.TroughHole then
+		-- The basin is open at the top: the counter has a hole over it (butting against its rim).
 		local hx, hz1 = TUB_HALF_X + 4, TUB_Z_MAX + 4
 		span(b, "Countertop", -ROOM_HALF_X, -hx, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, backZ, k.Counter, k.CounterMat, shadowless)
 		span(b, "Countertop", hx, ROOM_HALF_X, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, backZ, k.Counter, k.CounterMat, shadowless)
 		span(b, "Countertop", -hx, hx, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, hz1, backZ, k.Counter, k.CounterMat, shadowless)
-		return
+		if k.Outdoor then
+			return
+		end
+	else
+		span(b, "Countertop", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, ROOM_Z_BACK, k.Counter, k.CounterMat, shadowless)
 	end
-	span(b, "Countertop", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, ROOM_Z_BACK, k.Counter, k.CounterMat, shadowless)
 	span(b, "Backsplash", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y, COUNTER_TOP_Y + 70, ROOM_Z_BACK - 1, ROOM_Z_BACK, k.Tile, k.TileMat, noCollide())
 
 	-- Up the wall, leaving a gap over the sink area for each room's centrepiece.
@@ -10260,6 +10489,40 @@ local function buildFaucet(b: Builder)
 	drops.Parent = anchor
 end
 
+-- Level 3's water: a stone dragon gargoyle on the back wall above the trough, with water pouring from its
+-- mouth (a thin particle stream, like the Backyard's tap) into the trough below.
+local function buildGargoyle(b: Builder)
+	local stone = Color3.fromRGB(128, 122, 116)
+	local dark = Color3.fromRGB(88, 84, 80)
+	local gold = Color3.fromRGB(230, 190, 90)
+	local y = COUNTER_TOP_Y + 40
+	-- Wall plaque behind it, then the head: skull block, snout, brow, jaw, horns, eyes.
+	span(b, "GargoylePlaque", -52, 52, y - 40, y + 50, ROOM_Z_BACK - 6, ROOM_Z_BACK - 2, dark, Enum.Material.Slate, noCollide())
+	span(b, "GargoyleHead", -22, 22, y - 14, y + 26, ROOM_Z_BACK - 40, ROOM_Z_BACK - 6, stone, Enum.Material.Cobblestone)
+	span(b, "GargoyleSnout", -14, 14, y - 8, y + 12, ROOM_Z_BACK - 62, ROOM_Z_BACK - 40, stone, Enum.Material.Cobblestone)
+	span(b, "GargoyleJaw", -12, 12, y - 14, y - 8, ROOM_Z_BACK - 58, ROOM_Z_BACK - 36, dark, Enum.Material.Cobblestone, noCollide())
+	span(b, "GargoyleBrow", -20, 20, y + 16, y + 22, ROOM_Z_BACK - 50, ROOM_Z_BACK - 34, dark, Enum.Material.Cobblestone, noCollide())
+	for _, hx in { -16, 16 } do
+		span(b, "GargoyleHorn", hx - 3, hx + 3, y + 26, y + 52, ROOM_Z_BACK - 24, ROOM_Z_BACK - 18, stone, Enum.Material.Cobblestone, noCollide())
+		local eye = box(b, "GargoyleEye", Vector3.new(6, 6, 2), hx * 0.62, y + 12, ROOM_Z_BACK - 51, gold, Enum.Material.Neon, noCollide())
+		eye.Shape = Enum.PartType.Ball
+	end
+	-- Water from the mouth, down into the trough.
+	local mouth = box(b, "GargoyleWater", Vector3.new(2, 2, 2), 0, y - 4, ROOM_Z_BACK - 62, gold, nil, { Transparency = 1, CanCollide = false, CastShadow = false })
+	local drops = Instance.new("ParticleEmitter")
+	drops.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	drops.Color = ColorSequence.new(Color3.fromRGB(170, 215, 255))
+	drops.LightEmission = 0.3
+	drops.Lifetime = NumberRange.new(1.6, 1.9)
+	drops.Speed = NumberRange.new(50, 58)
+	drops.Rate = 45
+	drops.Size = NumberSequence.new(3, 2)
+	drops.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 0.7) })
+	drops.SpreadAngle = Vector2.new(2, 2)
+	drops.EmissionDirection = Enum.NormalId.Bottom
+	drops.Parent = mouth
+end
+
 -- The whole room for a level: shell + that room's props.
 local function buildRoom(b: Builder, levelIndex: number)
 	local style = ROOM_STYLES[levelIndex] or ROOM_STYLES[1]
@@ -10270,6 +10533,7 @@ local function buildRoom(b: Builder, levelIndex: number)
 		buildFaucet(b)
 	elseif levelIndex == 3 then
 		castleProps(b, style)
+		buildGargoyle(b)
 	else
 		familyProps(b, style)
 	end
@@ -10284,14 +10548,17 @@ local function buildTub(b: Builder, theme)
 	local zMid = (TUB_Z_MIN + TUB_Z_MAX) / 2
 	-- Level 2's basin is a white porcelain sink, open to the sky (no ceiling), with a rolled rim.
 	local sink = theme.Sink == true
-	local tubMat = if sink then Enum.Material.SmoothPlastic else Enum.Material.Metal
+	-- Level 3's basin is an olden-day oak wash trough bound with iron hoops, also open at the top.
+	local trough = theme.Trough == true
+	local open = sink or trough
+	local tubMat = if sink then Enum.Material.SmoothPlastic elseif trough then Enum.Material.WoodPlanks else Enum.Material.Metal
 
 	-- Tub floor and walls. They don't cast shadows, so the room's daylight still reaches inside.
 	span(b, "TubFloor", -TUB_HALF_X - 2, TUB_HALF_X + 2, -2, 0, TUB_Z_MIN, TUB_Z_MAX, steel, tubMat)
 	for _, side in { -1, 1 } do
 		span(b, "TubWall", side * TUB_HALF_X, side * (TUB_HALF_X + 2), 0, TUB_HEIGHT, TUB_Z_MIN, TUB_Z_MAX, steel, tubMat)
 		-- Pressed ribs and rack rails on the side walls.
-		for i = 1, (if sink then 0 else 6) do
+		for i = 1, (if open then 0 else 6) do
 			local y = i * (TUB_HEIGHT / 7)
 			span(b, "Rib", side * (TUB_HALF_X - 0.3), side * TUB_HALF_X, y - 0.4, y + 0.4, TUB_Z_MIN + 4, TUB_Z_MAX - 4, theme.Metal, Enum.Material.Metal, noCollide())
 		end
@@ -10303,28 +10570,47 @@ local function buildTub(b: Builder, theme)
 	-- The tub casts shadows (it's a closed box, like a real machine): the inside is lit by the
 	-- interior lights below rather than blasted by daylight.
 	span(b, "TubBack", -TUB_HALF_X - 2, TUB_HALF_X + 2, 0, TUB_HEIGHT, TUB_Z_MAX, TUB_Z_MAX + 2, steel, tubMat)
-	if sink then
-		-- The top rack is a dish drainer standing over the sink on four chrome posts, one under each
-		-- corner of its frame (the frame's bars are centred on x = +-RACK_HALF_X and z = TOP_RACK_Z).
-		for _, px in { -RACK_HALF_X, RACK_HALF_X } do
-			for _, pz in { TOP_RACK_Z[1], TOP_RACK_Z[2] } do
-				cyl(b, "DrainerPost", TOP_RACK_Y + 1.8, 2.4, px, (TOP_RACK_Y + 1.8) / 2, pz, Color3.fromRGB(205, 210, 218), Enum.Material.Metal)
+	if open then
+		if sink then
+			-- The top rack is a dish drainer standing over the sink on four chrome posts, one under each
+			-- corner of its frame (the frame's bars are centred on x = +-RACK_HALF_X and z = TOP_RACK_Z).
+			for _, px in { -RACK_HALF_X, RACK_HALF_X } do
+				for _, pz in { TOP_RACK_Z[1], TOP_RACK_Z[2] } do
+					cyl(b, "DrainerPost", TOP_RACK_Y + 1.8, 2.4, px, (TOP_RACK_Y + 1.8) / 2, pz, Color3.fromRGB(205, 210, 218), Enum.Material.Metal)
+				end
 			end
 		end
-		-- Invisible fence round the whole sink area, up to a lid high overhead: nobody can climb onto the
-		-- counter or the roof, however they jump or fly.
-		local fenceTop = 420
+		-- Invisible fence round the whole basin area, up to a lid high overhead: nobody can climb onto the
+		-- counter or anything above it, however they jump or fly.
+		local fenceTop = if sink then 420 else 800
 		local inv = { Transparency = 1, CastShadow = false }
 		for _, side in { -1, 1 } do
 			span(b, "SinkFence", side * (TUB_HALF_X + 0.5), side * (TUB_HALF_X + 4), TUB_HEIGHT, fenceTop, DOOR_Z_FAR - 7, TUB_Z_MAX + 4, Color3.new(1, 1, 1), nil, inv)
 		end
 		span(b, "SinkFence", -TUB_HALF_X, TUB_HALF_X, TUB_HEIGHT, fenceTop, TUB_Z_MAX + 0.5, TUB_Z_MAX + 4, Color3.new(1, 1, 1), nil, inv)
-		-- Rolled rim round the opening, level with the counter top, and an overflow slot.
-		local rim = Color3.fromRGB(250, 250, 248)
-		span(b, "SinkRim", -TUB_HALF_X - 4, -TUB_HALF_X + 3, TUB_HEIGHT, COUNTER_TOP_Y, TUB_Z_MIN - 3, TUB_Z_MAX + 4, rim, tubMat)
-		span(b, "SinkRim", TUB_HALF_X - 3, TUB_HALF_X + 4, TUB_HEIGHT, COUNTER_TOP_Y, TUB_Z_MIN - 3, TUB_Z_MAX + 4, rim, tubMat)
-		span(b, "SinkRim", -TUB_HALF_X - 4, TUB_HALF_X + 4, TUB_HEIGHT, COUNTER_TOP_Y, TUB_Z_MAX - 3, TUB_Z_MAX + 4, rim, tubMat)
-		span(b, "OverflowSlot", -12, 12, TUB_HEIGHT - 14, TUB_HEIGHT - 6, TUB_Z_MAX - 0.6, TUB_Z_MAX, Color3.fromRGB(120, 130, 140), nil, noCollide())
+		-- Rim round the opening, level with the counter top: rolled porcelain, or a thick dark oak cap.
+		local rim = if sink then Color3.fromRGB(250, 250, 248) else Color3.fromRGB(70, 50, 34)
+		local rimMat = if sink then tubMat else Enum.Material.Wood
+		span(b, "SinkRim", -TUB_HALF_X - 4, -TUB_HALF_X + 3, TUB_HEIGHT, COUNTER_TOP_Y, TUB_Z_MIN - 3, TUB_Z_MAX + 4, rim, rimMat)
+		span(b, "SinkRim", TUB_HALF_X - 3, TUB_HALF_X + 4, TUB_HEIGHT, COUNTER_TOP_Y, TUB_Z_MIN - 3, TUB_Z_MAX + 4, rim, rimMat)
+		span(b, "SinkRim", -TUB_HALF_X - 4, TUB_HALF_X + 4, TUB_HEIGHT, COUNTER_TOP_Y, TUB_Z_MAX - 3, TUB_Z_MAX + 4, rim, rimMat)
+		if sink then
+			span(b, "OverflowSlot", -12, 12, TUB_HEIGHT - 14, TUB_HEIGHT - 6, TUB_Z_MAX - 0.6, TUB_Z_MAX, Color3.fromRGB(120, 130, 140), nil, noCollide())
+		else
+			-- Iron hoops round the outside of the trough, with rivets, and iron corner straps.
+			local iron = Color3.fromRGB(52, 50, 54)
+			for _, y in { 16, 50, 84 } do
+				for _, side in { -1, 1 } do
+					span(b, "IronHoop", side * (TUB_HALF_X + 2), side * (TUB_HALF_X + 3.6), y - 3, y + 3, TUB_Z_MIN - 1, TUB_Z_MAX + 3.6, iron, Enum.Material.Metal, noCollide())
+				end
+				span(b, "IronHoop", -TUB_HALF_X - 3.6, TUB_HALF_X + 3.6, y - 3, y + 3, TUB_Z_MAX + 2, TUB_Z_MAX + 3.6, iron, Enum.Material.Metal, noCollide())
+			end
+			for _, side in { -1, 1 } do
+				for _, z in { TUB_Z_MIN + 6, TUB_Z_MAX - 6 } do
+					span(b, "IronStrap", side * (TUB_HALF_X + 2), side * (TUB_HALF_X + 4), 0, TUB_HEIGHT, z - 3, z + 3, iron, Enum.Material.Metal, noCollide())
+				end
+			end
+		end
 	else
 		span(b, "TubCeiling", -TUB_HALF_X - 2, TUB_HALF_X + 2, TUB_HEIGHT, TUB_HEIGHT + 2, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal)
 	end
@@ -10381,19 +10667,42 @@ end
 
 local function buildDoor(b: Builder, theme)
 	-- The invisible walls and lid: as tall as the tub on a dishwasher, far taller over the open sink.
-	local wallTop = if theme.Sink then 420 else TUB_HEIGHT
+	local open = theme.Sink == true or theme.Trough == true
+	local wallTop = if theme.Sink then 420 elseif open then 800 else TUB_HEIGHT
 	-- Inner panel (the floor you stand on) and the outer skin below it.
-	span(b, "DoorInner", -TUB_HALF_X, TUB_HALF_X, -1, 0, DOOR_Z_FAR, DOOR_Z_NEAR, theme.Tub, Enum.Material.Metal)
-	span(b, "DoorOuter", -TUB_HALF_X - 4, TUB_HALF_X + 4, -DOOR_THICK, -1, DOOR_Z_FAR - 6, DOOR_Z_NEAR, if theme.Sink then Color3.fromRGB(176, 130, 90) else K.Frame, if theme.Sink then Enum.Material.WoodPlanks else Enum.Material.Metal)
-	if theme.Sink then
-		-- The front of the sink is a drainboard: it stands on four legs, with grooves to drain the water.
+	span(b, "DoorInner", -TUB_HALF_X, TUB_HALF_X, -1, 0, DOOR_Z_FAR, DOOR_Z_NEAR, theme.Tub, if theme.Trough then Enum.Material.WoodPlanks else Enum.Material.Metal)
+	span(b, "DoorOuter", -TUB_HALF_X - 4, TUB_HALF_X + 4, -DOOR_THICK, -1, DOOR_Z_FAR - 6, DOOR_Z_NEAR, if theme.Sink then Color3.fromRGB(176, 130, 90) elseif open then Color3.fromRGB(96, 66, 42) else K.Frame, if open then Enum.Material.WoodPlanks else Enum.Material.Metal)
+	if open then
+		-- Standing on four legs: wooden for the drainboard, stone piers for the drawbridge.
 		for _, lx in { -TUB_HALF_X, TUB_HALF_X } do
 			for _, lz in { DOOR_Z_FAR - 2, DOOR_Z_NEAR - 6 } do
-				cyl(b, "DrainboardLeg", -DOOR_THICK - KITCHEN_FLOOR_Y, 8, lx, (-DOOR_THICK + KITCHEN_FLOOR_Y) / 2, lz, Color3.fromRGB(150, 104, 62), Enum.Material.Wood)
+				if theme.Sink then
+					cyl(b, "DrainboardLeg", -DOOR_THICK - KITCHEN_FLOOR_Y, 8, lx, (-DOOR_THICK + KITCHEN_FLOOR_Y) / 2, lz, Color3.fromRGB(150, 104, 62), Enum.Material.Wood)
+				else
+					span(b, "BridgePier", lx - 7, lx + 7, KITCHEN_FLOOR_Y, -DOOR_THICK, lz - 7, lz + 7, Color3.fromRGB(128, 122, 116), Enum.Material.Cobblestone)
+				end
 			end
 		end
 		for gx = -TUB_HALF_X + 10, TUB_HALF_X - 10, 10 do
-			span(b, "Groove", gx - 0.6, gx + 0.6, 0, 0.12, DOOR_Z_FAR + 4, DOOR_Z_NEAR - 4, Color3.fromRGB(170, 178, 186), nil, noCollide())
+			span(b, "Groove", gx - 0.6, gx + 0.6, 0, 0.12, DOOR_Z_FAR + 4, DOOR_Z_NEAR - 4, if theme.Sink then Color3.fromRGB(170, 178, 186) else Color3.fromRGB(60, 40, 26), nil, noCollide())
+		end
+		if theme.Trough then
+			-- Drawbridge: iron cross-bands and studs, and an iron torch stand at each side of the far end.
+			local iron = Color3.fromRGB(52, 50, 54)
+			for z = DOOR_Z_FAR + 12, DOOR_Z_NEAR - 8, 20 do
+				span(b, "BridgeBand", -TUB_HALF_X, TUB_HALF_X, 0, 0.18, z - 1.5, z + 1.5, iron, Enum.Material.Metal, noCollide())
+			end
+			for _, tx in { -TUB_HALF_X - 10, TUB_HALF_X + 10 } do
+				cyl(b, "TorchStand", 80, 4, tx, 40, DOOR_Z_FAR + 14, iron, Enum.Material.Metal, noCollide())
+				cyl(b, "TorchBowl", 6, 14, tx, 82, DOOR_Z_FAR + 14, iron, Enum.Material.Metal, noCollide())
+				local flame = box(b, "TorchFire", Vector3.new(9, 16, 9), tx, 92, DOOR_Z_FAR + 14, Color3.fromRGB(255, 160, 60), Enum.Material.Neon, noCollide())
+				flame.Shape = Enum.PartType.Ball
+				local fl = Instance.new("PointLight")
+				fl.Color = Color3.fromRGB(255, 170, 90)
+				fl.Brightness = 1.4
+				fl.Range = 55
+				fl.Parent = flame
+			end
 		end
 	end
 	-- Raised edges down the sides of the inner panel.
@@ -10405,10 +10714,10 @@ local function buildDoor(b: Builder, theme)
 	end
 	span(b, "SafetyWall", -TUB_HALF_X - 1, TUB_HALF_X + 1, 0, wallTop, DOOR_Z_FAR - 7, DOOR_Z_FAR - 6, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
 	-- A lid over the door area as well, level with the tub ceiling.
-	span(b, "SafetyLid", -TUB_HALF_X - 1, TUB_HALF_X + 1, wallTop, wallTop + 1, DOOR_Z_FAR - 7, if theme.Sink then TUB_Z_MAX + 4 else DOOR_Z_NEAR - 3.2, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
+	span(b, "SafetyLid", -TUB_HALF_X - 1, TUB_HALF_X + 1, wallTop, wallTop + 1, DOOR_Z_FAR - 7, if open then TUB_Z_MAX + 4 else DOOR_Z_NEAR - 3.2, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
 
 	-- Control strip along the far edge (the top of the door when it's closed), with buttons.
-	if theme.Sink then
+	if open then
 		return
 	end
 	span(b, "ControlStrip", -TUB_HALF_X - 4.3, TUB_HALF_X + 4.3, -DOOR_THICK - 0.3, 3, DOOR_Z_FAR - 6.3, DOOR_Z_FAR, Color3.fromRGB(40, 44, 52), Enum.Material.SmoothPlastic)
@@ -10820,6 +11129,9 @@ local KIND_SLOTS: { [string]: () -&gt; { Slot } } = {
 	Glass = function()
 		return grid(GLASS_X, GLASS_Z, TOP_RACK_Y)
 	end,
+	Goblet = function()
+		return grid(GLASS_X, GLASS_Z, TOP_RACK_Y)
+	end,
 	Pan = function()
 		return listSlots(PAN_SLOTS)
 	end,
@@ -10901,6 +11213,15 @@ function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeSc
 		Light = Color3.fromRGB(215, 235, 255),
 		Sink = false,
 	}, { __index = dishTheme }) :: any
+	if levelIndex == 3 then
+		-- The Royal Banquet's "machine" is an olden-day oak wash trough with iron racks.
+		theme.Tub = Color3.fromRGB(112, 78, 50)
+		theme.Rack = Color3.fromRGB(58, 56, 62)
+		theme.Metal = Color3.fromRGB(70, 68, 74)
+		theme.Accent = Color3.fromRGB(255, 205, 90)
+		theme.Light = Color3.fromRGB(255, 220, 160)
+		theme.Trough = true
+	end
 	if levelIndex == 2 then
 		-- The Backyard's basin is a white porcelain sink.
 		theme.Tub = Color3.fromRGB(238, 240, 242)
@@ -12828,16 +13149,31 @@ function DailyNotify.Queue(player: Player)
 	end)
 end
 
-local function send(userId: number, streak: number): boolean
-	local okSecret, secret = pcall(function()
-		return HttpService:GetSecret(Config.DailyNotify.SecretName)
-	end)
-	if not okSecret then
+-- The API key secret: the name in Config.DailyNotify.SecretName first, then the other names it might
+-- have been saved under (the first one that exists wins).
+local function findSecret(): (any?, string)
+	local tried = {}
+	for _, name in Config.DailyNotify.SecretNames do
+		table.insert(tried, name)
+		local ok, secret = pcall(function()
+			return HttpService:GetSecret(name)
+		end)
+		if ok and secret then
+			return secret, name
+		end
+	end
+	return nil, table.concat(tried, ", ")
+end
+
+-- Sends one notification. Returns (done, detail): `done` is false only when a retry might help.
+local function send(userId: number, streak: number): (boolean, string)
+	local secret, found = findSecret()
+	if not secret then
 		if not warned then
 			warned = true
-			warn("[DailyNotify] no API key secret '" .. Config.DailyNotify.SecretName .. "': " .. tostring(secret))
+			warn("[DailyNotify] no API key secret found (tried: " .. found .. ")")
 		end
-		return false
+		return false, "No API key secret found. Tried the names: " .. found
 	end
 	local body = HttpService:JSONEncode({
 		source = { universe = "universes/" .. tostring(game.GameId) },
@@ -12859,14 +13195,26 @@ local function send(userId: number, streak: number): boolean
 	end)
 	if not ok then
 		warn("[DailyNotify] request failed: " .. tostring(response))
-		return false
+		return false, "The request failed: " .. tostring(response) .. " (is Game Settings &gt; Security &gt; Allow HTTP Requests on?)"
 	end
 	if not response.Success then
 		warn(string.format("[DailyNotify] %d %s", response.StatusCode, tostring(response.Body)))
 		-- 4xx (not opted in, bad id) won't get better by retrying: drop it.
-		return response.StatusCode &gt;= 400 and response.StatusCode &lt; 500
+		return response.StatusCode &gt;= 400 and response.StatusCode &lt; 500, string.format("Roblox said %d: %s", response.StatusCode, string.sub(tostring(response.Body), 1, 160))
 	end
-	return true
+	return true, "Sent using the secret '" .. found .. "'."
+end
+
+-- Studio / owner test: sends the notification to this player right now and says how it went.
+function DailyNotify.TestNow(player: Player): string
+	if Config.DailyNotify.MessageId == "" then
+		return "No notification string ID set (StoreIds &gt; Notifications &gt; DailyReady)."
+	end
+	if game.GameId &lt;= 0 then
+		return "This place isn't published (no experience ID), so Roblox can't send it."
+	end
+	local _, detail = send(player.UserId, 1)
+	return detail
 end
 
 local function poll()
@@ -14903,6 +15251,7 @@ local SIZE = {
 	Pot = { Diameter = 18, Height = 14 },
 	Board = { Diameter = 22, Thickness = 1.6, Handle = 6 },
 	Cutter = { Height = 18, Wheel = 8 },
+	Goblet = { Diameter = 9, Height = 19 },
 }
 
 local DIRT_SCALE = 1.6 -- Config.GrimeTypes sizes were tuned for the old, smaller dishes
@@ -15298,6 +15647,25 @@ local function buildCutter(anchor: CFrame, theme, _rng: Random)
 	return parts, 1
 end
 
+-- Royal goblet standing on its foot: a round foot, a thin stem with a knob and a wide cup. Spots go on
+-- the cup. (Gold in the theme's Metal colour.)
+local function buildGoblet(anchor: CFrame, theme, _rng: Random)
+	local s = SIZE.Goblet
+	local gold = theme.Metal
+	local function at(y: number): CFrame
+		return axisCFrame(localPos(anchor, 0, y, 0), anchor.UpVector, anchor.LookVector)
+	end
+	local cupH = s.Height * 0.46
+	local parts = {
+		newPart(Enum.PartType.Cylinder, Vector3.new(1, s.Diameter * 0.78, s.Diameter * 0.78), at(0.5), gold, Enum.Material.Metal),
+		newPart(Enum.PartType.Cylinder, Vector3.new(s.Height * 0.4, 1.6, 1.6), at(1 + s.Height * 0.2), gold, Enum.Material.Metal),
+		newPart(Enum.PartType.Cylinder, Vector3.new(2, 3.4, 3.4), at(1 + s.Height * 0.2), gold, Enum.Material.Metal),
+		newPart(Enum.PartType.Cylinder, Vector3.new(cupH, s.Diameter, s.Diameter), at(s.Height - cupH / 2), gold, Enum.Material.Metal),
+		newPart(Enum.PartType.Cylinder, Vector3.new(1, s.Diameter + 0.8, s.Diameter + 0.8), at(s.Height - 0.5), Color3.new(gold.R * 0.8, gold.G * 0.8, gold.B * 0.8), Enum.Material.Metal),
+	}
+	return parts, 4
+end
+
 local BUILDERS: { [string]: (CFrame, any, Random) -&gt; ({ BasePart }, number) } = {
 	Plate = buildPlate,
 	Tray = buildTray,
@@ -15311,6 +15679,7 @@ local BUILDERS: { [string]: (CFrame, any, Random) -&gt; ({ BasePart }, number) }
 	Pot = buildPot,
 	Board = buildBoard,
 	Cutter = buildCutter,
+	Goblet = buildGoblet,
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -15558,6 +15927,12 @@ end
 local CANDIDATES: { [string]: (Random) -&gt; (Vector3, Vector3) } = {
 	Plate = candidatePlate,
 	Board = candidateBoard,
+	Goblet = function(rng)
+		-- the cup, from either side
+		local side = if rng:NextNumber() &lt; 0.5 then 1 else -1
+		local y = SIZE.Goblet.Height * (0.62 + rng:NextNumber() * 0.3)
+		return Vector3.new((rng:NextNumber() - 0.5) * 3, y, side * 4), Vector3.new(0, 0, -side)
+	end,
 	Cutter = function(rng)
 		-- the blade and the neck, from either side
 		local side = if rng:NextNumber() &lt; 0.5 then 1 else -1
@@ -47519,26 +47894,165 @@ player.CharacterAdded:Connect(function(character)
 	watchNoClipCharacter(character)
 end)
 
--- Admin Abuse show: lines of chat from the giant owner ("[Owner] Name: text") in the chat window. The
--- remote is waited for in the background, so the panel never waits on it.
-task.spawn(function()
-	local AbuseSay = ReplicatedStorage:WaitForChild("AbuseSay", 120)
-	if not AbuseSay then
-		return
+-- Admin Abuse show (for everyone): the countdown in the top right corner, the owner's lines (in chat and in a
+-- speech box at the bottom), and the booms that shake the screen. The remotes are waited for in the
+-- background, so the admin panel never waits on them.
+do
+	local abuse = Config.AbuseShow
+
+	-- Countdown / LIVE pill, very top right.
+	local _, timerRoot = UIKit.CreateScreen("AbuseTimer", 60)
+	local pill = Instance.new("Frame")
+	pill.Name = "Pill"
+	pill.AnchorPoint = Vector2.new(1, 0)
+	pill.Size = UDim2.fromOffset(250, 30)
+	pill.BackgroundColor3 = Colors.PanelDark
+	pill.Visible = false
+	UIKit.Corner(pill, 15)
+	local pillStroke = UIKit.Stroke(pill, Colors.Coin, 2, 0)
+	local pillText = UIKit.Label({ Text = "", TextSize = 16, Size = UDim2.new(1, -16, 1, 0), Position = UDim2.fromOffset(8, 0), Parent = pill })
+	pill.Parent = timerRoot
+	local function placePill()
+		pill.Position = UDim2.new(1, -(8 + UIKit.SafeInsets().Right), 0, 6)
 	end
-	AbuseSay.OnClientEvent:Connect(function(name: any, text: any)
-		if type(name) ~= "string" or type(text) ~= "string" then
-			return
+	placePill()
+	UIKit.LayoutChanged:Connect(placePill)
+	task.spawn(function()
+		while true do
+			local starts = tonumber(ReplicatedStorage:GetAttribute("AbuseStarts"))
+			if not starts then
+				for _, e in Config.UpcomingEvents do
+					if e.Key == abuse.EventKey then
+						starts = e.Starts
+					end
+				end
+			end
+			local now = Config.Now()
+			if starts then
+				local left = starts - now
+				if left &gt; 0 and left &lt;= abuse.PreSeconds then
+					pill.Visible = true
+					pillText.Text = string.format("ADMIN ABUSE IN %d:%02d", left // 60, left % 60)
+					pillStroke.Color = if left &lt;= 60 then Colors.Bad else Colors.Coin
+				elseif left &lt;= 0 and -left &lt; abuse.ShowSeconds then
+					pill.Visible = true
+					pillText.Text = "ADMIN ABUSE IS LIVE!"
+					pillStroke.Color = if math.floor(os.clock() * 2) % 2 == 0 then Colors.Bad else Colors.Coin
+				else
+					pill.Visible = false
+				end
+			end
+			task.wait(0.5)
 		end
-		pcall(function()
-			local channel = TextChatService:FindFirstChild("TextChannels") and TextChatService.TextChannels:FindFirstChild("RBXGeneral")
-			if channel then
-				local safe = string.gsub(string.gsub(string.gsub(text, "&amp;", "&amp;amp;"), "&lt;", "&amp;lt;"), "&gt;", "&amp;gt;")
-				;(channel :: any):DisplaySystemMessage(string.format('&lt;font color="#FFD54A"&gt;&lt;b&gt;[Owner] %s:&lt;/b&gt;&lt;/font&gt; %s', name, safe))
+	end)
+
+	-- Speech box: the owner's name and the line, typed out.
+	local _, talkRoot = UIKit.CreateScreen("AbuseTalk", 61)
+	local box = Instance.new("Frame")
+	box.Name = "Box"
+	box.AnchorPoint = Vector2.new(0.5, 1)
+	box.Position = UDim2.new(0.5, 0, 1, -150)
+	box.Size = UDim2.fromOffset(560, 92)
+	box.BackgroundColor3 = Colors.PanelDark
+	box.Visible = false
+	UIKit.Corner(box, 14)
+	UIKit.Stroke(box, Colors.Coin, 3, 0)
+	UIKit.Label({ Text = abuse.OwnerName, TextSize = 20, TextColor3 = Colors.Coin, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(16, 8), Size = UDim2.new(1, -32, 0, 24), Parent = box })
+	local speech = UIKit.Label({ Text = "", TextSize = 19, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(16, 36), Size = UDim2.new(1, -32, 1, -44), Parent = box })
+	box.Parent = talkRoot
+	local talkToken = 0
+	local function speak(text: string)
+		talkToken += 1
+		local mine = talkToken
+		speech.Text = text
+		speech.MaxVisibleGraphemes = 0
+		box.Visible = true
+		task.spawn(function()
+			for i = 1, #text do
+				if talkToken ~= mine then
+					return
+				end
+				speech.MaxVisibleGraphemes = i
+				task.wait(0.03)
+			end
+			task.wait(math.max(3, #text * 0.06))
+			if talkToken == mine then
+				box.Visible = false
 			end
 		end)
+	end
+
+	-- Screen shake (after the camera script, so it never accumulates) and the opening flash + title.
+	local shakeAmp = 0
+	RunService:BindToRenderStep("AbuseShake", Enum.RenderPriority.Camera.Value + 1, function(dt)
+		if shakeAmp &gt; 0.03 then
+			local camera = workspace.CurrentCamera
+			if camera then
+				camera.CFrame = camera.CFrame * CFrame.new((math.random() - 0.5) * shakeAmp, (math.random() - 0.5) * shakeAmp, 0) * CFrame.Angles(0, 0, (math.random() - 0.5) * shakeAmp * 0.03)
+			end
+			shakeAmp *= math.exp(-dt * 6)
+		else
+			shakeAmp = 0
+		end
 	end)
-end)
+	local _, fxRoot = UIKit.CreateScreen("AbuseFx", 62)
+	local flash = Instance.new("Frame")
+	flash.Size = UDim2.fromScale(2, 2)
+	flash.AnchorPoint = Vector2.new(0.5, 0.5)
+	flash.Position = UDim2.fromScale(0.5, 0.5)
+	flash.BackgroundColor3 = Color3.fromRGB(255, 244, 214)
+	flash.BackgroundTransparency = 1
+	flash.Parent = fxRoot
+	local title = UIKit.Label({ Text = "ADMIN ABUSE", TextSize = 64, TextColor3 = Colors.Coin, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.3), Size = UDim2.fromOffset(700, 90), TextTransparency = 1, Parent = fxRoot })
+	local lastIntro = 0
+	local function intro()
+		if os.clock() - lastIntro &lt; 30 then
+			return
+		end
+		lastIntro = os.clock()
+		flash.BackgroundTransparency = 0.15
+		TweenService:Create(flash, TweenInfo.new(0.9), { BackgroundTransparency = 1 }):Play()
+		title.TextTransparency = 0
+		title.Size = UDim2.fromOffset(1100, 150)
+		TweenService:Create(title, TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.fromOffset(700, 90), TextTransparency = 1 }):Play()
+	end
+
+	task.spawn(function()
+		local say = ReplicatedStorage:WaitForChild("AbuseSay", 120)
+		if say then
+			say.OnClientEvent:Connect(function(name: any, text: any)
+				if type(name) ~= "string" or type(text) ~= "string" then
+					return
+				end
+				speak(text)
+				pcall(function()
+					local channel = TextChatService:FindFirstChild("TextChannels") and TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+					if channel then
+						local safe = string.gsub(string.gsub(string.gsub(text, "&amp;", "&amp;amp;"), "&lt;", "&amp;lt;"), "&gt;", "&amp;gt;")
+						;(channel :: any):DisplaySystemMessage(string.format('&lt;font color="#FFD54A"&gt;&lt;b&gt;[Owner] %s:&lt;/b&gt;&lt;/font&gt; %s', name, safe))
+					end
+				end)
+			end)
+		end
+	end)
+	task.spawn(function()
+		local remote = ReplicatedStorage:WaitForChild("AbuseBoom", 120)
+		if remote then
+			remote.OnClientEvent:Connect(function(strength: any, pos: any)
+				if type(strength) ~= "number" then
+					return
+				end
+				local camera = workspace.CurrentCamera
+				local distance = if camera and typeof(pos) == "Vector3" then (camera.CFrame.Position - pos).Magnitude else 300
+				local near = math.clamp(1.15 - distance / 1100, 0.2, 1)
+				shakeAmp = math.max(shakeAmp, strength * 1.1 * near)
+				if strength &gt;= 3 then
+					intro()
+				end
+			end)
+		end
+	end)
+end
 
 -- Full-screen cover that hides teleports (jail, spectate, control).
 local cover = Instance.new("Frame")
@@ -47722,6 +48236,7 @@ local COMMANDS: { Command } = ({
 		return out
 	end } } },
 	{ Name = "globalcountdown", Icon = "⏳", Label = "Event countdown", Desc = "A countdown on everyone's screen in EVERY server (and for anyone who joins later), then LIVE NOW for an hour. Pick the time, then type the event's name (blank = Admin Abuse).", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "1h", "6h", "12h", "24h", "48h", "3d", "7d" }) }, { Kind = "text", Placeholder = "Event name (blank = Admin Abuse)" } } },
+	{ Name = "notifytest", Icon = "🔔", Label = "Notification test", Desc = "Sends the \"daily reward is ready\" notification to you right now and says how it went: is the key found, is HTTP on, are you opted in.", Group = "Studio", Target = "none" },
 	{ Name = "abuseshow", Icon = "🎆", Label = "Admin Abuse show", Desc = "Starts the whole Admin Abuse show in every server: rounds pause, you get a giant lobby copy, chat lines, votes and prizes. Pick when it starts, or put the real time back.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		return {
 			{ Label = "Start in 15 seconds", Value = "0.25" },

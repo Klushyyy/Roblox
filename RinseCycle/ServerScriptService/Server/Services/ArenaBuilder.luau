@@ -273,6 +273,7 @@ local ROOM_STYLES: { RoomStyle } = {
 		Handle = Color3.fromRGB(230, 190, 90), HandleMat = Enum.Material.Metal,
 		Kick = Color3.fromRGB(50, 34, 24),
 		Lamp = Color3.fromRGB(255, 205, 140),
+		TroughHole = true,
 		Bench = "Stone",
 	},
 }
@@ -416,15 +417,18 @@ local function buildKitchen(b: Builder, k: RoomStyle)
 	end
 
 	-- Countertop across the whole run (including over the dishwasher) with a backsplash.
-	if k.Outdoor then
-		-- The sink is open to the sky: the counter has a hole over the basin (butting against its rim).
+	if k.Outdoor or k.TroughHole then
+		-- The basin is open at the top: the counter has a hole over it (butting against its rim).
 		local hx, hz1 = TUB_HALF_X + 4, TUB_Z_MAX + 4
 		span(b, "Countertop", -ROOM_HALF_X, -hx, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, backZ, k.Counter, k.CounterMat, shadowless)
 		span(b, "Countertop", hx, ROOM_HALF_X, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, backZ, k.Counter, k.CounterMat, shadowless)
 		span(b, "Countertop", -hx, hx, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, hz1, backZ, k.Counter, k.CounterMat, shadowless)
-		return
+		if k.Outdoor then
+			return
+		end
+	else
+		span(b, "Countertop", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, ROOM_Z_BACK, k.Counter, k.CounterMat, shadowless)
 	end
-	span(b, "Countertop", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y - 6, COUNTER_TOP_Y, cabFront - 6, ROOM_Z_BACK, k.Counter, k.CounterMat, shadowless)
 	span(b, "Backsplash", -ROOM_HALF_X, ROOM_HALF_X, COUNTER_TOP_Y, COUNTER_TOP_Y + 70, ROOM_Z_BACK - 1, ROOM_Z_BACK, k.Tile, k.TileMat, noCollide())
 
 	-- Up the wall, leaving a gap over the sink area for each room's centrepiece.
@@ -1382,6 +1386,40 @@ local function buildFaucet(b: Builder)
 	drops.Parent = anchor
 end
 
+-- Level 3's water: a stone dragon gargoyle on the back wall above the trough, with water pouring from its
+-- mouth (a thin particle stream, like the Backyard's tap) into the trough below.
+local function buildGargoyle(b: Builder)
+	local stone = Color3.fromRGB(128, 122, 116)
+	local dark = Color3.fromRGB(88, 84, 80)
+	local gold = Color3.fromRGB(230, 190, 90)
+	local y = COUNTER_TOP_Y + 40
+	-- Wall plaque behind it, then the head: skull block, snout, brow, jaw, horns, eyes.
+	span(b, "GargoylePlaque", -52, 52, y - 40, y + 50, ROOM_Z_BACK - 6, ROOM_Z_BACK - 2, dark, Enum.Material.Slate, noCollide())
+	span(b, "GargoyleHead", -22, 22, y - 14, y + 26, ROOM_Z_BACK - 40, ROOM_Z_BACK - 6, stone, Enum.Material.Cobblestone)
+	span(b, "GargoyleSnout", -14, 14, y - 8, y + 12, ROOM_Z_BACK - 62, ROOM_Z_BACK - 40, stone, Enum.Material.Cobblestone)
+	span(b, "GargoyleJaw", -12, 12, y - 14, y - 8, ROOM_Z_BACK - 58, ROOM_Z_BACK - 36, dark, Enum.Material.Cobblestone, noCollide())
+	span(b, "GargoyleBrow", -20, 20, y + 16, y + 22, ROOM_Z_BACK - 50, ROOM_Z_BACK - 34, dark, Enum.Material.Cobblestone, noCollide())
+	for _, hx in { -16, 16 } do
+		span(b, "GargoyleHorn", hx - 3, hx + 3, y + 26, y + 52, ROOM_Z_BACK - 24, ROOM_Z_BACK - 18, stone, Enum.Material.Cobblestone, noCollide())
+		local eye = box(b, "GargoyleEye", Vector3.new(6, 6, 2), hx * 0.62, y + 12, ROOM_Z_BACK - 51, gold, Enum.Material.Neon, noCollide())
+		eye.Shape = Enum.PartType.Ball
+	end
+	-- Water from the mouth, down into the trough.
+	local mouth = box(b, "GargoyleWater", Vector3.new(2, 2, 2), 0, y - 4, ROOM_Z_BACK - 62, gold, nil, { Transparency = 1, CanCollide = false, CastShadow = false })
+	local drops = Instance.new("ParticleEmitter")
+	drops.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	drops.Color = ColorSequence.new(Color3.fromRGB(170, 215, 255))
+	drops.LightEmission = 0.3
+	drops.Lifetime = NumberRange.new(1.6, 1.9)
+	drops.Speed = NumberRange.new(50, 58)
+	drops.Rate = 45
+	drops.Size = NumberSequence.new(3, 2)
+	drops.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 0.7) })
+	drops.SpreadAngle = Vector2.new(2, 2)
+	drops.EmissionDirection = Enum.NormalId.Bottom
+	drops.Parent = mouth
+end
+
 -- The whole room for a level: shell + that room's props.
 local function buildRoom(b: Builder, levelIndex: number)
 	local style = ROOM_STYLES[levelIndex] or ROOM_STYLES[1]
@@ -1392,6 +1430,7 @@ local function buildRoom(b: Builder, levelIndex: number)
 		buildFaucet(b)
 	elseif levelIndex == 3 then
 		castleProps(b, style)
+		buildGargoyle(b)
 	else
 		familyProps(b, style)
 	end
@@ -1406,14 +1445,17 @@ local function buildTub(b: Builder, theme)
 	local zMid = (TUB_Z_MIN + TUB_Z_MAX) / 2
 	-- Level 2's basin is a white porcelain sink, open to the sky (no ceiling), with a rolled rim.
 	local sink = theme.Sink == true
-	local tubMat = if sink then Enum.Material.SmoothPlastic else Enum.Material.Metal
+	-- Level 3's basin is an olden-day oak wash trough bound with iron hoops, also open at the top.
+	local trough = theme.Trough == true
+	local open = sink or trough
+	local tubMat = if sink then Enum.Material.SmoothPlastic elseif trough then Enum.Material.WoodPlanks else Enum.Material.Metal
 
 	-- Tub floor and walls. They don't cast shadows, so the room's daylight still reaches inside.
 	span(b, "TubFloor", -TUB_HALF_X - 2, TUB_HALF_X + 2, -2, 0, TUB_Z_MIN, TUB_Z_MAX, steel, tubMat)
 	for _, side in { -1, 1 } do
 		span(b, "TubWall", side * TUB_HALF_X, side * (TUB_HALF_X + 2), 0, TUB_HEIGHT, TUB_Z_MIN, TUB_Z_MAX, steel, tubMat)
 		-- Pressed ribs and rack rails on the side walls.
-		for i = 1, (if sink then 0 else 6) do
+		for i = 1, (if open then 0 else 6) do
 			local y = i * (TUB_HEIGHT / 7)
 			span(b, "Rib", side * (TUB_HALF_X - 0.3), side * TUB_HALF_X, y - 0.4, y + 0.4, TUB_Z_MIN + 4, TUB_Z_MAX - 4, theme.Metal, Enum.Material.Metal, noCollide())
 		end
@@ -1425,28 +1467,47 @@ local function buildTub(b: Builder, theme)
 	-- The tub casts shadows (it's a closed box, like a real machine): the inside is lit by the
 	-- interior lights below rather than blasted by daylight.
 	span(b, "TubBack", -TUB_HALF_X - 2, TUB_HALF_X + 2, 0, TUB_HEIGHT, TUB_Z_MAX, TUB_Z_MAX + 2, steel, tubMat)
-	if sink then
-		-- The top rack is a dish drainer standing over the sink on four chrome posts, one under each
-		-- corner of its frame (the frame's bars are centred on x = +-RACK_HALF_X and z = TOP_RACK_Z).
-		for _, px in { -RACK_HALF_X, RACK_HALF_X } do
-			for _, pz in { TOP_RACK_Z[1], TOP_RACK_Z[2] } do
-				cyl(b, "DrainerPost", TOP_RACK_Y + 1.8, 2.4, px, (TOP_RACK_Y + 1.8) / 2, pz, Color3.fromRGB(205, 210, 218), Enum.Material.Metal)
+	if open then
+		if sink then
+			-- The top rack is a dish drainer standing over the sink on four chrome posts, one under each
+			-- corner of its frame (the frame's bars are centred on x = +-RACK_HALF_X and z = TOP_RACK_Z).
+			for _, px in { -RACK_HALF_X, RACK_HALF_X } do
+				for _, pz in { TOP_RACK_Z[1], TOP_RACK_Z[2] } do
+					cyl(b, "DrainerPost", TOP_RACK_Y + 1.8, 2.4, px, (TOP_RACK_Y + 1.8) / 2, pz, Color3.fromRGB(205, 210, 218), Enum.Material.Metal)
+				end
 			end
 		end
-		-- Invisible fence round the whole sink area, up to a lid high overhead: nobody can climb onto the
-		-- counter or the roof, however they jump or fly.
-		local fenceTop = 420
+		-- Invisible fence round the whole basin area, up to a lid high overhead: nobody can climb onto the
+		-- counter or anything above it, however they jump or fly.
+		local fenceTop = if sink then 420 else 800
 		local inv = { Transparency = 1, CastShadow = false }
 		for _, side in { -1, 1 } do
 			span(b, "SinkFence", side * (TUB_HALF_X + 0.5), side * (TUB_HALF_X + 4), TUB_HEIGHT, fenceTop, DOOR_Z_FAR - 7, TUB_Z_MAX + 4, Color3.new(1, 1, 1), nil, inv)
 		end
 		span(b, "SinkFence", -TUB_HALF_X, TUB_HALF_X, TUB_HEIGHT, fenceTop, TUB_Z_MAX + 0.5, TUB_Z_MAX + 4, Color3.new(1, 1, 1), nil, inv)
-		-- Rolled rim round the opening, level with the counter top, and an overflow slot.
-		local rim = Color3.fromRGB(250, 250, 248)
-		span(b, "SinkRim", -TUB_HALF_X - 4, -TUB_HALF_X + 3, TUB_HEIGHT, COUNTER_TOP_Y, TUB_Z_MIN - 3, TUB_Z_MAX + 4, rim, tubMat)
-		span(b, "SinkRim", TUB_HALF_X - 3, TUB_HALF_X + 4, TUB_HEIGHT, COUNTER_TOP_Y, TUB_Z_MIN - 3, TUB_Z_MAX + 4, rim, tubMat)
-		span(b, "SinkRim", -TUB_HALF_X - 4, TUB_HALF_X + 4, TUB_HEIGHT, COUNTER_TOP_Y, TUB_Z_MAX - 3, TUB_Z_MAX + 4, rim, tubMat)
-		span(b, "OverflowSlot", -12, 12, TUB_HEIGHT - 14, TUB_HEIGHT - 6, TUB_Z_MAX - 0.6, TUB_Z_MAX, Color3.fromRGB(120, 130, 140), nil, noCollide())
+		-- Rim round the opening, level with the counter top: rolled porcelain, or a thick dark oak cap.
+		local rim = if sink then Color3.fromRGB(250, 250, 248) else Color3.fromRGB(70, 50, 34)
+		local rimMat = if sink then tubMat else Enum.Material.Wood
+		span(b, "SinkRim", -TUB_HALF_X - 4, -TUB_HALF_X + 3, TUB_HEIGHT, COUNTER_TOP_Y, TUB_Z_MIN - 3, TUB_Z_MAX + 4, rim, rimMat)
+		span(b, "SinkRim", TUB_HALF_X - 3, TUB_HALF_X + 4, TUB_HEIGHT, COUNTER_TOP_Y, TUB_Z_MIN - 3, TUB_Z_MAX + 4, rim, rimMat)
+		span(b, "SinkRim", -TUB_HALF_X - 4, TUB_HALF_X + 4, TUB_HEIGHT, COUNTER_TOP_Y, TUB_Z_MAX - 3, TUB_Z_MAX + 4, rim, rimMat)
+		if sink then
+			span(b, "OverflowSlot", -12, 12, TUB_HEIGHT - 14, TUB_HEIGHT - 6, TUB_Z_MAX - 0.6, TUB_Z_MAX, Color3.fromRGB(120, 130, 140), nil, noCollide())
+		else
+			-- Iron hoops round the outside of the trough, with rivets, and iron corner straps.
+			local iron = Color3.fromRGB(52, 50, 54)
+			for _, y in { 16, 50, 84 } do
+				for _, side in { -1, 1 } do
+					span(b, "IronHoop", side * (TUB_HALF_X + 2), side * (TUB_HALF_X + 3.6), y - 3, y + 3, TUB_Z_MIN - 1, TUB_Z_MAX + 3.6, iron, Enum.Material.Metal, noCollide())
+				end
+				span(b, "IronHoop", -TUB_HALF_X - 3.6, TUB_HALF_X + 3.6, y - 3, y + 3, TUB_Z_MAX + 2, TUB_Z_MAX + 3.6, iron, Enum.Material.Metal, noCollide())
+			end
+			for _, side in { -1, 1 } do
+				for _, z in { TUB_Z_MIN + 6, TUB_Z_MAX - 6 } do
+					span(b, "IronStrap", side * (TUB_HALF_X + 2), side * (TUB_HALF_X + 4), 0, TUB_HEIGHT, z - 3, z + 3, iron, Enum.Material.Metal, noCollide())
+				end
+			end
+		end
 	else
 		span(b, "TubCeiling", -TUB_HALF_X - 2, TUB_HALF_X + 2, TUB_HEIGHT, TUB_HEIGHT + 2, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal)
 	end
@@ -1503,19 +1564,42 @@ end
 
 local function buildDoor(b: Builder, theme)
 	-- The invisible walls and lid: as tall as the tub on a dishwasher, far taller over the open sink.
-	local wallTop = if theme.Sink then 420 else TUB_HEIGHT
+	local open = theme.Sink == true or theme.Trough == true
+	local wallTop = if theme.Sink then 420 elseif open then 800 else TUB_HEIGHT
 	-- Inner panel (the floor you stand on) and the outer skin below it.
-	span(b, "DoorInner", -TUB_HALF_X, TUB_HALF_X, -1, 0, DOOR_Z_FAR, DOOR_Z_NEAR, theme.Tub, Enum.Material.Metal)
-	span(b, "DoorOuter", -TUB_HALF_X - 4, TUB_HALF_X + 4, -DOOR_THICK, -1, DOOR_Z_FAR - 6, DOOR_Z_NEAR, if theme.Sink then Color3.fromRGB(176, 130, 90) else K.Frame, if theme.Sink then Enum.Material.WoodPlanks else Enum.Material.Metal)
-	if theme.Sink then
-		-- The front of the sink is a drainboard: it stands on four legs, with grooves to drain the water.
+	span(b, "DoorInner", -TUB_HALF_X, TUB_HALF_X, -1, 0, DOOR_Z_FAR, DOOR_Z_NEAR, theme.Tub, if theme.Trough then Enum.Material.WoodPlanks else Enum.Material.Metal)
+	span(b, "DoorOuter", -TUB_HALF_X - 4, TUB_HALF_X + 4, -DOOR_THICK, -1, DOOR_Z_FAR - 6, DOOR_Z_NEAR, if theme.Sink then Color3.fromRGB(176, 130, 90) elseif open then Color3.fromRGB(96, 66, 42) else K.Frame, if open then Enum.Material.WoodPlanks else Enum.Material.Metal)
+	if open then
+		-- Standing on four legs: wooden for the drainboard, stone piers for the drawbridge.
 		for _, lx in { -TUB_HALF_X, TUB_HALF_X } do
 			for _, lz in { DOOR_Z_FAR - 2, DOOR_Z_NEAR - 6 } do
-				cyl(b, "DrainboardLeg", -DOOR_THICK - KITCHEN_FLOOR_Y, 8, lx, (-DOOR_THICK + KITCHEN_FLOOR_Y) / 2, lz, Color3.fromRGB(150, 104, 62), Enum.Material.Wood)
+				if theme.Sink then
+					cyl(b, "DrainboardLeg", -DOOR_THICK - KITCHEN_FLOOR_Y, 8, lx, (-DOOR_THICK + KITCHEN_FLOOR_Y) / 2, lz, Color3.fromRGB(150, 104, 62), Enum.Material.Wood)
+				else
+					span(b, "BridgePier", lx - 7, lx + 7, KITCHEN_FLOOR_Y, -DOOR_THICK, lz - 7, lz + 7, Color3.fromRGB(128, 122, 116), Enum.Material.Cobblestone)
+				end
 			end
 		end
 		for gx = -TUB_HALF_X + 10, TUB_HALF_X - 10, 10 do
-			span(b, "Groove", gx - 0.6, gx + 0.6, 0, 0.12, DOOR_Z_FAR + 4, DOOR_Z_NEAR - 4, Color3.fromRGB(170, 178, 186), nil, noCollide())
+			span(b, "Groove", gx - 0.6, gx + 0.6, 0, 0.12, DOOR_Z_FAR + 4, DOOR_Z_NEAR - 4, if theme.Sink then Color3.fromRGB(170, 178, 186) else Color3.fromRGB(60, 40, 26), nil, noCollide())
+		end
+		if theme.Trough then
+			-- Drawbridge: iron cross-bands and studs, and an iron torch stand at each side of the far end.
+			local iron = Color3.fromRGB(52, 50, 54)
+			for z = DOOR_Z_FAR + 12, DOOR_Z_NEAR - 8, 20 do
+				span(b, "BridgeBand", -TUB_HALF_X, TUB_HALF_X, 0, 0.18, z - 1.5, z + 1.5, iron, Enum.Material.Metal, noCollide())
+			end
+			for _, tx in { -TUB_HALF_X - 10, TUB_HALF_X + 10 } do
+				cyl(b, "TorchStand", 80, 4, tx, 40, DOOR_Z_FAR + 14, iron, Enum.Material.Metal, noCollide())
+				cyl(b, "TorchBowl", 6, 14, tx, 82, DOOR_Z_FAR + 14, iron, Enum.Material.Metal, noCollide())
+				local flame = box(b, "TorchFire", Vector3.new(9, 16, 9), tx, 92, DOOR_Z_FAR + 14, Color3.fromRGB(255, 160, 60), Enum.Material.Neon, noCollide())
+				flame.Shape = Enum.PartType.Ball
+				local fl = Instance.new("PointLight")
+				fl.Color = Color3.fromRGB(255, 170, 90)
+				fl.Brightness = 1.4
+				fl.Range = 55
+				fl.Parent = flame
+			end
 		end
 	end
 	-- Raised edges down the sides of the inner panel.
@@ -1527,10 +1611,10 @@ local function buildDoor(b: Builder, theme)
 	end
 	span(b, "SafetyWall", -TUB_HALF_X - 1, TUB_HALF_X + 1, 0, wallTop, DOOR_Z_FAR - 7, DOOR_Z_FAR - 6, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
 	-- A lid over the door area as well, level with the tub ceiling.
-	span(b, "SafetyLid", -TUB_HALF_X - 1, TUB_HALF_X + 1, wallTop, wallTop + 1, DOOR_Z_FAR - 7, if theme.Sink then TUB_Z_MAX + 4 else DOOR_Z_NEAR - 3.2, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
+	span(b, "SafetyLid", -TUB_HALF_X - 1, TUB_HALF_X + 1, wallTop, wallTop + 1, DOOR_Z_FAR - 7, if open then TUB_Z_MAX + 4 else DOOR_Z_NEAR - 3.2, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
 
 	-- Control strip along the far edge (the top of the door when it's closed), with buttons.
-	if theme.Sink then
+	if open then
 		return
 	end
 	span(b, "ControlStrip", -TUB_HALF_X - 4.3, TUB_HALF_X + 4.3, -DOOR_THICK - 0.3, 3, DOOR_Z_FAR - 6.3, DOOR_Z_FAR, Color3.fromRGB(40, 44, 52), Enum.Material.SmoothPlastic)
@@ -1942,6 +2026,9 @@ local KIND_SLOTS: { [string]: () -> { Slot } } = {
 	Glass = function()
 		return grid(GLASS_X, GLASS_Z, TOP_RACK_Y)
 	end,
+	Goblet = function()
+		return grid(GLASS_X, GLASS_Z, TOP_RACK_Y)
+	end,
 	Pan = function()
 		return listSlots(PAN_SLOTS)
 	end,
@@ -2023,6 +2110,15 @@ function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeSc
 		Light = Color3.fromRGB(215, 235, 255),
 		Sink = false,
 	}, { __index = dishTheme }) :: any
+	if levelIndex == 3 then
+		-- The Royal Banquet's "machine" is an olden-day oak wash trough with iron racks.
+		theme.Tub = Color3.fromRGB(112, 78, 50)
+		theme.Rack = Color3.fromRGB(58, 56, 62)
+		theme.Metal = Color3.fromRGB(70, 68, 74)
+		theme.Accent = Color3.fromRGB(255, 205, 90)
+		theme.Light = Color3.fromRGB(255, 220, 160)
+		theme.Trough = true
+	end
 	if levelIndex == 2 then
 		-- The Backyard's basin is a white porcelain sink.
 		theme.Tub = Color3.fromRGB(238, 240, 242)

@@ -13,6 +13,10 @@ local feedback, banners, says = {}, {}, {}
 G.getSignal(RSt:FindFirstChild("AdminFeedback"), "OnClientEvent"):Connect(function(t) table.insert(feedback, t) end)
 G.getSignal(RSt:FindFirstChild("AdminAnnouncement"), "OnClientEvent"):Connect(function(t) table.insert(banners, t) end)
 G.getSignal(RSt:FindFirstChild("AbuseSay"), "OnClientEvent"):Connect(function(n, t) table.insert(says, n .. ": " .. t) end)
+local booms, pillTexts = 0, {}
+local bm = RSt:FindFirstChild("AbuseBoom")
+if bm then G.getSignal(bm, "OnClientEvent"):Connect(function() booms += 1 end) end
+local function pill() local f = G.find(me.PlayerGui, "Pill") return f and f.Visible, f and G.find(f, "Label") and G.find(f, "Label").Text end
 local function asMe(c, t, x) call("client", function() cmd:FireServer(c, t or "", x or "") end) pump(0.5, G.frame) end
 out("lockdown at the real time (weeks away): " .. tostring((Config.EventLockdown(Config.Now()))))
 local bubbles0 = DS.Get(me).Bubbles
@@ -20,12 +24,18 @@ asMe("abuseshow", "0.25")
 out("feedback: " .. tostring(feedback[#feedback]))
 local locked, why = Config.EventLockdown(Config.Now())
 out("lockdown now: " .. tostring(locked) .. "  " .. why)
-pump(20, G.frame)
+pump(2, G.frame)
+out("countdown pill: " .. tostring(select(2, pill())) .. " visible " .. tostring((pill())))
+pump(18, G.frame)
+out("pill when live: " .. tostring(select(2, pill())))
+out("booms: " .. booms)
 out("banners: " .. table.concat(banners, " | "))
 pump(30, G.frame)
 out("lockdown during the show: " .. tostring((Config.EventLockdown(Config.Now()))))
 out("chat lines so far: " .. #says)
 for _, l in says do out("  " .. l) end
+local box = G.find(me.PlayerGui, "Box")
+out("speech box visible: " .. tostring(box and box.Visible))
 local giant = _G.__workspace:FindFirstChild("AbuseGiant")
 out("giant in the lobby: " .. tostring(giant ~= nil))
 pump(3, G.frame)

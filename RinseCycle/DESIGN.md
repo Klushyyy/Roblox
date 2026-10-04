@@ -1634,3 +1634,19 @@ Config.AbuseShow and the clock Config.Now. AdminServer's "Admin Abuse show" sect
 - The HUD's FREE tag sits on the Event button's top right corner so it no longer covers the label.
 - Check: `scen_mobile` sets phone-sized screens (844x390 and 390x844) and dumps windows; `mobaudit.py` lists text
   that lands under a size (labels set to scale to their box are an upper bound). Real devices still need a look.
+
+## 6zk. The Royal Wash Trough, a better giant, countdown, notification test (v2.8.0)
+
+- Level 3 keeps the royal banquet hall but its "machine" is now an olden-day oak wash trough: oak staves bound with
+  iron hoops and straps, open at the top (counter hole, rim, invisible fence and lid like the Backyard), a wooden
+  drawbridge walkway on stone piers with iron bands and two iron torch stands, black iron racks, and a stone dragon
+  gargoyle on the back wall pouring water into it. Glasses are now gold goblets (new dish kind Goblet).
+  Three levels, three kinds of dishwasher: steel machine, porcelain sink, oak trough.
+- Admin Abuse giant: built from the owner's HumanoidDescription (hair and all), only the root anchored so the default
+  R15 walk, idle, wave, point and cheer animations really play; feet measured onto the room floor; every stride
+  stomps (dust, shockwave ring, AbuseBoom shakes every screen by distance); he pauses to face the table and wave; a
+  beam attack every 50 s (showy, hurts nothing); he stays until the event ends and mutters Config.AbuseShow.Remarks.
+  The show opens with three booms, a flash and an ADMIN ABUSE title. His lines show in a typed speech box (and chat).
+- A small pill at the very top right counts down from 30 minutes ("ADMIN ABUSE IN 29:41"), then "ADMIN ABUSE IS LIVE!".
+  The schedule reaches clients through ReplicatedStorage attributes AbuseStarts / AbuseEnds.
+- DailyNotify tries several secret names (Config.DailyNotify.SecretNames), and the Studio tab has "Notification test".

@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.7.1"
+Config.Version = "2.8.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -145,7 +145,7 @@ Config.GrimeTypes = {
 -- Spots = base grime spots per dish of that kind (solo), before PartyGrimeScale.
 -- Theme colours are used by the arena and dish builders.
 ----------------------------------------------------------------------------------------------------
-Config.DishKinds = { "Plate", "Tray", "Bowl", "Cup", "Glass", "Fork", "Knife", "Spoon", "Pan", "Pot", "Board", "Cutter" }
+Config.DishKinds = { "Plate", "Tray", "Bowl", "Cup", "Glass", "Fork", "Knife", "Spoon", "Pan", "Pot", "Board", "Cutter", "Goblet" }
 
 Config.Levels = {
 	{
@@ -162,8 +162,8 @@ Config.Levels = {
 		ParTime = 540,
 		Bubbles = 80,
 		GoldenChance = 0.02,
-		Dishes = { Plate = 16, Tray = 0, Bowl = 6, Cup = 6, Glass = 2, Fork = 4, Knife = 3, Spoon = 3, Pan = 0, Pot = 0, Board = 0, Cutter = 0 },
-		Spots = { Plate = 6, Tray = 8, Bowl = 6, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16, Board = 8, Cutter = 2 },
+		Dishes = { Plate = 16, Tray = 0, Bowl = 6, Cup = 6, Glass = 2, Fork = 4, Knife = 3, Spoon = 3, Pan = 0, Pot = 0, Board = 0, Cutter = 0, Goblet = 0 },
+		Spots = { Plate = 6, Tray = 8, Bowl = 6, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16, Board = 8, Cutter = 2, Goblet = 3 },
 		Grime = { { Type = "Crumbs", Weight = 45 }, { Type = "Ketchup", Weight = 35 }, { Type = "Gravy", Weight = 20 } },
 		Theme = {
 			Tub = Color3.fromRGB(172, 178, 187),
@@ -190,8 +190,8 @@ Config.Levels = {
 		ParTime = 1260,
 		Bubbles = 250,
 		GoldenChance = 0.025,
-		Dishes = { Plate = 8, Tray = 5, Bowl = 8, Cup = 7, Glass = 4, Fork = 4, Knife = 3, Spoon = 3, Pan = 2, Pot = 0, Board = 8, Cutter = 4 },
-		Spots = { Plate = 5, Tray = 8, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 13, Pot = 15, Board = 8, Cutter = 2 },
+		Dishes = { Plate = 8, Tray = 5, Bowl = 8, Cup = 7, Glass = 4, Fork = 4, Knife = 3, Spoon = 3, Pan = 2, Pot = 0, Board = 8, Cutter = 4, Goblet = 0 },
+		Spots = { Plate = 5, Tray = 8, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 13, Pot = 15, Board = 8, Cutter = 2, Goblet = 3 },
 		Grime = {
 			{ Type = "TomatoSauce", Weight = 32 },
 			{ Type = "MeltedCheese", Weight = 26 },
@@ -224,8 +224,8 @@ Config.Levels = {
 		ParTime = 1860,
 		Bubbles = 700,
 		GoldenChance = 0.035,
-		Dishes = { Plate = 14, Tray = 10, Bowl = 10, Cup = 6, Glass = 10, Fork = 6, Knife = 6, Spoon = 5, Pan = 2, Pot = 2, Board = 0, Cutter = 0 },
-		Spots = { Plate = 5, Tray = 9, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16, Board = 8, Cutter = 2 },
+		Dishes = { Plate = 14, Tray = 10, Bowl = 10, Cup = 6, Glass = 0, Fork = 6, Knife = 6, Spoon = 5, Pan = 2, Pot = 2, Board = 0, Cutter = 0, Goblet = 10 },
+		Spots = { Plate = 5, Tray = 9, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16, Board = 8, Cutter = 2, Goblet = 3 },
 		Grime = {
 			{ Type = "TruffleGunk", Weight = 30 },
 			{ Type = "CaviarSmear", Weight = 25 },
@@ -763,6 +763,8 @@ Config.Daily = {
 Config.DailyNotify = {
 	MessageId = "", -- the notification string's ID (StoreIds > Notifications > DailyReady)
 	SecretName = "OpenCloudKey", -- the name of the API key secret (Creator Hub > Secrets)
+	-- Other names it is tried under if SecretName isn't found (the first that exists is used).
+	SecretNames = { "OpenCloudKey", "Notification", "Notifications", "NotificationKey", "NotificationsKey", "notification", "notifications", "APIKey", "ApiKey" },
 }
 Config.DailyRewards = {
 	{ Kind = "Bubbles", Amount = 60 },
@@ -1055,17 +1057,25 @@ Config.AbuseShow = {
 	OwnerUserId = 2297538363,
 	OwnerName = "EnderBuilda",
 	GiantScale = 30,
+	AttackEvery = 50, -- seconds between the giant's beam attacks (only for show: it hurts nobody)
+	RemarkEvery = 240, -- after the votes he keeps wandering, and says one of the Remarks this often
 	Lines = {
-		{ 6, "heyyy everyone" },
-		{ 14, "i heard this is admin abuse?" },
-		{ 24, "ok ok ok. who wants free stuff???" },
-		{ 34, "lets vote on it. you have 60 seconds, go go go" },
-		{ 118, "wait wait wait. theres more" },
-		{ 128, "5 random players are about to win a game pass" },
-		{ 215, "ok round 2. vote again, 60 seconds" },
-		{ 330, "ok thats enough chaos for one day" },
-		{ 345, "thank you all for playing Rinse Cycle! more events soon" },
-		{ 358, "i gotta go clean some dishes. bye!!" },
+		{ 8, "hmm. so you all showed up." },
+		{ 18, "im feeling generous today." },
+		{ 30, "have a look at the poll. you get 60 seconds to decide." },
+		{ 118, "interesting choice. fine, you win." },
+		{ 132, "oh and 5 of you are about to win a game pass. dont ask how, its admin abuse" },
+		{ 215, "ok one more. look at the poll again." },
+		{ 330, "that was fun. dont tell the other devs i did that" },
+		{ 346, "im going to keep walking around for a bit. watch your feet." },
+	},
+	Remarks = {
+		"still here. still huge.",
+		"someone get me a snack, im the size of a house",
+		"did anyone see where i put my game pass stash",
+		"hmm. nothing to see here. keep cleaning",
+		"thanks for hanging out, you lot",
+		"careful where you stand. i cant see you down there",
 	},
 	-- Votes: Kind "Bubbles"/"Gems" splits Amount between everyone online in every server; "Passes"
 	-- gives that many random players a game pass.

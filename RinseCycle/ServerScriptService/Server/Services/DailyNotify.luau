@@ -59,16 +59,31 @@ function DailyNotify.Queue(player: Player)
 	end)
 end
 
-local function send(userId: number, streak: number): boolean
-	local okSecret, secret = pcall(function()
-		return HttpService:GetSecret(Config.DailyNotify.SecretName)
-	end)
-	if not okSecret then
+-- The API key secret: the name in Config.DailyNotify.SecretName first, then the other names it might
+-- have been saved under (the first one that exists wins).
+local function findSecret(): (any?, string)
+	local tried = {}
+	for _, name in Config.DailyNotify.SecretNames do
+		table.insert(tried, name)
+		local ok, secret = pcall(function()
+			return HttpService:GetSecret(name)
+		end)
+		if ok and secret then
+			return secret, name
+		end
+	end
+	return nil, table.concat(tried, ", ")
+end
+
+-- Sends one notification. Returns (done, detail): `done` is false only when a retry might help.
+local function send(userId: number, streak: number): (boolean, string)
+	local secret, found = findSecret()
+	if not secret then
 		if not warned then
 			warned = true
-			warn("[DailyNotify] no API key secret '" .. Config.DailyNotify.SecretName .. "': " .. tostring(secret))
+			warn("[DailyNotify] no API key secret found (tried: " .. found .. ")")
 		end
-		return false
+		return false, "No API key secret found. Tried the names: " .. found
 	end
 	local body = HttpService:JSONEncode({
 		source = { universe = "universes/" .. tostring(game.GameId) },
@@ -90,14 +105,26 @@ local function send(userId: number, streak: number): boolean
 	end)
 	if not ok then
 		warn("[DailyNotify] request failed: " .. tostring(response))
-		return false
+		return false, "The request failed: " .. tostring(response) .. " (is Game Settings > Security > Allow HTTP Requests on?)"
 	end
 	if not response.Success then
 		warn(string.format("[DailyNotify] %d %s", response.StatusCode, tostring(response.Body)))
 		-- 4xx (not opted in, bad id) won't get better by retrying: drop it.
-		return response.StatusCode >= 400 and response.StatusCode < 500
+		return response.StatusCode >= 400 and response.StatusCode < 500, string.format("Roblox said %d: %s", response.StatusCode, string.sub(tostring(response.Body), 1, 160))
 	end
-	return true
+	return true, "Sent using the secret '" .. found .. "'."
+end
+
+-- Studio / owner test: sends the notification to this player right now and says how it went.
+function DailyNotify.TestNow(player: Player): string
+	if Config.DailyNotify.MessageId == "" then
+		return "No notification string ID set (StoreIds > Notifications > DailyReady)."
+	end
+	if game.GameId <= 0 then
+		return "This place isn't published (no experience ID), so Roblox can't send it."
+	end
+	local _, detail = send(player.UserId, 1)
+	return detail
 end
 
 local function poll()

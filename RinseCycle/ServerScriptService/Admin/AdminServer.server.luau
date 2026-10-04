@@ -38,6 +38,7 @@ local RoundService = require(GameServices:WaitForChild("RoundService"))
 local PetService = require(GameServices:WaitForChild("PetService"))
 local LeaderboardService = require(GameServices:WaitForChild("LeaderboardService"))
 local RunServers = require(GameServices:WaitForChild("RunServers"))
+local DailyNotify = require(GameServices:WaitForChild("DailyNotify"))
 local MessagingService = game:GetService("MessagingService")
 local TeleportService = game:GetService("TeleportService")
 
@@ -135,7 +136,7 @@ local ALL_COMMANDS = {
 -- enough" - a Developer or a Founder still gets nothing.
 -- Nothing is hidden behind Studio any more: every command belongs to a staff tier (below), and
 -- the owner-only ones (staff ranks, gifted passes, wiping the log) are only on the owner's list.
-local STUDIO_ONLY_COMMANDS = { "abuseshow" }
+local STUDIO_ONLY_COMMANDS = { "abuseshow", "notifytest" }
 
 -- Commands FOUNDER alone gets, on top of everything Developer has.
 --
@@ -692,6 +693,9 @@ Remote.AdminMuteStatus.Parent = ReplicatedStorage
 Remote.AbuseSay = Instance.new("RemoteEvent") -- S->C (ownerName, text): a line of chat from the owner during Admin Abuse
 Remote.AbuseSay.Name = "AbuseSay"
 Remote.AbuseSay.Parent = ReplicatedStorage
+Remote.AbuseBoom = Instance.new("RemoteEvent") -- S->C (strength, position): a stomp or blast: shakes the screen
+Remote.AbuseBoom.Name = "AbuseBoom"
+Remote.AbuseBoom.Parent = ReplicatedStorage
 Remote.AdminSetFlying = Instance.new("RemoteEvent")
 Remote.AdminSetFlying.Name = "AdminSetFlying"
 Remote.AdminSetFlying.Parent = ReplicatedStorage
@@ -5205,10 +5209,21 @@ do
 			realStarts, realEnds = e.Starts, e.Ends
 		end
 	end
+	-- The schedule is also an attribute on ReplicatedStorage, so every client's countdown follows it
+	-- (including a test start).
+	local function publishSchedule()
+		local e = abuseEvent()
+		if e then
+			ReplicatedStorage:SetAttribute("AbuseStarts", e.Starts)
+			ReplicatedStorage:SetAttribute("AbuseEnds", e.Ends)
+		end
+	end
+	publishSchedule()
 	handlers.AbuseSchedule = function(d)
 		local e = abuseEvent()
 		if e and tonumber(d.Starts) and tonumber(d.Ends) then
 			e.Starts, e.Ends = d.Starts, d.Ends
+			publishSchedule()
 		end
 	end
 
@@ -5298,10 +5313,17 @@ do
 		end
 	end
 
-	-- The giant: a copy of the owner's avatar, scaled up, pacing round the lobby room. Anchored and
-	-- non-colliding (players walk through him), animated with Roblox's default R15 walk and wave.
+	-- The giant: the owner's real avatar (hair and all, built from their HumanoidDescription), scaled up,
+	-- walking round the lobby room on the room floor with Roblox's default R15 animations (only the
+	-- root part is anchored, so the animations really move his limbs). Every stride stomps: dust, a
+	-- shockwave ring and a "boom" that shakes everyone's screen (Remote AbuseBoom). He pauses to
+	-- face the table and wave, and now and then fires a harmless showy beam at the plaza.
+	local Debris = game:GetService("Debris")
+	local ROOM_FLOOR = -130 -- LobbyBuilder's room floor
+	local TABLE_CENTER = Vector3.new(0, ROOM_FLOOR, -18)
 	local giant: Model? = nil
 	local giantConn: RBXScriptConnection? = nil
+	local boom: (number, Vector3) -> () = function() end
 	local function removeGiant()
 		if giantConn then
 			giantConn:Disconnect()
@@ -5312,45 +5334,117 @@ do
 			giant = nil
 		end
 	end
+	local function ringAt(pos: Vector3, size: number, seconds: number, color: Color3)
+		local ring = Instance.new("Part")
+		ring.Shape = Enum.PartType.Cylinder
+		ring.Size = Vector3.new(1, 10, 10)
+		ring.CFrame = CFrame.new(pos.X, pos.Y + 1, pos.Z) * CFrame.Angles(0, 0, math.pi / 2)
+		ring.Anchored = true
+		ring.CanCollide = false
+		ring.CanTouch = false
+		ring.CanQuery = false
+		ring.CastShadow = false
+		ring.Material = Enum.Material.Neon
+		ring.Color = color
+		ring.Transparency = 0.2
+		ring.Parent = workspace
+		TweenService:Create(ring, TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(1, size, size), Transparency = 1 }):Play()
+		Debris:AddItem(ring, seconds + 0.2)
+	end
+	local function dustAt(pos: Vector3)
+		local anchor = Instance.new("Part")
+		anchor.Transparency = 1
+		anchor.Anchored = true
+		anchor.CanCollide = false
+		anchor.CanTouch = false
+		anchor.CanQuery = false
+		anchor.Size = Vector3.new(4, 1, 4)
+		anchor.Position = pos + Vector3.new(0, 4, 0)
+		local dust = Instance.new("ParticleEmitter")
+		dust.Texture = "rbxasset://textures/particles/smoke_main.dds"
+		dust.Color = ColorSequence.new(Color3.fromRGB(200, 190, 175))
+		dust.Lifetime = NumberRange.new(1.2, 2)
+		dust.Speed = NumberRange.new(40, 90)
+		dust.SpreadAngle = Vector2.new(180, 20)
+		dust.Size = NumberSequence.new(25, 70)
+		dust.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.4), NumberSequenceKeypoint.new(1, 1) })
+		dust.Rate = 0
+		dust.EmissionDirection = Enum.NormalId.Top
+		dust.Parent = anchor
+		anchor.Parent = workspace
+		dust:Emit(28)
+		Debris:AddItem(anchor, 3)
+	end
+	boom = function(strength: number, pos: Vector3)
+		ringAt(pos, 120 + 160 * strength, 0.8, Color3.fromRGB(255, 205, 110))
+		dustAt(pos)
+		Remote.AbuseBoom:FireAllClients(strength, pos)
+	end
+
+	local spawning, spawnFailures, nextSpawnTry = false, 0, 0
+	local spawnGiantNow: () -> ()
+	-- Builds him once at a time, and gives up after three failures (each 20 s apart).
 	local function spawnGiant()
-		if giant then
+		if giant or spawning or spawnFailures >= 3 or os.clock() < nextSpawnTry then
 			return
 		end
+		spawning = true
+		spawnGiantNow()
+		spawning = false
+	end
+	spawnGiantNow = function()
 		local ok, model = pcall(function()
-			return Players:CreateHumanoidModelFromUserId(Show.OwnerUserId)
+			local desc = Players:GetHumanoidDescriptionFromUserId(Show.OwnerUserId)
+			return Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
 		end)
 		if not ok or not model then
+			spawnFailures += 1
+			nextSpawnTry = os.clock() + 20
+			warn("[AdminServer] couldn't build the Admin Abuse giant: " .. tostring(model))
 			return
 		end
 		model.Name = "AbuseGiant"
-		for _, part in model:GetDescendants() do
-			if part:IsA("BasePart") then
-				part.CanCollide = false
-				part.CanTouch = false
-				part.CanQuery = false
-				part.Anchored = true
-			end
-		end
 		local root = model:FindFirstChild("HumanoidRootPart") :: BasePart?
 		local humanoid = model:FindFirstChildOfClass("Humanoid")
 		if not root or not humanoid then
 			model:Destroy()
 			return
 		end
+		for _, part in model:GetDescendants() do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+				part.CanTouch = false
+				part.CanQuery = false
+				part.Massless = true
+			end
+		end
+		root.Anchored = true
 		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+		humanoid.PlatformStand = false
+		model.PrimaryPart = root
+		model:PivotTo(CFrame.new(0, ROOM_FLOOR + 50, 330))
 		model.Parent = workspace
 		pcall(function()
 			model:ScaleTo(Show.GiantScale)
 		end)
+		task.wait(0.2)
 		giant = model
-		-- A name tag over his head.
+		-- Height of the root above the soles of his feet (measured once, in the standing pose), so his
+		-- feet are exactly on the floor whatever his proportions or hair do.
+		local footL = model:FindFirstChild("LeftFoot") :: BasePart?
+		local footR = model:FindFirstChild("RightFoot") :: BasePart?
+		local soles = math.min(footL and (footL.Position.Y - footL.Size.Y / 2) or math.huge, footR and (footR.Position.Y - footR.Size.Y / 2) or math.huge)
+		local rootAbove = if soles == math.huge then humanoid.HipHeight + root.Size.Y / 2 else root.Position.Y - soles
+		local rootY = ROOM_FLOOR + rootAbove
+
+		-- Name tag.
 		local head = model:FindFirstChild("Head") :: BasePart?
 		if head then
 			local tag = Instance.new("BillboardGui")
 			tag.Size = UDim2.fromOffset(360, 70)
-			tag.StudsOffsetWorldSpace = Vector3.new(0, 12 * Show.GiantScale / 6, 0)
+			tag.StudsOffsetWorldSpace = Vector3.new(0, head.Size.Y * 1.2, 0)
 			tag.AlwaysOnTop = true
-			tag.MaxDistance = 5000
+			tag.MaxDistance = 6000
 			local label = Instance.new("TextLabel")
 			label.Size = UDim2.fromScale(1, 1)
 			label.BackgroundTransparency = 1
@@ -5362,34 +5456,129 @@ do
 			label.Parent = tag
 			tag.Parent = head
 		end
-		local track: AnimationTrack? = nil
-		pcall(function()
-			local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
-			local anim = Instance.new("Animation")
-			anim.AnimationId = "rbxassetid://507777826" -- default R15 walk
-			track = animator:LoadAnimation(anim)
-			track.Looped = true
-			track:Play()
-		end)
-		-- Round the room, inset from its walls (the lobby room is 840 wide, z -560..400, floor at -130).
-		local floorY = -130
-		local path = { Vector3.new(-320, floorY, 300), Vector3.new(320, floorY, 300), Vector3.new(320, floorY, -460), Vector3.new(-320, floorY, -460) }
-		local seg, pos = 1, path[1]
-		local speed = 70
-		local cf0, size0 = model:GetBoundingBox()
-		local rootY = root.Position.Y + (floorY - (cf0.Position.Y - size0.Y / 2)) -- feet on the floor
-		giantConn = RunService.Heartbeat:Connect(function(dt)
-			local target = path[seg % #path + 1]
-			local dir = target - pos
-			if dir.Magnitude < speed * dt then
-				pos = target
-				seg = seg % #path + 1
-			else
-				pos += dir.Unit * speed * dt
+
+		-- Animations (Roblox's default R15 set).
+		local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+		local function load(id: string, priority: Enum.AnimationPriority, looped: boolean): AnimationTrack?
+			local track: AnimationTrack? = nil
+			pcall(function()
+				local anim = Instance.new("Animation")
+				anim.AnimationId = "rbxassetid://" .. id
+				track = animator:LoadAnimation(anim)
+				if track then
+					track.Priority = priority
+					track.Looped = looped
+				end
+			end)
+			return track
+		end
+		local walkTrack = load("507777826", Enum.AnimationPriority.Movement, true)
+		local idleTrack = load("507766388", Enum.AnimationPriority.Idle, true)
+		local waveTrack = load("507770239", Enum.AnimationPriority.Action, false)
+		local pointTrack = load("507770453", Enum.AnimationPriority.Action, false)
+		local cheerTrack = load("507770677", Enum.AnimationPriority.Action, false)
+		if idleTrack then
+			idleTrack:Play()
+		end
+
+		-- Walk a ring round the table, stopping now and then.
+		local RADIUS, SPEED = 300, 90
+		local ring = {}
+		for i = 0, 11 do
+			local a = i / 12 * math.pi * 2 + math.pi / 2
+			table.insert(ring, Vector3.new(math.cos(a) * RADIUS, ROOM_FLOOR, TABLE_CENTER.Z + math.sin(a) * RADIUS))
+		end
+		local index, pos = 1, ring[1]
+		local state, stateUntil = "arrive", os.clock() + 2.5
+		local nextStomp, nextAttack = 0, os.clock() + Show.AttackEvery * 0.5
+		local facing = Vector3.new(0, 0, -1)
+		local stops = 0
+		local function face(dir: Vector3, dt: number)
+			local flat = Vector3.new(dir.X, 0, dir.Z)
+			if flat.Magnitude > 1e-3 then
+				facing = facing:Lerp(flat.Unit, math.clamp(dt * 3, 0, 1))
 			end
-			local look = path[seg % #path + 1] - pos
-			model:PivotTo(CFrame.lookAt(Vector3.new(pos.X, rootY, pos.Z), Vector3.new(pos.X + look.X, rootY, pos.Z + look.Z)))
+		end
+		local function setWalking(on: boolean)
+			if walkTrack then
+				if on and not walkTrack.IsPlaying then
+					-- A stride on a giant is huge: slow the cycle so his feet don't skate.
+					walkTrack:Play(0.3)
+					walkTrack:AdjustSpeed(SPEED / (16 * Show.GiantScale) * 1.4)
+				elseif not on and walkTrack.IsPlaying then
+					walkTrack:Stop(0.3)
+				end
+			end
+		end
+		local function fireBeam()
+			local from = root.Position + Vector3.new(0, 20 * Show.GiantScale / 6, 0) + facing * (6 * Show.GiantScale / 6)
+			local target = Vector3.new(math.random(-70, 70), 0.2, math.random(-85, 45))
+			local len = (target - from).Magnitude
+			local beam = Instance.new("Part")
+			beam.Anchored = true
+			beam.CanCollide = false
+			beam.CanTouch = false
+			beam.CanQuery = false
+			beam.CastShadow = false
+			beam.Material = Enum.Material.Neon
+			beam.Color = Color3.fromRGB(255, 120, 60)
+			beam.Size = Vector3.new(7, 7, len)
+			beam.CFrame = CFrame.lookAt(from, target) * CFrame.new(0, 0, -len / 2)
+			beam.Parent = workspace
+			TweenService:Create(beam, TweenInfo.new(1.4), { Transparency = 1, Size = Vector3.new(2, 2, len) }):Play()
+			Debris:AddItem(beam, 1.6)
+			local blast = Instance.new("Explosion") -- showy only: no damage, no force
+			blast.BlastPressure = 0
+			blast.BlastRadius = 14
+			blast.DestroyJointRadiusPercent = 0
+			blast.Position = target
+			blast.Parent = workspace
+			boom(2, target)
+			task.delay(0.5, boom, 1.5, target)
+		end
+		giantConn = RunService.Heartbeat:Connect(function(dt)
+			local now = os.clock()
+			if state == "walk" then
+				local target = ring[index % #ring + 1]
+				local dir = target - pos
+				if dir.Magnitude < SPEED * dt then
+					pos = target
+					index = index % #ring + 1
+					state, stateUntil = "pause", now + 4.5
+					stops += 1
+					setWalking(false)
+					if idleTrack then
+						idleTrack:Play(0.3)
+					end
+					local gesture = if stops % 3 == 0 then cheerTrack else waveTrack
+					if gesture then
+						gesture:Play(0.2)
+					end
+				else
+					pos += dir.Unit * SPEED * dt
+					face(dir, dt)
+					if now >= nextStomp then
+						nextStomp = now + 1.7
+						boom(1, Vector3.new(pos.X, ROOM_FLOOR, pos.Z))
+					end
+				end
+			else
+				face(TABLE_CENTER - pos, dt)
+				if state == "pause" and now >= nextAttack and now > stateUntil - 3.5 then
+					nextAttack = now + Show.AttackEvery
+					state, stateUntil = "attack", now + 2.6
+					if pointTrack then
+						pointTrack:Play(0.2)
+					end
+					task.delay(1.0, fireBeam)
+				elseif now >= stateUntil then
+					state = "walk"
+					setWalking(true)
+				end
+			end
+			root.CFrame = CFrame.lookAt(Vector3.new(pos.X, rootY, pos.Z), Vector3.new(pos.X + facing.X, rootY, pos.Z + facing.Z))
 		end)
+		boom(3, Vector3.new(0, ROOM_FLOOR, 330)) -- the arrival
 	end
 
 	-- The clock. Each step happens once per server, a second or so after its time comes.
@@ -5427,8 +5616,16 @@ do
 						RoundService.RemoveFromRun(plr)
 					end
 				end
-				if not RunServers.IsRunServer and t >= 2 then
-					spawnGiant()
+				if t >= 0 and once("intro" .. tag) then
+					-- boom, boom, boom: the lobby shakes before he arrives
+					for i = 0, 2 do
+						task.delay(i * 0.9, function()
+							Remote.AbuseBoom:FireAllClients(3, Vector3.new(0, ROOM_FLOOR, 330))
+						end)
+					end
+				end
+				if not RunServers.IsRunServer and t >= 3 then
+					task.spawn(spawnGiant)
 				end
 				for i, line in ipairs(Show.Lines) do
 					if t >= line[1] and t < line[1] + 30 and once("line" .. i .. tag) then
@@ -5441,12 +5638,30 @@ do
 					end
 				end
 			elseif t >= Show.ShowSeconds then
-				if giant then
+				-- The lockdown is over; the giant keeps wandering (and muttering) until the event itself ends.
+				if os.time() < e.Ends then
+					if not RunServers.IsRunServer and not giant and t < e.Ends - e.Starts and once("again" .. tag .. math.floor(t / 600)) then
+						task.spawn(spawnGiant)
+					end
+					local k = math.floor((t - Show.ShowSeconds) / Show.RemarkEvery)
+					if k >= 0 and #Show.Remarks > 0 and once("remark" .. k .. tag) then
+						say(Show.Remarks[k % #Show.Remarks + 1])
+					end
+				elseif giant then
 					removeGiant()
 				end
 			end
 		end
 	end)
+
+	-- :notifytest (Studio tab): sends the "daily reward ready" notification to you right now and tells you how
+	-- it went (secret found? HTTP on? are you opted in to notifications for this experience?).
+	Commands.notifytest = function(admin, _text)
+		task.spawn(function()
+			local result = DailyNotify.TestNow(admin)
+			sendFeedback(admin, "Notification test: " .. result, not string.find(result, "^Sent"))
+		end)
+	end
 
 	Commands.abuseshow = function(admin, text)
 		local e = abuseEvent()
