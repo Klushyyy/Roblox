@@ -1793,7 +1793,7 @@ do
 		local label = Instance.new("TextLabel")
 		label.Size = UDim2.new(1, 0, 1, 0)
 		label.BackgroundTransparency = 1
-		label.Font = Enum.Font.GothamBold
+		label.Font = Enum.Font.SourceSansBold
 		label.TextColor3 = Jail.C_ACCENT
 		label.TextScaled = true
 		label.Text = "CELL " .. cellIndex
@@ -5581,7 +5581,7 @@ do
 			local label = Instance.new("TextLabel")
 			label.Size = UDim2.fromScale(1, 1)
 			label.BackgroundTransparency = 1
-			label.Font = Enum.Font.FredokaOne
+			label.Font = Enum.Font.LuckiestGuy
 			label.TextScaled = true
 			label.TextColor3 = Color3.fromRGB(255, 213, 74)
 			label.TextStrokeTransparency = 0

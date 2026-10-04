@@ -186,7 +186,7 @@ local function worldSign(parent: BasePart, text: string, width: number, height: 
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		Text = text,
-		Font = Enum.Font.FredokaOne,
+		Font = Enum.Font.LuckiestGuy,
 		TextScaled = true,
 		TextColor3 = color or Color3.new(1, 1, 1),
 	}, gui) :: TextLabel
@@ -632,7 +632,7 @@ local function buildSpawn(parent: Instance)
 		Size = UDim2.fromScale(0.8, 0.36),
 		BackgroundTransparency = 1,
 		Text = string.upper(Config.GameName),
-		Font = Enum.Font.FredokaOne,
+		Font = Enum.Font.LuckiestGuy,
 		TextScaled = true,
 		TextColor3 = Color3.new(1, 1, 1),
 	}, gui)
@@ -891,10 +891,10 @@ local function buildPad(parent: Instance, id: number): PadInfo
 		mk("UIStroke", { Thickness = 2.5, Color = Color3.fromRGB(12, 30, 60) }, lbl)
 		return lbl
 	end
-	local titleLbl = line("Title", 0, 0.2, "", Color3.fromRGB(255, 230, 140), Enum.Font.FredokaOne)
-	local countLbl = line("Count", 0.2, 0.42, "0/" .. Config.Party.MaxPlayers, Color3.new(1, 1, 1), Enum.Font.FredokaOne)
-	local statusLbl = line("Status", 0.63, 0.2, "Touch to create a party", Color3.new(1, 1, 1), Enum.Font.FredokaOne)
-	local privacyLbl = line("Privacy", 0.84, 0.15, "", Color3.fromRGB(215, 230, 250), Enum.Font.GothamBold)
+	local titleLbl = line("Title", 0, 0.2, "", Color3.fromRGB(255, 230, 140), Enum.Font.LuckiestGuy)
+	local countLbl = line("Count", 0.2, 0.42, "0/" .. Config.Party.MaxPlayers, Color3.new(1, 1, 1), Enum.Font.LuckiestGuy)
+	local statusLbl = line("Status", 0.63, 0.2, "Touch to create a party", Color3.new(1, 1, 1), Enum.Font.LuckiestGuy)
+	local privacyLbl = line("Privacy", 0.84, 0.15, "", Color3.fromRGB(215, 230, 250), Enum.Font.SourceSansBold)
 
 	-- Members stand in the middle facing the plaza centre; leavers are put outside, towards it.
 	local toCentre = -math.sign(cx)
@@ -977,7 +977,7 @@ local function buildDishwasherBuilding(parent: Instance)
 		Position = UDim2.fromScale(0.03, 0.05),
 		BackgroundTransparency = 1,
 		Text = string.upper(Config.GameName),
-		Font = Enum.Font.FredokaOne,
+		Font = Enum.Font.LuckiestGuy,
 		TextScaled = true,
 		TextColor3 = Color3.fromRGB(120, 220, 255),
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -996,7 +996,7 @@ local function buildDishwasherBuilding(parent: Instance)
 	-- Roof sign.
 	local roofSign = mkPart("Part", { Name = "RoofSign", Size = Vector3.new(44, 9, 1), CFrame = at(0, h + 8.5, HATCHERY_Z - 4) * CFrame.Angles(0, math.pi, 0), Color = Color3.fromRGB(255, 120, 180), Material = Enum.Material.SmoothPlastic }, parent)
 	local signGui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(880, 180), LightInfluence = 0 }, roofSign)
-	local signText = mk("TextLabel", { Size = UDim2.fromScale(0.94, 0.86), Position = UDim2.fromScale(0.03, 0.07), BackgroundTransparency = 1, Text = "PETS & EGGS", Font = Enum.Font.FredokaOne, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, signGui)
+	local signText = mk("TextLabel", { Size = UDim2.fromScale(0.94, 0.86), Position = UDim2.fromScale(0.03, 0.07), BackgroundTransparency = 1, Text = "PETS & EGGS", Font = Enum.Font.LuckiestGuy, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, signGui)
 	mk("UIStroke", { Thickness = 5, Color = Color3.fromRGB(140, 40, 90) }, signText)
 	for _, x in { -18, 18 } do
 		mkPart("Part", { Name = "SignPost", Size = Vector3.new(0.8, 3, 0.8), CFrame = at(x, h + 3.5, HATCHERY_Z - 4), Color = Color3.fromRGB(200, 205, 212), Material = LOW }, parent)
@@ -1248,7 +1248,7 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 			Position = if paged then UDim2.fromOffset(75, 0) else UDim2.new(),
 			BackgroundTransparency = 1,
 			Text = titleText,
-			Font = Enum.Font.FredokaOne,
+			Font = Enum.Font.LuckiestGuy,
 			TextScaled = true,
 			TextColor3 = Color3.new(1, 1, 1),
 		}, root) :: TextLabel
@@ -1319,7 +1319,7 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 			Position = UDim2.fromOffset(if dir < 0 then -2 else 2, -1),
 			BackgroundTransparency = 1,
 			Text = if dir < 0 then "◀" else "▶",
-			Font = Enum.Font.FredokaOne,
+			Font = Enum.Font.LuckiestGuy,
 			TextSize = 34,
 			TextColor3 = Color3.fromRGB(60, 40, 10),
 			ZIndex = 6,
@@ -1367,7 +1367,7 @@ local function buildHowToPlay(parent: Instance, x: number, z: number, faceX: num
 		Size = UDim2.new(1, 0, 0, 56),
 		BackgroundTransparency = 1,
 		Text = "How to Play",
-		Font = Enum.Font.FredokaOne,
+		Font = Enum.Font.LuckiestGuy,
 		TextScaled = true,
 		TextColor3 = Color3.fromRGB(20, 110, 190),
 	}, gui)
@@ -1390,7 +1390,7 @@ local function buildHowToPlay(parent: Instance, x: number, z: number, faceX: num
 			Size = UDim2.new(1, 0, 0, 66),
 			BackgroundTransparency = 1,
 			Text = tostring(i) .. ". " .. text,
-			Font = Enum.Font.GothamBold,
+			Font = Enum.Font.SourceSansBold,
 			-- one fixed size for every step (scaled text made each line a different size)
 			TextSize = 31,
 			TextColor3 = Color3.fromRGB(20, 40, 70),
@@ -1702,9 +1702,9 @@ local function buildEventZone(parent: Instance)
 	end
 	local banner = mkPart("Part", { Name = "EventBanner", Size = Vector3.new(13, 4, 0.4), CFrame = at(x, FLOOR_Y + 9, z - 6.5), Color = Color3.fromRGB(70, 40, 120), Material = LOW }, parent)
 	local gui = mk("SurfaceGui", { Name = "Sign", Face = Enum.NormalId.Back, CanvasSize = Vector2.new(650, 200), LightInfluence = 0 }, banner) -- faces the spawn (+Z)
-	local title = mk("TextLabel", { Name = "Title", Size = UDim2.fromScale(1, 0.45), BackgroundTransparency = 1, Text = "NEXT EVENT", Font = Enum.Font.FredokaOne, TextScaled = true, TextColor3 = Color3.fromRGB(255, 200, 230) }, gui)
+	local title = mk("TextLabel", { Name = "Title", Size = UDim2.fromScale(1, 0.45), BackgroundTransparency = 1, Text = "NEXT EVENT", Font = Enum.Font.LuckiestGuy, TextScaled = true, TextColor3 = Color3.fromRGB(255, 200, 230) }, gui)
 	mk("UIStroke", { Thickness = 3, Color = Color3.fromRGB(12, 30, 60) }, title)
-	local when = mk("TextLabel", { Name = "When", Position = UDim2.fromScale(0, 0.45), Size = UDim2.fromScale(1, 0.55), BackgroundTransparency = 1, Text = "", Font = Enum.Font.FredokaOne, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, gui)
+	local when = mk("TextLabel", { Name = "When", Position = UDim2.fromScale(0, 0.45), Size = UDim2.fromScale(1, 0.55), BackgroundTransparency = 1, Text = "", Font = Enum.Font.LuckiestGuy, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, gui)
 	mk("UIStroke", { Thickness = 3, Color = Color3.fromRGB(12, 30, 60) }, when)
 	CollectionService:AddTag(when, "NextEventCountdown")
 	mk("PointLight", { Range = 16, Brightness = 0.8, Color = Color3.fromRGB(255, 150, 200) }, ring)

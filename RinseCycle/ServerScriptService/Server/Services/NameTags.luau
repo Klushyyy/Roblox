@@ -39,7 +39,7 @@ local function makeLabel(name: string, parent: Instance, y: number, h: number, m
 	label.BackgroundTransparency = 1
 	label.Position = UDim2.fromScale(0, y)
 	label.Size = UDim2.fromScale(1, h)
-	label.Font = Enum.Font.FredokaOne
+	label.Font = Enum.Font.LuckiestGuy
 	label.TextScaled = true
 	label.TextColor3 = Color3.new(1, 1, 1)
 	label.Text = ""

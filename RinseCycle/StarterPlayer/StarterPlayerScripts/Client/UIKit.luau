@@ -109,9 +109,9 @@ UIKit.Theme = {
 		Disabled = rgb(128, 142, 162),
 	},
 	Fonts = {
-		Title = Enum.Font.FredokaOne,
-		Body = Enum.Font.GothamBold,
-		Medium = Enum.Font.GothamMedium,
+		Title = Enum.Font.LuckiestGuy,
+		Body = Enum.Font.SourceSansBold,
+		Medium = Enum.Font.SourceSansSemibold,
 	},
 	Corner = 12,
 	CornerLarge = 16,
@@ -1206,7 +1206,7 @@ function UIKit.IconButton(props: { [string]: any }?): TextButton
 		caption.Visible = hasCaption
 		local value = tostring(button:GetAttribute("Icon") or "")
 		local kind = string.match(value, "^@(%a+)$")
-		local artSize = 2 * math.floor(height * (if hasCaption then 0.28 else 0.35)) -- even: stays centred
+		local artSize = 2 * math.floor(height * (if hasCaption then 0.33 else 0.38)) -- even: stays centred
 		local key = if kind then kind .. artSize .. tostring(hasCaption) else ""
 		if key ~= artKey then
 			artKey = key

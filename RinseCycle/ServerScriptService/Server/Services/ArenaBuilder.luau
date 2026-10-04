@@ -214,7 +214,7 @@ local function sign(parent: BasePart, text: string, widthStuds: number, heightSt
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
 	label.Size = UDim2.fromScale(1, 1)
-	label.Font = Enum.Font.FredokaOne
+	label.Font = Enum.Font.LuckiestGuy
 	label.TextScaled = true
 	label.TextColor3 = color or Color3.new(1, 1, 1)
 	label.Text = text
@@ -290,7 +290,7 @@ local function roomSign(b: Builder, text: string, size: Vector3, x: number, y: n
 	label.BackgroundTransparency = 1
 	label.Size = UDim2.fromScale(0.9, 0.8)
 	label.Position = UDim2.fromScale(0.05, 0.1)
-	label.Font = Enum.Font.FredokaOne
+	label.Font = Enum.Font.LuckiestGuy
 	label.TextScaled = true
 	label.TextColor3 = fg
 	label.Text = text
@@ -1804,7 +1804,7 @@ local function guiText(parent: Instance, name: string, text: string, pos: UDim2,
 	label.BackgroundTransparency = 1
 	label.Position = pos
 	label.Size = size
-	label.Font = Enum.Font.FredokaOne
+	label.Font = Enum.Font.LuckiestGuy
 	label.TextScaled = true
 	label.TextColor3 = color
 	label.Text = text

@@ -229,7 +229,7 @@ end
 local function label(props: { [string]: any }, parent: Instance): TextLabel
 	local lbl = Instance.new("TextLabel")
 	lbl.BackgroundTransparency = 1
-	lbl.Font = Enum.Font.FredokaOne
+	lbl.Font = Enum.Font.LuckiestGuy
 	lbl.TextScaled = true
 	lbl.TextColor3 = Color3.new(1, 1, 1)
 	-- A text stroke instead of a UIStroke: 100 rows a page, so fewer instances to send to everyone.

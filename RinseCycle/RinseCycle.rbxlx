@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.9.0"
+Config.Version = "2.9.1"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1055,7 +1055,7 @@ Config.UpcomingEvents = {
 -- rounds can't start; at the start everyone in a run is sent back to the lobby and a giant copy of the
 -- owner walks the lobby, "says" the Lines in chat, runs votes (Rounds) counted across every server, and
 -- gives out the winning prize. All times are seconds after Starts.
-Config.AbuseShow = {
+Config.AbuseShow = ({
 	EventKey = "AdminAbuse",
 	PreSeconds = 1800, -- rounds can't start this long before the event
 	ShowSeconds = 900, -- how long the show (and the pause on rounds) lasts
@@ -1184,7 +1184,7 @@ Config.AbuseShow = {
 			Chosen = "{text}. lets go.",
 		},
 	},
-}
+} :: any)
 
 -- What a prize option looks like with n players online: its button text and, for Passes / Pet, how many win.
 function Config.AbuseOption(option: any, n: number): any
@@ -5299,7 +5299,7 @@ do
 		local label = Instance.new("TextLabel")
 		label.Size = UDim2.new(1, 0, 1, 0)
 		label.BackgroundTransparency = 1
-		label.Font = Enum.Font.GothamBold
+		label.Font = Enum.Font.SourceSansBold
 		label.TextColor3 = Jail.C_ACCENT
 		label.TextScaled = true
 		label.Text = "CELL " .. cellIndex
@@ -9087,7 +9087,7 @@ do
 			local label = Instance.new("TextLabel")
 			label.Size = UDim2.fromScale(1, 1)
 			label.BackgroundTransparency = 1
-			label.Font = Enum.Font.FredokaOne
+			label.Font = Enum.Font.LuckiestGuy
 			label.TextScaled = true
 			label.TextColor3 = Color3.fromRGB(255, 213, 74)
 			label.TextStrokeTransparency = 0
@@ -9265,7 +9265,7 @@ do
 						if idleTrack then
 							idleTrack:Play(0.3)
 						end
-						local gesture = if acts % 3 == 0 then cheerTrack else pointTrack
+						local gesture = if acts % 3 == 0 then cheerTrack elseif acts % 3 == 1 then waveTrack else pointTrack
 						if gesture then
 							gesture:Play(0.2)
 						end
@@ -9670,7 +9670,7 @@ local function sign(parent: BasePart, text: string, widthStuds: number, heightSt
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
 	label.Size = UDim2.fromScale(1, 1)
-	label.Font = Enum.Font.FredokaOne
+	label.Font = Enum.Font.LuckiestGuy
 	label.TextScaled = true
 	label.TextColor3 = color or Color3.new(1, 1, 1)
 	label.Text = text
@@ -9746,7 +9746,7 @@ local function roomSign(b: Builder, text: string, size: Vector3, x: number, y: n
 	label.BackgroundTransparency = 1
 	label.Size = UDim2.fromScale(0.9, 0.8)
 	label.Position = UDim2.fromScale(0.05, 0.1)
-	label.Font = Enum.Font.FredokaOne
+	label.Font = Enum.Font.LuckiestGuy
 	label.TextScaled = true
 	label.TextColor3 = fg
 	label.Text = text
@@ -11260,7 +11260,7 @@ local function guiText(parent: Instance, name: string, text: string, pos: UDim2,
 	label.BackgroundTransparency = 1
 	label.Position = pos
 	label.Size = size
-	label.Font = Enum.Font.FredokaOne
+	label.Font = Enum.Font.LuckiestGuy
 	label.TextScaled = true
 	label.TextColor3 = color
 	label.Text = text
@@ -17289,7 +17289,7 @@ end
 local function label(props: { [string]: any }, parent: Instance): TextLabel
 	local lbl = Instance.new("TextLabel")
 	lbl.BackgroundTransparency = 1
-	lbl.Font = Enum.Font.FredokaOne
+	lbl.Font = Enum.Font.LuckiestGuy
 	lbl.TextScaled = true
 	lbl.TextColor3 = Color3.new(1, 1, 1)
 	-- A text stroke instead of a UIStroke: 100 rows a page, so fewer instances to send to everyone.
@@ -18170,7 +18170,7 @@ local function worldSign(parent: BasePart, text: string, width: number, height: 
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		Text = text,
-		Font = Enum.Font.FredokaOne,
+		Font = Enum.Font.LuckiestGuy,
 		TextScaled = true,
 		TextColor3 = color or Color3.new(1, 1, 1),
 	}, gui) :: TextLabel
@@ -18616,7 +18616,7 @@ local function buildSpawn(parent: Instance)
 		Size = UDim2.fromScale(0.8, 0.36),
 		BackgroundTransparency = 1,
 		Text = string.upper(Config.GameName),
-		Font = Enum.Font.FredokaOne,
+		Font = Enum.Font.LuckiestGuy,
 		TextScaled = true,
 		TextColor3 = Color3.new(1, 1, 1),
 	}, gui)
@@ -18875,10 +18875,10 @@ local function buildPad(parent: Instance, id: number): PadInfo
 		mk("UIStroke", { Thickness = 2.5, Color = Color3.fromRGB(12, 30, 60) }, lbl)
 		return lbl
 	end
-	local titleLbl = line("Title", 0, 0.2, "", Color3.fromRGB(255, 230, 140), Enum.Font.FredokaOne)
-	local countLbl = line("Count", 0.2, 0.42, "0/" .. Config.Party.MaxPlayers, Color3.new(1, 1, 1), Enum.Font.FredokaOne)
-	local statusLbl = line("Status", 0.63, 0.2, "Touch to create a party", Color3.new(1, 1, 1), Enum.Font.FredokaOne)
-	local privacyLbl = line("Privacy", 0.84, 0.15, "", Color3.fromRGB(215, 230, 250), Enum.Font.GothamBold)
+	local titleLbl = line("Title", 0, 0.2, "", Color3.fromRGB(255, 230, 140), Enum.Font.LuckiestGuy)
+	local countLbl = line("Count", 0.2, 0.42, "0/" .. Config.Party.MaxPlayers, Color3.new(1, 1, 1), Enum.Font.LuckiestGuy)
+	local statusLbl = line("Status", 0.63, 0.2, "Touch to create a party", Color3.new(1, 1, 1), Enum.Font.LuckiestGuy)
+	local privacyLbl = line("Privacy", 0.84, 0.15, "", Color3.fromRGB(215, 230, 250), Enum.Font.SourceSansBold)
 
 	-- Members stand in the middle facing the plaza centre; leavers are put outside, towards it.
 	local toCentre = -math.sign(cx)
@@ -18961,7 +18961,7 @@ local function buildDishwasherBuilding(parent: Instance)
 		Position = UDim2.fromScale(0.03, 0.05),
 		BackgroundTransparency = 1,
 		Text = string.upper(Config.GameName),
-		Font = Enum.Font.FredokaOne,
+		Font = Enum.Font.LuckiestGuy,
 		TextScaled = true,
 		TextColor3 = Color3.fromRGB(120, 220, 255),
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -18980,7 +18980,7 @@ local function buildDishwasherBuilding(parent: Instance)
 	-- Roof sign.
 	local roofSign = mkPart("Part", { Name = "RoofSign", Size = Vector3.new(44, 9, 1), CFrame = at(0, h + 8.5, HATCHERY_Z - 4) * CFrame.Angles(0, math.pi, 0), Color = Color3.fromRGB(255, 120, 180), Material = Enum.Material.SmoothPlastic }, parent)
 	local signGui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(880, 180), LightInfluence = 0 }, roofSign)
-	local signText = mk("TextLabel", { Size = UDim2.fromScale(0.94, 0.86), Position = UDim2.fromScale(0.03, 0.07), BackgroundTransparency = 1, Text = "PETS &amp; EGGS", Font = Enum.Font.FredokaOne, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, signGui)
+	local signText = mk("TextLabel", { Size = UDim2.fromScale(0.94, 0.86), Position = UDim2.fromScale(0.03, 0.07), BackgroundTransparency = 1, Text = "PETS &amp; EGGS", Font = Enum.Font.LuckiestGuy, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, signGui)
 	mk("UIStroke", { Thickness = 5, Color = Color3.fromRGB(140, 40, 90) }, signText)
 	for _, x in { -18, 18 } do
 		mkPart("Part", { Name = "SignPost", Size = Vector3.new(0.8, 3, 0.8), CFrame = at(x, h + 3.5, HATCHERY_Z - 4), Color = Color3.fromRGB(200, 205, 212), Material = LOW }, parent)
@@ -19232,7 +19232,7 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 			Position = if paged then UDim2.fromOffset(75, 0) else UDim2.new(),
 			BackgroundTransparency = 1,
 			Text = titleText,
-			Font = Enum.Font.FredokaOne,
+			Font = Enum.Font.LuckiestGuy,
 			TextScaled = true,
 			TextColor3 = Color3.new(1, 1, 1),
 		}, root) :: TextLabel
@@ -19303,7 +19303,7 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 			Position = UDim2.fromOffset(if dir &lt; 0 then -2 else 2, -1),
 			BackgroundTransparency = 1,
 			Text = if dir &lt; 0 then "◀" else "▶",
-			Font = Enum.Font.FredokaOne,
+			Font = Enum.Font.LuckiestGuy,
 			TextSize = 34,
 			TextColor3 = Color3.fromRGB(60, 40, 10),
 			ZIndex = 6,
@@ -19351,7 +19351,7 @@ local function buildHowToPlay(parent: Instance, x: number, z: number, faceX: num
 		Size = UDim2.new(1, 0, 0, 56),
 		BackgroundTransparency = 1,
 		Text = "How to Play",
-		Font = Enum.Font.FredokaOne,
+		Font = Enum.Font.LuckiestGuy,
 		TextScaled = true,
 		TextColor3 = Color3.fromRGB(20, 110, 190),
 	}, gui)
@@ -19374,7 +19374,7 @@ local function buildHowToPlay(parent: Instance, x: number, z: number, faceX: num
 			Size = UDim2.new(1, 0, 0, 66),
 			BackgroundTransparency = 1,
 			Text = tostring(i) .. ". " .. text,
-			Font = Enum.Font.GothamBold,
+			Font = Enum.Font.SourceSansBold,
 			-- one fixed size for every step (scaled text made each line a different size)
 			TextSize = 31,
 			TextColor3 = Color3.fromRGB(20, 40, 70),
@@ -19686,9 +19686,9 @@ local function buildEventZone(parent: Instance)
 	end
 	local banner = mkPart("Part", { Name = "EventBanner", Size = Vector3.new(13, 4, 0.4), CFrame = at(x, FLOOR_Y + 9, z - 6.5), Color = Color3.fromRGB(70, 40, 120), Material = LOW }, parent)
 	local gui = mk("SurfaceGui", { Name = "Sign", Face = Enum.NormalId.Back, CanvasSize = Vector2.new(650, 200), LightInfluence = 0 }, banner) -- faces the spawn (+Z)
-	local title = mk("TextLabel", { Name = "Title", Size = UDim2.fromScale(1, 0.45), BackgroundTransparency = 1, Text = "NEXT EVENT", Font = Enum.Font.FredokaOne, TextScaled = true, TextColor3 = Color3.fromRGB(255, 200, 230) }, gui)
+	local title = mk("TextLabel", { Name = "Title", Size = UDim2.fromScale(1, 0.45), BackgroundTransparency = 1, Text = "NEXT EVENT", Font = Enum.Font.LuckiestGuy, TextScaled = true, TextColor3 = Color3.fromRGB(255, 200, 230) }, gui)
 	mk("UIStroke", { Thickness = 3, Color = Color3.fromRGB(12, 30, 60) }, title)
-	local when = mk("TextLabel", { Name = "When", Position = UDim2.fromScale(0, 0.45), Size = UDim2.fromScale(1, 0.55), BackgroundTransparency = 1, Text = "", Font = Enum.Font.FredokaOne, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, gui)
+	local when = mk("TextLabel", { Name = "When", Position = UDim2.fromScale(0, 0.45), Size = UDim2.fromScale(1, 0.55), BackgroundTransparency = 1, Text = "", Font = Enum.Font.LuckiestGuy, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, gui)
 	mk("UIStroke", { Thickness = 3, Color = Color3.fromRGB(12, 30, 60) }, when)
 	CollectionService:AddTag(when, "NextEventCountdown")
 	mk("PointLight", { Range = 16, Brightness = 0.8, Color = Color3.fromRGB(255, 150, 200) }, ring)
@@ -20657,7 +20657,7 @@ local function makeLabel(name: string, parent: Instance, y: number, h: number, m
 	label.BackgroundTransparency = 1
 	label.Position = UDim2.fromScale(0, y)
 	label.Size = UDim2.fromScale(1, h)
-	label.Font = Enum.Font.FredokaOne
+	label.Font = Enum.Font.LuckiestGuy
 	label.TextScaled = true
 	label.TextColor3 = Color3.new(1, 1, 1)
 	label.Text = ""
@@ -27076,7 +27076,7 @@ end
 local function label(props: { [string]: any }, parent: Instance): TextLabel
 	local lbl = Instance.new("TextLabel")
 	lbl.BackgroundTransparency = 1
-	lbl.Font = Enum.Font.FredokaOne
+	lbl.Font = Enum.Font.LuckiestGuy
 	lbl.TextScaled = true
 	lbl.TextColor3 = INK
 	for k, v in props do
@@ -32406,7 +32406,7 @@ function HUD.Init()
 	local codesButton = leftButton(2, "@Ticket", "Codes", Colors.Primary, "Codes")
 	local freeButton = leftButton(3, "@Love", "Free", Colors.Good, "Free")
 	-- Trade lives in the right column (under Ranks), leaving room above Daily for the boost badges.
-	local tradeButton = sideButton("@Trade", "Trade", Colors.Accent, "T", "", function()
+	local tradeButton = sideButton("@Trade", "Trade", Color3.fromRGB(45, 212, 191), "T", "", function()
 		UIKit.ToggleWindow("Trade")
 	end)
 	-- Music on / off (MusicPlayer). Under Trade; the staff Admin button goes below it.
@@ -34190,22 +34190,14 @@ ART.Calendar = {
 -- HUD buttons (smooth-edged set: no rotated frames anywhere, see the header)
 ----------------------------------------------------------------------------------------------------
 
--- Pets: a happy puppy face with floppy ears.
+-- Pets / inventory: a bold paw print (one big pad and four toes).
 ART.Pup = {
-	{ "rect", x = 0.17, y = 0.44, w = 0.22, h = 0.46, r = 0.5, fill = { rgb(176, 112, 70), rgb(132, 78, 46) }, o = true },
-	{ "rect", x = 0.83, y = 0.44, w = 0.22, h = 0.46, r = 0.5, fill = { rgb(176, 112, 70), rgb(132, 78, 46) }, o = true },
-	"|",
-	{ "disc", x = 0.5, y = 0.52, d = 0.7, fill = { rgb(255, 222, 170), rgb(236, 176, 110) }, o = true },
-	{ "rect", x = 0.5, y = 0.7, w = 0.4, h = 0.26, r = 0.5, fill = rgb(255, 240, 214) },
-	{ "disc", x = 0.36, y = 0.48, d = 0.11, fill = rgb(40, 28, 24) },
-	{ "disc", x = 0.64, y = 0.48, d = 0.11, fill = rgb(40, 28, 24) },
-	{ "disc", x = 0.345, y = 0.465, d = 0.04, fill = WHITE },
-	{ "disc", x = 0.625, y = 0.465, d = 0.04, fill = WHITE },
-	{ "rect", x = 0.5, y = 0.62, w = 0.15, h = 0.1, r = 0.5, fill = rgb(50, 32, 28) },
-	{ "rect", x = 0.5, y = 0.79, w = 0.1, h = 0.12, r = 0.5, fill = rgb(255, 110, 130) },
-	{ "disc", x = 0.25, y = 0.64, d = 0.1, fill = rgb(255, 150, 150), t = 0.45 },
-	{ "disc", x = 0.75, y = 0.64, d = 0.1, fill = rgb(255, 150, 150), t = 0.45 },
-	{ "rect", x = 0.42, y = 0.26, w = 0.16, h = 0.05, r = 0.5, fill = WHITE, t = 0.5 },
+	{ "disc", x = 0.18, y = 0.44, d = 0.2, fill = rgb(255, 255, 255), o = true },
+	{ "disc", x = 0.38, y = 0.24, d = 0.22, fill = rgb(255, 255, 255), o = true },
+	{ "disc", x = 0.62, y = 0.24, d = 0.22, fill = rgb(255, 255, 255), o = true },
+	{ "disc", x = 0.82, y = 0.44, d = 0.2, fill = rgb(255, 255, 255), o = true },
+	{ "rect", x = 0.5, y = 0.69, w = 0.56, h = 0.42, r = 0.5, fill = rgb(255, 255, 255), o = true },
+	{ "rect", x = 0.5, y = 0.65, w = 0.36, h = 0.1, r = 0.5, fill = rgb(255, 196, 150), t = 0.4 },
 }
 
 -- Shop: a shopping bag with a round handle.
@@ -44305,9 +44297,9 @@ UIKit.Theme = {
 		Disabled = rgb(128, 142, 162),
 	},
 	Fonts = {
-		Title = Enum.Font.FredokaOne,
-		Body = Enum.Font.GothamBold,
-		Medium = Enum.Font.GothamMedium,
+		Title = Enum.Font.LuckiestGuy,
+		Body = Enum.Font.SourceSansBold,
+		Medium = Enum.Font.SourceSansSemibold,
 	},
 	Corner = 12,
 	CornerLarge = 16,
@@ -45402,7 +45394,7 @@ function UIKit.IconButton(props: { [string]: any }?): TextButton
 		caption.Visible = hasCaption
 		local value = tostring(button:GetAttribute("Icon") or "")
 		local kind = string.match(value, "^@(%a+)$")
-		local artSize = 2 * math.floor(height * (if hasCaption then 0.28 else 0.35)) -- even: stays centred
+		local artSize = 2 * math.floor(height * (if hasCaption then 0.33 else 0.38)) -- even: stays centred
 		local key = if kind then kind .. artSize .. tostring(hasCaption) else ""
 		if key ~= artKey then
 			artKey = key

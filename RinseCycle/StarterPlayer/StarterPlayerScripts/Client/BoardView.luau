@@ -31,7 +31,7 @@ end
 local function label(props: { [string]: any }, parent: Instance): TextLabel
 	local lbl = Instance.new("TextLabel")
 	lbl.BackgroundTransparency = 1
-	lbl.Font = Enum.Font.FredokaOne
+	lbl.Font = Enum.Font.LuckiestGuy
 	lbl.TextScaled = true
 	lbl.TextColor3 = INK
 	for k, v in props do

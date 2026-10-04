@@ -290,7 +290,7 @@ function HUD.Init()
 	local codesButton = leftButton(2, "@Ticket", "Codes", Colors.Primary, "Codes")
 	local freeButton = leftButton(3, "@Love", "Free", Colors.Good, "Free")
 	-- Trade lives in the right column (under Ranks), leaving room above Daily for the boost badges.
-	local tradeButton = sideButton("@Trade", "Trade", Colors.Accent, "T", "", function()
+	local tradeButton = sideButton("@Trade", "Trade", Color3.fromRGB(45, 212, 191), "T", "", function()
 		UIKit.ToggleWindow("Trade")
 	end)
 	-- Music on / off (MusicPlayer). Under Trade; the staff Admin button goes below it.

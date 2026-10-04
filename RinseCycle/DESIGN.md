@@ -1659,3 +1659,8 @@ Config.AbuseShow and the clock Config.Now. AdminServer's "Admin Abuse show" sect
 - Show polls are published `Silent`: the poll card closes the second it ends (`GlobalPoll` "Close"), no results card.
 - He chats the whole time: scripted `Lines`, plus `Chatter` (or `HeatChatter`) every `ChatterEvery` seconds; after the show `Remarks` every 40 s until the event ends.
 - Giant: no Humanoid (an AnimationController plays the animations, so no hip-height jumps); the root's height is locked each frame to his lowest foot sole; he walks a smooth circle; every footfall booms; heat = faster walk, more frequent double attacks, red pulses and bigger shake. Attacks: beam, meteors, lightning, shockwave, barrage (all harmless), with a floating fake admin command.
+
+## 6zm. Fonts, paw icon, Trade colour (v2.9.1)
+- UI fonts: titles Luckiest Guy (a classic simulator-game font), body Source Sans Bold / Semibold (UIKit.Theme.Fonts); every FredokaOne / Gotham use in the world (name tags, boards, lobby signs) swapped too.
+- The Pets (inventory) button is a bold paw print; side-button icons are drawn larger.
+- Trade's button is teal, so Ranks is the only purple one.
