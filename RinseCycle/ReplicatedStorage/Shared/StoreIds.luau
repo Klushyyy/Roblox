@@ -15,33 +15,33 @@ return {
 
 	-- Game passes (bought once, kept forever).
 	GamePasses = {
-		DoubleCoins = 0,   -- 2x Coins (99 R$)
-		SuperScrub = 0,    -- Super Scrub (129 R$)
-		MegaTank = 0,      -- Mega Tank (149 R$)
-		LuckyCharm = 0,    -- Lucky Charm (99 R$)
-		PetSlots = 0,      -- +2 Pet Slots (149 R$)
-		AutoDrain = 0,     -- Auto Drain (149 R$)
-		DoubleBubbles = 0, -- 2x Bubbles (179 R$)
-		VIP = 0,           -- VIP (199 R$)
-		DoubleLuck = 0,    -- x2 Luck (149 R$)
-		ToolNozzle = 0,    -- Spray Nozzle (49 R$)
-		ToolWasher = 0,    -- Pressure Washer (99 R$)
-		ToolCannon = 0,    -- Foam Cannon (199 R$)
+		DoubleCoins = 1998171441,   -- 2x Coins (99 R$)
+		SuperScrub = 1999275431,    -- Super Scrub (129 R$)
+		MegaTank = 1999635456,      -- Mega Tank (149 R$)
+		LuckyCharm = 2001374337,    -- Lucky Charm (99 R$)
+		PetSlots = 1999263395,      -- +2 Pet Slots (149 R$)
+		AutoDrain = 2001644356,     -- Auto Drain (149 R$)
+		DoubleBubbles = 1998867445, -- 2x Bubbles (179 R$)
+		VIP = 2001476378,           -- VIP (199 R$)
+		DoubleLuck = 2001938341,    -- x2 Luck (149 R$)
+		ToolNozzle = 1999185504,    -- Spray Nozzle (49 R$)
+		ToolWasher = 1998081436,    -- Pressure Washer (99 R$)
+		ToolCannon = 2002424326,    -- Foam Cannon (199 R$)
 	},
 
 	-- Developer products (can be bought again and again).
 	DevProducts = {
-		Bubbles1 = 0,      -- Handful of Bubbles (19 R$)
-		Bubbles2 = 0,      -- Bucket of Bubbles (49 R$)
-		Bubbles3 = 0,      -- Tub of Bubbles (99 R$)
-		Bubbles4 = 0,      -- Bathtub Overflow (199 R$)
-		Coins1 = 0,        -- Coin Splash (15 R$)
-		Coins2 = 0,        -- Coin Wave (39 R$)
-		Coins3 = 0,        -- Coin Flood (89 R$)
-		Gems1 = 0,         -- Pouch of Gems (29 R$)
-		Gems2 = 0,         -- Sack of Gems (79 R$)
-		Gems3 = 0,         -- Chest of Gems (199 R$)
-		RestoreStreak = 0, -- Restore Streak (29 R$)
+		Bubbles1 = 3715384602,      -- Handful of Bubbles (19 R$)
+		Bubbles2 = 3715384663,      -- Bucket of Bubbles (49 R$)
+		Bubbles3 = 3715384708,      -- Tub of Bubbles (99 R$)
+		Bubbles4 = 3715384765,      -- Bathtub Overflow (199 R$)
+		Coins1 = 3715384814,        -- Coin Splash (15 R$)
+		Coins2 = 3715384876,        -- Coin Wave (39 R$)
+		Coins3 = 3715384928,        -- Coin Flood (89 R$)
+		Gems1 = 3715384965,         -- Pouch of Gems (29 R$)
+		Gems2 = 3715385007,         -- Sack of Gems (79 R$)
+		Gems3 = 3715385050,         -- Chest of Gems (199 R$)
+		RestoreStreak = 3715385096, -- Restore Streak (29 R$)
 	},
 
 	-- Roblox Events for the Next Event ring in the lobby (Creator Hub > your experience > Engagement
