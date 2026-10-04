@@ -684,7 +684,7 @@ do
 					pillStroke.Color = if left <= 60 then Colors.Bad else Colors.Coin
 				elseif left <= 0 and -left < abuse.ShowSeconds then
 					pill.Visible = true
-					pillText.Text = "ADMIN ABUSE IS LIVE!"
+					pillText.Text = if ReplicatedStorage:GetAttribute("AbuseHeat") then "ADMIN ABUSE: MAX HEAT!" else "ADMIN ABUSE IS LIVE!"
 					pillStroke.Color = if math.floor(os.clock() * 2) % 2 == 0 then Colors.Bad else Colors.Coin
 				else
 					pill.Visible = false
@@ -732,6 +732,7 @@ do
 
 	-- Screen shake (after the camera script, so it never accumulates) and the opening flash + title.
 	local shakeAmp = 0
+	local heatPulse: () -> () = function() end
 	RunService:BindToRenderStep("AbuseShake", Enum.RenderPriority.Camera.Value + 1, function(dt)
 		if shakeAmp > 0.03 then
 			local camera = workspace.CurrentCamera
@@ -752,6 +753,18 @@ do
 	flash.BackgroundTransparency = 1
 	flash.Parent = fxRoot
 	local title = UIKit.Label({ Text = "ADMIN ABUSE", TextSize = 64, TextColor3 = Colors.Coin, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.3), Size = UDim2.fromOffset(700, 90), Visible = false, Parent = fxRoot })
+	-- Heat: a red vignette that pulses on every big blast, and a title when it starts.
+	local heatFrame = Instance.new("Frame")
+	heatFrame.Size = UDim2.fromScale(2, 2)
+	heatFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	heatFrame.Position = UDim2.fromScale(0.5, 0.5)
+	heatFrame.BackgroundColor3 = Color3.fromRGB(255, 50, 30)
+	heatFrame.BackgroundTransparency = 1
+	heatFrame.Parent = fxRoot
+	heatPulse = function()
+		heatFrame.BackgroundTransparency = 0.78
+		TweenService:Create(heatFrame, TweenInfo.new(0.6), { BackgroundTransparency = 1 }):Play()
+	end
 	local lastIntro = 0
 	local function intro()
 		if os.clock() - lastIntro < 30 then
@@ -769,6 +782,20 @@ do
 		end)
 	end
 
+	ReplicatedStorage:GetAttributeChangedSignal("AbuseHeat"):Connect(function()
+		if ReplicatedStorage:GetAttribute("AbuseHeat") then
+			heatPulse()
+			title.Text = "TURN UP THE HEAT"
+			title.TextColor3 = Colors.Bad
+			title.Visible = true
+			title.TextTransparency = 0
+			title.Size = UDim2.fromOffset(1100, 150)
+			TweenService:Create(title, TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.fromOffset(700, 90), TextTransparency = 1 }):Play()
+			task.delay(3.1, function()
+				title.Visible = false
+			end)
+		end
+	end)
 	task.spawn(function()
 		local say = ReplicatedStorage:WaitForChild("AbuseSay", 120)
 		if say then
@@ -797,7 +824,11 @@ do
 				local camera = workspace.CurrentCamera
 				local distance = if camera and typeof(pos) == "Vector3" then (camera.CFrame.Position - pos).Magnitude else 300
 				local near = math.clamp(1.15 - distance / 1100, 0.2, 1)
-				shakeAmp = math.max(shakeAmp, strength * 1.1 * near)
+				local heatMult = if ReplicatedStorage:GetAttribute("AbuseHeat") then 1.7 else 1
+				shakeAmp = math.max(shakeAmp, strength * 1.1 * near * heatMult)
+				if heatMult > 1 and strength >= 1.5 then
+					heatPulse()
+				end
 				if strength >= 3 then
 					intro()
 				end

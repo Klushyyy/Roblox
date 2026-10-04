@@ -1652,3 +1652,10 @@ Config.AbuseShow and the clock Config.Now. AdminServer's "Admin Abuse show" sect
 - DailyNotify tries several secret names (Config.DailyNotify.SecretNames), and the Studio tab has "Notification test".
 
 - v2.8.1: the invisible walls round the Backyard sink and the drawbridge are now 8 studs thick (a thin 1-stud wall could be tunnelled by a fast flier). The intro title is hidden (not just transparent) until the show opens.
+
+## 6zl. Admin Abuse v2: three rounds, scaled prizes, a giant that stays on the floor (v2.9.0)
+- Prizes scale with the players online in every server (`Config.AbuseOption`): Bubbles/Gems are `PerPlayer` each (the poll text shows the pool, PerPlayer x n); Passes/Pet pick a Share of the players (rounded up, min 1) as winners.
+- Round 1 (poll): Bubbles vs Gems. Round 2 (announced, no vote): random game passes. Round 3 (poll, "turn up the heat", from `HeatAt`): limited pet / random pass / Bubbles / Gems. The limited pet is `Config.Pets.AdminAbuse` (Banhammer Dragon, Event = true). Pet winners: `PetDrop` message, bag full = 150 Gems.
+- Show polls are published `Silent`: the poll card closes the second it ends (`GlobalPoll` "Close"), no results card.
+- He chats the whole time: scripted `Lines`, plus `Chatter` (or `HeatChatter`) every `ChatterEvery` seconds; after the show `Remarks` every 40 s until the event ends.
+- Giant: no Humanoid (an AnimationController plays the animations, so no hip-height jumps); the root's height is locked each frame to his lowest foot sole; he walks a smooth circle; every footfall booms; heat = faster walk, more frequent double attacks, red pulses and bigger shake. Attacks: beam, meteors, lightning, shockwave, barrage (all harmless), with a floating fake admin command.

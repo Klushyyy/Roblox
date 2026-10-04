@@ -4839,7 +4839,7 @@ do
 		if type(d.Id) ~= "string" or type(d.Options) ~= "table" or polls[d.Id] then
 			return
 		end
-		local poll = { Id = d.Id, Question = tostring(d.Question), Options = d.Options, EndsAt = tonumber(d.EndsAt) or os.time(), Origin = d.Origin, Votes = {} }
+		local poll = { Id = d.Id, Question = tostring(d.Question), Options = d.Options, EndsAt = tonumber(d.EndsAt) or os.time(), Origin = d.Origin, Votes = {}, Silent = d.Silent == true }
 		polls[d.Id] = poll
 		for _, plr in ipairs(Players:GetPlayers()) do
 			sendPoll(plr, poll)
@@ -4854,7 +4854,8 @@ do
 			end
 			polls[poll.Id] = nil
 			for _, plr in ipairs(Players:GetPlayers()) do
-				Remote.GlobalPoll:FireClient(plr, "End", poll.Id)
+				-- A show poll's card goes away the second it ends (no results card).
+				Remote.GlobalPoll:FireClient(plr, if poll.Silent then "Close" else "End", poll.Id)
 			end
 			publish({ Kind = "PollTally", Id = poll.Id, Origin = poll.Origin, Counts = counts })
 		end)
@@ -5268,21 +5269,86 @@ do
 		return math.max(n, #Players:GetPlayers(), 1)
 	end
 
-	local function applyOutcome(option: any)
-		if option.Kind == "Bubbles" or option.Kind == "Gems" then
-			local share = math.max(1, math.floor(option.Amount / everyoneOnline()))
-			publish({ Kind = "GiveAll", Currency = option.Kind, Amount = share })
-			publish({ Kind = "Banner", Text = string.format("%s: everyone gets %s %s!", option.Text, Format.Commas(share), option.Kind) })
-		elseif option.Kind == "Passes" then
-			Commands.globalpassdrop(STUB, tostring(option.Amount) .. " random")
+	-- n random online players (every server, hidden staff left out).
+	local function pickWinners(count: number): { number }
+		local pool, seen = {}, {}
+		for _, server in ipairs(ServerList.Read()) do
+			for _, p in ipairs(server.Players or {}) do
+				local id = tonumber(p.UserId)
+				if id and not p.Hidden and not seen[id] then
+					seen[id] = true
+					table.insert(pool, id)
+				end
+			end
+		end
+		local out = {}
+		for _ = 1, math.min(count, #pool) do
+			table.insert(out, table.remove(pool, math.random(1, #pool)))
+		end
+		return out
+	end
+	handlers.PetDrop = function(d)
+		if type(d.W) ~= "table" then
+			return
+		end
+		local def = Config.Pets[Show.Pet]
+		for _, id in ipairs(d.W) do
+			local plr = Players:GetPlayerByUserId(tonumber(id) or 0)
+			if plr and def then
+				if PetService.GivePet(plr, Show.Pet) then
+					celebrate(plr, "You won a limited pet!", "Admin Abuse: you got the limited " .. def.Name .. "!", "@Gift")
+				else
+					DataService.AddGems(plr, 150)
+					celebrate(plr, "You won!", "Your pet bag is full, so here are 150 Gems instead of the " .. def.Name .. "!", "@Gift")
+				end
+			end
+		end
+		if type(d.Text) == "string" then
+			bannerAll(d.Text)
 		end
 	end
-	-- One vote: the poll goes to every server (the existing global poll), the counts come back here, and
-	-- the winner is applied. The winner is the most votes (the first on a tie; nobody voted = the first).
+
+	-- Gives the prize (an option from Config.AbuseOption) to everyone / the winners, in every server.
+	local function applyOutcome(option: any)
+		if option.Kind == "Bubbles" or option.Kind == "Gems" then
+			publish({ Kind = "GiveAll", Currency = option.Kind, Amount = option.PerPlayer })
+			publish({ Kind = "Banner", Text = string.format("Admin Abuse: everyone gets %s %s!", Format.Commas(option.PerPlayer), option.Kind) })
+		elseif option.Kind == "Passes" then
+			Commands.globalpassdrop(STUB, tostring(option.Count) .. " random")
+		elseif option.Kind == "Pet" then
+			local winners = pickWinners(option.Count)
+			publish({ Kind = "PetDrop", W = winners, Text = string.format("Admin Abuse: %d player%s won the limited %s pet!", #winners, if #winners == 1 then "" else "s", Config.Pets[Show.Pet].Name) })
+		end
+	end
+	local heat = false -- set by the clock once he turns up the heat
+	-- One round. A poll goes to every server (the existing global poll, "silent": its card closes the
+	-- second the vote ends), the counts come back here, and the winner is applied. An announced round
+	-- just happens. The winner is the most votes (the first on a tie; nobody voted = the first).
 	local function runRound(round: any)
-		local options = {}
+		local n = everyoneOnline()
+		local function fill(text: string, option: any): string
+			local out = string.gsub(text, "{players}", string.format("%d lucky player%s", option.Count, if option.Count == 1 then "" else "s"))
+			out = string.gsub(out, "{n}", tostring(option.Count))
+			out = string.gsub(out, "{pet}", Config.Pets[Show.Pet].Name)
+			out = string.gsub(out, "{text}", option.Text)
+			return out
+		end
+		if round.Kind == "Announce" then
+			local option = Config.AbuseOption(round.Option, n)
+			publish({ Kind = "AbuseSay", Text = fill(round.Intro, option) })
+			task.delay(8, function()
+				applyOutcome(option)
+				task.delay(4, function()
+					publish({ Kind = "AbuseSay", Text = round.Done })
+				end)
+			end)
+			return
+		end
+		local options, picked = {}, {}
 		for _, o in round.Options do
-			table.insert(options, o.Text)
+			local option = Config.AbuseOption(o, n)
+			table.insert(picked, option)
+			table.insert(options, option.Text)
 		end
 		local id = game.JobId .. ":abuse:" .. tostring(os.clock())
 		local counts = {}
@@ -5290,22 +5356,24 @@ do
 			counts[i] = 0
 		end
 		collecting[id] = { Counts = counts, Question = round.Question, Options = options }
-		publish({ Kind = "PollStart", Id = id, Question = round.Question, Options = options, EndsAt = Config.Now() + round.Seconds, Origin = game.JobId })
+		if round.Intro then
+			publish({ Kind = "AbuseSay", Text = round.Intro })
+		end
+		publish({ Kind = "PollStart", Id = id, Silent = true, Question = round.Question, Options = options, EndsAt = Config.Now() + round.Seconds, Origin = game.JobId })
 		task.delay(round.Seconds + 7, function()
 			local c = collecting[id]
 			collecting[id] = nil
 			if not c then
 				return
 			end
-			publish({ Kind = "PollResult", Id = id, Question = c.Question, Options = c.Options, Counts = c.Counts })
 			local best, bestVotes = 1, -1
-			for i, n in ipairs(c.Counts) do
-				if n > bestVotes then
-					best, bestVotes = i, n
+			for i, count in ipairs(c.Counts) do
+				if count > bestVotes then
+					best, bestVotes = i, count
 				end
 			end
-			local winner = round.Options[best]
-			publish({ Kind = "AbuseSay", Text = "chat has spoken: " .. winner.Text .. "!" })
+			local winner = picked[best]
+			publish({ Kind = "AbuseSay", Text = fill(round.Chosen, winner) })
 			task.delay(3, applyOutcome, winner)
 		end)
 	end
@@ -5316,10 +5384,11 @@ do
 	end
 
 	-- The giant: the owner's real avatar (hair and all, built from their HumanoidDescription), scaled up,
-	-- walking round the lobby room on the room floor with Roblox's default R15 animations (only the
-	-- root part is anchored, so the animations really move his limbs). Every stride stomps: dust, a
-	-- shockwave ring and a "boom" that shakes everyone's screen (Remote AbuseBoom). He pauses to
-	-- face the table and wave, and now and then fires a harmless showy beam at the plaza.
+	-- walking a circle round the lobby room with Roblox's default R15 animations (only the root part is
+	-- anchored, so the animations really move his limbs). The root's height is locked to his lowest
+	-- foot sole every frame, so he never sinks into or hovers over the floor, and every footfall
+	-- booms: dust, a shockwave ring and a screen shake (Remote AbuseBoom). Now and then he stops,
+	-- faces the table and attacks with something showy (harmless: no damage, no force).
 	local Debris = game:GetService("Debris")
 	local ROOM_FLOOR = -130 -- LobbyBuilder's room floor
 	local TABLE_CENTER = Vector3.new(0, ROOM_FLOOR, -18)
@@ -5378,9 +5447,57 @@ do
 		Debris:AddItem(anchor, 3)
 	end
 	boom = function(strength: number, pos: Vector3)
-		ringAt(pos, 120 + 160 * strength, 0.8, Color3.fromRGB(255, 205, 110))
+		ringAt(pos, 120 + 160 * strength, 0.8, if heat then Color3.fromRGB(255, 90, 60) else Color3.fromRGB(255, 205, 110))
 		dustAt(pos)
 		Remote.AbuseBoom:FireAllClients(strength, pos)
+	end
+	local function plazaSpot(): Vector3
+		return Vector3.new(math.random(-70, 70), 0.2, math.random(-85, 45))
+	end
+	local function harmlessBlast(pos: Vector3, radius: number)
+		local blast = Instance.new("Explosion") -- showy only: no damage, no force
+		blast.BlastPressure = 0
+		blast.BlastRadius = radius
+		blast.DestroyJointRadiusPercent = 0
+		blast.Position = pos
+		blast.Parent = workspace
+	end
+	local function neonPart(size: Vector3, color: Color3, shape: Enum.PartType?): Part
+		local part = Instance.new("Part")
+		part.Anchored = true
+		part.CanCollide = false
+		part.CanTouch = false
+		part.CanQuery = false
+		part.CastShadow = false
+		part.Material = Enum.Material.Neon
+		part.Color = color
+		part.Size = size
+		if shape then
+			part.Shape = shape
+		end
+		return part
+	end
+	-- Floating admin command above him.
+	local FAKE_COMMANDS = { ":give all everything", ":global speed 999", ":kill dishes", ":fly all", ":globalgive * 999999", ":smite table", ":size me 30", ":unban fun", ":setadminrank me 99", ":clean all" }
+	local function commandText(head: BasePart)
+		local tag = Instance.new("BillboardGui")
+		tag.Size = UDim2.fromOffset(520, 60)
+		tag.StudsOffsetWorldSpace = Vector3.new(0, head.Size.Y * 2.4, 0)
+		tag.AlwaysOnTop = true
+		tag.MaxDistance = 6000
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.fromScale(1, 1)
+		label.BackgroundTransparency = 1
+		label.Font = Enum.Font.Code
+		label.TextScaled = true
+		label.TextColor3 = Color3.fromRGB(255, 80, 70)
+		label.TextStrokeTransparency = 0
+		label.Text = FAKE_COMMANDS[math.random(1, #FAKE_COMMANDS)]
+		label.Parent = tag
+		tag.Parent = head
+		TweenService:Create(tag, TweenInfo.new(2.4), { StudsOffsetWorldSpace = Vector3.new(0, head.Size.Y * 4, 0) }):Play()
+		TweenService:Create(label, TweenInfo.new(2.4), { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
+		Debris:AddItem(tag, 2.6)
 	end
 
 	local spawning, spawnFailures, nextSpawnTry = false, 0, 0
@@ -5393,6 +5510,15 @@ do
 		spawning = true
 		spawnGiantNow()
 		spawning = false
+	end
+	-- The lowest point of a part (its rotated box), so a foot's sole is found whatever the pose.
+	local function lowestPoint(part: BasePart?): number
+		if not part then
+			return math.huge
+		end
+		local cf, size = part.CFrame, part.Size
+		local reach = (math.abs(cf.RightVector.Y) * size.X + math.abs(cf.UpVector.Y) * size.Y + math.abs(cf.LookVector.Y) * size.Z) / 2
+		return cf.Position.Y - reach
 	end
 	spawnGiantNow = function()
 		local ok, model = pcall(function()
@@ -5421,8 +5547,6 @@ do
 			end
 		end
 		root.Anchored = true
-		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-		humanoid.PlatformStand = false
 		model.PrimaryPart = root
 		model:PivotTo(CFrame.new(0, ROOM_FLOOR + 50, 330))
 		model.Parent = workspace
@@ -5431,12 +5555,19 @@ do
 		end)
 		task.wait(0.2)
 		giant = model
-		-- Height of the root above the soles of his feet (measured once, in the standing pose), so his
-		-- feet are exactly on the floor whatever his proportions or hair do.
+		-- No Humanoid: its state machine moves the hips up and down (the "sinking into the floor"). An
+		-- AnimationController plays the same animations without it.
+		local hipHeight = humanoid.HipHeight
+		humanoid:Destroy()
+		local controller = Instance.new("AnimationController")
+		controller.Parent = model
+		local animator = Instance.new("Animator")
+		animator.Parent = controller
+
 		local footL = model:FindFirstChild("LeftFoot") :: BasePart?
 		local footR = model:FindFirstChild("RightFoot") :: BasePart?
-		local soles = math.min(footL and (footL.Position.Y - footL.Size.Y / 2) or math.huge, footR and (footR.Position.Y - footR.Size.Y / 2) or math.huge)
-		local rootAbove = if soles == math.huge then humanoid.HipHeight + root.Size.Y / 2 else root.Position.Y - soles
+		local low = math.min(lowestPoint(footL), lowestPoint(footR))
+		local rootAbove = if low == math.huge then hipHeight + root.Size.Y / 2 else root.Position.Y - low
 		local rootY = ROOM_FLOOR + rootAbove
 
 		-- Name tag.
@@ -5460,7 +5591,6 @@ do
 		end
 
 		-- Animations (Roblox's default R15 set).
-		local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
 		local function load(id: string, priority: Enum.AnimationPriority, looped: boolean): AnimationTrack?
 			local track: AnimationTrack? = nil
 			pcall(function()
@@ -5483,18 +5613,15 @@ do
 			idleTrack:Play()
 		end
 
-		-- Walk a ring round the table, stopping now and then.
-		local RADIUS, SPEED = 300, 90
-		local ring = {}
-		for i = 0, 11 do
-			local a = i / 12 * math.pi * 2 + math.pi / 2
-			table.insert(ring, Vector3.new(math.cos(a) * RADIUS, ROOM_FLOOR, TABLE_CENTER.Z + math.sin(a) * RADIUS))
-		end
-		local index, pos = 1, ring[1]
+		-- A circle round the table: the angle moves at SPEED studs a second along the radius.
+		local RADIUS = 300
+		local angle = math.pi / 2
+		local walkSpeed = 90
 		local state, stateUntil = "arrive", os.clock() + 2.5
-		local nextStomp, nextAttack = 0, os.clock() + Show.AttackEvery * 0.5
-		local facing = Vector3.new(0, 0, -1)
-		local stops = 0
+		local nextAttack = os.clock() + 8
+		local facing = Vector3.new(-1, 0, 0)
+		local pos = Vector3.new(0, ROOM_FLOOR, TABLE_CENTER.Z + RADIUS)
+		local acts = 0
 		local function face(dir: Vector3, dt: number)
 			local flat = Vector3.new(dir.X, 0, dir.Z)
 			if flat.Magnitude > 1e-3 then
@@ -5504,81 +5631,173 @@ do
 		local function setWalking(on: boolean)
 			if walkTrack then
 				if on and not walkTrack.IsPlaying then
-					-- A stride on a giant is huge: slow the cycle so his feet don't skate.
 					walkTrack:Play(0.3)
-					walkTrack:AdjustSpeed(SPEED / (16 * Show.GiantScale) * 1.4)
 				elseif not on and walkTrack.IsPlaying then
 					walkTrack:Stop(0.3)
 				end
+				if on then
+					-- A stride on a giant is huge: slow the cycle so his feet don't skate.
+					walkTrack:AdjustSpeed(walkSpeed / (16 * Show.GiantScale) * 1.4)
+				end
 			end
 		end
+
+		-- Attacks (all just for show).
+		local function headPoint(): Vector3
+			return root.Position + Vector3.new(0, 20 * Show.GiantScale / 6, 0) + facing * Show.GiantScale / 6 * 6
+		end
 		local function fireBeam()
-			local from = root.Position + Vector3.new(0, 20 * Show.GiantScale / 6, 0) + facing * (6 * Show.GiantScale / 6)
-			local target = Vector3.new(math.random(-70, 70), 0.2, math.random(-85, 45))
+			local from = headPoint()
+			local target = plazaSpot()
 			local len = (target - from).Magnitude
-			local beam = Instance.new("Part")
-			beam.Anchored = true
-			beam.CanCollide = false
-			beam.CanTouch = false
-			beam.CanQuery = false
-			beam.CastShadow = false
-			beam.Material = Enum.Material.Neon
-			beam.Color = Color3.fromRGB(255, 120, 60)
-			beam.Size = Vector3.new(7, 7, len)
+			local beam = neonPart(Vector3.new(7, 7, len), Color3.fromRGB(255, 120, 60))
 			beam.CFrame = CFrame.lookAt(from, target) * CFrame.new(0, 0, -len / 2)
 			beam.Parent = workspace
 			TweenService:Create(beam, TweenInfo.new(1.4), { Transparency = 1, Size = Vector3.new(2, 2, len) }):Play()
 			Debris:AddItem(beam, 1.6)
-			local blast = Instance.new("Explosion") -- showy only: no damage, no force
-			blast.BlastPressure = 0
-			blast.BlastRadius = 14
-			blast.DestroyJointRadiusPercent = 0
-			blast.Position = target
-			blast.Parent = workspace
+			harmlessBlast(target, 14)
 			boom(2, target)
 			task.delay(0.5, boom, 1.5, target)
 		end
+		local function meteors()
+			for i = 1, if heat then 9 else 5 do
+				task.delay(i * 0.35, function()
+					local target = plazaSpot()
+					local rock = neonPart(Vector3.new(16, 16, 16), Color3.fromRGB(255, 140, 50), Enum.PartType.Ball)
+					rock.Position = target + Vector3.new(math.random(-120, 120), 260, math.random(-120, 120))
+					rock.Parent = workspace
+					local fall = TweenService:Create(rock, TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = target + Vector3.new(0, 8, 0) })
+					fall.Completed:Connect(function()
+						rock:Destroy()
+						harmlessBlast(target, 12)
+						boom(1.6, target)
+					end)
+					fall:Play()
+				end)
+			end
+		end
+		local function lightning()
+			for i = 1, if heat then 6 else 3 do
+				task.delay(i * 0.3, function()
+					local target = plazaSpot()
+					local from = target + Vector3.new(math.random(-40, 40), 320, math.random(-40, 40))
+					local previous = from
+					for step = 1, 5 do
+						local nextPoint = from:Lerp(target, step / 5) + (if step < 5 then Vector3.new(math.random(-25, 25), 0, math.random(-25, 25)) else Vector3.zero)
+						local len = (nextPoint - previous).Magnitude
+						local bolt = neonPart(Vector3.new(3, 3, len), Color3.fromRGB(190, 220, 255))
+						bolt.CFrame = CFrame.lookAt(previous, nextPoint) * CFrame.new(0, 0, -len / 2)
+						bolt.Parent = workspace
+						TweenService:Create(bolt, TweenInfo.new(0.5), { Transparency = 1 }):Play()
+						Debris:AddItem(bolt, 0.6)
+						previous = nextPoint
+					end
+					harmlessBlast(target, 10)
+					boom(1.4, target)
+				end)
+			end
+		end
+		local function shockwave()
+			local feet = Vector3.new(pos.X, ROOM_FLOOR, pos.Z)
+			for i = 0, 2 do
+				task.delay(i * 0.25, function()
+					ringAt(feet, 1400 + i * 400, 1.6, Color3.fromRGB(255, 80 + i * 50, 60))
+				end)
+			end
+			boom(3, feet)
+		end
+		local function barrage()
+			for i = 1, if heat then 8 else 5 do
+				task.delay(i * 0.3, function()
+					boom(1.8, plazaSpot())
+				end)
+			end
+		end
+		local ATTACKS = { fireBeam, meteors, lightning, shockwave, barrage }
+		local lastAttack = 0
+		local function attack()
+			local pick = math.random(1, #ATTACKS)
+			if pick == lastAttack then
+				pick = pick % #ATTACKS + 1
+			end
+			lastAttack = pick
+			ATTACKS[pick]()
+			if heat then
+				task.delay(1.2, function()
+					ATTACKS[math.random(1, #ATTACKS)]()
+				end)
+			end
+			if head then
+				commandText(head :: BasePart)
+			end
+		end
+
+		local feetUp = { L = false, R = false }
+		local lastStep = os.clock()
+		local function footfall(foot: BasePart)
+			lastStep = os.clock()
+			boom(if heat then 1.6 else 1.2, Vector3.new(foot.Position.X, ROOM_FLOOR, foot.Position.Z))
+		end
+
 		giantConn = RunService.Heartbeat:Connect(function(dt)
 			local now = os.clock()
-			if state == "walk" then
-				local target = ring[index % #ring + 1]
-				local dir = target - pos
-				if dir.Magnitude < SPEED * dt then
-					pos = target
-					index = index % #ring + 1
-					state, stateUntil = "pause", now + 4.5
-					stops += 1
-					setWalking(false)
-					if idleTrack then
-						idleTrack:Play(0.3)
-					end
-					local gesture = if stops % 3 == 0 then cheerTrack else waveTrack
-					if gesture then
-						gesture:Play(0.2)
-					end
-				else
-					pos += dir.Unit * SPEED * dt
-					face(dir, dt)
-					if now >= nextStomp then
-						nextStomp = now + 1.7
-						boom(1, Vector3.new(pos.X, ROOM_FLOOR, pos.Z))
+			walkSpeed = if heat then 130 else 90
+			if state == "walk" or state == "arrive" then
+				if state == "arrive" and now >= stateUntil then
+					state = "walk"
+					setWalking(true)
+				end
+				if state == "walk" then
+					angle += walkSpeed / RADIUS * dt
+					pos = Vector3.new(math.cos(angle) * RADIUS, ROOM_FLOOR, TABLE_CENTER.Z + math.sin(angle) * RADIUS)
+					face(Vector3.new(-math.sin(angle), 0, math.cos(angle)), dt)
+					if now >= nextAttack then
+						state, stateUntil = "act", now + (if heat then 3.2 else 4.2)
+						nextAttack = now + (if heat then Show.HeatAttackEvery else Show.AttackEvery)
+						acts += 1
+						setWalking(false)
+						if idleTrack then
+							idleTrack:Play(0.3)
+						end
+						local gesture = if acts % 3 == 0 then cheerTrack elseif acts % 3 == 1 then waveTrack else pointTrack
+						if gesture then
+							gesture:Play(0.2)
+						end
+						task.delay(1.0, attack)
 					end
 				end
-			else
+			elseif state == "act" then
 				face(TABLE_CENTER - pos, dt)
-				if state == "pause" and now >= nextAttack and now > stateUntil - 3.5 then
-					nextAttack = now + Show.AttackEvery
-					state, stateUntil = "attack", now + 2.6
-					if pointTrack then
-						pointTrack:Play(0.2)
-					end
-					task.delay(1.0, fireBeam)
-				elseif now >= stateUntil then
+				if now >= stateUntil then
 					state = "walk"
 					setWalking(true)
 				end
 			end
+			-- Floor lock: the lowest sole sits on the floor, whatever the animation does.
+			local low2 = math.min(lowestPoint(footL), lowestPoint(footR))
+			if low2 ~= math.huge then
+				local above = math.clamp(root.Position.Y - low2, rootAbove * 0.7, rootAbove * 1.3)
+				rootY += (ROOM_FLOOR + above - rootY) * math.min(1, dt * 20)
+			end
 			root.CFrame = CFrame.lookAt(Vector3.new(pos.X, rootY, pos.Z), Vector3.new(pos.X + facing.X, rootY, pos.Z + facing.Z))
+			-- Footfalls: a foot that was lifted and is back on the floor is a step: boom.
+			if state == "walk" then
+				for side, foot in { L = footL, R = footR } do
+					if foot then
+						local h = lowestPoint(foot) - ROOM_FLOOR
+						if h > Show.GiantScale * 0.1 then
+							feetUp[side] = true
+						elseif feetUp[side] and h < Show.GiantScale * 0.04 then
+							feetUp[side] = false
+							footfall(foot)
+						end
+					end
+				end
+				if now - lastStep > 1.6 then
+					-- the animation isn't giving steps (not loaded?): keep the beat anyway
+					footfall(root)
+				end
+			end
 		end)
 		boom(3, Vector3.new(0, ROOM_FLOOR, 330)) -- the arrival
 	end
@@ -5591,6 +5810,20 @@ do
 		end
 		fired[key] = true
 		return true
+	end
+	-- Is a scripted line or round announcement about to be said (so the chatter can wait)?
+	local function scriptedNear(t: number): boolean
+		for _, line in ipairs(Show.Lines) do
+			if math.abs(t - line[1]) < 6 then
+				return true
+			end
+		end
+		for _, round in ipairs(Show.Rounds) do
+			if t >= round.At - 2 and t < round.At + 12 then
+				return true
+			end
+		end
+		return false
 	end
 	task.spawn(function()
 		while true do
@@ -5607,6 +5840,11 @@ do
 					local mins = math.floor(w / 60)
 					bannerAll(string.format("Admin Abuse starts in %d minute%s! You can't start a round right now. Stay tuned for free game passes, Bubbles and surprises!", mins, if mins == 1 then "" else "s"))
 				end
+			end
+			local wasHeat = heat
+			heat = t >= Show.HeatAt and t < Show.ShowSeconds
+			if heat ~= wasHeat then
+				ReplicatedStorage:SetAttribute("AbuseHeat", heat)
 			end
 			if t >= 0 and t < Show.ShowSeconds then
 				if once("start" .. tag) then
@@ -5639,9 +5877,15 @@ do
 						runRound(round)
 					end
 				end
+				-- He never goes quiet: something every ChatterEvery seconds in between.
+				local slot = math.floor(t / Show.ChatterEvery)
+				if slot >= 1 and once("chat" .. slot .. tag) and not scriptedNear(t) then
+					local list = if heat then Show.HeatChatter else Show.Chatter
+					say(list[slot % #list + 1])
+				end
 			elseif t >= Show.ShowSeconds then
 				-- The lockdown is over; the giant keeps wandering (and muttering) until the event itself ends.
-				if os.time() < e.Ends then
+				if Config.Now() < e.Ends then
 					if not RunServers.IsRunServer and not giant and t < e.Ends - e.Starts and once("again" .. tag .. math.floor(t / 600)) then
 						task.spawn(spawnGiant)
 					end

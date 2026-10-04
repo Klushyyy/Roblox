@@ -54,6 +54,28 @@ end
 pump(75, G.frame)
 out("bubbles gained from the vote: " .. (DS.Get(me).Bubbles - bubbles0))
 out("chat lines: " .. #says .. "  last: " .. tostring(says[#says]))
+out("poll card after the vote ends (should be gone): " .. tostring(card and card.Parent.Parent.Visible))
+local passes0 = 0
+pump(130, G.frame)
+out("chat lines by the pass round: " .. #says .. "  last: " .. tostring(says[#says]))
+pump(185, G.frame)
+card = G.find(me.PlayerGui, "Poll")
+out("final poll visible: " .. tostring(card and card.Visible) .. "  heat attr: " .. tostring(RSt:GetAttribute("AbuseHeat")))
+answers = card and G.find(card, "Answers")
+if answers then
+	local btns = {}
+	for _, b in answers:GetChildren() do if b:IsA("TextButton") then table.insert(btns, b) end end
+	table.sort(btns, function(a, b) return a.LayoutOrder < b.LayoutOrder end)
+	out("final answers: " .. #btns)
+	if btns[1] then G.getSignal(btns[1], "Activated"):Fire() end
+end
+pump(70, G.frame)
+out("final card gone: " .. tostring(not (card and card.Parent.Parent.Visible)))
+local pets = 0
+for _, p in DS.Get(me).Pets do if p.Id == "AdminAbuse" then pets += 1 end end
+out("limited pets won: " .. pets)
+pump(200, G.frame)
+out("chat lines total: " .. #says .. "  giant alive: " .. tostring(_G.__workspace:FindFirstChild("AbuseGiant") ~= nil) .. "  booms " .. booms)
 pump(60, G.frame)
 asMe("abuseshow", "reset")
 out("after reset lockdown: " .. tostring((Config.EventLockdown(Config.Now()))))

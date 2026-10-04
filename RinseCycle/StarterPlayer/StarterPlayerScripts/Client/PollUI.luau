@@ -284,6 +284,8 @@ function PollUI.Init()
 	pollRemote.OnClientEvent:Connect(function(kind, id, text, options, extra)
 		if kind == "Start" and type(id) == "string" and type(options) == "table" then
 			showVoting(id, tostring(text), options, tonumber(extra) or os.time())
+		elseif kind == "Close" and id == currentId then
+			close() -- a show poll: gone the second it ends
 		elseif kind == "End" and id == currentId and phase == "Voting" then
 			phase = "Counting"
 			timer.Text = "Counting votes..."

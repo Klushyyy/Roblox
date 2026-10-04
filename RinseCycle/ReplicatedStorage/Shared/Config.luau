@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.8.1"
+Config.Version = "2.9.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -308,6 +308,8 @@ Config.Pets = {
 	TreasureTurtle = { Name = "Treasure Turtle", Rarity = "Legendary", PowerShare = 1.26, Capacity = 100, CoinBonus = 0.32, Model = "Turtle", Event = true, Limited = "Treasure Chest event", Colors = { Body = Color3.fromRGB(60, 170, 150), Accent = Color3.fromRGB(255, 205, 60) }, Shiny = true },
 	-- Club contest winners only (the top club each month): no egg or chest has it.
 	ClubChampion = { Name = "Champion Dragon", Rarity = "Legendary", PowerShare = 1.7, Capacity = 130, CoinBonus = 0.4, Model = "Dragon", Event = true, Limited = "Club contest winners", Colors = { Body = Color3.fromRGB(255, 190, 40), Accent = Color3.fromRGB(255, 90, 90) }, Shiny = true },
+	-- Admin Abuse show, final round only.
+	AdminAbuse = { Name = "Banhammer Dragon", Rarity = "Legendary", PowerShare = 1.8, Capacity = 135, CoinBonus = 0.42, Model = "Dragon", Event = true, Limited = "Admin Abuse show", Colors = { Body = Color3.fromRGB(40, 36, 52), Accent = Color3.fromRGB(255, 70, 60) }, Shiny = true },
 }
 
 -- Eggs cost Bubbles. Bubbles can never be bought with Robux, so eggs are not "paid random items";
@@ -1049,7 +1051,7 @@ Config.UpcomingEvents = {
 -- rounds can't start; at the start everyone in a run is sent back to the lobby and a giant copy of the
 -- owner walks the lobby, "says" the Lines in chat, runs votes (Rounds) counted across every server, and
 -- gives out the winning prize. All times are seconds after Starts.
-Config.AbuseShow = {
+Config.AbuseShow = ({
 	EventKey = "AdminAbuse",
 	PreSeconds = 1800, -- rounds can't start this long before the event
 	ShowSeconds = 900, -- how long the show (and the pause on rounds) lasts
@@ -1057,50 +1059,154 @@ Config.AbuseShow = {
 	OwnerUserId = 2297538363,
 	OwnerName = "EnderBuilda",
 	GiantScale = 30,
-	AttackEvery = 50, -- seconds between the giant's beam attacks (only for show: it hurts nobody)
-	RemarkEvery = 240, -- after the votes he keeps wandering, and says one of the Remarks this often
+	AttackEvery = 16, -- seconds between his showy attacks (they hurt nobody)
+	HeatAttackEvery = 7, -- ...and once the heat is turned up
+	HeatAt = 400, -- seconds after the start when he "turns up the heat" (until the show ends)
+	ChatterEvery = 12, -- he says something at least this often during the show
+	RemarkEvery = 40, -- and after the show, until the event ends
+	Pet = "AdminAbuse", -- the limited pet from the final round
+	-- Lines at exact times (seconds after the start). Between them he fills the gaps with Chatter.
 	Lines = {
-		{ 8, "hmm. so you all showed up." },
-		{ 18, "im feeling generous today." },
-		{ 30, "have a look at the poll. you get 60 seconds to decide." },
-		{ 118, "interesting choice. fine, you win." },
-		{ 132, "oh and 5 of you are about to win a game pass. dont ask how, its admin abuse" },
-		{ 215, "ok one more. look at the poll again." },
-		{ 330, "that was fun. dont tell the other devs i did that" },
-		{ 346, "im going to keep walking around for a bit. watch your feet." },
+		{ 6, "hmm. so you all showed up." },
+		{ 18, "ok. im feeling generous today." },
+		{ 29, "poll incoming. bubbles or gems, you decide." },
+		{ 100, "alright, the people have spoken. check your inventory." },
+		{ 118, "dont get comfortable. theres more." },
+		{ 392, "ok. thats enough warming up." },
+		{ 472, "that was the last vote. i am not done though." },
+		{ 600, "we are past the prizes. im just here to cause a scene now." },
+		{ 880, "last stretch. then i have to give you your rounds back." },
+	},
+	Chatter = {
+		"you can keep playing around, i wont stop you",
+		"does anyone actually read the poll or just click the first one",
+		"i built this game at 3am and now im standing on it",
+		"the table is smaller from up here. weird",
+		"somebody wave at me",
+		"dont mind the shaking. thats just me walking",
+		"if you find a bug, pretend you didnt. i have enough",
+		"i can see your pets from here. they are very small",
+		"top tip: wash the dishes. the dishes are the whole game",
+		"i have exactly one rule today: nobody gets bored",
+		"every server is getting this right now. thats a lot of people",
+		"hello to everyone who just joined. you picked a good time",
+		"i promise the floor is fine. ive checked. twice",
+		"if i step on you, thats a feature",
+		"tell your friends. actually dont, i only have so many prizes",
+		"somewhere there is a dev panel with my name on it. today i used it",
+		"how is the weather down there",
+		"your bubbles are looking suspiciously low. i may fix that",
+		"somebody is cleaning right now and missing all of this. respect",
+		"i am legally required to say i am not actually the size of a house",
+		"the mop is mightier than the sword. i made that up",
+		"hang around. things are about to get silly",
+	},
+	HeatChatter = {
+		"its getting hot in here",
+		"every system i own is on fire. in a good way",
+		"this is what admin abuse looks like. take notes",
+		"i am not holding back anymore",
+		"the table is shaking. thats not an earthquake, thats me",
+		"ive got more commands than sense right now",
+		"someone told me not to do this. i did it twice",
+		"max power. no brakes",
+		"watch the sky. i am not responsible for the sky",
+		"if your screen is shaking, you are in the right place",
+		"you wanted a show. you are getting a show",
+		"nothing is balanced anymore and i love it",
+		"i have the keys and no supervision",
+		"the dishes can wait. this cant",
+		"somebody screenshot this, i want proof later",
+		"i can feel the server sweating",
+		"my admin rank has never been used this well",
+		"bigger. louder. why not",
+		"keep your eyes on the table. i am aiming at it. mostly",
+		"i could do this all day. i probably will",
+		"is the floor still there? good. not for long",
+		"still going. still huge. still not sorry",
 	},
 	Remarks = {
 		"still here. still huge.",
 		"someone get me a snack, im the size of a house",
-		"did anyone see where i put my game pass stash",
 		"hmm. nothing to see here. keep cleaning",
 		"thanks for hanging out, you lot",
 		"careful where you stand. i cant see you down there",
+		"i will be walking around for a while. dont mind me",
+		"if you missed the prizes, you missed the prizes. next time",
+		"the floor is shaking because i said so",
+		"keep an eye on the table. i might aim at it again",
+		"i could get used to being this tall",
+		"every step is a boom. i didnt plan that, it just happens",
+		"somebody tell the other devs i said hi",
+		"still got a few tricks left. maybe",
+		"top of the leaderboard? i can see you from up here",
 	},
-	-- Votes: Kind "Bubbles"/"Gems" splits Amount between everyone online in every server; "Passes"
-	-- gives that many random players a game pass.
+	-- The three rounds. Everything scales with how many players are online in all servers (n):
+	--   Bubbles/Gems: PerPlayer each (the pool shown is PerPlayer * n)
+	--   Passes/Pet:   Share of the players (rounded up, at least 1) win a random game pass / the limited pet
+	-- Poll rounds are a vote; "Announce" rounds just happen. {n} is the count of winners and {pet} the pet.
 	Rounds = {
 		{
 			At = 40,
-			Seconds = 60,
+			Kind = "Poll",
+			Seconds = 45,
 			Question = "What should I give out?",
 			Options = {
-				{ Text = "Share 50,000 Bubbles", Kind = "Bubbles", Amount = 50000 },
-				{ Text = "Share 10,000 Bubbles", Kind = "Bubbles", Amount = 10000 },
-				{ Text = "10 random game passes", Kind = "Passes", Amount = 10 },
+				{ Kind = "Bubbles", PerPlayer = 400 },
+				{ Kind = "Gems", PerPlayer = 40 },
 			},
+			Chosen = "chat has spoken: {text}. coming right up.",
 		},
 		{
-			At = 220,
-			Seconds = 60,
-			Question = "One more! What next?",
+			At = 235,
+			Kind = "Announce",
+			Option = { Kind = "Passes", Share = 0.1 },
+			Intro = "this one isnt a vote. a random game pass is going to {players}. no, you cant pick.",
+			Done = "done. check your screens, winners.",
+		},
+		{
+			At = 410,
+			Kind = "Poll",
+			Heat = true,
+			Seconds = 45,
+			Question = "FINAL ROUND! Pick the prize!",
+			Intro = "final round. turning up the heat. the winner of this vote is the prize.",
 			Options = {
-				{ Text = "Share 3,000 Gems", Kind = "Gems", Amount = 3000 },
-				{ Text = "3 random game passes", Kind = "Passes", Amount = 3 },
+				{ Kind = "Pet", Share = 0.1 },
+				{ Kind = "Passes", Share = 0.2 },
+				{ Kind = "Bubbles", PerPlayer = 1500 },
+				{ Kind = "Gems", PerPlayer = 150 },
 			},
+			Chosen = "{text}. lets go.",
 		},
 	},
-}
+} :: any)
+
+-- What a prize option looks like with n players online: its button text and, for Passes / Pet, how many win.
+function Config.AbuseOption(option: any, n: number): any
+	local function commas(x: number): string
+		local s = tostring(math.floor(x))
+		while true do
+			local replaced, count = string.gsub(s, "^(-?%d+)(%d%d%d)", "%1,%2")
+			s = replaced
+			if count == 0 then
+				break
+			end
+		end
+		return s
+	end
+	local out = { Kind = option.Kind, PerPlayer = option.PerPlayer or 0, Count = 0, Text = "" }
+	if option.Kind == "Bubbles" or option.Kind == "Gems" then
+		out.Text = string.format("Share %s %s", commas(out.PerPlayer * n), option.Kind)
+	elseif option.Kind == "Passes" then
+		out.Count = math.clamp(math.ceil(n * (option.Share or 0.1)), 1, 25)
+		out.Text = "Chance at a random pass"
+	else
+		out.Count = math.clamp(math.ceil(n * (option.Share or 0.1)), 1, 15)
+		out.Text = "Chance at the limited pet"
+	end
+	return out
+end
 
 -- True (and why) while rounds are paused for the Admin Abuse show: from PreSeconds before it starts
 -- until ShowSeconds after.
