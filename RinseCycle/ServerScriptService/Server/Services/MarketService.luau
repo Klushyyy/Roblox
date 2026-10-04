@@ -335,16 +335,6 @@ function MarketService.Init()
 		end
 	end
 
-	-- The "+20% Luck" rewarded ad's product (ShopService "WatchLuckAd").
-	MarketService.RegisterProduct(Config.EventProducts.AdLuck, function(player)
-		if not DataService.AddAdLuck(player) then
-			error("profile not loaded")
-		end
-		if player.Parent == Players then
-			notifyRemote:FireClient(player, "+20% Luck for your rank rolls!", "Good")
-		end
-	end)
-
 	MarketplaceService.PromptGamePassPurchaseFinished:Connect(onPassPurchaseFinished)
 	MarketplaceService.ProcessReceipt = processReceipt
 

@@ -100,7 +100,6 @@ local BUSY_TEXT = {
 	SocialDone = "Checking",
 	Merge = "Merging",
 	Delete = "Deleting",
-	WatchLuckAd = "Loading the ad",
 	EquipBest = "Equipping",
 }
 

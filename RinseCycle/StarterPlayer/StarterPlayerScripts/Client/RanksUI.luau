@@ -40,16 +40,14 @@ local rollButton: TextButton
 local gemsLabel: TextLabel
 local luckButton: TextButton
 local luckActive: Frame? = nil
-local adButton: TextButton
+local inviteButton: TextButton
 local luckSummary: TextLabel
-local watchingAd = false
 
--- Your luck right now: the total multiplier (Config.LuckMult), ad stacks and seconds left on them.
-local function currentLuck(meta: any): (number, number, number)
+-- Your luck right now: the total multiplier (Config.LuckMult) and the friends who joined through your invites.
+local function currentLuck(meta: any): (number, number)
 	local hasPass = meta ~= nil and meta.Passes.DoubleLuck == true
-	local left = if meta then math.max(0, (tonumber(meta.AdLuckUntil) or 0) - os.time()) else 0
-	local stacks = if left > 0 then math.clamp(tonumber(meta.AdLuckStacks) or 0, 0, Config.RankRoll.AdLuck.MaxAds) else 0
-	return Config.LuckMult(hasPass, stacks), stacks, left
+	local friends = if meta then math.clamp(tonumber(meta.Referrals) or 0, 0, Config.RankRoll.FriendLuck.MaxFriends) else 0
+	return Config.LuckMult(hasPass, friends), friends
 end
 
 local function multText(mult: number): string
@@ -115,25 +113,19 @@ local function renderGems()
 	if luckActive then
 		luckActive.Visible = luck
 	end
-	if adButton then
-		local mult, stacks, left = currentLuck(meta)
-		local ad = Config.RankRoll.AdLuck
-		local label = adButton:FindFirstChildWhichIsA("TextLabel", true)
+	if inviteButton then
+		local mult, friends = currentLuck(meta)
+		local fl = Config.RankRoll.FriendLuck
+		local label = inviteButton:FindFirstChildWhichIsA("TextLabel", true)
 		if label then
-			label.Text = if watchingAd
-				then "Loading ad..."
-				elseif stacks >= ad.MaxAds then "MAX AD BOOST"
-			else string.format("+%d%% Luck  WATCH AD (%d/%d)", math.floor(ad.PerAd * 100 + 0.5), stacks, ad.MaxAds)
+			label.Text = string.format("INVITE FRIENDS  +%d%% Luck each (%d/%d)", math.floor(fl.PerFriend * 100 + 0.5), friends, fl.MaxFriends)
 		end
-		UIKit.SetDisabled(adButton, watchingAd)
-		UIKit.SetButtonColor(adButton, if stacks >= ad.MaxAds then Colors.Disabled else Colors.Primary)
+		UIKit.SetButtonColor(inviteButton, if friends >= fl.MaxFriends then Colors.Good else Colors.Primary)
 		if mult > 1 then
-			luckSummary.Text = if left > 0
-				then string.format("LUCK %s  •  ads end in %d:%02d", multText(mult), left // 60, left % 60)
-				else string.format("LUCK %s", multText(mult))
+			luckSummary.Text = string.format("LUCK %s  •  from %d friend%s%s", multText(mult), friends, if friends == 1 then "" else "s", if meta ~= nil and meta.Passes.DoubleLuck == true then " + x2 pass" else "")
 			luckSummary.TextColor3 = Colors.Good
 		else
-			luckSummary.Text = string.format("Watch %d ads for x2 luck (x4 with the pass)", ad.MaxAds)
+			luckSummary.Text = string.format("Invite %d friends for x2 luck (x4 with the pass)", fl.MaxFriends)
 			luckSummary.TextColor3 = Colors.TextDim
 		end
 	end
@@ -738,8 +730,8 @@ function RanksUI.Init()
 	UIKit.Label({ Text = "x2 LUCK OWNED", TextSize = 18, Size = UDim2.fromScale(1, 1), Parent = active })
 	active.Parent = leftPanel
 	luckActive = active
-	adButton = UIKit.Button({
-		Text = "WATCH AD",
+	inviteButton = UIKit.Button({
+		Text = "INVITE FRIENDS",
 		Size = UDim2.new(0.5, -4, 0, 46),
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, 0, 0, 330),
@@ -747,40 +739,8 @@ function RanksUI.Init()
 		TextSize = 14,
 		Parent = leftPanel,
 		OnClick = function()
-			if watchingAd then
-				return
-			end
-			local _mult, stacks = currentLuck(ClientState.Meta)
-			if stacks >= Config.RankRoll.AdLuck.MaxAds then
-				UIKit.Toast("You're already at the max ad boost! It lasts a few more minutes.", "Info")
-				return
-			end
-			watchingAd = true
-			renderGems()
-			task.spawn(function()
-				-- Roblox wants the client to confirm a rewarded video is available before the server
-				-- asks to show one (AdService:GetAdAvailabilityNowAsync). Skipped in Studio, which has none.
-				if not RunService:IsStudio() then
-					local ok, availability = pcall(function()
-						return (game:GetService("AdService") :: any):GetAdAvailabilityNowAsync((Enum :: any).AdFormat.RewardedVideo)
-					end)
-					if not ok or availability == nil or availability.AdAvailabilityResult ~= (Enum :: any).AdAvailabilityResult.IsAvailable then
-						watchingAd = false
-						UIKit.Toast("No ad available right now. Try again in a bit!", "Info")
-						renderGems()
-						return
-					end
-				end
-				local result = ClientState.MetaRequest("WatchLuckAd")
-				watchingAd = false
-				if result.Ok then
-					UIKit.PlaySound("Sparkle")
-					UIKit.Toast(result.Message or "+20% Luck!", "Good")
-				else
-					UIKit.Toast(result.Error or "No ad available right now.", "Info")
-				end
-				render()
-			end)
+			local RewardsUI = require(script.Parent:WaitForChild("RewardsUI")) :: any
+			RewardsUI.Invite()
 		end,
 	})
 	luckSummary = UIKit.Label({

@@ -364,24 +364,7 @@ local function buildFree(screenRoot: Instance)
 		TextSize = 20,
 		Parent = invite,
 		OnClick = function()
-			task.spawn(function()
-				local okCan, can = pcall(function()
-					return SocialService:CanSendGameInviteAsync(LocalPlayer)
-				end)
-				if okCan and can == false then
-					UIKit.Toast("Invites aren't available on this account.", "Info")
-					return
-				end
-				local ok = pcall(function()
-					local options = Instance.new("ExperienceInviteOptions")
-					options.PromptMessage = "Come clean dishes with me in Rinse Cycle!"
-					options.LaunchData = tostring(LocalPlayer.UserId)
-					SocialService:PromptGameInvite(LocalPlayer, options)
-				end)
-				if not ok then
-					UIKit.Toast("Couldn't open the invite. Try again!", "Info")
-				end
-			end)
+			RewardsUI.Invite()
 		end,
 	})
 	local inviteStatus = UIKit.Label({ Text = "", TextSize = 15, TextColor3 = Colors.Coin, Size = UDim2.fromOffset(230, 20), Position = UDim2.new(1, -4, 1, -8), AnchorPoint = Vector2.new(1, 1), Parent = invite })
@@ -431,6 +414,29 @@ end
 -- it can't be shown (already on, or asked too recently).
 -- Shows Roblox's notification opt-in. Returns "Asked" (the pop-up was shown) or "AlreadyOn" (can't
 -- ask: they're on already, or Roblox won't ask again yet). The CALLER says something about it, once.
+-- Opens Roblox's invite prompt; the invite carries your UserId so a new friend who joins through it
+-- counts for you (rewards in Free, and +luck in Ranks).
+function RewardsUI.Invite()
+	task.spawn(function()
+		local okCan, can = pcall(function()
+			return SocialService:CanSendGameInviteAsync(LocalPlayer)
+		end)
+		if okCan and can == false then
+			UIKit.Toast("Invites aren't available on this account.", "Info")
+			return
+		end
+		local ok = pcall(function()
+			local options = Instance.new("ExperienceInviteOptions")
+			options.PromptMessage = "Come clean dishes with me in Rinse Cycle!"
+			options.LaunchData = tostring(LocalPlayer.UserId)
+			SocialService:PromptGameInvite(LocalPlayer, options)
+		end)
+		if not ok then
+			UIKit.Toast("Couldn't open the invite. Try again!", "Info")
+		end
+	end)
+end
+
 function RewardsUI.PromptNotifications(): string
 	local okCan, can = pcall(function()
 		return ExperienceNotificationService:CanPromptOptInAsync()

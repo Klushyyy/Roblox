@@ -1593,3 +1593,16 @@ server creates `CreateAdRewardFromDevProductId(StoreIds.Events.AdLuck)` and call
 `ShowRewardedVideoAdAsync`, and Roblox grants the product through ProcessReceipt (MarketService) once
 the ad is watched to the end. Needs a developer product worth 3 to 10 R$ and an ads-eligible game
 (2,000+ monthly visitors, approved maturity questionnaire).
+
+## 6zh. Backyard polish, friend luck (v2.5.0)
+
+- The ad luck is gone (ads need 2,000 monthly visitors). Luck now comes from invited friends: +10% each
+  who joins through your invite, up to 10 (x2), doubled by the x2 Luck pass (x4). Config.RankRoll.FriendLuck,
+  Config.LuckMult(hasPass, friends). The Ranks window button opens Roblox's invite prompt
+  (RewardsUI.Invite). AdLuck product, request and registration are removed (data fields stay, unused).
+- Backyard: invisible fence round the sink up to a lid at 420 (nobody reaches the counter or roofs);
+  the front frame bar is gone; drainer posts sit under the rack's corners; boards stand square like plates;
+  BBQ moved, lid no longer z-fights, handle has brackets; string lights hang from poles tall enough to
+  hold them; pizza boxes left the floor; pizzas and box stacks sit on the benches.
+- Mountains are a polar heightmap of triangles, each drawn as two WedgeParts (rolling hills, rock, snow,
+  ridge at 900-1500 studs). Trees copy the lobby's style (crossed-box hex trunk, turned canopy blocks).

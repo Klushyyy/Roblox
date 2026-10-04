@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.4.1"
+Config.Version = "2.5.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -419,15 +419,15 @@ Config.Gems = {
 Config.RankRoll = {
 	Cost = 30, -- gems per roll
 	LuckMult = 2, -- x2 Luck pass: Rare and better are this many times as likely
-	-- Rewarded video ads (Roblox AdService): each ad adds PerAd to your luck for Minutes, up to
-	-- MaxAds stacked (+100%). The x2 Luck pass doubles the total: 5 ads = x2 luck, x4 with the pass.
-	AdLuck = { PerAd = 0.2, MaxAds = 5, Minutes = 15 },
+	-- Friend luck: every friend who joins through your invite adds PerFriend to your luck, for good,
+	-- up to MaxFriends (+100% = x2). The x2 Luck pass doubles the total: 10 friends = x2, x4 with the pass.
+	FriendLuck = { PerFriend = 0.1, MaxFriends = 10 },
 }
 
--- Your total luck: (1 + ad stacks x PerAd) x (2 with the x2 Luck pass).
-function Config.LuckMult(hasPass: boolean?, adStacks: number?): number
-	local ads = math.clamp(math.floor(tonumber(adStacks) or 0), 0, Config.RankRoll.AdLuck.MaxAds)
-	return (1 + ads * Config.RankRoll.AdLuck.PerAd) * (if hasPass then Config.RankRoll.LuckMult else 1)
+-- Your total luck: (1 + friends who joined x PerFriend) x (2 with the x2 Luck pass).
+function Config.LuckMult(hasPass: boolean?, friends: number?): number
+	local n = math.clamp(math.floor(tonumber(friends) or 0), 0, Config.RankRoll.FriendLuck.MaxFriends)
+	return (1 + n * Config.RankRoll.FriendLuck.PerFriend) * (if hasPass then Config.RankRoll.LuckMult else 1)
 end
 
 Config.RankRarities = {
@@ -964,7 +964,7 @@ function Config.GetGiftProduct(passKey: string)
 end
 
 -- Event developer products (StoreIds > Events): Treasure Chest packs and the luck ad reward.
-Config.EventProducts = { ChestOne = 0, ChestThree = 0, ChestTen = 0, AdLuck = 0 }
+Config.EventProducts = { ChestOne = 0, ChestThree = 0, ChestTen = 0 }
 
 ----------------------------------------------------------------------------------------------------
 -- TREASURE CHEST EVENT (limited time, the chest in the lobby). Everyone gets FreeOpens free, then

@@ -244,7 +244,7 @@ local function rollRank(player: Player, _value: any): Types.RequestResult
 	end
 	local passes = DataService.GetPasses(player)
 	rollingUntil[player] = now + ROLL_SECONDS
-	local weights, total = Config.RankWeights(Config.LuckMult(passes.DoubleLuck == true, DataService.AdLuckStacks(profile)))
+	local weights, total = Config.RankWeights(Config.LuckMult(passes.DoubleLuck == true, profile.Referrals))
 	local r = rankRng:NextNumber() * total
 	local picked = weights[#weights].Rank
 	for _, entry in weights do
@@ -378,45 +378,8 @@ local function setPetsResting(player: Player, value: any): Types.RequestResult
 	return { Ok = true }
 end
 
--- "+20% Luck" rewarded video ad (Roblox AdService). The reward is the developer product
--- Config.EventProducts.AdLuck: Roblox sends it through ProcessReceipt once the ad is watched to the
--- end, and MarketService gives the stack (DataService.AddAdLuck). This only asks for the ad.
--- Yields while the ad plays (the player's other requests wait; they're watching anyway).
-local function watchLuckAd(player: Player, _value: any): Types.RequestResult
-	-- Already at the most ads that stack: no ad shown (nothing to gain).
-	if DataService.AdLuckStacks(DataService.Get(player)) >= Config.RankRoll.AdLuck.MaxAds then
-		return fail("You're already at the max ad boost!")
-	end
-	local productId = Config.EventProducts.AdLuck
-	if type(productId) ~= "number" or productId == 0 then
-		-- No product yet: a free stack in Studio (to test the button), "soon" in a live game.
-		if not testAllowed() then
-			return fail("Ads are coming soon!")
-		end
-		DataService.AddAdLuck(player)
-		return { Ok = true, Message = "+20% Luck (Studio test, no ad shown)" }
-	end
-	local ok, result = pcall(function()
-		local AdService = game:GetService("AdService") :: any
-		local reward = AdService:CreateAdRewardFromDevProductId(productId)
-		return AdService:ShowRewardedVideoAdAsync(player, reward)
-	end)
-	if not ok then
-		warn("[ShopService] rewarded ad failed: " .. tostring(result))
-		return fail("No ad available right now. Try again later!")
-	end
-	local name = if typeof(result) == "EnumItem" then result.Name else tostring(result)
-	if name == "ShowCompleted" then
-		return { Ok = true, Message = "Thanks for watching! +20% Luck" }
-	elseif name == "ShowInterrupted" then
-		return fail("Watch the whole ad to get the luck.")
-	end
-	return fail("No ad available right now. Try again later!")
-end
-
 local HANDLERS: { [string]: (Player, any) -> Types.RequestResult } = {
 	ClaimDaily = claimDaily,
-	WatchLuckAd = watchLuckAd,
 	ClaimStayBoost = claimStayBoost,
 	SetPetsResting = setPetsResting,
 	SocialDone = socialDone,

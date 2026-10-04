@@ -81,14 +81,12 @@ return {
 		DishMaster = 2704509948705644, -- "Dish Master"              Clean 1,000 dishes.
 	},
 
-	-- Developer products for the Treasure Chest event and the luck ad. Create each one in Creator
+	-- Developer products for the Treasure Chest event. Create each one in Creator
 	-- Dashboard > Monetization > Developer Products with the name and price shown.
 	Events = {
 		ChestOne = 3716462768,   -- Treasure Chest x1 (49 R$)
 		ChestThree = 3716462840, -- Treasure Chest x3 (139 R$)
 		ChestTen = 3716462894,   -- Treasure Chest x10 (349 R$)
-		AdLuck = 0,     -- Luck Ad Reward: the developer product Roblox grants when a player finishes a rewarded video ad (make it worth 3-10 R$, e.g. price 5).
-		                -- Also turn ads on: Creator Dashboard > Monetization > Ads (rewarded video ads).
 	},
 
 	-- Background music: audio asset IDs (Creator Store > Audio > Music, or the Toolbox's Audio tab;
