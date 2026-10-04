@@ -87,7 +87,7 @@ return {
 		ChestOne = 3716462768,   -- Treasure Chest x1 (49 R$)
 		ChestThree = 3716462840, -- Treasure Chest x3 (139 R$)
 		ChestTen = 3716462894,   -- Treasure Chest x10 (349 R$)
-		AdLuck = 0,     -- Luck Ad Reward (any price, e.g. 5 R$): the reward a rewarded video ad gives.
+		AdLuck = 0,     -- Luck Ad Reward: the developer product Roblox grants when a player finishes a rewarded video ad (make it worth 3-10 R$, e.g. price 5).
 		                -- Also turn ads on: Creator Dashboard > Monetization > Ads (rewarded video ads).
 	},
 

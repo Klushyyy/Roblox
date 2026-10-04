@@ -758,6 +758,19 @@ function RanksUI.Init()
 			watchingAd = true
 			renderGems()
 			task.spawn(function()
+				-- Roblox wants the client to confirm a rewarded video is available before the server
+				-- asks to show one (AdService:GetAdAvailabilityNowAsync). Skipped in Studio, which has none.
+				if not RunService:IsStudio() then
+					local ok, availability = pcall(function()
+						return (game:GetService("AdService") :: any):GetAdAvailabilityNowAsync((Enum :: any).AdFormat.RewardedVideo)
+					end)
+					if not ok or availability == nil or availability.AdAvailabilityResult ~= (Enum :: any).AdAvailabilityResult.IsAvailable then
+						watchingAd = false
+						UIKit.Toast("No ad available right now. Try again in a bit!", "Info")
+						renderGems()
+						return
+					end
+				end
 				local result = ClientState.MetaRequest("WatchLuckAd")
 				watchingAd = false
 				if result.Ok then

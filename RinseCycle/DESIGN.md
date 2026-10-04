@@ -1584,3 +1584,12 @@ walls instead of clipping through. All gameplay queries use Include filters.
   announced, auto-ends.
 - Party window: the Chapter 4 card opens the Roblox event RSVP (StoreIds > EventIds > Chapter4).
 - Clubs: the points help dialog grows to fit its text. Chest product IDs are filled in StoreIds.
+
+## 6zg. Rewarded ads follow Roblox's flow (v2.4.1)
+
+The "+20% luck" ad is Roblox's built-in rewarded video ad. Flow: the client checks
+`AdService:GetAdAvailabilityNowAsync(Enum.AdFormat.RewardedVideo)` (RanksUI; skipped in Studio), the
+server creates `CreateAdRewardFromDevProductId(StoreIds.Events.AdLuck)` and calls
+`ShowRewardedVideoAdAsync`, and Roblox grants the product through ProcessReceipt (MarketService) once
+the ad is watched to the end. Needs a developer product worth 3 to 10 R$ and an ads-eligible game
+(2,000+ monthly visitors, approved maturity questionnaire).
