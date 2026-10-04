@@ -567,6 +567,16 @@ if string.sub(what, 1, 5) == "arena" then
 	local arena = ArenaBuilder.Build(1, level, { GrimeScale = 1, GoldenChance = 0.05 })
 	rootInst = arena.Model
 	print("arena parts", #parts(rootInst), "dirt", #arena.GrimeFolder:GetChildren(), "total", arena.TotalGrime)
+	local perKind = {}
+	for _, d in arena.Dishes do
+		local k = perKind[d.Kind] or { dishes = 0, spots = 0 }
+		k.dishes += 1
+		k.spots += #d.Grime
+		perKind[d.Kind] = k
+	end
+	for kind, k in perKind do
+		print(string.format("  %-7s %3d dishes, %3d dirt spots", kind, k.dishes, k.spots))
+	end
 elseif what == "npclineup" then
 	local NPC = loadModule(ROOT .. "/StarterPlayer/StarterPlayerScripts/Client/LevelNPCs")
 	rootInst = Inst.new("Model")

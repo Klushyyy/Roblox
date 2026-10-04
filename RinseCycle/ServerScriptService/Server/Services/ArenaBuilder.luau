@@ -273,7 +273,6 @@ local ROOM_STYLES: { RoomStyle } = {
 		Handle = Color3.fromRGB(230, 190, 90), HandleMat = Enum.Material.Metal,
 		Kick = Color3.fromRGB(50, 34, 24),
 		Lamp = Color3.fromRGB(255, 205, 140),
-		TroughHole = true,
 		Bench = "Stone",
 	},
 }
@@ -1386,40 +1385,6 @@ local function buildFaucet(b: Builder)
 	drops.Parent = anchor
 end
 
--- Level 3's water: a stone dragon gargoyle on the back wall above the trough, with water pouring from its
--- mouth (a thin particle stream, like the Backyard's tap) into the trough below.
-local function buildGargoyle(b: Builder)
-	local stone = Color3.fromRGB(128, 122, 116)
-	local dark = Color3.fromRGB(88, 84, 80)
-	local gold = Color3.fromRGB(230, 190, 90)
-	local y = COUNTER_TOP_Y + 40
-	-- Wall plaque behind it, then the head: skull block, snout, brow, jaw, horns, eyes.
-	span(b, "GargoylePlaque", -52, 52, y - 40, y + 50, ROOM_Z_BACK - 6, ROOM_Z_BACK - 2, dark, Enum.Material.Slate, noCollide())
-	span(b, "GargoyleHead", -22, 22, y - 14, y + 26, ROOM_Z_BACK - 40, ROOM_Z_BACK - 6, stone, Enum.Material.Cobblestone)
-	span(b, "GargoyleSnout", -14, 14, y - 8, y + 12, ROOM_Z_BACK - 62, ROOM_Z_BACK - 40, stone, Enum.Material.Cobblestone)
-	span(b, "GargoyleJaw", -12, 12, y - 14, y - 8, ROOM_Z_BACK - 58, ROOM_Z_BACK - 36, dark, Enum.Material.Cobblestone, noCollide())
-	span(b, "GargoyleBrow", -20, 20, y + 16, y + 22, ROOM_Z_BACK - 50, ROOM_Z_BACK - 34, dark, Enum.Material.Cobblestone, noCollide())
-	for _, hx in { -16, 16 } do
-		span(b, "GargoyleHorn", hx - 3, hx + 3, y + 26, y + 52, ROOM_Z_BACK - 24, ROOM_Z_BACK - 18, stone, Enum.Material.Cobblestone, noCollide())
-		local eye = box(b, "GargoyleEye", Vector3.new(6, 6, 2), hx * 0.62, y + 12, ROOM_Z_BACK - 51, gold, Enum.Material.Neon, noCollide())
-		eye.Shape = Enum.PartType.Ball
-	end
-	-- Water from the mouth, down into the trough.
-	local mouth = box(b, "GargoyleWater", Vector3.new(2, 2, 2), 0, y - 4, ROOM_Z_BACK - 62, gold, nil, { Transparency = 1, CanCollide = false, CastShadow = false })
-	local drops = Instance.new("ParticleEmitter")
-	drops.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	drops.Color = ColorSequence.new(Color3.fromRGB(170, 215, 255))
-	drops.LightEmission = 0.3
-	drops.Lifetime = NumberRange.new(1.6, 1.9)
-	drops.Speed = NumberRange.new(50, 58)
-	drops.Rate = 45
-	drops.Size = NumberSequence.new(3, 2)
-	drops.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 0.7) })
-	drops.SpreadAngle = Vector2.new(2, 2)
-	drops.EmissionDirection = Enum.NormalId.Bottom
-	drops.Parent = mouth
-end
-
 -- The whole room for a level: shell + that room's props.
 local function buildRoom(b: Builder, levelIndex: number)
 	local style = ROOM_STYLES[levelIndex] or ROOM_STYLES[1]
@@ -1430,7 +1395,6 @@ local function buildRoom(b: Builder, levelIndex: number)
 		buildFaucet(b)
 	elseif levelIndex == 3 then
 		castleProps(b, style)
-		buildGargoyle(b)
 	else
 		familyProps(b, style)
 	end
@@ -1447,7 +1411,7 @@ local function buildTub(b: Builder, theme)
 	local sink = theme.Sink == true
 	-- Level 3's basin is an olden-day oak wash trough bound with iron hoops, also open at the top.
 	local trough = theme.Trough == true
-	local open = sink or trough
+	local open = sink
 	local tubMat = if sink then Enum.Material.SmoothPlastic elseif trough then Enum.Material.WoodPlanks else Enum.Material.Metal
 
 	-- Tub floor and walls. They don't cast shadows, so the room's daylight still reaches inside.
@@ -1482,9 +1446,9 @@ local function buildTub(b: Builder, theme)
 		local fenceTop = if sink then 420 else 800
 		local inv = { Transparency = 1, CastShadow = false }
 		for _, side in { -1, 1 } do
-			span(b, "SinkFence", side * (TUB_HALF_X + 0.5), side * (TUB_HALF_X + 4), TUB_HEIGHT, fenceTop, DOOR_Z_FAR - 7, TUB_Z_MAX + 4, Color3.new(1, 1, 1), nil, inv)
+			span(b, "SinkFence", side * (TUB_HALF_X + 0.5), side * (TUB_HALF_X + 10), TUB_HEIGHT, fenceTop, DOOR_Z_FAR - 14, TUB_Z_MAX + 10, Color3.new(1, 1, 1), nil, inv)
 		end
-		span(b, "SinkFence", -TUB_HALF_X, TUB_HALF_X, TUB_HEIGHT, fenceTop, TUB_Z_MAX + 0.5, TUB_Z_MAX + 4, Color3.new(1, 1, 1), nil, inv)
+		span(b, "SinkFence", -TUB_HALF_X, TUB_HALF_X, TUB_HEIGHT, fenceTop, TUB_Z_MAX + 0.5, TUB_Z_MAX + 10, Color3.new(1, 1, 1), nil, inv)
 		-- Rim round the opening, level with the counter top: rolled porcelain, or a thick dark oak cap.
 		local rim = if sink then Color3.fromRGB(250, 250, 248) else Color3.fromRGB(70, 50, 34)
 		local rimMat = if sink then tubMat else Enum.Material.Wood
@@ -1493,8 +1457,11 @@ local function buildTub(b: Builder, theme)
 		span(b, "SinkRim", -TUB_HALF_X - 4, TUB_HALF_X + 4, TUB_HEIGHT, COUNTER_TOP_Y, TUB_Z_MAX - 3, TUB_Z_MAX + 4, rim, rimMat)
 		if sink then
 			span(b, "OverflowSlot", -12, 12, TUB_HEIGHT - 14, TUB_HEIGHT - 6, TUB_Z_MAX - 0.6, TUB_Z_MAX, Color3.fromRGB(120, 130, 140), nil, noCollide())
-		else
-			-- Iron hoops round the outside of the trough, with rivets, and iron corner straps.
+		end
+	else
+		span(b, "TubCeiling", -TUB_HALF_X - 2, TUB_HALF_X + 2, TUB_HEIGHT, TUB_HEIGHT + 2, TUB_Z_MIN, TUB_Z_MAX, steel, if trough then Enum.Material.WoodPlanks else Enum.Material.Metal)
+		if trough then
+			-- Iron hoops round the outside of the oak chest, iron corner straps and a banded lid.
 			local iron = Color3.fromRGB(52, 50, 54)
 			for _, y in { 16, 50, 84 } do
 				for _, side in { -1, 1 } do
@@ -1504,12 +1471,14 @@ local function buildTub(b: Builder, theme)
 			end
 			for _, side in { -1, 1 } do
 				for _, z in { TUB_Z_MIN + 6, TUB_Z_MAX - 6 } do
-					span(b, "IronStrap", side * (TUB_HALF_X + 2), side * (TUB_HALF_X + 4), 0, TUB_HEIGHT, z - 3, z + 3, iron, Enum.Material.Metal, noCollide())
+					span(b, "IronStrap", side * (TUB_HALF_X + 2), side * (TUB_HALF_X + 4), 0, TUB_HEIGHT + 3, z - 3, z + 3, iron, Enum.Material.Metal, noCollide())
+					span(b, "LidStrap", side * (TUB_HALF_X - 1), side * (TUB_HALF_X + 4), TUB_HEIGHT + 2, TUB_HEIGHT + 4.5, z - 4, z + 4, iron, Enum.Material.Metal, noCollide())
 				end
 			end
+			for _, z in { TUB_Z_MIN + 20, (TUB_Z_MIN + TUB_Z_MAX) / 2, TUB_Z_MAX - 20 } do
+				span(b, "LidBand", -TUB_HALF_X - 1, TUB_HALF_X + 1, TUB_HEIGHT + 2, TUB_HEIGHT + 4, z - 3, z + 3, iron, Enum.Material.Metal, noCollide())
+			end
 		end
-	else
-		span(b, "TubCeiling", -TUB_HALF_X - 2, TUB_HALF_X + 2, TUB_HEIGHT, TUB_HEIGHT + 2, TUB_Z_MIN, TUB_Z_MAX, steel, Enum.Material.Metal)
 	end
 
 	-- Filter cup in the floor at the back, heating element loop.
@@ -1521,11 +1490,13 @@ local function buildTub(b: Builder, theme)
 
 	-- Front frame around the opening, the machine's side panels, and the toe kick under the door.
 	-- (Offsets of 0.2 keep every face off its neighbours' planes, so nothing flickers.)
+	local frameColor = if trough then Color3.fromRGB(96, 66, 42) else K.Frame
+	local frameMat = if trough then Enum.Material.Wood else Enum.Material.Metal
 	if not sink then
-		span(b, "FrameTop", -TUB_HALF_X - 6.2, TUB_HALF_X + 6.2, TUB_HEIGHT - 0.2, COUNTER_TOP_Y - 6, TUB_Z_MIN - 3.2, TUB_Z_MIN + 2, K.Frame, Enum.Material.Metal)
+		span(b, "FrameTop", -TUB_HALF_X - 6.2, TUB_HALF_X + 6.2, TUB_HEIGHT - 0.2, COUNTER_TOP_Y - 6, TUB_Z_MIN - 3.2, TUB_Z_MIN + 2, frameColor, frameMat)
 	end
 	for _, side in { -1, 1 } do
-		span(b, "FrameSide", side * (TUB_HALF_X - 0.2), side * (TUB_HALF_X + 6), KITCHEN_FLOOR_Y, TUB_HEIGHT, TUB_Z_MIN - 3, TUB_Z_MIN + 2, K.Frame, Enum.Material.Metal)
+		span(b, "FrameSide", side * (TUB_HALF_X - 0.2), side * (TUB_HALF_X + 6), KITCHEN_FLOOR_Y, TUB_HEIGHT, TUB_Z_MIN - 3, TUB_Z_MIN + 2, frameColor, frameMat)
 		span(b, "Gasket", side * (TUB_HALF_X - 0.4), side * TUB_HALF_X, 0, TUB_HEIGHT - 0.4, TUB_Z_MIN - 0.5, TUB_Z_MIN + 1, Color3.fromRGB(50, 50, 55), nil, noCollide())
 	end
 	span(b, "UnderTub", -TUB_HALF_X - 5.8, TUB_HALF_X + 5.8, KITCHEN_FLOOR_Y + 12, -2.2, TUB_Z_MIN + 1, TUB_Z_MAX, Color3.fromRGB(90, 90, 95), Enum.Material.Metal)
@@ -1564,12 +1535,13 @@ end
 
 local function buildDoor(b: Builder, theme)
 	-- The invisible walls and lid: as tall as the tub on a dishwasher, far taller over the open sink.
-	local open = theme.Sink == true or theme.Trough == true
-	local wallTop = if theme.Sink then 420 elseif open then 800 else TUB_HEIGHT
+	local open = theme.Sink == true
+	local oak = theme.Trough == true
+	local wallTop = if open then 420 else TUB_HEIGHT
 	-- Inner panel (the floor you stand on) and the outer skin below it.
 	span(b, "DoorInner", -TUB_HALF_X, TUB_HALF_X, -1, 0, DOOR_Z_FAR, DOOR_Z_NEAR, theme.Tub, if theme.Trough then Enum.Material.WoodPlanks else Enum.Material.Metal)
-	span(b, "DoorOuter", -TUB_HALF_X - 4, TUB_HALF_X + 4, -DOOR_THICK, -1, DOOR_Z_FAR - 6, DOOR_Z_NEAR, if theme.Sink then Color3.fromRGB(176, 130, 90) elseif open then Color3.fromRGB(96, 66, 42) else K.Frame, if open then Enum.Material.WoodPlanks else Enum.Material.Metal)
-	if open then
+	span(b, "DoorOuter", -TUB_HALF_X - 4, TUB_HALF_X + 4, -DOOR_THICK, -1, DOOR_Z_FAR - 6, DOOR_Z_NEAR, if theme.Sink then Color3.fromRGB(176, 130, 90) elseif oak then Color3.fromRGB(96, 66, 42) else K.Frame, if open or oak then Enum.Material.WoodPlanks else Enum.Material.Metal)
+	if open or oak then
 		-- Standing on four legs: wooden for the drainboard, stone piers for the drawbridge.
 		for _, lx in { -TUB_HALF_X, TUB_HALF_X } do
 			for _, lz in { DOOR_Z_FAR - 2, DOOR_Z_NEAR - 6 } do
@@ -1607,14 +1579,14 @@ local function buildDoor(b: Builder, theme)
 		span(b, "DoorEdge", side * (TUB_HALF_X - 2), side * TUB_HALF_X, 0, 2, DOOR_Z_FAR, DOOR_Z_NEAR, theme.Metal, Enum.Material.Metal)
 		-- Invisible safety wall so nobody walks off the side.
 		-- Invisible safety wall, as tall as the tub, so nobody can jump off the door.
-		span(b, "SafetyWall", side * TUB_HALF_X, side * (TUB_HALF_X + 1), 0, wallTop, DOOR_Z_FAR - 6, DOOR_Z_NEAR, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
+		span(b, "SafetyWall", side * TUB_HALF_X, side * (TUB_HALF_X + 8), 0, wallTop, DOOR_Z_FAR - 14, DOOR_Z_NEAR, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
 	end
-	span(b, "SafetyWall", -TUB_HALF_X - 1, TUB_HALF_X + 1, 0, wallTop, DOOR_Z_FAR - 7, DOOR_Z_FAR - 6, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
+	span(b, "SafetyWall", -TUB_HALF_X - 8, TUB_HALF_X + 8, 0, wallTop, DOOR_Z_FAR - 14, DOOR_Z_FAR - 6, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
 	-- A lid over the door area as well, level with the tub ceiling.
-	span(b, "SafetyLid", -TUB_HALF_X - 1, TUB_HALF_X + 1, wallTop, wallTop + 1, DOOR_Z_FAR - 7, if open then TUB_Z_MAX + 4 else DOOR_Z_NEAR - 3.2, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
+	span(b, "SafetyLid", -TUB_HALF_X - 8, TUB_HALF_X + 8, wallTop, wallTop + 8, DOOR_Z_FAR - 14, if open then TUB_Z_MAX + 10 else DOOR_Z_NEAR - 3.2, Color3.new(1, 1, 1), nil, { Transparency = 1, CastShadow = false })
 
 	-- Control strip along the far edge (the top of the door when it's closed), with buttons.
-	if open then
+	if open or oak then
 		return
 	end
 	span(b, "ControlStrip", -TUB_HALF_X - 4.3, TUB_HALF_X + 4.3, -DOOR_THICK - 0.3, 3, DOOR_Z_FAR - 6.3, DOOR_Z_FAR, Color3.fromRGB(40, 44, 52), Enum.Material.SmoothPlastic)

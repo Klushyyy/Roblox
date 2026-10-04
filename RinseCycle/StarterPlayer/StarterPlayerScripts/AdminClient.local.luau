@@ -751,7 +751,7 @@ do
 	flash.BackgroundColor3 = Color3.fromRGB(255, 244, 214)
 	flash.BackgroundTransparency = 1
 	flash.Parent = fxRoot
-	local title = UIKit.Label({ Text = "ADMIN ABUSE", TextSize = 64, TextColor3 = Colors.Coin, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.3), Size = UDim2.fromOffset(700, 90), TextTransparency = 1, Parent = fxRoot })
+	local title = UIKit.Label({ Text = "ADMIN ABUSE", TextSize = 64, TextColor3 = Colors.Coin, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.3), Size = UDim2.fromOffset(700, 90), Visible = false, Parent = fxRoot })
 	local lastIntro = 0
 	local function intro()
 		if os.clock() - lastIntro < 30 then
@@ -760,9 +760,13 @@ do
 		lastIntro = os.clock()
 		flash.BackgroundTransparency = 0.15
 		TweenService:Create(flash, TweenInfo.new(0.9), { BackgroundTransparency = 1 }):Play()
+		title.Visible = true
 		title.TextTransparency = 0
 		title.Size = UDim2.fromOffset(1100, 150)
 		TweenService:Create(title, TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.fromOffset(700, 90), TextTransparency = 1 }):Play()
+		task.delay(3.1, function()
+			title.Visible = false -- the outline stays when text is only transparent
+		end)
 	end
 
 	task.spawn(function()

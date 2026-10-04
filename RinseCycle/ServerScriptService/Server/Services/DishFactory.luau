@@ -45,7 +45,7 @@ local SIZE = {
 	Pot = { Diameter = 18, Height = 14 },
 	Board = { Diameter = 22, Thickness = 1.6, Handle = 6 },
 	Cutter = { Height = 18, Wheel = 8 },
-	Goblet = { Diameter = 9, Height = 19 },
+	Goblet = { Diameter = 11, Height = 22 },
 }
 
 local DIRT_SCALE = 1.6 -- Config.GrimeTypes sizes were tuned for the old, smaller dishes
@@ -449,13 +449,14 @@ local function buildGoblet(anchor: CFrame, theme, _rng: Random)
 	local function at(y: number): CFrame
 		return axisCFrame(localPos(anchor, 0, y, 0), anchor.UpVector, anchor.LookVector)
 	end
-	local cupH = s.Height * 0.46
+	local cupH = s.Height * 0.55
 	local parts = {
 		newPart(Enum.PartType.Cylinder, Vector3.new(1, s.Diameter * 0.78, s.Diameter * 0.78), at(0.5), gold, Enum.Material.Metal),
 		newPart(Enum.PartType.Cylinder, Vector3.new(s.Height * 0.4, 1.6, 1.6), at(1 + s.Height * 0.2), gold, Enum.Material.Metal),
 		newPart(Enum.PartType.Cylinder, Vector3.new(2, 3.4, 3.4), at(1 + s.Height * 0.2), gold, Enum.Material.Metal),
 		newPart(Enum.PartType.Cylinder, Vector3.new(cupH, s.Diameter, s.Diameter), at(s.Height - cupH / 2), gold, Enum.Material.Metal),
-		newPart(Enum.PartType.Cylinder, Vector3.new(1, s.Diameter + 0.8, s.Diameter + 0.8), at(s.Height - 0.5), Color3.new(gold.R * 0.8, gold.G * 0.8, gold.B * 0.8), Enum.Material.Metal),
+		-- a darker lip, a little higher and wider than the cup so no faces share a plane
+		newPart(Enum.PartType.Cylinder, Vector3.new(1.2, s.Diameter + 0.8, s.Diameter + 0.8), at(s.Height - 0.4), Color3.new(gold.R * 0.8, gold.G * 0.8, gold.B * 0.8), Enum.Material.Metal),
 	}
 	return parts, 4
 end
@@ -722,10 +723,11 @@ local CANDIDATES: { [string]: (Random) -> (Vector3, Vector3) } = {
 	Plate = candidatePlate,
 	Board = candidateBoard,
 	Goblet = function(rng)
-		-- the cup, from either side
+		-- the cup (the upper 55% of it), from either side
 		local side = if rng:NextNumber() < 0.5 then 1 else -1
-		local y = SIZE.Goblet.Height * (0.62 + rng:NextNumber() * 0.3)
-		return Vector3.new((rng:NextNumber() - 0.5) * 3, y, side * 4), Vector3.new(0, 0, -side)
+		local cupH = SIZE.Goblet.Height * 0.55
+		local y = SIZE.Goblet.Height - cupH / 2 + (rng:NextNumber() - 0.5) * cupH * 0.5
+		return Vector3.new((rng:NextNumber() - 0.5) * 3, y, side * 6), Vector3.new(0, 0, -side)
 	end,
 	Cutter = function(rng)
 		-- the blade and the neck, from either side

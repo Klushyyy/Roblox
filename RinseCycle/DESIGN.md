@@ -1637,10 +1637,10 @@ Config.AbuseShow and the clock Config.Now. AdminServer's "Admin Abuse show" sect
 
 ## 6zk. The Royal Wash Trough, a better giant, countdown, notification test (v2.8.0)
 
-- Level 3 keeps the royal banquet hall but its "machine" is now an olden-day oak wash trough: oak staves bound with
-  iron hoops and straps, open at the top (counter hole, rim, invisible fence and lid like the Backyard), a wooden
-  drawbridge walkway on stone piers with iron bands and two iron torch stands, black iron racks, and a stone dragon
-  gargoyle on the back wall pouring water into it. Glasses are now gold goblets (new dish kind Goblet).
+- Level 3 keeps the royal banquet hall but its "machine" is now an olden-day oak washing chest: oak planks bound with
+  iron hoops, straps and a banded lid (closed, like the dishwasher: nobody can climb out), a wooden drawbridge
+  walkway on stone piers with iron bands and two iron torch stands, and black iron racks. (v2.8.0's open trough and
+  gargoyle looked like a sink and are gone.) Glasses are now gold goblets (new dish kind Goblet, cup 55% of its height).
   Three levels, three kinds of dishwasher: steel machine, porcelain sink, oak trough.
 - Admin Abuse giant: built from the owner's HumanoidDescription (hair and all), only the root anchored so the default
   R15 walk, idle, wave, point and cheer animations really play; feet measured onto the room floor; every stride
@@ -1650,3 +1650,5 @@ Config.AbuseShow and the clock Config.Now. AdminServer's "Admin Abuse show" sect
 - A small pill at the very top right counts down from 30 minutes ("ADMIN ABUSE IN 29:41"), then "ADMIN ABUSE IS LIVE!".
   The schedule reaches clients through ReplicatedStorage attributes AbuseStarts / AbuseEnds.
 - DailyNotify tries several secret names (Config.DailyNotify.SecretNames), and the Studio tab has "Notification test".
+
+- v2.8.1: the invisible walls round the Backyard sink and the drawbridge are now 8 studs thick (a thin 1-stud wall could be tunnelled by a fast flier). The intro title is hidden (not just transparent) until the show opens.
