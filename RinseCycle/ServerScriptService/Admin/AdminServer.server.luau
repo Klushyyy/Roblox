@@ -220,7 +220,7 @@ local TIER_COMMANDS = {
 		for _, name in ipairs(FOUNDER_ONLY_COMMANDS) do
 			table.insert(list, name)
 		end
-		for _, name in ipairs({ "setadminrank", "stafflist", "wipelogs", "givegamepass", "removegamepass", "globalgive", "globalpassdrop", "globalboost", "globalcountdown", "cancelcountdown" }) do
+		for _, name in ipairs({ "setadminrank", "stafflist", "wipelogs", "givegamepass", "removegamepass", "globalgive", "globalpassdrop", "globalboost", "globalcountdown", "cancelcountdown", "abuseshow" }) do
 			table.insert(list, name)
 		end
 		return list
@@ -3051,6 +3051,9 @@ local function logEntry(adminName, adminTier, commandName, targetName, extra, de
 end
 
 local function logCommand(admin, commandName, targetName, extra, description)
+	if typeof(admin) ~= "Instance" then
+		return
+	end
 	-- Captured at execution time, not looked up later - an admin's tier
 	-- (in particular the Studio testing override) can change over a
 	-- session, and a log entry should reflect what they were when they
@@ -3112,6 +3115,9 @@ end
 -- Dispatcher
 -- =====================================================================
 local function sendFeedback(player, text, isError)
+	if typeof(player) ~= "Instance" then
+		return -- the Admin Abuse show runs commands without a player
+	end
 	Remote.AdminFeedback:FireClient(player, text, isError == true)
 end
 
@@ -4831,6 +4837,9 @@ Remote.GlobalPoll.Parent = ReplicatedStorage
 Remote.GlobalPollVote = Instance.new("RemoteEvent")
 Remote.GlobalPollVote.Name = "GlobalPollVote"
 Remote.GlobalPollVote.Parent = ReplicatedStorage
+Remote.AbuseSay = Instance.new("RemoteEvent") -- S->C (ownerName, text): a line of chat from the owner during Admin Abuse
+Remote.AbuseSay.Name = "AbuseSay"
+Remote.AbuseSay.Parent = ReplicatedStorage
 Remote.GlobalCountdown = Instance.new("RemoteEvent") -- S->C ("Set", name, endsAt, liveMinutes) / ("Clear")
 Remote.GlobalCountdown.Name = "GlobalCountdown"
 Remote.GlobalCountdown.Parent = ReplicatedStorage
@@ -5236,5 +5245,302 @@ do
 		local ok = publish({ Kind = "Boost", Minutes = minutes })
 		sendFeedback(admin, string.format("x2 Cleaning for everyone for %d minutes%s", minutes, if ok then " in every server" else " (this server only)"), false)
 		logCommand(admin, "globalboost", nil, tostring(minutes), string.format("%s gave everyone %d min of x2 cleaning", admin.Name, minutes))
+	end
+	----------------------------------------------------------------- Admin Abuse show
+	-- Runs by itself in EVERY server from the event's Starts time (Config.UpcomingEvents, key
+	-- AdminAbuse), so no one has to press anything: every server reads the same clock. Banners and the
+	-- warning countdown, the lobby giant and the chat lines are per server; the votes and the prizes
+	-- are done once for the whole game: a server "claims" a step in a MemoryStore hash map first, so
+	-- only one server runs it, and the existing global poll / give / pass drop do the rest.
+	-- :abuseshow [minutes] starts the whole thing that many minutes from now, to try it; ":abuseshow
+	-- reset" puts the real time back.
+	local Show = Config.AbuseShow
+	local function abuseEvent(): any
+		for _, e in Config.UpcomingEvents do
+			if e.Key == Show.EventKey then
+				return e
+			end
+		end
+		return nil
+	end
+	local realStarts, realEnds = nil, nil
+	do
+		local e = abuseEvent()
+		if e then
+			realStarts, realEnds = e.Starts, e.Ends
+		end
+	end
+	handlers.AbuseSchedule = function(d)
+		local e = abuseEvent()
+		if e and tonumber(d.Starts) and tonumber(d.Ends) then
+			e.Starts, e.Ends = d.Starts, d.Ends
+		end
+	end
+
+	local STUB = { Name = Show.OwnerName .. " (event)", UserId = 0 } -- stands in for an admin in the commands
+	local function say(text: string)
+		for _, plr in ipairs(Players:GetPlayers()) do
+			Remote.AbuseSay:FireClient(plr, Show.OwnerName, text)
+		end
+	end
+	local claimMap = nil
+	pcall(function()
+		claimMap = game:GetService("MemoryStoreService"):GetHashMap("RinseCycle_AbuseSteps")
+	end)
+	-- True on exactly one server per step (and on this one when MemoryStore isn't there: Studio).
+	local function claim(step: string): boolean
+		if not claimMap then
+			return true
+		end
+		local ok, result = pcall(function()
+			return claimMap:UpdateAsync(step, function(old)
+				if old ~= nil then
+					return nil
+				end
+				return game.JobId
+			end, 7200)
+		end)
+		return ok and result == game.JobId
+	end
+	local function everyoneOnline(): number
+		local seen, n = {}, 0
+		for _, server in ipairs(ServerList.Read()) do
+			for _, p in ipairs(server.Players or {}) do
+				local id = tonumber(p.UserId)
+				if id and not p.Hidden and not seen[id] then
+					seen[id] = true
+					n += 1
+				end
+			end
+		end
+		return math.max(n, #Players:GetPlayers(), 1)
+	end
+
+	local function applyOutcome(option: any)
+		if option.Kind == "Bubbles" or option.Kind == "Gems" then
+			local share = math.max(1, math.floor(option.Amount / everyoneOnline()))
+			publish({ Kind = "GiveAll", Currency = option.Kind, Amount = share })
+			publish({ Kind = "Banner", Text = string.format("%s: everyone gets %s %s!", option.Text, Format.Commas(share), option.Kind) })
+		elseif option.Kind == "Passes" then
+			Commands.globalpassdrop(STUB, tostring(option.Amount) .. " random")
+		end
+	end
+	-- One vote: the poll goes to every server (the existing global poll), the counts come back here, and
+	-- the winner is applied. The winner is the most votes (the first on a tie; nobody voted = the first).
+	local function runRound(round: any)
+		local options = {}
+		for _, o in round.Options do
+			table.insert(options, o.Text)
+		end
+		local id = game.JobId .. ":abuse:" .. tostring(os.clock())
+		local counts = {}
+		for i = 1, #options do
+			counts[i] = 0
+		end
+		collecting[id] = { Counts = counts, Question = round.Question, Options = options }
+		publish({ Kind = "PollStart", Id = id, Question = round.Question, Options = options, EndsAt = Config.Now() + round.Seconds, Origin = game.JobId })
+		task.delay(round.Seconds + 7, function()
+			local c = collecting[id]
+			collecting[id] = nil
+			if not c then
+				return
+			end
+			publish({ Kind = "PollResult", Id = id, Question = c.Question, Options = c.Options, Counts = c.Counts })
+			local best, bestVotes = 1, -1
+			for i, n in ipairs(c.Counts) do
+				if n > bestVotes then
+					best, bestVotes = i, n
+				end
+			end
+			local winner = round.Options[best]
+			publish({ Kind = "AbuseSay", Text = "chat has spoken: " .. winner.Text .. "!" })
+			task.delay(3, applyOutcome, winner)
+		end)
+	end
+	handlers.AbuseSay = function(d)
+		if type(d.Text) == "string" then
+			say(string.sub(d.Text, 1, 200))
+		end
+	end
+
+	-- The giant: a copy of the owner's avatar, scaled up, pacing round the lobby room. Anchored and
+	-- non-colliding (players walk through him), animated with Roblox's default R15 walk and wave.
+	local giant: Model? = nil
+	local giantConn: RBXScriptConnection? = nil
+	local function removeGiant()
+		if giantConn then
+			giantConn:Disconnect()
+			giantConn = nil
+		end
+		if giant then
+			giant:Destroy()
+			giant = nil
+		end
+	end
+	local function spawnGiant()
+		if giant then
+			return
+		end
+		local ok, model = pcall(function()
+			return Players:CreateHumanoidModelFromUserId(Show.OwnerUserId)
+		end)
+		if not ok or not model then
+			return
+		end
+		model.Name = "AbuseGiant"
+		for _, part in model:GetDescendants() do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+				part.CanTouch = false
+				part.CanQuery = false
+				part.Anchored = true
+			end
+		end
+		local root = model:FindFirstChild("HumanoidRootPart") :: BasePart?
+		local humanoid = model:FindFirstChildOfClass("Humanoid")
+		if not root or not humanoid then
+			model:Destroy()
+			return
+		end
+		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+		model.Parent = workspace
+		pcall(function()
+			model:ScaleTo(Show.GiantScale)
+		end)
+		giant = model
+		-- A name tag over his head.
+		local head = model:FindFirstChild("Head") :: BasePart?
+		if head then
+			local tag = Instance.new("BillboardGui")
+			tag.Size = UDim2.fromOffset(360, 70)
+			tag.StudsOffsetWorldSpace = Vector3.new(0, 12 * Show.GiantScale / 6, 0)
+			tag.AlwaysOnTop = true
+			tag.MaxDistance = 5000
+			local label = Instance.new("TextLabel")
+			label.Size = UDim2.fromScale(1, 1)
+			label.BackgroundTransparency = 1
+			label.Font = Enum.Font.FredokaOne
+			label.TextScaled = true
+			label.TextColor3 = Color3.fromRGB(255, 213, 74)
+			label.TextStrokeTransparency = 0
+			label.Text = Show.OwnerName
+			label.Parent = tag
+			tag.Parent = head
+		end
+		local track: AnimationTrack? = nil
+		pcall(function()
+			local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+			local anim = Instance.new("Animation")
+			anim.AnimationId = "rbxassetid://507777826" -- default R15 walk
+			track = animator:LoadAnimation(anim)
+			track.Looped = true
+			track:Play()
+		end)
+		-- Round the room, inset from its walls (the lobby room is 840 wide, z -560..400, floor at -130).
+		local floorY = -130
+		local path = { Vector3.new(-320, floorY, 300), Vector3.new(320, floorY, 300), Vector3.new(320, floorY, -460), Vector3.new(-320, floorY, -460) }
+		local seg, pos = 1, path[1]
+		local speed = 70
+		local cf0, size0 = model:GetBoundingBox()
+		local rootY = root.Position.Y + (floorY - (cf0.Position.Y - size0.Y / 2)) -- feet on the floor
+		giantConn = RunService.Heartbeat:Connect(function(dt)
+			local target = path[seg % #path + 1]
+			local dir = target - pos
+			if dir.Magnitude < speed * dt then
+				pos = target
+				seg = seg % #path + 1
+			else
+				pos += dir.Unit * speed * dt
+			end
+			local look = path[seg % #path + 1] - pos
+			model:PivotTo(CFrame.lookAt(Vector3.new(pos.X, rootY, pos.Z), Vector3.new(pos.X + look.X, rootY, pos.Z + look.Z)))
+		end)
+	end
+
+	-- The clock. Each step happens once per server, a second or so after its time comes.
+	local fired: { [string]: boolean } = {}
+	local function once(key: string): boolean
+		if fired[key] then
+			return false
+		end
+		fired[key] = true
+		return true
+	end
+	task.spawn(function()
+		while true do
+			task.wait(1)
+			local e = abuseEvent()
+			if not e then
+				continue
+			end
+			local t = Config.Now() - e.Starts -- negative before the start
+			local tag = tostring(e.Starts)
+			-- Countdown warnings (only if we're still within a minute of them: late servers stay quiet).
+			for _, w in ipairs(Show.Warnings) do
+				if t >= -w and t < -w + 60 and once("warn" .. w .. tag) then
+					local mins = math.floor(w / 60)
+					bannerAll(string.format("Admin Abuse starts in %d minute%s! You can't start a round right now. Stay tuned for free game passes, Bubbles and surprises!", mins, if mins == 1 then "" else "s"))
+				end
+			end
+			if t >= 0 and t < Show.ShowSeconds then
+				if once("start" .. tag) then
+					bannerAll("ADMIN ABUSE IS LIVE!")
+				end
+				-- Anyone still in a run goes back to the lobby.
+				for _, plr in ipairs(Players:GetPlayers()) do
+					if RoundService.IsInRun(plr) then
+						RoundService.RemoveFromRun(plr)
+					end
+				end
+				if not RunServers.IsRunServer and t >= 2 then
+					spawnGiant()
+				end
+				for i, line in ipairs(Show.Lines) do
+					if t >= line[1] and t < line[1] + 30 and once("line" .. i .. tag) then
+						say(line[2])
+					end
+				end
+				for i, round in ipairs(Show.Rounds) do
+					if t >= round.At and t < round.At + 30 and once("round" .. i .. tag) and claim("round" .. i .. ":" .. tag) then
+						runRound(round)
+					end
+				end
+			elseif t >= Show.ShowSeconds then
+				if giant then
+					removeGiant()
+				end
+			end
+		end
+	end)
+
+	Commands.abuseshow = function(admin, text)
+		local e = abuseEvent()
+		if not e then
+			sendFeedback(admin, "No Admin Abuse event is set up.", true)
+			return
+		end
+		local arg = string.lower(text:match("^%s*(%S*)") or "")
+		local starts, ends
+		if arg == "reset" then
+			if not realStarts then
+				return
+			end
+			starts, ends = realStarts, realEnds
+		else
+			local minutes = math.clamp(tonumber(arg) or 1, 0.25, 600)
+			starts = Config.Now() + math.floor(minutes * 60)
+			ends = starts + 3600
+		end
+		if claimMap then
+			-- steps from an earlier try would otherwise count as already done
+			pcall(function()
+				for i = 1, #Show.Rounds do
+					claimMap:RemoveAsync("round" .. i .. ":" .. tostring(starts))
+				end
+			end)
+		end
+		local ok = publish({ Kind = "AbuseSchedule", Starts = starts, Ends = ends })
+		sendFeedback(admin, if arg == "reset" then "Admin Abuse is back on its real time." else string.format("Admin Abuse show starts in %s%s. Rounds are paused from now.", Format.Time and Format.Time(starts - Config.Now()) or tostring(math.floor((starts - Config.Now()) / 60)) .. " min", if ok then " (every server)" else " (this server only)"), false)
+		logCommand(admin, "abuseshow", nil, arg, admin.Name .. " set the Admin Abuse show: " .. tostring(arg))
 	end
 end

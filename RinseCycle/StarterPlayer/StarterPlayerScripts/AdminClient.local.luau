@@ -642,6 +642,24 @@ player.CharacterAdded:Connect(function(character)
 	watchNoClipCharacter(character)
 end)
 
+-- Admin Abuse show: lines of chat from the giant owner ("[Owner] Name: text") in the chat window.
+do
+	local AbuseSay = remote("AbuseSay")
+	AbuseSay.OnClientEvent:Connect(function(name: any, text: any)
+		if type(name) ~= "string" or type(text) ~= "string" then
+			return
+		end
+		pcall(function()
+			local TextChatService = game:GetService("TextChatService")
+			local channel = TextChatService:FindFirstChild("TextChannels") and TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+			if channel then
+				local safe = string.gsub(string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"), ">", "&gt;")
+				;(channel :: any):DisplaySystemMessage(string.format('<font color="#FFD54A"><b>[Owner] %s:</b></font> %s', name, safe))
+			end
+		end)
+	end)
+end
+
 -- Full-screen cover that hides teleports (jail, spectate, control).
 local cover = Instance.new("Frame")
 cover.Name = "TeleportCover"
@@ -825,6 +843,7 @@ local COMMANDS: { Command } = ({
 		return out
 	end } } },
 	{ Name = "globalcountdown", Icon = "⏳", Label = "Event countdown", Desc = "A countdown on everyone's screen in EVERY server (and for anyone who joins later), then LIVE NOW for an hour. Pick the time, then type the event's name (blank = Admin Abuse).", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "1h", "6h", "12h", "24h", "48h", "3d", "7d" }) }, { Kind = "text", Placeholder = "Event name (blank = Admin Abuse)" } } },
+	{ Name = "abuseshow", Icon = "🎆", Label = "Admin Abuse show", Desc = "Starts the whole Admin Abuse show in every server that many minutes from now (to try it). Rounds pause, a giant you walks the lobby, there are chat lines, votes and prizes. Type reset to put the real time back.", Group = "Global", Target = "none", Inputs = { { Kind = "text", Placeholder = "Minutes until it starts (1), or reset" } } },
 	{ Name = "cancelcountdown", Icon = "🛑", Label = "Cancel countdown", Desc = "Removes the event countdown from everyone's screen, in every server.", Group = "Global", Target = "none", Danger = true },
 	{ Name = "globalboost", Icon = "⚡", Label = "x2 boost", Desc = "x2 Cleaning for everyone online in EVERY server, for this many minutes.", Group = "Global", Target = "none", Inputs = { { Kind = "number", Placeholder = "Minutes (1-180)", Required = true } } },
 }) :: any

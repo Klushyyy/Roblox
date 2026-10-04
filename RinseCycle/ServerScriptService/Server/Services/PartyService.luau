@@ -937,6 +937,12 @@ local function onPartyAction(player: Player, action: any, value: any)
 			return
 		end
 		local level, max, privacy = value.Level, value.MaxPlayers, value.Privacy
+		-- Rounds are paused before and during the Admin Abuse show.
+		local locked, why = Config.EventLockdown()
+		if locked then
+			notify(player, why, "Bad")
+			return
+		end
 		if not isInteger(level) or level < 1 or level > #Config.Levels then
 			return
 		end
@@ -993,6 +999,11 @@ local function onPartyAction(player: Player, action: any, value: any)
 		party.LevelChosen = true
 	elseif action == "StartNow" then
 		if party.Status ~= "Waiting" then
+			return
+		end
+		local locked, why = Config.EventLockdown()
+		if locked then
+			notify(player, why, "Bad")
 			return
 		end
 		party.EndsAt = math.min(party.EndsAt, Util.Now()) -- the poll loop launches it next tick

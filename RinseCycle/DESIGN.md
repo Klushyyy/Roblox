@@ -1606,3 +1606,18 @@ the ad is watched to the end. Needs a developer product worth 3 to 10 R$ and an 
   hold them; pizza boxes left the floor; pizzas and box stacks sit on the benches.
 - Mountains are a polar heightmap of triangles, each drawn as two WedgeParts (rolling hills, rock, snow,
   ridge at 900-1500 studs). Trees copy the lobby's style (crossed-box hex trunk, turned canopy blocks).
+
+## 6zi. Admin Abuse show (v2.6.0)
+
+Runs on its own in every server from the AdminAbuse event's Starts time (Config.UpcomingEvents), driven by
+Config.AbuseShow and the clock Config.Now. AdminServer's "Admin Abuse show" section:
+- 30 / 15 / 5 / 1 minutes before: banner warnings. Rounds can't start (Config.EventLockdown, checked in
+  PartyService Create and StartNow) from 30 minutes before until the show ends (15 minutes after the start).
+- At the start: "ADMIN ABUSE IS LIVE!", anyone in a run goes back to the lobby, and in lobby servers a giant copy
+  of the owner (Players:CreateHumanoidModelFromUserId, ScaleTo 30, default R15 walk) paces round the room.
+- Chat lines "[Owner] EnderBuilda: ..." (Remote AbuseSay -> AdminClient -> chat window) on a timeline.
+- Votes (Rounds): one server claims each round in a MemoryStore hash map, runs the existing global poll (counts
+  from every server), then applies the winner: Bubbles/Gems are split between everyone online in every server
+  (GiveAll), Passes runs the pass drop. No votes = the first option.
+- `:abuseshow [minutes]` (owner) starts the whole show that many minutes from now in every server to try it;
+  `:abuseshow reset` puts the real time back. Test: scen_abuse.

@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.5.0"
+Config.Version = "2.6.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1042,6 +1042,78 @@ Config.UpcomingEvents = {
 		RobloxEventId = "", -- set from StoreIds > EventIds > AdminAbuse
 	},
 }
+
+-- The Admin Abuse show (AdminServer runs it in every server from the event's Starts time). Before it,
+-- rounds can't start; at the start everyone in a run is sent back to the lobby and a giant copy of the
+-- owner walks the lobby, "says" the Lines in chat, runs votes (Rounds) counted across every server, and
+-- gives out the winning prize. All times are seconds after Starts.
+Config.AbuseShow = {
+	EventKey = "AdminAbuse",
+	PreSeconds = 1800, -- rounds can't start this long before the event
+	ShowSeconds = 900, -- how long the show (and the pause on rounds) lasts
+	Warnings = { 1800, 900, 300, 60 }, -- banners this many seconds before the start
+	OwnerUserId = 2297538363,
+	OwnerName = "EnderBuilda",
+	GiantScale = 30,
+	Lines = {
+		{ 6, "heyyy everyone" },
+		{ 14, "i heard this is admin abuse?" },
+		{ 24, "ok ok ok. who wants free stuff???" },
+		{ 34, "lets vote on it. you have 60 seconds, go go go" },
+		{ 118, "wait wait wait. theres more" },
+		{ 128, "5 random players are about to win a game pass" },
+		{ 215, "ok round 2. vote again, 60 seconds" },
+		{ 330, "ok thats enough chaos for one day" },
+		{ 345, "thank you all for playing Rinse Cycle! more events soon" },
+		{ 358, "i gotta go clean some dishes. bye!!" },
+	},
+	-- Votes: Kind "Bubbles"/"Gems" splits Amount between everyone online in every server; "Passes"
+	-- gives that many random players a game pass.
+	Rounds = {
+		{
+			At = 40,
+			Seconds = 60,
+			Question = "What should I give out?",
+			Options = {
+				{ Text = "Share 50,000 Bubbles", Kind = "Bubbles", Amount = 50000 },
+				{ Text = "Share 10,000 Bubbles", Kind = "Bubbles", Amount = 10000 },
+				{ Text = "10 random game passes", Kind = "Passes", Amount = 10 },
+			},
+		},
+		{
+			At = 220,
+			Seconds = 60,
+			Question = "One more! What next?",
+			Options = {
+				{ Text = "Share 3,000 Gems", Kind = "Gems", Amount = 3000 },
+				{ Text = "3 random game passes", Kind = "Passes", Amount = 3 },
+			},
+		},
+	},
+}
+
+-- True (and why) while rounds are paused for the Admin Abuse show: from PreSeconds before it starts
+-- until ShowSeconds after.
+-- The clock the event uses (a test can replace it).
+function Config.Now(): number
+	return os.time()
+end
+
+function Config.EventLockdown(now: number?): (boolean, string)
+	local t = now or Config.Now()
+	for _, e in Config.UpcomingEvents do
+		if e.Key == Config.AbuseShow.EventKey then
+			local left = e.Starts - t
+			if left > 0 and left <= Config.AbuseShow.PreSeconds then
+				local mins = math.ceil(left / 60)
+				return true, string.format("Admin Abuse starts in %d minute%s! You can't start a round right now. Stay tuned for free game passes, Bubbles and surprises!", mins, if mins == 1 then "" else "s")
+			elseif left <= 0 and -left < Config.AbuseShow.ShowSeconds then
+				return true, "Admin Abuse is live! Rounds are paused until the show is over."
+			end
+		end
+	end
+	return false, ""
+end
 
 function Config.NextEvent(now: number?): any
 	local t = now or os.time()
