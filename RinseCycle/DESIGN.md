@@ -1621,3 +1621,15 @@ Config.AbuseShow and the clock Config.Now. AdminServer's "Admin Abuse show" sect
   (GiveAll), Passes runs the pass drop. No votes = the first option.
 - `:abuseshow [minutes]` (owner) starts the whole show that many minutes from now in every server to try it;
   `:abuseshow reset` puts the real time back. Test: scen_abuse.
+
+## 6zj. The castle hall and phone text (v2.7.0)
+
+- Level 3's hall is much bigger (ArenaBuilder sets the room per build: half width 780 instead of 420, depth to
+  z -1000, height 860). More pillars (every 150 studs, fireplace bay skipped), a ribbed stone vault of arches under
+  the ceiling, tall stained-glass windows with pointed tops in every bay, a gallery walkway with balusters and
+  corbels along both side walls, taller banners, five large chandeliers. The table, throne and NPC spots are unchanged.
+- Phone text: UIKit raises any label that would land under 10 real pixels on a small touch screen (screen scale
+  under 0.8), up to 1.45x its design size (PHONE_MIN_PX / PHONE_MAX_BOOST). Windows already shrink to fit.
+- The HUD's FREE tag sits on the Event button's top right corner so it no longer covers the label.
+- Check: `scen_mobile` sets phone-sized screens (844x390 and 390x844) and dumps windows; `mobaudit.py` lists text
+  that lands under a size (labels set to scale to their box are an upper bound). Real devices still need a look.

@@ -248,8 +248,8 @@ function HUD.Init()
 	end)
 	local freeTag = Instance.new("Frame")
 	freeTag.Name = "FreeTag"
-	freeTag.AnchorPoint = Vector2.new(0.5, 0.5)
-	freeTag.Position = UDim2.new(0.5, 0, 1, 0)
+	freeTag.AnchorPoint = Vector2.new(1, 0.5) -- on the top right corner, clear of the "Event" label below the icon
+	freeTag.Position = UDim2.new(1, 8, 0, 2)
 	freeTag.Size = UDim2.fromOffset(56, 22)
 	freeTag.BackgroundColor3 = Colors.Bad
 	freeTag.ZIndex = 8

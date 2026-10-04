@@ -287,8 +287,19 @@ type TextEntry = { Base: number, Limit: UITextSizeConstraint? }
 local textEntries: { [TextLabel]: TextEntry } = setmetatable({}, { __mode = "k" }) :: any
 local textBoost = 1
 
+-- Phone text minimum: on a small touch screen the whole canvas is shrunk (scale ~0.4 to 0.55), which
+-- left many labels at 6 to 8 real pixels. Any label that would land under PHONE_MIN_PX is made bigger,
+-- up to PHONE_MAX_BOOST times its design size (scaled text still shrinks to its box).
+local PHONE_MIN_PX = 10
+local PHONE_MAX_BOOST = 1.45
+local phoneScale = 0 -- the screen scale while on a phone, 0 everywhere else
+
 local function applyTextBoost(label: TextLabel, entry: TextEntry)
-	local size = math.clamp(math.floor(entry.Base * textBoost + 0.5), 1, 100)
+	local factor = textBoost
+	if phoneScale > 0 then
+		factor = math.max(factor, math.clamp(PHONE_MIN_PX / (entry.Base * phoneScale), 1, PHONE_MAX_BOOST))
+	end
+	local size = math.clamp(math.floor(entry.Base * factor + 0.5), 1, 100)
 	label.TextSize = size
 	if entry.Limit then
 		entry.Limit.MaxTextSize = size
@@ -298,7 +309,7 @@ end
 local function registerText(label: TextLabel, base: number, limit: UITextSizeConstraint?)
 	local entry = { Base = base, Limit = limit }
 	textEntries[label] = entry
-	if textBoost ~= 1 then
+	if textBoost ~= 1 or phoneScale > 0 then
 		applyTextBoost(label, entry)
 	end
 end
@@ -427,8 +438,10 @@ local function applyLayout(force: boolean)
 	end
 	viewport, scale, insetPx, lastTouch, lastGamepad, safePx = vp, newScale, newInset, touch, pad, newSafe
 	local boost = if pad then GAMEPAD_TEXT_BOOST else 1
-	if boost ~= textBoost then
+	local newPhoneScale = if touch and newScale < 0.8 then newScale else 0
+	if boost ~= textBoost or newPhoneScale ~= phoneScale then
 		textBoost = boost
+		phoneScale = newPhoneScale
 		for label, entry in textEntries do
 			if label.Parent then
 				applyTextBoost(label, entry)

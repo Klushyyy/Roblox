@@ -45,9 +45,9 @@ local SPAWN_Z = -100
 
 local KITCHEN_FLOOR_Y = -24
 local COUNTER_TOP_Y = 112 -- (lower outdoors: set per build)
-local ROOM_HALF_X = 420
-local ROOM_Z_FRONT, ROOM_Z_BACK = -520, 76
-local ROOM_HEIGHT = 520
+local ROOM_HALF_X = 420 -- (the castle hall is much wider: set per build)
+local ROOM_Z_FRONT, ROOM_Z_BACK = -520, 76 -- (the castle hall is much deeper: set per build)
+local ROOM_HEIGHT = 520 -- (and much taller)
 
 local DRAIN_POS = Vector3.new(0, 0, -49) -- clear of the rack ramp (Z -41..-36)
 
@@ -777,25 +777,95 @@ local function castleProps(b: Builder, k: RoomStyle)
 	end
 	span(b, "WindowArch", wx0 - 10, wx1 + 10, wy1, wy1 + 16, ROOM_Z_BACK - 6, ROOM_Z_BACK, stone, Enum.Material.Cobblestone, noCollide())
 
-	-- Pillars along both side walls, each with a banner between.
+	-- Pillars along both side walls, each with a banner between. The hall is long, so there are many;
+	-- the fireplace takes the right wall around z -240.
+	local pillarZs = {}
+	for z = ROOM_Z_FRONT + 90, -100, 150 do
+		table.insert(pillarZs, z)
+	end
+	local function atFireplace(z: number): boolean
+		return z > -350 and z < -130
+	end
 	for _, side in { -1, 1 } do
-		for i, z in { -460, -340, -220, -100 } do
-			-- The fireplace takes the right wall around z -240.
-			if side == 1 and (z == -220 or z == -340) then
+		for _, z in pillarZs do
+			if side == 1 and atFireplace(z) then
 				continue
 			end
 			local x = side * (ROOM_HALF_X - 30)
-			span(b, "Pillar", x - 20, x + 20, fy, fy + ROOM_HEIGHT, z - 20, z + 20, stone, Enum.Material.Cobblestone)
-			span(b, "PillarBase", x - 26, x + 26, fy, fy + 18, z - 26, z + 26, Color3.fromRGB(130, 124, 116), Enum.Material.Slate)
-			span(b, "PillarCap", x - 26, x + 26, fy + ROOM_HEIGHT - 24, fy + ROOM_HEIGHT, z - 26, z + 26, Color3.fromRGB(130, 124, 116), Enum.Material.Slate)
-			if i < 4 then
-				local bz = z + 60
-				local bx = side * (ROOM_HALF_X - 3)
-				span(b, "Banner", bx - 1, bx + 1, fy + 220, fy + 440, bz - 30, bz + 30, red, Enum.Material.Fabric, noCollide())
-				span(b, "BannerTrim", bx - 1.4, bx + 1.4, fy + 216, fy + 222, bz - 32, bz + 32, gold, Enum.Material.Metal, noCollide())
-				span(b, "BannerRod", bx - 3, bx + 3, fy + 440, fy + 446, bz - 36, bz + 36, gold, Enum.Material.Metal, noCollide())
-				span(b, "BannerCrest", bx - 1.6, bx + 1.6, fy + 320, fy + 350, bz - 12, bz + 12, gold, Enum.Material.Metal, noCollide())
+			span(b, "Pillar", x - 24, x + 24, fy, fy + ROOM_HEIGHT, z - 24, z + 24, stone, Enum.Material.Cobblestone)
+			span(b, "PillarBase", x - 32, x + 32, fy, fy + 22, z - 32, z + 32, Color3.fromRGB(130, 124, 116), Enum.Material.Slate)
+			span(b, "PillarCap", x - 32, x + 32, fy + ROOM_HEIGHT - 30, fy + ROOM_HEIGHT, z - 32, z + 32, Color3.fromRGB(130, 124, 116), Enum.Material.Slate)
+			local bz = z + 75
+			local bx = side * (ROOM_HALF_X - 3)
+			if bz < ROOM_Z_BACK - 40 and not (side == 1 and atFireplace(bz)) then
+				span(b, "Banner", bx - 1, bx + 1, fy + 420, fy + 720, bz - 36, bz + 36, red, Enum.Material.Fabric, noCollide())
+				span(b, "BannerTrim", bx - 1.4, bx + 1.4, fy + 414, fy + 422, bz - 38, bz + 38, gold, Enum.Material.Metal, noCollide())
+				span(b, "BannerRod", bx - 3, bx + 3, fy + 720, fy + 728, bz - 44, bz + 44, gold, Enum.Material.Metal, noCollide())
+				span(b, "BannerCrest", bx - 1.6, bx + 1.6, fy + 540, fy + 590, bz - 16, bz + 16, gold, Enum.Material.Metal, noCollide())
 			end
+		end
+	end
+
+	-- Ribbed vault: a stone arch across the hall above every pillar pair, springing from the wall tops
+	-- and meeting the ceiling in the middle.
+	do
+		local rise = 190
+		local springY = fy + ROOM_HEIGHT - rise
+		local n = 16
+		for _, z in pillarZs do
+			local px, py = ROOM_HALF_X - 30, springY
+			for i = 1, n do
+				local th = i / n * math.pi
+				local nx, ny = math.cos(th) * (ROOM_HALF_X - 30), springY + math.sin(th) * rise
+				local len = math.sqrt((nx - px) ^ 2 + (ny - py) ^ 2) + 2
+				local seg = box(b, "VaultRib", Vector3.new(len, 20, 26), (px + nx) / 2, (py + ny) / 2, z, Color3.fromRGB(150, 144, 136), Enum.Material.Cobblestone, noCollide())
+				seg.CFrame = footprint(b.origin, (px + nx) / 2, (py + ny) / 2, z) * CFrame.Angles(0, 0, math.atan2(ny - py, nx - px))
+				px, py = nx, ny
+			end
+		end
+	end
+
+	-- Tall stained-glass windows in the wall bays between the pillars, with a stone frame and a pointed top.
+	do
+		local glass = { Color3.fromRGB(80, 120, 230), Color3.fromRGB(220, 60, 70), Color3.fromRGB(250, 200, 70), Color3.fromRGB(80, 190, 120) }
+		for _, side in { -1, 1 } do
+			for zi, z in pillarZs do
+				local wz = z + 75
+				if wz > ROOM_Z_BACK - 70 or (side == 1 and atFireplace(wz)) then
+					continue
+				end
+				local wx = side * (ROOM_HALF_X - 2)
+				local w, y0, y1 = 70, fy + 250, fy + 600
+				span(b, "WindowFrame", wx - 3, wx + 1, y0 - 10, y1 + 10, wz - w / 2 - 8, wz + w / 2 + 8, Color3.fromRGB(120, 114, 106), Enum.Material.Slate, noCollide())
+				for gi = 0, 2 do
+					for gj = 0, 6 do
+						local zz0 = wz - w / 2 + gi * w / 3
+						local yy0 = y0 + gj * (y1 - y0) / 7
+						local pane = span(b, "StainedGlass", wx - 1, wx + 1.5, yy0 + 1, yy0 + (y1 - y0) / 7 - 1, zz0 + 1, zz0 + w / 3 - 1, glass[(gi + gj + zi) % 4 + 1], Enum.Material.Neon, noCollide())
+						pane.Transparency = 0.25
+						pane.CastShadow = false
+					end
+				end
+				-- pointed top: two slanted bars meeting above the window
+				for _, s2 in { -1, 1 } do
+					local bar = box(b, "WindowPoint", Vector3.new(4, 4, w / 2 + 14), wx, y1 + 22, wz + s2 * (w / 4 + 4), Color3.fromRGB(120, 114, 106), Enum.Material.Slate, noCollide())
+					bar.CFrame = footprint(b.origin, wx, y1 + 22, wz + s2 * (w / 4 + 4)) * CFrame.Angles(s2 * math.rad(24), 0, 0)
+				end
+			end
+		end
+	end
+
+	-- A gallery along each side wall: a stone walkway on corbels with a balustrade.
+	for _, side in { -1, 1 } do
+		local gx0, gx1 = side * (ROOM_HALF_X - 70), side * ROOM_HALF_X
+		span(b, "GalleryFloor", gx0, gx1, fy + 330, fy + 346, ROOM_Z_FRONT + 40, ROOM_Z_BACK - 40, Color3.fromRGB(128, 122, 116), Enum.Material.Slate, noCollide())
+		span(b, "GalleryRail", gx0 - side * 2, gx0 + side * 2, fy + 346, fy + 366, ROOM_Z_FRONT + 40, ROOM_Z_BACK - 40, Color3.fromRGB(150, 144, 136), Enum.Material.Cobblestone, noCollide())
+		for z = ROOM_Z_FRONT + 60, ROOM_Z_BACK - 60, 40 do
+			span(b, "Baluster", gx0 - side * 3, gx0 + side * 3, fy + 346, fy + 398, z - 4, z + 4, Color3.fromRGB(176, 170, 162), Enum.Material.Marble, noCollide())
+		end
+		span(b, "GalleryHandrail", gx0 - side * 4, gx0 + side * 4, fy + 398, fy + 408, ROOM_Z_FRONT + 40, ROOM_Z_BACK - 40, Color3.fromRGB(92, 58, 38), Enum.Material.Wood, noCollide())
+		for z = ROOM_Z_FRONT + 90, ROOM_Z_BACK - 60, 150 do
+			span(b, "Corbel", gx0 + side * 10, gx1, fy + 290, fy + 332, z - 14, z + 14, Color3.fromRGB(150, 144, 136), Enum.Material.Cobblestone, noCollide())
 		end
 	end
 
@@ -860,14 +930,14 @@ local function castleProps(b: Builder, k: RoomStyle)
 
 	-- Wall torches on the pillars' room-facing sides, lighting the hall warmly.
 	for _, side in { -1, 1 } do
-		for _, z in { -460, -340, -220, -100 } do
-			if side == 1 and (z == -220 or z == -340) then
+		for _, z in pillarZs do
+			if side == 1 and atFireplace(z) then
 				continue
 			end
-			local x = side * (ROOM_HALF_X - 52)
-			span(b, "TorchBracket", x - 3, x + 3, fy + 200, fy + 230, z - 3, z + 3, Color3.fromRGB(60, 50, 45), Enum.Material.Metal, noCollide())
-			cyl(b, "TorchCup", 10, 14, x, fy + 234, z, Color3.fromRGB(60, 50, 45), Enum.Material.Metal, noCollide())
-			local flame = box(b, "TorchFlame", Vector3.new(10, 18, 10), x, fy + 248, z, Color3.fromRGB(255, 160, 60), Enum.Material.Neon, noCollide())
+			local x = side * (ROOM_HALF_X - 58)
+			span(b, "TorchBracket", x - 3, x + 3, fy + 220, fy + 250, z - 3, z + 3, Color3.fromRGB(60, 50, 45), Enum.Material.Metal, noCollide())
+			cyl(b, "TorchCup", 10, 14, x, fy + 254, z, Color3.fromRGB(60, 50, 45), Enum.Material.Metal, noCollide())
+			local flame = box(b, "TorchFlame", Vector3.new(10, 18, 10), x, fy + 268, z, Color3.fromRGB(255, 160, 60), Enum.Material.Neon, noCollide())
 			flame.Shape = Enum.PartType.Ball
 			local light = Instance.new("PointLight")
 			light.Color = Color3.fromRGB(255, 170, 90)
@@ -904,17 +974,24 @@ local function castleProps(b: Builder, k: RoomStyle)
 		span(b, "Beam", -ROOM_HALF_X, ROOM_HALF_X, fy + ROOM_HEIGHT - 20, fy + ROOM_HEIGHT, z - 10, z + 10, Color3.fromRGB(60, 40, 28), Enum.Material.Wood, noCollide())
 	end
 
-	-- Two chandeliers: a gold ring with glowing candles on a chain.
-	for _, cz in { -400, -230 } do
-		span(b, "Chain", -1, 1, fy + 360, fy + ROOM_HEIGHT, cz - 1, cz + 1, gold, Enum.Material.Metal, noCollide())
-		cyl(b, "ChandelierRing", 6, 120, 0, fy + 360, cz, gold, Enum.Material.Metal, noCollide())
-		for i = 0, 9 do
-			local a = i / 10 * math.pi * 2
-			local x, z = math.cos(a) * 56, cz + math.sin(a) * 56
-			cyl(b, "ChCandle", 14, 5, x, fy + 370, z, Color3.fromRGB(250, 245, 230), nil, noCollide())
-			local flame = box(b, "ChFlame", Vector3.new(4, 6, 4), x, fy + 380, z, Color3.fromRGB(255, 190, 70), Enum.Material.Neon, noCollide())
+	-- Chandeliers down the length of the hall: a gold ring with glowing candles on a long chain.
+	for cz = ROOM_Z_FRONT + 170, -120, 230 do
+		local ringY = fy + ROOM_HEIGHT - 300
+		span(b, "Chain", -1.2, 1.2, ringY, fy + ROOM_HEIGHT, cz - 1.2, cz + 1.2, gold, Enum.Material.Metal, noCollide())
+		cyl(b, "ChandelierRing", 6, 150, 0, ringY, cz, gold, Enum.Material.Metal, noCollide())
+		cyl(b, "ChandelierInner", 5, 80, 0, ringY - 8, cz, gold, Enum.Material.Metal, noCollide())
+		for i = 0, 11 do
+			local a = i / 12 * math.pi * 2
+			local x, z = math.cos(a) * 71, cz + math.sin(a) * 71
+			cyl(b, "ChCandle", 14, 5, x, ringY + 10, z, Color3.fromRGB(250, 245, 230), nil, noCollide())
+			local flame = box(b, "ChFlame", Vector3.new(4, 6, 4), x, ringY + 20, z, Color3.fromRGB(255, 190, 70), Enum.Material.Neon, noCollide())
 			flame.Shape = Enum.PartType.Ball
 		end
+		local glow = Instance.new("PointLight")
+		glow.Color = Color3.fromRGB(255, 200, 130)
+		glow.Brightness = 1.5
+		glow.Range = 60
+		glow.Parent = b.model:FindFirstChild("ChandelierRing") or b.model
 	end
 end
 
@@ -1953,6 +2030,9 @@ function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeSc
 		theme.Sink = true
 	end
 	-- The Backyard (level 2) is a shallow sink in a low outdoor counter; the others are full dishwashers.
+	ROOM_HALF_X = if levelIndex == 3 then 780 else 420
+	ROOM_Z_FRONT = if levelIndex == 3 then -1000 else -520
+	ROOM_HEIGHT = if levelIndex == 3 then 860 else 520
 	TUB_HEIGHT = if levelIndex == 2 then 34 else 100
 	COUNTER_TOP_Y = if levelIndex == 2 then 40 else 112
 	local origin = ArenaBuilder.SlotOrigin(slot)
