@@ -5186,6 +5186,8 @@ do
 		logCommand(admin, "globalboost", nil, tostring(minutes), string.format("%s gave everyone %d min of x2 cleaning", admin.Name, minutes))
 	end
 	----------------------------------------------------------------- Admin Abuse show
+	-- (Everything below lives in its own function, so its locals have their own budget of 200 registers.)
+	;(function()
 	-- Runs by itself in EVERY server from the event's Starts time (Config.UpcomingEvents, key
 	-- AdminAbuse), so no one has to press anything: every server reads the same clock. Banners and the
 	-- warning countdown, the lobby giant and the chat lines are per server; the votes and the prizes
@@ -5697,4 +5699,5 @@ do
 		sendFeedback(admin, if arg == "reset" then "Admin Abuse is back on its real time." else string.format("Admin Abuse show starts in %s%s. Rounds are paused from now.", Format.Time and Format.Time(starts - Config.Now()) or tostring(math.floor((starts - Config.Now()) / 60)) .. " min", if ok then " (every server)" else " (this server only)"), false)
 		logCommand(admin, "abuseshow", nil, arg, admin.Name .. " set the Admin Abuse show: " .. tostring(arg))
 	end
+	end)()
 end
