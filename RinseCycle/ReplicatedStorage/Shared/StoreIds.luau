@@ -73,11 +73,11 @@ return {
 		Level2 = 4342556802449819,     -- "Pizza Party Cleared"      Clean every dish in level 2.
 		Level3 = 4215993717051062,     -- "Royal Banquet Cleared"    Clean every dish in level 3.
 		FirstPet = 996802792244268,   -- "New Best Friend"          Hatch your first pet.
-		GoldenPet = 0,  -- "Golden Touch"             Merge a Golden pet.
-		Rebirth = 0,    -- "Born Again"               Rebirth for the first time.
-		LegendRank = 0, -- "Legendary Luck"           Roll a Legendary or Mythic rank.
-		Club = 0,       -- "Better Together"          Make or join a club.
-		DishMaster = 0, -- "Dish Master"              Clean 1,000 dishes.
+		GoldenPet = 706372052285673,  -- "Golden Touch"             Merge a Golden pet.
+		Rebirth = 2883619495633715,    -- "Born Again"               Rebirth for the first time.
+		LegendRank = 3034324866864862, -- "Legendary Luck"           Roll a Legendary or Mythic rank.
+		Club = 2101771823008708,       -- "Better Together"          Make or join a club.
+		DishMaster = 2704509948705644, -- "Dish Master"              Clean 1,000 dishes.
 	},
 
 	-- Developer products for the Treasure Chest event and the luck ad. Create each one in Creator
