@@ -642,15 +642,18 @@ player.CharacterAdded:Connect(function(character)
 	watchNoClipCharacter(character)
 end)
 
--- Admin Abuse show: lines of chat from the giant owner ("[Owner] Name: text") in the chat window.
-do
-	local AbuseSay = remote("AbuseSay")
+-- Admin Abuse show: lines of chat from the giant owner ("[Owner] Name: text") in the chat window. The
+-- remote is waited for in the background, so the panel never waits on it.
+task.spawn(function()
+	local AbuseSay = ReplicatedStorage:WaitForChild("AbuseSay", 120)
+	if not AbuseSay then
+		return
+	end
 	AbuseSay.OnClientEvent:Connect(function(name: any, text: any)
 		if type(name) ~= "string" or type(text) ~= "string" then
 			return
 		end
 		pcall(function()
-			local TextChatService = game:GetService("TextChatService")
 			local channel = TextChatService:FindFirstChild("TextChannels") and TextChatService.TextChannels:FindFirstChild("RBXGeneral")
 			if channel then
 				local safe = string.gsub(string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"), ">", "&gt;")
@@ -658,7 +661,7 @@ do
 			end
 		end)
 	end)
-end
+end)
 
 -- Full-screen cover that hides teleports (jail, spectate, control).
 local cover = Instance.new("Frame")
@@ -754,7 +757,6 @@ local COMMANDS: { Command } = ({
 	{ Name = "fly", Icon = "🕊️", Label = "Fly", Desc = "Lets them fly (F to take off / land). Toggles.", Group = "Control", Target = "player" },
 	{ Name = "noclip", Icon = "🚪", Label = "No Clip tool", Desc = "Gives (or takes back) a tool: hold it to fly through walls, click to teleport.", Group = "Control", Target = "player" },
 	{ Name = "giant", Icon = "🗿", Label = "Giant", Desc = "Makes them huge (or back to normal). Toggles.", Group = "Control", Target = "player", Inputs = { { Kind = "number", Placeholder = "Size 2-30 (8)" } } },
-	{ Name = "abuse", Icon = "🎆", Label = "Admin Abuse show", Desc = "Giant, glowing, rainbow, flying, announced to everyone. Ends by itself.", Group = "Control", Target = "player", Inputs = { { Kind = "number", Placeholder = "Seconds (60)" } } },
 	{ Name = "msg", Icon = "💬", Label = "Message", Desc = "Pops a message up on their screen.", Group = "Control", Target = "player", Inputs = { { Kind = "text", Placeholder = "Message", Required = true } } },
 	-- Move
 	{ Name = "goto", Icon = "➡️", Label = "Go to", Desc = "Teleports you to them.", Group = "Move", Target = "player" },
@@ -843,7 +845,16 @@ local COMMANDS: { Command } = ({
 		return out
 	end } } },
 	{ Name = "globalcountdown", Icon = "⏳", Label = "Event countdown", Desc = "A countdown on everyone's screen in EVERY server (and for anyone who joins later), then LIVE NOW for an hour. Pick the time, then type the event's name (blank = Admin Abuse).", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "1h", "6h", "12h", "24h", "48h", "3d", "7d" }) }, { Kind = "text", Placeholder = "Event name (blank = Admin Abuse)" } } },
-	{ Name = "abuseshow", Icon = "🎆", Label = "Admin Abuse show", Desc = "Starts the whole Admin Abuse show in every server that many minutes from now (to try it). Rounds pause, a giant you walks the lobby, there are chat lines, votes and prizes. Type reset to put the real time back.", Group = "Global", Target = "none", Inputs = { { Kind = "text", Placeholder = "Minutes until it starts (1), or reset" } } },
+	{ Name = "abuseshow", Icon = "🎆", Label = "Admin Abuse show", Desc = "Starts the whole Admin Abuse show in every server: rounds pause, you get a giant lobby copy, chat lines, votes and prizes. Pick when it starts, or put the real time back.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+		return {
+			{ Label = "Start in 15 seconds", Value = "0.25" },
+			{ Label = "Start in 1 minute", Value = "1" },
+			{ Label = "Start in 5 minutes", Value = "5" },
+			{ Label = "Start in 20 minutes", Value = "20" },
+			{ Label = "Start in 30 minutes", Value = "30" },
+			{ Label = "Back to the real time", Value = "reset" },
+		}
+	end } } },
 	{ Name = "cancelcountdown", Icon = "🛑", Label = "Cancel countdown", Desc = "Removes the event countdown from everyone's screen, in every server.", Group = "Global", Target = "none", Danger = true },
 	{ Name = "globalboost", Icon = "⚡", Label = "x2 boost", Desc = "x2 Cleaning for everyone online in EVERY server, for this many minutes.", Group = "Global", Target = "none", Inputs = { { Kind = "number", Placeholder = "Minutes (1-180)", Required = true } } },
 }) :: any
@@ -854,6 +865,7 @@ local GROUPS = {
 	{ Name = "Game", Icon = "🧼" },
 	{ Name = "Server", Icon = "📢" },
 	{ Name = "Global", Icon = "🌍" },
+	{ Name = "Studio", Icon = "🧪" },
 }
 local DURATIONS = { "1h", "6h", "24h", "3d", "7d", "30d" }
 local PRESETS = {

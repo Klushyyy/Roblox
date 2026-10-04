@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.7.0"
+Config.Version = "2.7.1"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -3503,7 +3503,7 @@ local ALL_COMMANDS = {
 	"kill", "jail", "god", "respawn",
 	"spectate", "controlplayer", "invis",
 	"viewpets", "givepet",
-	"fly", "noclip", "giant", "abuse",
+	"fly", "noclip", "giant",
 	"leaderboards", "globalannounce", "joinserver", "bringserver", "serverlist",
 	"globalpoll",
 }
@@ -3525,7 +3525,7 @@ local ALL_COMMANDS = {
 -- enough" - a Developer or a Founder still gets nothing.
 -- Nothing is hidden behind Studio any more: every command belongs to a staff tier (below), and
 -- the owner-only ones (staff ranks, gifted passes, wiping the log) are only on the owner's list.
-local STUDIO_ONLY_COMMANDS = {}
+local STUDIO_ONLY_COMMANDS = { "abuseshow" }
 
 -- Commands FOUNDER alone gets, on top of everything Developer has.
 --
@@ -3610,7 +3610,7 @@ local TIER_COMMANDS = {
 		for _, name in ipairs(FOUNDER_ONLY_COMMANDS) do
 			table.insert(list, name)
 		end
-		for _, name in ipairs({ "setadminrank", "stafflist", "wipelogs", "givegamepass", "removegamepass", "globalgive", "globalpassdrop", "globalboost", "globalcountdown", "cancelcountdown", "abuseshow" }) do
+		for _, name in ipairs({ "setadminrank", "stafflist", "wipelogs", "givegamepass", "removegamepass", "globalgive", "globalpassdrop", "globalboost", "globalcountdown", "cancelcountdown" }) do
 			table.insert(list, name)
 		end
 		return list
@@ -4079,6 +4079,9 @@ Remote.AdminMuteStatus.Parent = ReplicatedStorage
 -- Fired to the TARGET's own client (not the admin's) with true/false -
 -- :fly can be aimed at anyone, not just staff, so this has to work for
 -- every player's client, not just inside the staff-only admin panel.
+Remote.AbuseSay = Instance.new("RemoteEvent") -- S-&gt;C (ownerName, text): a line of chat from the owner during Admin Abuse
+Remote.AbuseSay.Name = "AbuseSay"
+Remote.AbuseSay.Parent = ReplicatedStorage
 Remote.AdminSetFlying = Instance.new("RemoteEvent")
 Remote.AdminSetFlying.Name = "AdminSetFlying"
 Remote.AdminSetFlying.Parent = ReplicatedStorage
@@ -5502,7 +5505,7 @@ end
 
 
 -- =====================================================================
--- :noclip (a tool that walks through walls), :giant and :abuse (the Admin Abuse show)
+-- :noclip (a tool that walks through walls), and :giant
 -- =====================================================================
 -- The No Clip tool is made here (nothing to place in ServerStorage). AdminClient sees it in the
 -- character: while it's held the player flies through walls, and clicking teleports to the mouse.
@@ -5553,59 +5556,6 @@ local function isGiant(target: Player): boolean
 		return character:GetScale()
 	end)
 	return ok and scale &gt; 1.5
-end
-
--- The Admin Abuse show: huge, glowing, cycling colours, flying and fast, then back to normal.
-local abuseToken: { [number]: number } = {}
-local function runAbuse(target: Player, seconds: number, size: number)
-	local character = target.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	if not character or not root or not humanoid then
-		return false
-	end
-	local token = (abuseToken[target.UserId] or 0) + 1
-	abuseToken[target.UserId] = token
-	local oldSpeed = humanoid.WalkSpeed
-	setGiantScale(target, size)
-	humanoid.WalkSpeed = oldSpeed * 1.5
-	local sparkles = Instance.new("Sparkles")
-	sparkles.Name = "AbuseSparkles"
-	sparkles.Parent = root
-	local glow = Instance.new("PointLight")
-	glow.Name = "AbuseGlow"
-	glow.Range = 40 * size / 4
-	glow.Brightness = 3
-	glow.Parent = root
-	local highlight = Instance.new("Highlight")
-	highlight.Name = "AbuseHighlight"
-	highlight.FillTransparency = 0.5
-	highlight.OutlineTransparency = 0
-	highlight.Parent = character
-	setFlying(target, true)
-	task.spawn(function()
-		local t0 = os.clock()
-		while os.clock() - t0 &lt; seconds and abuseToken[target.UserId] == token and character.Parent do
-			local color = Color3.fromHSV((os.clock() * 0.5) % 1, 0.8, 1)
-			glow.Color = color
-			sparkles.SparkleColor = color
-			highlight.FillColor = color
-			highlight.OutlineColor = color
-			task.wait(0.05)
-		end
-		if abuseToken[target.UserId] == token then
-			abuseToken[target.UserId] = nil
-			setFlying(target, false)
-			if character.Parent then
-				setGiantScale(target, 1)
-				humanoid.WalkSpeed = oldSpeed
-			end
-		end
-		sparkles:Destroy()
-		glow:Destroy()
-		highlight:Destroy()
-	end)
-	return true
 end
 
 -- =====================================================================
@@ -7172,7 +7122,7 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 	-- :fly with no name typed targets the issuing admin themselves,
 	-- rather than requiring ":fly MyOwnUsername" every time - :fly [name]
 	-- still works normally for flying someone else.
-	if (commandName == "fly" or commandName == "noclip" or commandName == "giant" or commandName == "abuse") and targetName == "" then
+	if (commandName == "fly" or commandName == "noclip" or commandName == "giant") and targetName == "" then
 		targetName = admin.Name
 	end
 
@@ -7522,18 +7472,6 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 		logCommand(admin, "giant", target.Name, makeGiant and ("x" .. size) or "normal",
 			admin.Name .. " made " .. target.Name .. (makeGiant and (" giant (x" .. size .. ")") or " normal size"))
 		sendFeedback(admin, target.Name .. (makeGiant and (" is now x" .. size .. " size") or " is back to normal size"), false)
-
-	elseif commandName == "abuse" then
-		local seconds = math.clamp(tonumber(extraText:match("^%s*(%S*)") or "") or 60, 10, 600)
-		if not runAbuse(target, seconds, 12) then
-			sendFeedback(admin, target.Name .. " has no character right now", true)
-			return
-		end
-		for _, plr in Players:GetPlayers() do
-			Remote.AdminAnnouncement:FireClient(plr, target.Name .. " is abusing admin!")
-		end
-		logCommand(admin, "abuse", target.Name, seconds .. "s", admin.Name .. " started the Admin Abuse show for " .. target.Name .. " (" .. seconds .. "s)")
-		sendFeedback(admin, "Admin Abuse show for " .. target.Name .. " (" .. seconds .. "s)", false)
 
 	elseif commandName == "give" then
 		if extraText == "" then
@@ -8227,9 +8165,6 @@ Remote.GlobalPoll.Parent = ReplicatedStorage
 Remote.GlobalPollVote = Instance.new("RemoteEvent")
 Remote.GlobalPollVote.Name = "GlobalPollVote"
 Remote.GlobalPollVote.Parent = ReplicatedStorage
-Remote.AbuseSay = Instance.new("RemoteEvent") -- S-&gt;C (ownerName, text): a line of chat from the owner during Admin Abuse
-Remote.AbuseSay.Name = "AbuseSay"
-Remote.AbuseSay.Parent = ReplicatedStorage
 Remote.GlobalCountdown = Instance.new("RemoteEvent") -- S-&gt;C ("Set", name, endsAt, liveMinutes) / ("Clear")
 Remote.GlobalCountdown.Name = "GlobalCountdown"
 Remote.GlobalCountdown.Parent = ReplicatedStorage
@@ -8930,6 +8865,10 @@ do
 			end)
 		end
 		local ok = publish({ Kind = "AbuseSchedule", Starts = starts, Ends = ends })
+		if arg ~= "reset" then
+			local mins = math.ceil((starts - Config.Now()) / 60)
+			publish({ Kind = "Banner", Text = string.format("Admin Abuse starts in %d minute%s! You can't start a round right now. Stay tuned for free game passes, Bubbles and surprises!", mins, if mins == 1 then "" else "s") })
+		end
 		sendFeedback(admin, if arg == "reset" then "Admin Abuse is back on its real time." else string.format("Admin Abuse show starts in %s%s. Rounds are paused from now.", Format.Time and Format.Time(starts - Config.Now()) or tostring(math.floor((starts - Config.Now()) / 60)) .. " min", if ok then " (every server)" else " (this server only)"), false)
 		logCommand(admin, "abuseshow", nil, arg, admin.Name .. " set the Admin Abuse show: " .. tostring(arg))
 	end
@@ -47580,15 +47519,18 @@ player.CharacterAdded:Connect(function(character)
 	watchNoClipCharacter(character)
 end)
 
--- Admin Abuse show: lines of chat from the giant owner ("[Owner] Name: text") in the chat window.
-do
-	local AbuseSay = remote("AbuseSay")
+-- Admin Abuse show: lines of chat from the giant owner ("[Owner] Name: text") in the chat window. The
+-- remote is waited for in the background, so the panel never waits on it.
+task.spawn(function()
+	local AbuseSay = ReplicatedStorage:WaitForChild("AbuseSay", 120)
+	if not AbuseSay then
+		return
+	end
 	AbuseSay.OnClientEvent:Connect(function(name: any, text: any)
 		if type(name) ~= "string" or type(text) ~= "string" then
 			return
 		end
 		pcall(function()
-			local TextChatService = game:GetService("TextChatService")
 			local channel = TextChatService:FindFirstChild("TextChannels") and TextChatService.TextChannels:FindFirstChild("RBXGeneral")
 			if channel then
 				local safe = string.gsub(string.gsub(string.gsub(text, "&amp;", "&amp;amp;"), "&lt;", "&amp;lt;"), "&gt;", "&amp;gt;")
@@ -47596,7 +47538,7 @@ do
 			end
 		end)
 	end)
-end
+end)
 
 -- Full-screen cover that hides teleports (jail, spectate, control).
 local cover = Instance.new("Frame")
@@ -47692,7 +47634,6 @@ local COMMANDS: { Command } = ({
 	{ Name = "fly", Icon = "🕊️", Label = "Fly", Desc = "Lets them fly (F to take off / land). Toggles.", Group = "Control", Target = "player" },
 	{ Name = "noclip", Icon = "🚪", Label = "No Clip tool", Desc = "Gives (or takes back) a tool: hold it to fly through walls, click to teleport.", Group = "Control", Target = "player" },
 	{ Name = "giant", Icon = "🗿", Label = "Giant", Desc = "Makes them huge (or back to normal). Toggles.", Group = "Control", Target = "player", Inputs = { { Kind = "number", Placeholder = "Size 2-30 (8)" } } },
-	{ Name = "abuse", Icon = "🎆", Label = "Admin Abuse show", Desc = "Giant, glowing, rainbow, flying, announced to everyone. Ends by itself.", Group = "Control", Target = "player", Inputs = { { Kind = "number", Placeholder = "Seconds (60)" } } },
 	{ Name = "msg", Icon = "💬", Label = "Message", Desc = "Pops a message up on their screen.", Group = "Control", Target = "player", Inputs = { { Kind = "text", Placeholder = "Message", Required = true } } },
 	-- Move
 	{ Name = "goto", Icon = "➡️", Label = "Go to", Desc = "Teleports you to them.", Group = "Move", Target = "player" },
@@ -47781,7 +47722,16 @@ local COMMANDS: { Command } = ({
 		return out
 	end } } },
 	{ Name = "globalcountdown", Icon = "⏳", Label = "Event countdown", Desc = "A countdown on everyone's screen in EVERY server (and for anyone who joins later), then LIVE NOW for an hour. Pick the time, then type the event's name (blank = Admin Abuse).", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "1h", "6h", "12h", "24h", "48h", "3d", "7d" }) }, { Kind = "text", Placeholder = "Event name (blank = Admin Abuse)" } } },
-	{ Name = "abuseshow", Icon = "🎆", Label = "Admin Abuse show", Desc = "Starts the whole Admin Abuse show in every server that many minutes from now (to try it). Rounds pause, a giant you walks the lobby, there are chat lines, votes and prizes. Type reset to put the real time back.", Group = "Global", Target = "none", Inputs = { { Kind = "text", Placeholder = "Minutes until it starts (1), or reset" } } },
+	{ Name = "abuseshow", Icon = "🎆", Label = "Admin Abuse show", Desc = "Starts the whole Admin Abuse show in every server: rounds pause, you get a giant lobby copy, chat lines, votes and prizes. Pick when it starts, or put the real time back.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+		return {
+			{ Label = "Start in 15 seconds", Value = "0.25" },
+			{ Label = "Start in 1 minute", Value = "1" },
+			{ Label = "Start in 5 minutes", Value = "5" },
+			{ Label = "Start in 20 minutes", Value = "20" },
+			{ Label = "Start in 30 minutes", Value = "30" },
+			{ Label = "Back to the real time", Value = "reset" },
+		}
+	end } } },
 	{ Name = "cancelcountdown", Icon = "🛑", Label = "Cancel countdown", Desc = "Removes the event countdown from everyone's screen, in every server.", Group = "Global", Target = "none", Danger = true },
 	{ Name = "globalboost", Icon = "⚡", Label = "x2 boost", Desc = "x2 Cleaning for everyone online in EVERY server, for this many minutes.", Group = "Global", Target = "none", Inputs = { { Kind = "number", Placeholder = "Minutes (1-180)", Required = true } } },
 }) :: any
@@ -47792,6 +47742,7 @@ local GROUPS = {
 	{ Name = "Game", Icon = "🧼" },
 	{ Name = "Server", Icon = "📢" },
 	{ Name = "Global", Icon = "🌍" },
+	{ Name = "Studio", Icon = "🧪" },
 }
 local DURATIONS = { "1h", "6h", "24h", "3d", "7d", "30d" }
 local PRESETS = {

@@ -1619,8 +1619,9 @@ Config.AbuseShow and the clock Config.Now. AdminServer's "Admin Abuse show" sect
 - Votes (Rounds): one server claims each round in a MemoryStore hash map, runs the existing global poll (counts
   from every server), then applies the winner: Bubbles/Gems are split between everyone online in every server
   (GiveAll), Passes runs the pass drop. No votes = the first option.
-- `:abuseshow [minutes]` (owner) starts the whole show that many minutes from now in every server to try it;
-  `:abuseshow reset` puts the real time back. Test: scen_abuse.
+- `abuseshow` is in the panel's Studio tab (shown in Studio, and to the owner account live): pick "Start in 15
+  seconds / 1 / 5 / 20 / 30 minutes" or "Back to the real time" and the whole show runs in every server from then.
+  The old `:abuse` (rainbow giant) command is gone. Test: scen_abuse.
 
 ## 6zj. The castle hall and phone text (v2.7.0)
 
