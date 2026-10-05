@@ -5462,6 +5462,7 @@ do
 		end
 	end
 	local eyesFor: number? = nil -- how long the next eye-laser burst lasts (set just before it starts)
+	local stopChase: (() -> ())? = nil -- ends the pet hunt (and removes any pets still running about)
 	local giantLeave: (() -> ())? = nil
 	local giantSit: (() -> ())? = nil
 	local giantGesture: ((string?) -> ())? = nil -- arm pose for the dishwasher charge
@@ -6229,7 +6230,8 @@ do
 				end
 				-- the wreck burns and smokes for a while
 				local fire = Instance.new("Part")
-				fire.Transparency = 1
+				fire.Name = "Wreck"
+			fire.Transparency = 1
 				fire.Anchored = true
 				fire.CanCollide = false
 				fire.CanQuery = false
@@ -6543,16 +6545,23 @@ do
 				local flash = neonPart(Vector3.new(40, 40, 40), Color3.new(1, 1, 1), Enum.PartType.Ball)
 				flash.Position = target + Vector3.new(0, 6, 0)
 				flash.Parent = workspace
-				TweenService:Create(flash, TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(900, 900, 900), Transparency = 1 }):Play()
+				TweenService:Create(flash, TweenInfo.new(1.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(2200, 2200, 2200), Transparency = 1 }):Play()
+				-- the fireball itself
+				local fireball = neonPart(Vector3.new(60, 60, 60), Color3.fromRGB(255, 150, 50), Enum.PartType.Ball)
+				fireball.Transparency = 0.2
+				fireball.Position = target + Vector3.new(0, 20, 0)
+				fireball.Parent = workspace
+				TweenService:Create(fireball, TweenInfo.new(2.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(520, 520, 520), Position = target + Vector3.new(0, 150, 0), Transparency = 1 }):Play()
+				Debris:AddItem(fireball, 2.6)
 				Debris:AddItem(flash, 1.5)
-				for i = 0, 5 do
-					task.delay(i * 0.18, function()
-						ringAt(Vector3.new(target.X, 2, target.Z), 300 + i * 220, 1.4, Color3.fromRGB(255, 190, 90))
-						Remote.AbuseBoom:FireAllClients(4, target)
+				for i = 0, 7 do
+					task.delay(i * 0.2, function()
+						ringAt(Vector3.new(target.X, 2, target.Z), 500 + i * 380, 1.8, Color3.fromRGB(255, 190, 90))
+						Remote.AbuseBoom:FireAllClients(5, target)
 					end)
 				end
 				-- the table breaks open round it (the big hole in the middle, a few smaller ones)
-				for _, c in { { 0, 0, 28 }, { -38, -4, 15 }, { 38, -4, 15 }, { -12, 30, 13 }, { 14, 34, 13 } } do
+				for _, c in { { 0, 12, 46 }, { -62, 14, 34 }, { 62, 14, 34 }, { -36, 58, 28 }, { 36, 58, 28 }, { 0, 70, 24 } } do
 					craterCount += 1
 					local cx = math.clamp(target.X + c[1], -90, 90)
 					local cz = math.clamp(target.Z + c[2], -96, 24)
@@ -6564,16 +6573,17 @@ do
 					local hum = ch and ch:FindFirstChildOfClass("Humanoid")
 					if r and hum then
 						local off = Vector3.new(r.Position.X - target.X, 0, r.Position.Z - target.Z)
-						if off.Magnitude < 90 and r.Position.Y < 60 then
+						if off.Magnitude < 140 and r.Position.Y < 60 then
 							local dir = if off.Magnitude > 0.5 then off.Unit else Vector3.new(0, 0, 1)
 							pcall(function()
 								hum:ChangeState(Enum.HumanoidStateType.Freefall)
-								r.AssemblyLinearVelocity = dir * 95 + Vector3.new(0, 70, 0)
+								r.AssemblyLinearVelocity = dir * 120 + Vector3.new(0, 90, 0)
 							end)
 						end
 					end
 				end
 				local wreck = Instance.new("Part")
+				wreck.Name = "Wreck"
 				wreck.Transparency = 1
 				wreck.Anchored = true
 				wreck.CanCollide = false
@@ -6597,6 +6607,185 @@ do
 				wreck.Parent = workspace
 				track(wreck)
 				nukeActive = false
+			end)
+		end
+		-- The pet hunt: limited pets (a different one from the dragon) are let loose on the undamaged part of the table.
+		-- How many depends on how many players are in this server. They run away from people, fast; holding E on one
+		-- for three seconds catches it (it struggles, slowing down, while someone holds). After a minute whatever is
+		-- left fades away. A countdown shows on everyone's screen.
+		local chaseActive = false
+		fx.petchase = function()
+			if chaseActive then
+				return
+			end
+			local petId = Show.ChasePet
+			local def = Config.Pets[petId]
+			if not def then
+				return
+			end
+			chaseActive = true
+			local PetModels = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PetModels"))
+			local players = #Players:GetPlayers()
+			local count = if players <= 3 then 1 elseif players <= 5 then 2 elseif players <= 10 then 3 else math.min(10, 3 + math.ceil((players - 10) / 6))
+			local DURATION = 60
+			local endsAt = Config.Now() + DURATION
+			ReplicatedStorage:SetAttribute("AbusePetsEnd", endsAt)
+			local pets: { { Model: Model, Root: BasePart, Dir: Vector3, Holding: number, Done: boolean, Height: number } } = {}
+			local function bounded(x: number, z: number): boolean
+				return math.abs(x) < 82 and z > -88 and z < 52 and not LobbyBuilder.IsHoleAt(x, z, 12)
+			end
+			local function freeSpot(): Vector3
+				for _ = 1, 40 do
+					local x, z = math.random(-80, 80), math.random(-85, 50)
+					if bounded(x, z) then
+						return Vector3.new(x, 0, z)
+					end
+				end
+				return Vector3.new(0, 0, 20)
+			end
+			local function removePet(rec: any)
+				rec.Done = true
+				for _, d in rec.Model:GetDescendants() do
+					if d:IsA("BasePart") then
+						TweenService:Create(d, TweenInfo.new(0.8), { Transparency = 1 }):Play()
+					end
+				end
+				task.delay(0.9, function()
+					rec.Model:Destroy()
+				end)
+			end
+			for _ = 1, count do
+				local okBuild, model = pcall(PetModels.Build, petId, 1)
+				if okBuild and model then
+					pcall(function()
+						model:ScaleTo(2.6)
+					end)
+					local root = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
+					if root then
+						for _, d in model:GetDescendants() do
+							if d:IsA("BasePart") then
+								d.Anchored = true
+								d.CanCollide = false
+								d.CanQuery = true
+							end
+						end
+						model.Name = "AbuseChasePet"
+						local spot = freeSpot()
+						local _, size = model:GetBoundingBox()
+						local rec = { Model = model, Root = root, Dir = Vector3.new(math.random() - 0.5, 0, math.random() - 0.5).Unit, Holding = 0, Done = false, Height = size.Y / 2 }
+						model:PivotTo(CFrame.new(spot.X, rec.Height + 0.4, spot.Z))
+						model.Parent = workspace
+						local prompt = Instance.new("ProximityPrompt")
+						prompt.ActionText = "Catch"
+						prompt.ObjectText = def.Name .. " (limited)"
+						prompt.HoldDuration = 3
+						prompt.MaxActivationDistance = 11
+						prompt.RequiresLineOfSight = false
+						prompt.KeyboardKeyCode = Enum.KeyCode.E
+						prompt.Parent = root
+						prompt.PromptButtonHoldBegan:Connect(function()
+							rec.Holding += 1
+						end)
+						prompt.PromptButtonHoldEnded:Connect(function()
+							rec.Holding = math.max(0, rec.Holding - 1)
+						end)
+						prompt.Triggered:Connect(function(plr)
+							if rec.Done then
+								return
+							end
+							removePet(rec)
+							local given = PetService.GivePet(plr, petId)
+							if given then
+								celebrate(plr, "You caught it!", "You got the limited " .. def.Name .. "!", "@Gift")
+							else
+								DataService.AddGems(plr, 150)
+								celebrate(plr, "You caught it!", "Your pet bag is full, so here are 150 Gems instead of the " .. def.Name .. "!", "@Gift")
+							end
+							say(plr.Name .. " caught one!")
+						end)
+						table.insert(pets, rec)
+					else
+						model:Destroy()
+					end
+				end
+			end
+			local conn: RBXScriptConnection? = nil
+			local function finish()
+				if conn then
+					conn:Disconnect()
+					conn = nil
+				end
+				for _, rec in pets do
+					if not rec.Done then
+						removePet(rec)
+					end
+				end
+				ReplicatedStorage:SetAttribute("AbusePetsEnd", nil)
+				chaseActive = false
+				stopChase = nil
+			end
+			stopChase = finish
+			local hop = 0
+			conn = RunService.Heartbeat:Connect(function(dt)
+				hop += dt
+				if Config.Now() >= endsAt then
+					finish()
+					return
+				end
+				local alive = 0
+				for _, rec in pets do
+					if not rec.Done then
+						alive += 1
+						local pos = rec.Root.Position
+						-- away from anyone close, plus a little wandering
+						local flee = Vector3.zero
+						for _, plr in Players:GetPlayers() do
+							local r = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+							if r then
+								local off = Vector3.new(pos.X - r.Position.X, 0, pos.Z - r.Position.Z)
+								local d = off.Magnitude
+								if d < 45 and d > 0.1 then
+									flee += off.Unit * (45 - d) / 45
+								end
+							end
+						end
+						local want = rec.Dir + flee * 2.2 + Vector3.new(math.random() - 0.5, 0, math.random() - 0.5) * 0.3
+						if want.Magnitude < 0.05 then
+							want = rec.Dir
+						end
+						rec.Dir = rec.Dir:Lerp(want.Unit, math.clamp(dt * 6, 0, 1))
+						if rec.Dir.Magnitude < 0.01 then
+							rec.Dir = want.Unit
+						end
+						rec.Dir = rec.Dir.Unit
+						local speed = if rec.Holding > 0 then 7 else (if flee.Magnitude > 0.05 then 40 else 22)
+						-- never into a hole in the table or off its edge: turn away until the next step is on solid table
+						local nx, nz = pos.X + rec.Dir.X * speed * dt, pos.Z + rec.Dir.Z * speed * dt
+						if not bounded(nx, nz) then
+							local found = false
+							for k = 1, 12 do
+								local a = math.rad(30 * k) * (if k % 2 == 0 then 1 else -1)
+								local cosA, sinA = math.cos(a), math.sin(a)
+								local d2 = Vector3.new(rec.Dir.X * cosA - rec.Dir.Z * sinA, 0, rec.Dir.X * sinA + rec.Dir.Z * cosA)
+								local tx, tz = pos.X + d2.X * speed * dt * 3, pos.Z + d2.Z * speed * dt * 3
+								if bounded(tx, tz) then
+									rec.Dir = d2
+									nx, nz = pos.X + d2.X * speed * dt, pos.Z + d2.Z * speed * dt
+									found = true
+									break
+								end
+							end
+							if not found then
+								nx, nz = pos.X, pos.Z
+							end
+						end
+						local y = rec.Height + 0.4 + math.abs(math.sin(hop * 9 + alive)) * 1.2
+						rec.Model:PivotTo(CFrame.lookAt(Vector3.new(nx, y, nz), Vector3.new(nx + rec.Dir.X, y, nz + rec.Dir.Z)))
+					end
+				end
+				if alive == 0 then
+					finish()
+				end
 			end)
 		end
 		fx.fountains = function()
@@ -6655,7 +6844,17 @@ do
 		end
 	end
 	local function closeHoles()
-		LobbyBuilder.HealHoles(10)
+		-- the fires and smoke die down first, then the table builds itself back, slowly
+		for _, p in fxParts do
+			if p.Name == "Wreck" then
+				for _, e in p:GetDescendants() do
+					if e:IsA("ParticleEmitter") then
+						e.Enabled = false
+					end
+				end
+			end
+		end
+		LobbyBuilder.HealHoles(14)
 	end
 
 	local spawning, spawnFailures, nextSpawnTry = false, 0, 0
@@ -7652,6 +7851,9 @@ do
 		LobbyBuilder.SetRescue(false)
 		restoreLighting()
 		endPerks()
+		if stopChase then
+			stopChase()
+		end
 		LobbyBuilder.SetPadsEnabled(true)
 		LobbyBuilder.SetUiEnabled(true)
 		LobbyBuilder.RepairDishwasher()
@@ -7928,7 +8130,7 @@ do
 	end
 
 	-- :abusefx <name> (Studio tab): try one piece of the show on its own (it spawns the giant if needed).
-	local FX_NAMES = { "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes", "fireballs", "dishwasher", "bombs", "chairshow", "nuke" }
+	local FX_NAMES = { "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes", "fireballs", "dishwasher", "bombs", "chairshow", "nuke", "petchase" }
 	Commands.abusefx = function(admin, text)
 		local arg = string.lower(text:match("^%s*(%S*)") or "")
 		local function needGiant(): boolean

@@ -2285,7 +2285,7 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 		return
 	end
 	local roof = opts.Roof == true
-	local TILE = if roof then 11 else TILE
+	local TILE = if roof then 11 elseif R >= 30 then 9 else TILE -- (big holes: bigger tiles, so a half-table crater is not thousands of parts)
 	local cx, cz = ORIGIN.X + holeX, ORIGIN.Z + holeZ
 	local S = R + 10
 	local rec: HoleRec = { Hidden = {}, Pieces = {}, Tiles = {}, Props = {}, Cracks = {}, Center = Vector3.new(cx, ORIGIN.Y, cz), Radius = R }
@@ -2513,6 +2513,16 @@ end
 local function healRec(index: number, rec: HoleRec, total: number)
 	do
 		holes[index] = nil
+		-- The glow from below and its smoke fade away over the repair (not "on, then suddenly gone").
+		for _, piece in rec.Pieces do
+			for _, d in piece:GetDescendants() do
+				if d:IsA("PointLight") then
+					TweenService:Create(d, TweenInfo.new(total * 0.85), { Brightness = 0 }):Play()
+				elseif d:IsA("ParticleEmitter") then
+					d.Enabled = false
+				end
+			end
+		end
 		for _, inst in ((rec :: any).Ui or {}) :: { Instance } do
 			(inst :: any).Enabled = true
 		end
@@ -2581,6 +2591,19 @@ local function healRec(index: number, rec: HoleRec, total: number)
 			end
 		end)
 	end
+end
+
+-- Is (x, z) in or near a hole in the table (not the ceiling)? Things that run about on the table keep clear of them.
+function LobbyBuilder.IsHoleAt(x: number, z: number, margin: number): boolean
+	for index, rec in holes do
+		if index ~= 100 then
+			local dx, dz = x - (rec.Center.X - ORIGIN.X), z - (rec.Center.Z - ORIGIN.Z)
+			if math.sqrt(dx * dx + dz * dz) < rec.Radius + margin then
+				return true
+			end
+		end
+	end
+	return false
 end
 
 function LobbyBuilder.HealHoles(seconds: number?)

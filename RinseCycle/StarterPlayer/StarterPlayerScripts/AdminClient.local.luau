@@ -685,7 +685,13 @@ do
 					pillStroke.Color = if left <= 60 then Colors.Bad else Colors.Coin
 				elseif left <= 0 and -left < abuse.ShowSeconds then
 					pill.Visible = true
-					pillText.Text = if ReplicatedStorage:GetAttribute("AbuseHeat") then "ADMIN ABUSE: MAX HEAT!" else "ADMIN ABUSE IS LIVE!"
+					local petsEnd = ReplicatedStorage:GetAttribute("AbusePetsEnd")
+					if type(petsEnd) == "number" and petsEnd > now then
+						-- the pet hunt: a countdown on the pill
+						pillText.Text = string.format("CATCH THE PETS: %d:%02d", (petsEnd - now) // 60, (petsEnd - now) % 60)
+					else
+						pillText.Text = if ReplicatedStorage:GetAttribute("AbuseHeat") then "ADMIN ABUSE: MAX HEAT!" else "ADMIN ABUSE IS LIVE!"
+					end
 					pillStroke.Color = if math.floor(os.clock() * 2) % 2 == 0 then Colors.Bad else Colors.Coin
 				else
 					pill.Visible = false
@@ -1214,7 +1220,7 @@ local COMMANDS: { Command } = ({
 	{ Name = "notifytest", Icon = "🔔", Label = "Notification test", Desc = "Sends the \"daily reward is ready\" notification to you right now and says how it went: is the key found, is HTTP on, are you opted in.", Group = "Studio", Target = "none" },
 	{ Name = "abusefx", Icon = "💥", Label = "Test Admin Abuse effects", Desc = "Tries one piece of the Admin Abuse show on its own (it spawns the giant first): each effect, the table holes, the obby, the heat, the exit. 'Every effect' plays them all, 9 seconds apart.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		local list = {}
-		for _, name in { "all", "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes", "fireballs", "dishwasher", "bombs", "chairshow", "nuke", "hole1", "hole2", "heal", "obby", "obbybreak", "heat", "calm", "leave", "off" } do
+		for _, name in { "all", "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes", "fireballs", "dishwasher", "bombs", "chairshow", "nuke", "petchase", "hole1", "hole2", "heal", "obby", "obbybreak", "heat", "calm", "leave", "off" } do
 			local label = if name == "all" then "Every effect, one after another" elseif name == "off" then "Put everything away" elseif name == "heal" then "Close the table holes" elseif name == "hole1" then "Table hole 1" elseif name == "hole2" then "Table hole 2" elseif name == "obby" then "Build the obby" elseif name == "obbybreak" then "Smash the obby" elseif name == "heat" then "Turn up the heat" elseif name == "calm" then "Cool down" elseif name == "leave" then "The exit through the roof" else name
 			table.insert(list, { Label = label, Value = name })
 		end

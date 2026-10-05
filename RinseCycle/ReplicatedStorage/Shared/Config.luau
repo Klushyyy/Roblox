@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.18"
+Config.Version = "2.12.19"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -309,6 +309,7 @@ Config.Pets = {
 	-- Club contest winners only (the top club each month): no egg or chest has it.
 	ClubChampion = { Name = "Champion Dragon", Rarity = "Legendary", PowerShare = 1.7, Capacity = 130, CoinBonus = 0.4, Model = "Dragon", Event = true, Limited = "Club contest winners", Colors = { Body = Color3.fromRGB(255, 190, 40), Accent = Color3.fromRGB(255, 90, 90) }, Shiny = true },
 	-- Admin Abuse show, final round only.
+	GlitchFox = { Name = "Glitch Fox", Rarity = "Epic", PowerShare = 0.9, Capacity = 70, CoinBonus = 0.24, Model = "Fox", Event = true, Limited = "Admin Abuse show", Colors = { Body = Color3.fromRGB(110, 60, 200), Accent = Color3.fromRGB(80, 255, 220) }, Shiny = true },
 	AdminAbuse = { Name = "Banhammer Dragon", Rarity = "Legendary", PowerShare = 1.8, Capacity = 135, CoinBonus = 0.42, Model = "Dragon", Event = true, Limited = "Admin Abuse show", Colors = { Body = Color3.fromRGB(40, 36, 52), Accent = Color3.fromRGB(255, 70, 60) }, Shiny = true },
 }
 
@@ -1135,13 +1136,14 @@ Config.UpcomingEvents = {
 Config.AbuseShow = ({
 	EventKey = "AdminAbuse",
 	PreSeconds = 1800, -- rounds can't start this long before the event
-	ShowSeconds = 624, -- the whole show, from the first boom to the end (rounds are paused for it)
+	ShowSeconds = 630, -- the whole show, from the first boom to the end (rounds are paused for it)
 	Warnings = { 1800, 900, 300, 60 }, -- banners this many seconds before the start
 	OwnerUserId = 2297538363,
 	OwnerName = "EnderBuilda",
 	GiantScale = 38, -- how tall he is while he warms up
 	HeatScale = 42, -- ...and once the heat is turned up
-	NukeAt = 596, -- when the nuke goes off (seconds into the show), just before he leaves
+	ChasePet = "GlitchFox", -- the limited pets that run about the table for a minute
+	NukeAt = 566, -- when the nuke goes off (seconds into the show), just before he leaves
 	ThanksGems = 100, -- everyone gets this at the end, for staying
 	HeatAt = 330, -- seconds after the start when he "turns up the heat" (until the end)
 	Pet = "AdminAbuse", -- the limited pet from the final round
@@ -1303,44 +1305,37 @@ do
 	at(442, "attack", "blackhole")
 	at(450, "attack", "disco")
 	at(456, "attack", "lightning")
-	at(462, "say", "i have the keys and no supervision.")
-	at(466, "attack", "laser")
-	at(474, "attack", "meteors")
-	at(480, "attack", "tornado")
+	at(444, "say", "ok. this bit is boring. lets make it more interesting.")
+	at(448, "say", "im letting some limited pets loose on the table. they run from you. hold E on one to catch it. you have one minute.")
+	at(452, "attack", "petchase")
 	at(486, "say", "somebody screenshot this. i want proof later.")
 	at(490, "attack", "lightning")
 	at(496, "attack", "ufo")
-	at(502, "attack", "blackhole")
-	at(512, "attack", "laser")
+	at(514, "attack", "laser")
 	at(518, "attack", "barrage")
-	at(524, "attack", "meteors")
+	at(524, "say", "that spot looks empty. i am redecorating.")
+	at(526, "attack", "nuke")
 	at(530, "attack", "laser")
-	at(531, "say", "all right. five seconds till the obby comes down.")
-	at(533, "say", "5")
-	at(534, "say", "4")
-	at(535, "say", "3")
-	at(536, "say", "2")
-	at(537, "say", "1")
-	at(538, "obby", false)
-	at(538, "say", "boom.")
+	at(501, "say", "all right. five seconds till the obby comes down.")
+	at(503, "say", "5")
+	at(504, "say", "4")
+	at(505, "say", "3")
+	at(506, "say", "2")
+	at(507, "say", "1")
+	at(508, "obby", false)
+	at(508, "say", "boom.")
 	at(548, "attack", "tornado")
 	at(554, "attack", "lightning")
-	at(541, "say", "that spot looks empty. i am redecorating.")
-	at(543, "attack", "nuke")
-	at(560, "say", "one last big one. all of it. everything.")
+	at(560, "say", "one more thing is about to go off. stand back.")
 	at(564, "attack", "blackhole")
-	at(568, "attack", "meteors")
 	at(572, "attack", "fireworks")
-	at(576, "attack", "lightning")
-	at(580, "attack", "shockwave")
-	at(586, "attack", "barrage")
-	at(592, "attack", "laser")
-	at(575, "attack", "parksouth")
-	at(598, "say", "alright. thats everything i had.")
-	at(602, "say", "thanks for coming. laters.")
-	at(605, "leave")
-	at(613, "thanks")
-	at(617, "heal")
+	at(578, "attack", "lightning")
+	at(582, "attack", "parksouth")
+	at(592, "say", "alright. thats everything i had.")
+	at(596, "say", "now everyone watch this.")
+	at(599, "leave")
+	at(611, "thanks")
+	at(613, "heal")
 	Config.AbuseShow.Script = S
 end
 
