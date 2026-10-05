@@ -1716,3 +1716,7 @@ Debug logs showed the idle animation leaves the feet ~113 studs under the floor,
 
 ### 6zv. Where he may act (v2.12.5)
 He only does effects (and the roof exit) when his angle round the table is clear of the chairs (east 335-25 deg, west 155-205 deg, directly behind the dishwasher 250-290 deg). South (the spawn side) and the four corners are allowed; otherwise the effect waits until he walks round to an allowed spot.
+
+### 6zw. Varied extras, persistent rainbow (v2.12.6)
+- Every act gets an extra from `BONUS` (eyes, eyes, fireballs, meteors, eyes, fireballs, shockwave, eyes, barrage, fireballs, eyes), never the scripted effect itself. Eye lasers grow 1-4 per eye; `fx.fireballs` (`:abusefx fireballs`) rains more fireballs each use and shakes the table.
+- `disco` now keeps the world rainbow until the heat starts (it only restores ColorShift when heat is on, so it never fights the red). The line before it says "the world needs some colour."

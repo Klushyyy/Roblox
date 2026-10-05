@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.5"
+Config.Version = "2.12.6"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1239,7 +1239,7 @@ do
 	at(106, "attack", "ufo")
 	at(122, "attack", "shockwave")
 	at(126, "say", "you can feel that, right? thats the floor. it is not happy.")
-	at(134, "say", "the table needs some colour. one second.")
+	at(134, "say", "the world needs some colour. one second.")
 	at(138, "attack", "disco")
 	at(144, "say", "next vote. you choose how i break things.")
 	at(147, "round", "Break")

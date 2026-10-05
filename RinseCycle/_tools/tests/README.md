@@ -67,3 +67,4 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
 - v2.12.3: giant eye lasers, effects wait while he is behind the dishwasher, spawn float snap.
 - v2.12.4: giant walks at the flash, eye lasers sized to the act, progressive laser counts and patterns.
 - v2.12.5: giant acts only away from the chairs and the dishwasher's back.
+- v2.12.6: varied bonus effects (fireballs etc.), rainbow persists until the heat, 'the world needs some colour'.

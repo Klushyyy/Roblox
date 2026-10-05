@@ -5953,26 +5953,73 @@ do
 			Remote.AbuseBoom:FireAllClients(1.4, Vector3.new(0, 0, 15))
 		end
 		local discoBusy = false
+		-- The world goes rainbow and STAYS that way until the heat starts (then the red takes over). Called
+		-- again while it is on, it does nothing. (In the heat it is a short burst: it never fights the red.)
 		fx.disco = function()
 			if discoBusy then
 				return
 			end
 			discoBusy = true
 			local original = { Lighting.ColorShift_Top, Lighting.OutdoorAmbient }
+			local wasLive = ReplicatedStorage:GetAttribute("AbuseLive") == true
 			task.spawn(function()
-				for i = 1, 16 do
+				local maxSteps = if heat then 16 else 1500
+				for i = 1, maxSteps do
+					if maxSteps > 16 and (heat or (i > 3 and not giant) or (wasLive and ReplicatedStorage:GetAttribute("AbuseLive") ~= true)) then
+						break
+					end
 					local c = Color3.fromHSV((i / 16 * 2) % 1, 0.8, 1)
 					Lighting.ColorShift_Top = c
-					Lighting.OutdoorAmbient = c:Lerp(Color3.new(1, 1, 1), 0.4)
-					if i % 2 == 0 then
-						Remote.AbuseBoom:FireAllClients(0.7, Vector3.new(0, 0, 0))
+					if not heat then
+						Lighting.OutdoorAmbient = c:Lerp(Color3.new(1, 1, 1), 0.4)
+					end
+					if i % 8 == 0 then
+						Remote.AbuseBoom:FireAllClients(0.5, Vector3.new(0, 0, 0))
 					end
 					task.wait(0.4)
 				end
 				Lighting.ColorShift_Top = original[1]
-				Lighting.OutdoorAmbient = original[2]
+				if not heat then
+					Lighting.OutdoorAmbient = original[2]
+				end
 				discoBusy = false
 			end)
+		end
+		-- Fireballs fall on the table one after another and shake it. More of them each time it is used.
+		local fireUses = 0
+		fx.fireballs = function()
+			fireUses += 1
+			local n = math.min(22, 4 + fireUses * 3 + (if heat then 4 else 0))
+			for i = 1, n do
+				task.delay((i - 1) * 0.18, function()
+					local spot = plazaSpot()
+					local ball = neonPart(Vector3.new(11, 11, 11), Color3.fromRGB(255, 120, 40), Enum.PartType.Ball)
+					ball.Position = spot + Vector3.new(math.random(-50, 50), 260, math.random(-50, 50))
+					local fire = Instance.new("ParticleEmitter")
+					fire.Texture = "rbxasset://textures/particles/fire_main.dds"
+					fire.Color = ColorSequence.new(Color3.fromRGB(255, 220, 90), Color3.fromRGB(255, 60, 20))
+					fire.Lifetime = NumberRange.new(0.4, 0.8)
+					fire.Speed = NumberRange.new(2, 10)
+					fire.Rate = 90
+					fire.Size = NumberSequence.new(14, 0)
+					fire.LightEmission = 1
+					fire.Parent = ball
+					ball.Parent = workspace
+					local fall = TweenService:Create(ball, TweenInfo.new(0.85, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = spot + Vector3.new(0, 5, 0) })
+					fall.Completed:Connect(function()
+						ball:Destroy()
+						harmlessBlast(spot + Vector3.new(0, 4, 0), 18)
+						Remote.AbuseBoom:FireAllClients(1.3, spot) -- the table shakes
+						local ring = neonPart(Vector3.new(0.4, 6, 6), Color3.fromRGB(255, 170, 60), Enum.PartType.Cylinder)
+						ring.CFrame = CFrame.new(spot.X, 0.4, spot.Z) * CFrame.Angles(0, 0, math.rad(90))
+						ring.Parent = workspace
+						TweenService:Create(ring, TweenInfo.new(0.6), { Size = Vector3.new(0.4, 40, 40), Transparency = 1 }):Play()
+						Debris:AddItem(ring, 0.7)
+					end)
+					fall:Play()
+					Debris:AddItem(ball, 2)
+				end)
+			end
 		end
 		fx.fountains = function()
 			for i = 1, if heat then 8 else 5 do
@@ -6322,6 +6369,7 @@ do
 		local facing = Vector3.new(-1, 0, 0)
 		local pos = Vector3.new(0, ROOM_FLOOR, TABLE_CENTER.Z + RADIUS)
 		local acts = 0
+		local BONUS = { "eyes", "eyes", "fireballs", "meteors", "eyes", "fireballs", "shockwave", "eyes", "barrage", "fireballs", "eyes" }
 		local flyHeight, flySpeed = 0, 60
 		local leapHeight = 0 -- how far he is above the floor while jumping over the obby
 		local function face(dir: Vector3, dt: number)
@@ -6570,11 +6618,16 @@ do
 			end
 			commandText(nil)
 			task.delay(0.8, effect)
-			if name ~= "eyes" and state == "act" and FX.eyes then
+			-- Something extra with the act, never the same thing twice running: lasers a couple of times, then
+			-- fireballs, meteors and shockwaves, then lasers again with more beams, and so on.
+			local bonus = BONUS[(acts - 1) % #BONUS + 1]
+			if bonus ~= name and state == "act" and FX[bonus] then
 				task.delay(0.4, function()
 					if state == "act" then
-						eyesFor = math.max(1.2, stateUntil - os.clock() - 0.2)
-						FX.eyes()
+						if bonus == "eyes" then
+							eyesFor = math.max(1.2, stateUntil - os.clock() - 0.2)
+						end
+						FX[bonus]()
 					end
 				end)
 			end
@@ -6842,7 +6895,7 @@ do
 	end
 
 	-- :abusefx <name> (Studio tab): try one piece of the show on its own (it spawns the giant if needed).
-	local FX_NAMES = { "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes" }
+	local FX_NAMES = { "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes", "fireballs" }
 	Commands.abusefx = function(admin, text)
 		local arg = string.lower(text:match("^%s*(%S*)") or "")
 		local function needGiant(): boolean
