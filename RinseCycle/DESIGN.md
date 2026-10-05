@@ -1700,3 +1700,6 @@ Config.AbuseShow and the clock Config.Now. AdminServer's "Admin Abuse show" sect
 - Floor lock is wider (0.5x-1.5x) and faster so pose changes (walk -> idle when an effect starts) can't sink him.
 - `:abusedebug` (Studio): floating readout above him (state, walking, gesture, rootY, feet height, leap, angle) plus a once-a-second print.
 - Heart (two discs + diamond) and Trade (line arrows) icons redrawn; `Config.IconImages` can point to uploaded PNGs.
+
+### 6zs. Giant stands on the walk pose (v2.12.2)
+Debug logs showed the idle animation leaves the feet ~113 studs under the floor, and the old floor-lock clamp (0.5-1.5x) couldn't follow. He no longer uses idle: standing still is the walk cycle frozen (speed 0). The floor lock clamp is 0.3-4x and snaps (instead of sliding) when a pose change moves the feet more than 2 scales.

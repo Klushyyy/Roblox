@@ -6040,7 +6040,13 @@ do
 		end
 		local walkTrack = load("507777826", Enum.AnimationPriority.Movement, true)
 		local idleTrack = load("507766388", Enum.AnimationPriority.Idle, true)
-		if idleTrack then
+		-- The idle animation puts the feet ~2x further below the hips than the walk does (his logs: feet 113
+		-- studs under the floor each time he stopped), so he never uses it: standing still is the walk cycle
+		-- frozen (speed 0), which is known to stand on the floor.
+		if walkTrack then
+			walkTrack:Play(0)
+			walkTrack:AdjustSpeed(0)
+		elseif idleTrack then
 			idleTrack:Play()
 		end
 		task.wait(0.8) -- (still far away and out of sight) let the pose settle before measuring it
@@ -6214,15 +6220,11 @@ do
 		end
 		local function setWalking(on: boolean)
 			if walkTrack then
-				if on and not walkTrack.IsPlaying then
-					walkTrack:Play(0.3)
-				elseif not on and walkTrack.IsPlaying then
-					walkTrack:Stop(0.3)
+				if not walkTrack.IsPlaying then
+					walkTrack:Play(0.1)
 				end
-				if on then
-					-- A stride on a giant is huge: slow the cycle so his feet don't skate.
-					walkTrack:AdjustSpeed(walkSpeed / (16 * scaleNow) * 1.5)
-				end
+				-- A stride on a giant is huge: slow the cycle so his feet don't skate (0 = standing still).
+				walkTrack:AdjustSpeed(if on then walkSpeed / (16 * scaleNow) * 1.5 else 0)
 			end
 		end
 		-- Bigger (or smaller) over a few seconds; the floor lock follows by itself.
@@ -6364,9 +6366,11 @@ do
 				-- gain can't oscillate even if the feet lag a frame), with a dead zone and a speed limit.
 				local low2 = math.min(lowestPoint(footL), lowestPoint(footR))
 				if low2 ~= math.huge and leapHeight < 0.5 then
-					local above = math.clamp(rootY - low2, rootAbove * 0.5, rootAbove * 1.5)
+					local above = math.clamp(rootY - low2, rootAbove * 0.3, rootAbove * 4)
 					local error = ROOM_FLOOR + above - rootY
-					if math.abs(error) > scaleNow * 0.02 then
+					if math.abs(error) > scaleNow * 2 then
+						rootY += error -- a pose change moved the feet a long way: snap, never slide through the floor
+					elseif math.abs(error) > scaleNow * 0.02 then
 						rootY += math.clamp(error * math.min(1, dt * 12), -scaleNow * dt * 8, scaleNow * dt * 8)
 					end
 				end
