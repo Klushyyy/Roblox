@@ -1767,3 +1767,9 @@ While he charges the dishwasher ball both arms go straight out in front, turned 
 - The nuke lands where the dishwasher stood (0, -89) with the line "that spot looks empty. i am redecorating."; its craters ring that spot, far from the spawn and the obby.
 - Eye lasers hold his arms out to the sides (`flex`), never in front of his face. Smashing the shop/eggs/pet stand is about twice as fast. He starts folding into the sit animation in the air so there is no pop on landing.
 - Z-fighting: every flat effect on the table sits at least 0.8 studs up and is at least 0.5 thick. The dark fireball scorch marks (they read as black lines) are gone: a short glowing ember ring replaces them.
+
+### 6zzf. Poll, pads, smash UI, invisible blocks (v2.12.15)
+- PollUI: while `AbuseLive` the poll is never hidden by an "open window" (the other windows are faded away, so a window UIKit still counts as open could hide the poll for good).
+- PartyService: the pad loop no longer admits anyone while `Config.EventLockdown()` is on (pads were position-checked, so disabling their touch/collision was not enough; that is what let people walk into a pad and get stuck).
+- The lobby prompts and labels are no longer switched off at show start. They go off only with the thing they belong to: when `SmashProps` hits it or a crater swallows it (`switchOffUiOn`), and come back when it is restored/healed.
+- Invisible solid parts (hit boxes) near what is smashed are made non-solid (`smashedInvisible`) and restored afterwards, so nobody can jump onto a block where the shop or eggs were.

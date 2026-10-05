@@ -7687,7 +7687,6 @@ do
 					-- party pads and the lobby's prompts and labels are off for the whole show; anyone inside a pad is
 					-- walked out of it
 					LobbyBuilder.SetPadsEnabled(false)
-					LobbyBuilder.SetUiEnabled(false)
 					for _, plr in Players:GetPlayers() do
 						pcall(function()
 							if PartyService.IsInParty(plr) then

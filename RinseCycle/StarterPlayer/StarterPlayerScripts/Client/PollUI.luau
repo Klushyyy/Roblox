@@ -303,7 +303,8 @@ function PollUI.Init()
 		while true do
 			-- Under every window: out of the way while one is open.
 			if currentId then
-				holder.Visible = not UIKit.IsWindowOpen()
+				-- (during the Admin Abuse show the other windows are faded away, so one can never hide the poll)
+				holder.Visible = game:GetService("ReplicatedStorage"):GetAttribute("AbuseLive") == true or not UIKit.IsWindowOpen()
 			end
 			if phase == "Voting" then
 				local left = math.max(0, endsAt - Config.Now())

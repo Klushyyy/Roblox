@@ -2268,6 +2268,16 @@ local ROOF_PART_NAMES = { Ceiling = true, CeilingBeam = true, Crown = true }
 
 -- Cuts a round hole (tiles fall, rim tilts) in the named parts around (x, z). opts.Roof: the ceiling
 -- (bigger tiles, no props / cracks / glow, and the falling tiles never collide with anyone).
+-- Prompts and floating labels belong to the thing they sit on: when it is smashed or falls into a hole they go
+-- off with it (and come back when it is put back).
+local function switchOffUiOn(part: BasePart, store: { Instance })
+	for _, d in part:GetDescendants() do
+		if (d:IsA("ProximityPrompt") or d:IsA("BillboardGui")) and d.Enabled then
+			table.insert(store, d)
+			d.Enabled = false
+		end
+	end
+end
 local function cutDisc(index: number, holeX: number, holeZ: number, R: number, names: { [string]: boolean }, opts: { Roof: boolean?, Launch: Vector3? })
 	local model = lobby and lobby.Model
 	if not model or holes[index] then
@@ -2279,6 +2289,8 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 	local S = R + 10
 	local rec: HoleRec = { Hidden = {}, Pieces = {}, Tiles = {}, Props = {}, Cracks = {}, Center = Vector3.new(cx, ORIGIN.Y, cz), Radius = R }
 	holes[index] = rec
+	local holeUi: { Instance } = {}
+	(rec :: any).Ui = holeUi
 	local folder = mk("Folder", { Name = "HolePieces" .. index }, Workspace) :: Folder
 	table.insert(rec.Pieces, folder)
 
@@ -2418,6 +2430,7 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 				local y = d.Position.Y - ORIGIN.Y
 				if math.sqrt(dx * dx + dz * dz) < R + 4 and y > -1 and y < 60 and not d:IsDescendantOf(folder) then
 					table.insert(rec.Props, { Part = d, CF = d.CFrame, Anchored = d.Anchored :: boolean, Collide = d.CanCollide })
+					switchOffUiOn(d, holeUi)
 				end
 			end
 		end
@@ -2493,6 +2506,9 @@ end
 local function healRec(index: number, rec: HoleRec, total: number)
 	do
 		holes[index] = nil
+		for _, inst in ((rec :: any).Ui or {}) :: { Instance } do
+			(inst :: any).Enabled = true
+		end
 		local folder = rec.Pieces[1]
 		for _, crack in rec.Cracks do
 			TweenService:Create(crack, TweenInfo.new(total * 0.6), { Transparency = 1 }):Play()
@@ -2683,6 +2699,8 @@ type Smashed = { Part: BasePart, CF: CFrame, Anchored: boolean, Collide: boolean
 local smashedProps: { Smashed } = {}
 local smashedSet: { [BasePart]: boolean } = {}
 local smashedPrompts: { [ProximityPrompt]: boolean } = {}
+local smashedUi: { Instance } = {}
+local smashedInvisible: { BasePart } = {} -- invisible solid parts (hit boxes) near what was smashed: made non-solid
 function LobbyBuilder.GetSmashTargets(): { { Name: string, Pos: Vector3, Radius: number } }
 	local list = { { Name = "Soap shop", Pos = Vector3.new(SHOP_X, 0, EGG_Z), Radius = 15 } }
 	local eggs = Config.Eggs
@@ -2711,6 +2729,15 @@ function LobbyBuilder.SmashProps(center: Vector3, radius: number, launch: Vector
 				table.insert(smashedProps, rec)
 				table.insert(mine, rec)
 			end
+		elseif d:IsA("BasePart") and d.Transparency >= 0.95 and d.CanCollide and d.Anchored and d.Name ~= "Barrier" and not TABLE_PART_NAMES[d.Name] and not d:IsA("SpawnLocation") and not (dishwasherFolder and d:IsDescendantOf(dishwasherFolder)) then
+			-- (an invisible block left standing where the shop or the eggs were: anyone could jump onto it)
+			local dx, dz = d.Position.X - cx, d.Position.Z - cz
+			local y = d.Position.Y - ORIGIN.Y
+			if math.sqrt(dx * dx + dz * dz) < radius + 4 and y > -1 and y < 60 and d.Size.X < 60 and d.Size.Z < 60 then
+				table.insert(smashedInvisible, d)
+				d.CanCollide = false
+				d.CanQuery = false
+			end
 		elseif d:IsA("ProximityPrompt") and d.Enabled then
 			local part = d.Parent
 			if part and part:IsA("BasePart") then
@@ -2720,6 +2747,16 @@ function LobbyBuilder.SmashProps(center: Vector3, radius: number, launch: Vector
 					d.Enabled = false
 				end
 			end
+		end
+	end
+	for _, rec in mine do
+		switchOffUiOn(rec.Part, smashedUi)
+	end
+	for _, d in model:GetDescendants() do
+		-- (a label that floats over a smashed part, but belongs to something else)
+		if d:IsA("BillboardGui") and d.Enabled and d.Adornee and d.Adornee:IsA("BasePart") and smashedSet[d.Adornee] then
+			table.insert(smashedUi, d)
+			d.Enabled = false
 		end
 	end
 	for _, rec in mine do
@@ -2751,7 +2788,16 @@ function LobbyBuilder.RestoreProps()
 	for prompt in smashedPrompts do
 		prompt.Enabled = true
 	end
-	smashedProps, smashedSet, smashedPrompts = {}, {}, {}
+	for _, inst in smashedUi do
+		(inst :: any).Enabled = true
+	end
+	for _, part in smashedInvisible do
+		if part.Parent then
+			part.CanCollide = true
+			part.CanQuery = false
+		end
+	end
+	smashedProps, smashedSet, smashedPrompts, smashedUi, smashedInvisible = {}, {}, {}, {}, {}
 end
 
 -- While the show runs the party pads do nothing at all: nothing on them is solid or touchable, and

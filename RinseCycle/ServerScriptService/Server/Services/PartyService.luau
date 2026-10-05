@@ -873,9 +873,10 @@ local function tick()
 		end
 	end
 
-	-- 2) Free players standing in a pad.
+	-- 2) Free players standing in a pad. (Not at all while Admin Abuse is on: the pads do nothing then.)
+	local eventLocked = Config.EventLockdown()
 	for _, player in Players:GetPlayers() do
-		if canEnterPads(player, clock) then
+		if not eventLocked and canEnterPads(player, clock) then
 			local root = Characters.GetRoot(player)
 			if root then
 				local position = root.Position
