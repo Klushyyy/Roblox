@@ -2551,6 +2551,8 @@ end
 -- chunks of the same colours; RepairDishwasher puts it all back.
 local dishwasherSaved: { [BasePart]: { number | boolean } }? = nil
 local dishwasherChunks: { BasePart } = {}
+local dishwasherGuis: { [SurfaceGui]: boolean } = {}
+local dishwasherSavedCF: { [BasePart]: CFrame } = {}
 function LobbyBuilder.DishwasherBroken(): boolean
 	return dishwasherSaved ~= nil
 end
@@ -2563,8 +2565,26 @@ function LobbyBuilder.BreakDishwasher(impact: Vector3)
 	dishwasherSaved = saved
 	local rng = Random.new()
 	local budget = 190
-	for _, d in folder:GetDescendants() do
-		if d:IsA("BasePart") then
+	-- (the roof ladder is a separate set of parts: it goes too, and its climbing truss moves far away)
+	local pieces: { Instance } = folder:GetDescendants()
+	local model = lobby and lobby.Model
+	if model then
+		for _, d in model:GetChildren() do
+			if string.sub(d.Name, 1, 6) == "Ladder" then
+				table.insert(pieces, d)
+			end
+		end
+	end
+	for _, d in pieces do
+		if d:IsA("SurfaceGui") then
+			-- (a SurfaceGui draws even when its part is invisible: the title text and the roof sign)
+			dishwasherGuis[d] = d.Enabled
+			d.Enabled = false
+		elseif d:IsA("BasePart") then
+			if d:IsA("TrussPart") then
+				dishwasherSavedCF[d] = d.CFrame
+				d.CFrame = d.CFrame - Vector3.new(0, 3000, 0)
+			end
 			saved[d] = { d.Transparency, d.CanCollide, d.CanQuery }
 			if d.Transparency < 0.9 and budget > 0 then
 				local vol = d.Size.X * d.Size.Y * d.Size.Z
@@ -2614,6 +2634,14 @@ function LobbyBuilder.RepairDishwasher()
 			c:Destroy()
 		end)
 	end
+	for gui, enabled in dishwasherGuis do
+		gui.Enabled = enabled
+	end
+	dishwasherGuis = {}
+	for part, cf in dishwasherSavedCF do
+		part.CFrame = cf
+	end
+	dishwasherSavedCF = {}
 	for part, orig in saved do
 		if part.Parent then
 			TweenService:Create(part, TweenInfo.new(1.5), { Transparency = orig[1] :: number }):Play()
@@ -2628,6 +2656,83 @@ function LobbyBuilder.RepairDishwasher()
 			end
 		end
 	end
+end
+
+-- What the giant punches off the table (the soap shop, the eggs, the pet stand): every loose prop near a
+-- point is unanchored and flung; RestoreProps puts it all back. Nothing here is a Humanoid.
+type Smashed = { Part: BasePart, CF: CFrame, Anchored: boolean, Collide: boolean, Transparency: number }
+local smashedProps: { Smashed } = {}
+local smashedSet: { [BasePart]: boolean } = {}
+local smashedPrompts: { [ProximityPrompt]: boolean } = {}
+function LobbyBuilder.GetSmashTargets(): { { Name: string, Pos: Vector3, Radius: number } }
+	local list = { { Name = "Soap shop", Pos = Vector3.new(SHOP_X, 0, EGG_Z), Radius = 15 } }
+	local eggs = Config.Eggs
+	local n = #eggs
+	for i, egg in eggs do
+		table.insert(list, { Name = tostring(egg.Name or ("Egg " .. i)), Pos = Vector3.new((i - (n + 1) / 2) * 20, 0, EGG_Z), Radius = 9 })
+	end
+	table.insert(list, { Name = "Pet stand", Pos = Vector3.new(PETSTAND_X, 0, EGG_Z), Radius = 11 })
+	return list
+end
+function LobbyBuilder.SmashProps(center: Vector3, radius: number, launch: Vector3)
+	local model = lobby and lobby.Model
+	if not model then
+		return
+	end
+	local cx, cz = ORIGIN.X + center.X, ORIGIN.Z + center.Z
+	local rng = Random.new()
+	local mine: { Smashed } = {}
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") and not smashedSet[d] and d.Anchored and d.Transparency < 0.95 and d.Name ~= "Barrier" and not TABLE_PART_NAMES[d.Name] and d.Size.Y < 70 and not (dishwasherFolder and d:IsDescendantOf(dishwasherFolder)) and not d:IsA("SpawnLocation") then
+			local dx, dz = d.Position.X - cx, d.Position.Z - cz
+			local y = d.Position.Y - ORIGIN.Y
+			if math.sqrt(dx * dx + dz * dz) < radius and y > -1 and y < 45 then
+				local rec: Smashed = { Part = d, CF = d.CFrame, Anchored = true, Collide = d.CanCollide, Transparency = d.Transparency }
+				smashedSet[d] = true
+				table.insert(smashedProps, rec)
+				table.insert(mine, rec)
+			end
+		elseif d:IsA("ProximityPrompt") and d.Enabled then
+			local part = d.Parent
+			if part and part:IsA("BasePart") then
+				local dx, dz = part.Position.X - cx, part.Position.Z - cz
+				if math.sqrt(dx * dx + dz * dz) < radius then
+					smashedPrompts[d] = true
+					d.Enabled = false
+				end
+			end
+		end
+	end
+	for _, rec in mine do
+		local part = rec.Part
+		part.Anchored = false
+		part.CanCollide = true
+		part.AssemblyLinearVelocity = launch + Vector3.new(rng:NextNumber(-25, 25), rng:NextNumber(0, 40), rng:NextNumber(-25, 25))
+		part.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-10, 10), rng:NextNumber(-10, 10), rng:NextNumber(-10, 10))
+		task.delay(6, function()
+			if part.Parent and smashedSet[part] then
+				TweenService:Create(part, TweenInfo.new(1.5), { Transparency = 1 }):Play()
+			end
+		end)
+	end
+end
+function LobbyBuilder.RestoreProps()
+	for _, rec in smashedProps do
+		local part = rec.Part
+		if part.Parent then
+			part.Anchored = true
+			part.AssemblyLinearVelocity = Vector3.zero
+			part.AssemblyAngularVelocity = Vector3.zero
+			part.CFrame = rec.CF
+			part.Transparency = rec.Transparency
+			part.CanCollide = rec.Collide
+			part.Anchored = rec.Anchored
+		end
+	end
+	for prompt in smashedPrompts do
+		prompt.Enabled = true
+	end
+	smashedProps, smashedSet, smashedPrompts = {}, {}, {}
 end
 
 function LobbyBuilder.HealRoof(seconds: number?)

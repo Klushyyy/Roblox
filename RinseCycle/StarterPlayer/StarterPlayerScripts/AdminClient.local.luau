@@ -815,6 +815,71 @@ do
 			playTitle("TURN UP THE HEAT", Colors.Bad)
 		end
 	end)
+	-- While the show is live every other window and the whole HUD fade away (nothing in them is usable then
+	-- anyway), and come back when it is over. Polls, prizes, the show's own text and the admin panel stay.
+	local UI_KEEP = { AbuseTimer = true, AbuseTalk = true, AbuseFx = true, PollUI = true, Celebrate = true, UIKitToasts = true, AdminStatus = true, AdminPanel = true }
+	local uiHidden: { [ScreenGui]: boolean } = {}
+	local function setLiveUi(live: boolean)
+		local pg = player:FindFirstChildOfClass("PlayerGui")
+		if not pg then
+			return
+		end
+		if live then
+			for _, sg in pg:GetChildren() do
+				if sg:IsA("ScreenGui") and not UI_KEEP[sg.Name] and sg.Enabled and not uiHidden[sg] then
+					uiHidden[sg] = true
+					task.spawn(function()
+						local recs: { { any } } = {}
+						for _, d in sg:GetDescendants() do
+							if d:IsA("GuiObject") then
+								table.insert(recs, { d, "BackgroundTransparency", d.BackgroundTransparency })
+								if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+									table.insert(recs, { d, "TextTransparency", (d :: any).TextTransparency })
+									table.insert(recs, { d, "TextStrokeTransparency", (d :: any).TextStrokeTransparency })
+								elseif d:IsA("ImageLabel") or d:IsA("ImageButton") then
+									table.insert(recs, { d, "ImageTransparency", (d :: any).ImageTransparency })
+								end
+							elseif d:IsA("UIStroke") then
+								table.insert(recs, { d, "Transparency", d.Transparency })
+							end
+						end
+						local t0 = os.clock()
+						while uiHidden[sg] do
+							local f = math.min(1, (os.clock() - t0) / 0.9)
+							for _, r in recs do
+								pcall(function()
+									r[1][r[2]] = (r[3] :: number) + (1 - (r[3] :: number)) * f
+								end)
+							end
+							if f >= 1 then
+								break
+							end
+							task.wait()
+						end
+						if uiHidden[sg] then
+							sg.Enabled = false
+						end
+						for _, r in recs do
+							pcall(function()
+								r[1][r[2]] = r[3]
+							end)
+						end
+					end)
+				end
+			end
+		else
+			for sg in uiHidden do
+				uiHidden[sg] = nil
+				sg.Enabled = true
+			end
+		end
+	end
+	ReplicatedStorage:GetAttributeChangedSignal("AbuseLive"):Connect(function()
+		setLiveUi(ReplicatedStorage:GetAttribute("AbuseLive") == true)
+	end)
+	if ReplicatedStorage:GetAttribute("AbuseLive") == true then
+		setLiveUi(true)
+	end
 	task.spawn(function()
 		local say = ReplicatedStorage:WaitForChild("AbuseSay", 120)
 		if say then
@@ -1041,7 +1106,7 @@ local COMMANDS: { Command } = ({
 	{ Name = "notifytest", Icon = "🔔", Label = "Notification test", Desc = "Sends the \"daily reward is ready\" notification to you right now and says how it went: is the key found, is HTTP on, are you opted in.", Group = "Studio", Target = "none" },
 	{ Name = "abusefx", Icon = "💥", Label = "Test Admin Abuse effects", Desc = "Tries one piece of the Admin Abuse show on its own (it spawns the giant first): each effect, the table holes, the obby, the heat, the exit. 'Every effect' plays them all, 9 seconds apart.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		local list = {}
-		for _, name in { "all", "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes", "fireballs", "dishwasher", "bombs", "sit", "punch", "stand", "hole1", "hole2", "heal", "obby", "obbybreak", "heat", "calm", "leave", "off" } do
+		for _, name in { "all", "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes", "fireballs", "dishwasher", "bombs", "chairshow", "nuke", "hole1", "hole2", "heal", "obby", "obbybreak", "heat", "calm", "leave", "off" } do
 			local label = if name == "all" then "Every effect, one after another" elseif name == "off" then "Put everything away" elseif name == "heal" then "Close the table holes" elseif name == "hole1" then "Table hole 1" elseif name == "hole2" then "Table hole 2" elseif name == "obby" then "Build the obby" elseif name == "obbybreak" then "Smash the obby" elseif name == "heat" then "Turn up the heat" elseif name == "calm" then "Cool down" elseif name == "leave" then "The exit through the roof" else name
 			table.insert(list, { Label = label, Value = name })
 		end

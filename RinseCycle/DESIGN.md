@@ -1746,3 +1746,11 @@ He only does effects (and the roof exit) when his angle round the table is clear
 
 ### 6zzb. Hands out for the charge (v2.12.11)
 While he charges the dishwasher ball both arms go straight out in front, turned in so the hands meet (a runtime arm-only animation, `makeGesture("charge", ...)`: raise = +90 deg about X, yaw +-24 deg), and the ball grows where the hands are (3.1 x scale in front of the hips, 1.4 x scale up). The arms drop once it is fired. (The earlier arm poses used -95 deg, which swung the arms backwards, which is why they looked wrong.)
+
+### 6zzc. Chair show, nuke, UI fade, arm animations (v2.12.12)
+- Arm animations are fixed: R15 shoulder poses are raise-forward = +X, out-to-the-side = +Z (right arm) / -Z (left arm). `makeAnim` builds looped poses (point, cheer, wave, flex, charge = hands together) and one-shots (slamR, punchR, punchL). Every act now gets one of point/cheer/wave/flex; effects never start while he is mid-somersault (`canAct` refuses while `leapHeight >= 5`), which is what froze him in the air.
+- `attack chairshow` (t=60): he goes round to the north side, sits on the end chair (about 25 s total instead of 120), slams the Fastest Clean board (its hole opens, the props fly the way he slammed), then punches off the soap shop, each egg and the pet stand (`LobbyBuilder.GetSmashTargets` / `SmashProps` / `RestoreProps`), and stands up. Hole 2 now opens at t=199.
+- The dishwasher smash also removes the roof ladder and every SurfaceGui (the "RINSE CYCLE" and "PETS & EGGS" lettering kept drawing on invisible parts).
+- `attack nuke` (t=540): he throws a nuke onto the right side of the table; it sits there with a countdown over it that reaches 0 at `Show.NukeAt` (596), then it breaks a big area of that side (five real holes). The spawn and the obby are far from it.
+- Client: while `AbuseLive`, every ScreenGui except the show's own, polls, prizes, toasts and the admin panel fades out over 0.9 s and comes back at the end. `rollRank` refuses during the show (party pads were already locked by `Config.EventLockdown`).
+- `scen_dishwasher.luau` also covers the smash/restore of props; `scen_tableparts.luau` lists the table layers under hole 1.

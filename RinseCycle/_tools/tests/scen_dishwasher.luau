@@ -41,3 +41,24 @@ pump(1, G.frame)
 LB.HealHoles(1)
 pump(3, G.frame)
 print("holes healed")
+
+-- Punching the soap shop, the eggs and the pet stand: every prop near each target comes loose, and all return.
+local targets = LB.GetSmashTargets()
+local loose = 0
+for _, t in targets do
+	LB.SmashProps(t.Pos, t.Radius, Vector3.new(0, 20, 60))
+end
+for _, d in lobby.Model:GetDescendants() do
+	if d:IsA("BasePart") and d.Anchored == false then
+		loose += 1
+	end
+end
+print("smash targets:", #targets, "loose parts after smashing:", loose)
+LB.RestoreProps()
+local still = 0
+for _, d in lobby.Model:GetDescendants() do
+	if d:IsA("BasePart") and d.Anchored == false then
+		still += 1
+	end
+end
+print("loose parts after restore (should be 0):", still)

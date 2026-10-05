@@ -5444,7 +5444,8 @@ do
 	local giantSit: (() -> ())? = nil
 	local giantGesture: ((string?) -> ())? = nil -- arm pose for the dishwasher charge
 	local giantStand: (() -> ())? = nil
-	local giantPunch: (() -> ())? = nil
+	local giantChairShow: (() -> ())? = nil
+	local chairShowBusy = false
 	local punchLaunch: Vector3? = nil -- set by the punch: the next table hole flings what is in it this way
 	local leaving = false -- set once he starts the exit: nothing respawns him afterwards
 	local giantRescale: ((number, number) -> ())? = nil
@@ -5464,7 +5465,8 @@ do
 			end
 		end
 		giantHead, giantLeave, giantRescale = nil, nil, nil
-		giantSit, giantStand, giantPunch, punchLaunch, giantGesture = nil, nil, nil, nil, nil
+		giantSit, giantStand, giantChairShow, punchLaunch, giantGesture = nil, nil, nil, nil, nil
+		chairShowBusy = false
 	end
 	local function ringAt(pos: Vector3, size: number, seconds: number, color: Color3)
 		local ring = Instance.new("Part")
@@ -6360,6 +6362,213 @@ do
 				end
 			end)
 		end
+		-- The nuke: he picks it up (hands together), throws it onto the right side of the table, where it sits
+		-- with a countdown over it, and at the end of the countdown (just before he leaves) it goes off and breaks
+		-- a big part of that side of the table. The spawn and the obby are far from it, so they stay usable.
+		local nukeActive = false
+		fx.nuke = function()
+			local model = giant
+			local rootPart = model and model:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if not model or not rootPart or nukeActive then
+				return
+			end
+			nukeActive = true
+			local e = abuseEvent()
+			local boomAt = if e then e.Starts + (Show.NukeAt or 596) else Config.Now() + 30
+			local nowT = Config.Now()
+			if boomAt - nowT < 10 or boomAt - nowT > 150 then
+				boomAt = nowT + 30 -- (a test, or it is late)
+			end
+			local unit = if giantHead then giantHead.Size.Y else 45
+			local scale = unit / 1.2
+			local parts: { BasePart } = {}
+			local offsets: { CFrame } = {}
+			local function add(part: BasePart, offset: CFrame)
+				part.Parent = workspace
+				track(part)
+				table.insert(parts, part)
+				table.insert(offsets, offset)
+			end
+			local function metal(size: Vector3, color: Color3, shape: Enum.PartType?): Part
+				local part = Instance.new("Part")
+				part.Anchored = true
+				part.CanCollide = false
+				part.CanTouch = false
+				part.CanQuery = false
+				part.Material = Enum.Material.Metal
+				part.Color = color
+				part.Size = size
+				if shape then
+					part.Shape = shape
+				end
+				return part
+			end
+			local olive = Color3.fromRGB(78, 88, 66)
+			local body = metal(Vector3.new(26, 8, 8), olive, Enum.PartType.Cylinder)
+			add(body, CFrame.identity)
+			add(metal(Vector3.new(8, 8, 8), olive, Enum.PartType.Ball), CFrame.new(13, 0, 0))
+			for _, x in { -5, 5 } do
+				local band = neonPart(Vector3.new(1, 8.4, 8.4), Color3.fromRGB(255, 50, 40), Enum.PartType.Cylinder)
+				add(band, CFrame.new(x, 0, 0))
+			end
+			for k = 0, 2 do
+				add(metal(Vector3.new(5, 0.6, 6), Color3.fromRGB(60, 66, 54)), CFrame.new(-12, 0, 0) * CFrame.Angles(k * math.pi / 3, 0, 0) * CFrame.new(0, 4.5, 0))
+			end
+			local function place(cf: CFrame)
+				for i, p in parts do
+					p.CFrame = cf * offsets[i]
+				end
+			end
+			local function hands(): Vector3
+				return rootPart.Position + rootPart.CFrame.LookVector * (scale * 3.4) + Vector3.new(0, scale * 1.4, 0)
+			end
+			local function cleanup()
+				for _, p in parts do
+					p:Destroy()
+				end
+				nukeActive = false
+			end
+			if giantGesture then
+				giantGesture("charge")
+			end
+			task.spawn(function()
+				-- held out in front of him
+				local t0 = os.clock()
+				while os.clock() - t0 < 1.6 do
+					if giant ~= model then
+						cleanup()
+						return
+					end
+					local look = rootPart.CFrame.LookVector
+					place(CFrame.lookAt(hands(), hands() + look) * CFrame.Angles(0, math.rad(90), 0))
+					task.wait()
+				end
+				-- thrown onto the right side of the table
+				if giantGesture then
+					giantGesture(nil)
+				end
+				local target = Vector3.new(60, 4.5, -32)
+				local from = hands()
+				local f0 = os.clock()
+				local FLIGHT = 1.7
+				Remote.AbuseBoom:FireAllClients(1.8, from)
+				while true do
+					local f = (os.clock() - f0) / FLIGHT
+					if f >= 1 or giant ~= model then
+						break
+					end
+					local pos = from:Lerp(target, f) + Vector3.new(0, math.sin(math.pi * f) * 110, 0)
+					place(CFrame.new(pos) * CFrame.Angles(f * 9, f * 5, 0))
+					task.wait()
+				end
+				if not body.Parent then
+					cleanup()
+					return
+				end
+				local landed = CFrame.new(target) * CFrame.Angles(0, math.rad(28), 0)
+				place(landed)
+				Remote.AbuseBoom:FireAllClients(2.6, target)
+				ringAt(Vector3.new(target.X, 1, target.Z), 160, 0.8, Color3.fromRGB(255, 150, 60))
+				-- the countdown over it
+				local gui = Instance.new("BillboardGui")
+				gui.Size = UDim2.fromOffset(300, 110)
+				gui.StudsOffsetWorldSpace = Vector3.new(0, 16, 0)
+				gui.AlwaysOnTop = true
+				gui.MaxDistance = 4000
+				local label = Instance.new("TextLabel")
+				label.Size = UDim2.fromScale(1, 1)
+				label.BackgroundTransparency = 1
+				label.Font = Enum.Font.LuckiestGuy
+				label.TextScaled = true
+				label.TextColor3 = Color3.fromRGB(255, 70, 60)
+				label.TextStrokeTransparency = 0
+				label.Parent = gui
+				gui.Parent = body
+				local glow = Instance.new("PointLight")
+				glow.Color = Color3.fromRGB(255, 60, 40)
+				glow.Range = 60
+				glow.Parent = body
+				local lastShown = -1
+				while true do
+					if not body.Parent or giant == nil then
+						cleanup() -- (the show was put away early: it never goes off)
+						return
+					end
+					local left = math.ceil(boomAt - Config.Now())
+					if left ~= lastShown then
+						lastShown = left
+						label.Text = tostring(math.max(0, left))
+						glow.Brightness = if left <= 10 then 6 else 2
+						if left <= 10 and left > 0 then
+							Remote.AbuseBoom:FireAllClients(0.8, target)
+						end
+					end
+					if left <= 0 then
+						break
+					end
+					task.wait(0.2)
+				end
+				-- it goes off
+				cleanup()
+				local flash = neonPart(Vector3.new(40, 40, 40), Color3.new(1, 1, 1), Enum.PartType.Ball)
+				flash.Position = target + Vector3.new(0, 6, 0)
+				flash.Parent = workspace
+				TweenService:Create(flash, TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(900, 900, 900), Transparency = 1 }):Play()
+				Debris:AddItem(flash, 1.5)
+				for i = 0, 5 do
+					task.delay(i * 0.18, function()
+						ringAt(Vector3.new(target.X, 2, target.Z), 300 + i * 220, 1.4, Color3.fromRGB(255, 190, 90))
+						Remote.AbuseBoom:FireAllClients(4, target)
+					end)
+				end
+				-- the table breaks open round it (the big hole in the middle, a few smaller ones)
+				for _, c in { { 0, 0, 30 }, { -38, -12, 17 }, { 32, 16, 17 }, { -8, 38, 15 }, { 8, -42, 15 } } do
+					craterCount += 1
+					local cx = math.clamp(target.X + c[1], -90, 90)
+					local cz = math.clamp(target.Z + c[2], -96, 24)
+					LobbyBuilder.OpenCrater(craterCount, cx, cz, c[3])
+				end
+				for _, plr in Players:GetPlayers() do
+					local ch = plr.Character
+					local r = ch and ch:FindFirstChild("HumanoidRootPart") :: BasePart?
+					local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+					if r and hum then
+						local off = Vector3.new(r.Position.X - target.X, 0, r.Position.Z - target.Z)
+						if off.Magnitude < 90 and r.Position.Y < 60 then
+							local dir = if off.Magnitude > 0.5 then off.Unit else Vector3.new(0, 0, 1)
+							pcall(function()
+								hum:ChangeState(Enum.HumanoidStateType.Freefall)
+								r.AssemblyLinearVelocity = dir * 95 + Vector3.new(0, 70, 0)
+							end)
+						end
+					end
+				end
+				local wreck = Instance.new("Part")
+				wreck.Transparency = 1
+				wreck.Anchored = true
+				wreck.CanCollide = false
+				wreck.CanQuery = false
+				wreck.Size = Vector3.new(50, 2, 50)
+				wreck.Position = Vector3.new(target.X, -4, target.Z)
+				for _, kind in { "fire", "smoke" } do
+					local em = Instance.new("ParticleEmitter")
+					em.Texture = if kind == "fire" then "rbxasset://textures/particles/fire_main.dds" else "rbxasset://textures/particles/smoke_main.dds"
+					em.Color = if kind == "fire" then ColorSequence.new(Color3.fromRGB(255, 200, 80), Color3.fromRGB(255, 70, 20)) else ColorSequence.new(Color3.fromRGB(50, 50, 54))
+					em.Lifetime = NumberRange.new(1.2, 2.8)
+					em.Speed = NumberRange.new(8, 24)
+					em.SpreadAngle = Vector2.new(30, 30)
+					em.EmissionDirection = Enum.NormalId.Top
+					em.Rate = if kind == "fire" then 30 else 18
+					em.Size = NumberSequence.new(if kind == "fire" then 12 else 18, 4)
+					em.Transparency = NumberSequence.new(if kind == "fire" then 0.2 else 0.5, 1)
+					em.LightEmission = if kind == "fire" then 1 else 0
+					em.Parent = wreck
+				end
+				wreck.Parent = workspace
+				track(wreck)
+				nukeActive = false
+			end)
+		end
 		fx.fountains = function()
 			for i = 1, if heat then 8 else 5 do
 				task.delay(i * 0.25, function()
@@ -6579,22 +6788,33 @@ do
 			tag.Parent = head
 		end
 
-		-- Arm gestures: small runtime animations that pose only the upper arms (Motor6D properties can't be
-		-- written from a script; animations can). If one can't be made the giant simply doesn't gesture.
+		-- Arm animations: small runtime animations that pose only the upper arms (Motor6D properties can't be
+		-- written from a script; animations can). If one can't be made the giant simply doesn't use it.
+		-- R15 shoulder poses: raising an arm FORWARD is +X rotation; swinging it OUT to the side is +Z for the right
+		-- arm and -Z for the left; the arms hang down at rest.
 		local gestureTracks: { [string]: AnimationTrack } = {}
-		local function makeGesture(name: string, right: CFrame?, left: CFrame?)
+		local function Rx(deg: number): CFrame
+			return CFrame.Angles(math.rad(deg), 0, 0)
+		end
+		local function Ry(deg: number): CFrame
+			return CFrame.Angles(0, math.rad(deg), 0)
+		end
+		local function Rz(deg: number): CFrame
+			return CFrame.Angles(0, 0, math.rad(deg))
+		end
+		-- frames: { { time, rightArmPose?, leftArmPose? } }
+		local function makeAnim(name: string, frames: { { any } }, looped: boolean)
 			local ok, err = pcall(function()
 				local seq = Instance.new("KeyframeSequence")
-				seq.Name = "Gesture" .. name
-				seq.Priority = Enum.AnimationPriority.Action
-				seq.Loop = true
-				for i = 0, 1 do
+				seq.Name = "Giant" .. name
+				seq.Priority = Enum.AnimationPriority.Action2
+				seq.Loop = looped
+				for _, f in frames do
 					local kf = Instance.new("Keyframe")
-					kf.Time = i * 0.5
+					kf.Time = f[1] :: number
 					local rootPose = Instance.new("Pose")
-					rootPose.Name = "HumanoidRootPose"
-					rootPose.Weight = 0
 					rootPose.Name = "HumanoidRootPart"
+					rootPose.Weight = 0
 					local lower = Instance.new("Pose")
 					lower.Name = "LowerTorso"
 					lower.Weight = 0
@@ -6603,36 +6823,46 @@ do
 					upper.Weight = 0
 					upper.Parent = lower
 					lower.Parent = rootPose
-					local wiggle = if name == "wave" and i == 1 then CFrame.Angles(0, 0, 0.35) else CFrame.identity
-					if right then
+					if f[2] then
 						local r = Instance.new("Pose")
 						r.Name = "RightUpperArm"
-						r.CFrame = right * wiggle
+						r.CFrame = f[2] :: CFrame
 						r.Weight = 1
 						r.Parent = upper
 					end
-					if left then
+					if f[3] then
 						local l = Instance.new("Pose")
 						l.Name = "LeftUpperArm"
-						l.CFrame = left
+						l.CFrame = f[3] :: CFrame
 						l.Weight = 1
 						l.Parent = upper
 					end
 					rootPose.Parent = kf
 					kf.Parent = seq
 				end
-				local hash = KeyframeSequenceProvider:RegisterKeyframeSequence(seq)
 				local anim = Instance.new("Animation")
-				anim.AnimationId = hash
+				anim.AnimationId = KeyframeSequenceProvider:RegisterKeyframeSequence(seq)
 				local track = animator:LoadAnimation(anim)
-				track.Priority = Enum.AnimationPriority.Action
-				track.Looped = true
+				track.Priority = Enum.AnimationPriority.Action2
+				track.Looped = looped
 				gestureTracks[name] = track
 			end)
 			if not ok then
-				warn("[AbuseGiant] gesture '" .. name .. "' unavailable: " .. tostring(err))
+				warn("[AbuseGiant] animation '" .. name .. "' unavailable: " .. tostring(err))
 			end
 		end
+		local ID = CFrame.identity
+		-- held poses (looping)
+		makeAnim("point", { { 0, Rx(90) }, { 0.5, Rx(90) } }, true)
+		makeAnim("cheer", { { 0, Rz(165), Rz(-165) }, { 0.3, Rz(150), Rz(-150) }, { 0.6, Rz(165), Rz(-165) } }, true)
+		makeAnim("wave", { { 0, Rz(150) }, { 0.25, Rz(172) }, { 0.5, Rz(150) } }, true)
+		makeAnim("flex", { { 0, Rz(90), Rz(-90) }, { 0.5, Rz(90), Rz(-90) } }, true)
+		-- both arms out in front, turned in so the hands meet (he holds the glowing ball / the nuke there)
+		makeAnim("charge", { { 0, Ry(24) * Rx(90), Ry(-24) * Rx(90) }, { 0.5, Ry(24) * Rx(90), Ry(-24) * Rx(90) } }, true)
+		-- one-shots
+		makeAnim("slamR", { { 0, ID }, { 0.4, Rz(165) }, { 0.7, Rz(60) * Rx(40) }, { 1.2, Rz(60) * Rx(40) }, { 1.5, ID } }, false)
+		makeAnim("punchR", { { 0, ID }, { 0.25, Rx(-45) }, { 0.5, Rx(95) }, { 0.95, Rx(95) }, { 1.3, ID } }, false)
+		makeAnim("punchL", { { 0, ID, ID }, { 0.25, nil, Rx(-45) }, { 0.5, nil, Rx(95) }, { 0.95, nil, Rx(95) }, { 1.3, nil, ID } }, false)
 		local gestureNow: string? = nil
 		local function setGesture(name: string?)
 			if name == gestureNow then
@@ -6641,19 +6871,28 @@ do
 			gestureNow = name
 			for key, track in gestureTracks do
 				pcall(function()
-					if key == name then
-						if not track.IsPlaying then
-							track:Play(0.3)
+					if track.Looped then
+						if key == name then
+							if not track.IsPlaying then
+								track:Play(0.3)
+							end
+						elseif track.IsPlaying then
+							track:Stop(0.3)
 						end
-					elseif track.IsPlaying then
-						track:Stop(0.3)
 					end
 				end)
 			end
 		end
-		-- Both arms straight out in front, turned in towards each other so the hands meet (R15: raising an arm
-		-- forward is +90 deg about X; the yaw brings the hands to the middle). Used while he charges the ball.
-		makeGesture("charge", CFrame.Angles(0, math.rad(24), 0) * CFrame.Angles(math.rad(90), 0, 0), CFrame.Angles(0, math.rad(-24), 0) * CFrame.Angles(math.rad(90), 0, 0))
+		-- a one-shot arm move (slam, punch): the held pose is put away first
+		local function playAnim(name: string)
+			setGesture(nil)
+			local track = gestureTracks[name]
+			if track then
+				pcall(function()
+					track:Play(0.1)
+				end)
+			end
+		end
 		giantGesture = setGesture
 
 		-- Debugging: ":abusedebug" turns on a floating readout and prints. DEBUG is checked every frame.
@@ -6735,7 +6974,6 @@ do
 		-- Sitting on the chair at the end of the table (behind the dishwasher), punching the leaderboard off the
 		-- table from there, and standing up again. (Animation ids are Roblox's default R15 sit and tool-slash.)
 		local sitTrack = load("2506281703", Enum.AnimationPriority.Action, true)
-		local punchTrack = load("2410679501", Enum.AnimationPriority.Action2, false)
 		local SIT_X, SIT_Z, SIT_TOP, SIT_LIFT = 0, -168, -43, 1.0 -- the chair; how far the hips sit above the seat (x scale)
 		local MOVE_TIME = 2.4
 		local moveT0, moveFromPos, moveFromY = 0, pos, rootY
@@ -6761,30 +6999,90 @@ do
 			end
 			commandText(":stand")
 		end
-		giantPunch = function()
-			if state ~= "seated" then
+		-- The chair show: he walks round to the north side, leaps onto the chair at the end of the table, slams his
+		-- hand down on the Fastest Clean board, then punches off the soap shop, every egg and the pet stand, one at a
+		-- time, and gets up again. (Each smash unanchors what is there and flings it the way the fist went.)
+		local function impactAt(target: Vector3, radius: number, strong: boolean)
+			Remote.AbuseBoom:FireAllClients(if strong then 3 else 2.2, target)
+			harmlessBlast(target + Vector3.new(0, 10, 0), radius * 1.6)
+			ringAt(target, radius * 12, 0.8, Color3.fromRGB(255, 220, 150))
+		end
+		giantChairShow = function()
+			if chairShowBusy then
 				return
 			end
-			local board = Vector3.new(-80, 0, -74) -- the Fastest Clean board
-			local flat = board - Vector3.new(pos.X, 0, pos.Z)
-			local dir = if flat.Magnitude > 1 then flat.Unit else Vector3.new(0, 0, 1)
-			facing = Vector3.new(dir.X, 0, dir.Z)
-			if punchTrack then
-				punchTrack:Play(0.1)
-			end
-			-- the board flies the way the fist went (the next "hole" step uses it)
-			punchLaunch = dir * 150 + Vector3.new(0, 70, 0)
-			task.delay(0.9, function()
-				if giant == model then
-					Remote.AbuseBoom:FireAllClients(2.4, board)
-					harmlessBlast(board + Vector3.new(0, 10, 0), 22)
-					ringAt(board, 260, 0.8, Color3.fromRGB(255, 230, 160))
+			chairShowBusy = true
+			task.spawn(function()
+				local function alive(): boolean
+					return giant == model and not leaving
 				end
-			end)
-			task.delay(2.2, function()
-				if giant == model and state == "seated" then
-					facing = Vector3.new(0, 0, 1)
+				-- to the north side, then up onto the chair
+				for _ = 1, 200 do
+					if not alive() then
+						break
+					end
+					local d = math.deg(angle) % 360
+					if state == "walk" and d > 255 and d < 285 and leapHeight < 5 then
+						if giantSit then
+							giantSit()
+						end
+						break
+					end
+					task.wait(0.2)
 				end
+				for _ = 1, 60 do
+					if state == "seated" or not alive() then
+						break
+					end
+					task.wait(0.2)
+				end
+				if alive() and state == "seated" then
+					task.wait(0.8)
+					local seat = Vector3.new(SIT_X, 0, SIT_Z)
+					local function turnTo(target: Vector3)
+						local flat = Vector3.new(target.X - seat.X, 0, target.Z - seat.Z)
+						if flat.Magnitude > 1 then
+							facing = flat.Unit
+						end
+					end
+					-- 1. the Fastest Clean board: a slam, and the hole opens under it
+					local board = Vector3.new(-80, 0, -74)
+					turnTo(board)
+					playAnim("slamR")
+					task.wait(0.7)
+					if alive() then
+						local dir = (board - seat).Unit
+						punchLaunch = dir * 140 + Vector3.new(0, 60, 0)
+						openHole(1)
+						impactAt(board, 22, true)
+					end
+					task.wait(1.6)
+					-- 2. everything else on the front of the table
+					for i, t in LobbyBuilder.GetSmashTargets() do
+						if not alive() then
+							break
+						end
+						turnTo(t.Pos)
+						local right = t.Pos.X < seat.X -- (facing +Z, his right hand is the -X side)
+						playAnim(if right then "punchR" else "punchL")
+						task.wait(0.55)
+						if not alive() then
+							break
+						end
+						local dir = Vector3.new(t.Pos.X - seat.X, 0, t.Pos.Z - seat.Z).Unit
+						LobbyBuilder.SmashProps(t.Pos, t.Radius, dir * 110 + Vector3.new(0, 40, 0))
+						impactAt(t.Pos, 14, false)
+						task.wait(1.0)
+					end
+					if alive() then
+						facing = Vector3.new(0, 0, 1)
+						task.wait(0.4)
+						if giantStand then
+							giantStand()
+						end
+					end
+				end
+				chairShowBusy = false
 			end)
 		end
 
@@ -7033,31 +7331,9 @@ do
 			if name == "winner" then
 				name = chosenEffect
 			end
-			if name == "sit" then
-				task.spawn(function()
-					for _ = 1, 200 do
-						if giant ~= model or leaving then
-							return
-						end
-						local d = math.deg(angle) % 360
-						if state == "walk" and d > 255 and d < 285 and leapHeight < 5 then
-							if giantSit then
-								giantSit()
-							end
-							return
-						end
-						task.wait(0.2)
-					end
-				end)
-				return
-			elseif name == "stand" then
-				if giantStand then
-					giantStand()
-				end
-				return
-			elseif name == "punch" then
-				if giantPunch then
-					giantPunch()
+			if name == "chairshow" then
+				if giantChairShow then
+					giantChairShow()
 				end
 				return
 			end
@@ -7068,7 +7344,10 @@ do
 			-- Where and when he may do it: away from the chairs and the dishwasher's back (the dishwasher smash
 			-- itself needs him on the south side, in front of the couch, on the ground).
 			local function canAct(): boolean
-				if name == "dishwasher" then
+				if state == "walk" and leapHeight >= 5 then
+					return false -- never start something in the middle of the somersault over the obby
+				end
+				if name == "dishwasher" or name == "nuke" then
 					local deg = math.deg(angle) % 360
 					return state == "walk" and deg > 80 and deg < 100 and leapHeight < 5
 				end
@@ -7090,15 +7369,27 @@ do
 			end
 			acts += 1
 			if state == "walk" then
-				state, stateUntil = "act", os.clock() + (if name == "dishwasher" then 10 elseif name == "bombs" then 6 elseif heat then 3.6 else 4.6)
+				state, stateUntil = "act", os.clock() + (if name == "dishwasher" then 10 elseif name == "nuke" then 9 elseif name == "bombs" then 6 elseif heat then 3.6 else 4.6)
 				setWalking(false)
+			end
+			-- an arm move that goes with it (the dishwasher and the nuke do their own)
+			if name ~= "dishwasher" and name ~= "nuke" and (state == "act" or state == "seated") then
+				local gesture = ({ "point", "cheer", "wave", "flex" })[(acts - 1) % 4 + 1]
+				setGesture(gesture)
+				if state == "seated" then
+					task.delay(3.2, function()
+						if giant == model and state == "seated" and gestureNow == gesture then
+							setGesture(nil)
+						end
+					end)
+				end
 			end
 			commandText(nil)
 			task.delay(0.8, effect)
 			-- Something extra with the act, never the same thing twice running: lasers a couple of times, then
 			-- fireballs, meteors and shockwaves, then lasers again with more beams, and so on.
 			local bonus = BONUS[(acts - 1) % #BONUS + 1]
-			if name ~= "dishwasher" and name ~= "bombs" and bonus ~= name and (state == "act" or state == "seated") and FX[bonus] then
+			if name ~= "dishwasher" and name ~= "nuke" and name ~= "bombs" and bonus ~= name and (state == "act" or state == "seated") and FX[bonus] then
 				task.delay(0.4, function()
 					if state == "act" or state == "seated" then
 						if bonus == "eyes" then
@@ -7169,6 +7460,7 @@ do
 		LobbyBuilder.BreakObby()
 		LobbyBuilder.SetRescue(false)
 		LobbyBuilder.RepairDishwasher()
+		LobbyBuilder.RestoreProps()
 		clearFx()
 	end
 	-- The first player to finish the obby (in any server) wins a game pass, announced to everyone.
@@ -7425,7 +7717,7 @@ do
 	end
 
 	-- :abusefx <name> (Studio tab): try one piece of the show on its own (it spawns the giant if needed).
-	local FX_NAMES = { "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes", "fireballs", "dishwasher", "bombs", "sit", "punch", "stand" }
+	local FX_NAMES = { "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes", "fireballs", "dishwasher", "bombs", "chairshow", "nuke" }
 	Commands.abusefx = function(admin, text)
 		local arg = string.lower(text:match("^%s*(%S*)") or "")
 		local function needGiant(): boolean

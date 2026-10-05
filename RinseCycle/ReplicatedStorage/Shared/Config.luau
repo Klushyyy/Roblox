@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.11"
+Config.Version = "2.12.12"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1141,6 +1141,7 @@ Config.AbuseShow = ({
 	OwnerName = "EnderBuilda",
 	GiantScale = 38, -- how tall he is while he warms up
 	HeatScale = 42, -- ...and once the heat is turned up
+	NukeAt = 596, -- when the nuke goes off (seconds into the show), just before he leaves
 	ThanksGems = 100, -- everyone gets this at the end, for staying
 	HeatAt = 330, -- seconds after the start when he "turns up the heat" (until the end)
 	Pet = "AdminAbuse", -- the limited pet from the final round
@@ -1229,14 +1230,14 @@ do
 	at(38, "say", "bubbles or gems. dont overthink it.")
 	at(41, "say", "see that machine? i never liked it.")
 	at(44, "attack", "dishwasher")
+	at(58, "say", "my legs hurt. im sitting down. and then im going to have a look at that table.")
+	at(60, "attack", "chairshow")
 	at(62, "attack", "fountains")
 	at(52, "say", "the vote closes in a few seconds.")
 	at(68, "attack", "lightning")
 	at(74, "say", "prizes are landing in your inventory right now.")
 	at(78, "attack", "barrage")
 	at(86, "say", "that was the easy part.")
-	at(80, "say", "my legs hurt. im sitting down for this bit.")
-	at(84, "attack", "sit")
 	at(114, "attack", "laser")
 	at(98, "say", "this next one isnt a vote.")
 	at(101, "round", "Passes")
@@ -1253,10 +1254,7 @@ do
 	-- (the winning effect plays by itself when the vote is counted, around 182)
 	at(190, "say", "thats what you picked. dont blame me.")
 	at(196, "say", "right. the table. lets see how much it can take.")
-	at(197, "attack", "punch")
-	at(199, "hole", 1)
-	at(204, "say", "right. stretching my legs.")
-	at(205, "attack", "stand")
+	at(199, "hole", 2)
 	at(207, "say", "stay off the edges. or dont. i get to watch either way.")
 	at(211, "attack", "beam")
 	at(217, "say", "now. im going to build something. give me a second.")
@@ -1319,6 +1317,8 @@ do
 	at(537, "obby", false)
 	at(548, "attack", "tornado")
 	at(554, "attack", "lightning")
+	at(536, "say", "i brought something. stay off the right side of the table.")
+	at(540, "attack", "nuke")
 	at(560, "say", "one last big one. all of it. everything.")
 	at(564, "attack", "blackhole")
 	at(568, "attack", "meteors")

@@ -231,6 +231,10 @@ local function rollRank(player: Player, _value: any): Types.RequestResult
 	if now < (rollingUntil[player] or 0) then
 		return fail("Wait for your roll to finish!")
 	end
+	local locked = Config.EventLockdown()
+	if locked then
+		return fail("Ranks are closed while Admin Abuse is on!")
+	end
 	local cost = Config.RankRoll.Cost
 	local profile = DataService.Get(player)
 	if not profile then

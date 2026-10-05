@@ -73,3 +73,4 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
 - v2.12.9: chair sit + punch, real craters (apron cut), poll card corners.
 - v2.12.10: Local/Global Admin Abuse test commands, :privatelobby.
 - v2.12.11: arms out and hands together for the dishwasher charge.
+- v2.12.12: chair show (slam + punches), nuke, UI fade during the show, arm animations fixed, no effects mid-flip.
