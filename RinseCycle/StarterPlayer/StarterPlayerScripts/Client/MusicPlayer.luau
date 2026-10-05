@@ -17,7 +17,7 @@ local ClientState = require(Client:WaitForChild("ClientState"))
 
 local MusicPlayer = {}
 
-local FADE = 1.2
+local FADE = 0.6
 local CROSSFADE = 4 -- seconds the end of one track overlaps the start of the next
 
 local initialized = false
@@ -134,11 +134,35 @@ function MusicPlayer.SetEnabled(on: boolean)
 	refresh()
 end
 
+-- Loads the show tracks ahead of time, so there is no gap when it starts.
+local function preloadShow()
+	local ContentProvider = game:GetService("ContentProvider")
+	local list = {}
+	local show = (Config.AbuseShow :: any).Music
+	for _, key in { "Warm", "Heat" } do
+		for _, id in (show and show[key]) or {} do
+			local sound = Instance.new("Sound")
+			sound.SoundId = "rbxassetid://" .. tostring(id)
+			table.insert(list, sound)
+		end
+	end
+	pcall(function()
+		ContentProvider:PreloadAsync(list)
+	end)
+	for _, sound in list do
+		sound:Destroy()
+	end
+end
+
 function MusicPlayer.Init()
 	if initialized then
 		return
 	end
 	initialized = true
+	task.spawn(function()
+		task.wait(8)
+		preloadShow()
+	end)
 	ClientState.Changed:Connect(function(kind)
 		if kind == "Run" then
 			refresh()

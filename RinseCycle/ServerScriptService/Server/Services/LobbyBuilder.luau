@@ -1816,12 +1816,6 @@ local function notifyPlayer(player: Player, text: string, kind: string)
 	end)
 end
 
--- Is this player standing on a part (its top face, with a little slack)?
-local function standingOn(root: BasePart, cf: CFrame, size: Vector3): boolean
-	local rel = cf:PointToObjectSpace(root.Position)
-	return math.abs(rel.X) <= size.X / 2 + 1 and math.abs(rel.Z) <= size.Z / 2 + 1 and rel.Y > size.Y / 2 - 1 and rel.Y < size.Y / 2 + 9
-end
-
 local function sendToLobbySpawn(player: Player)
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
@@ -2052,8 +2046,10 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 		else
 			notifyPlayer(player, "You finished! (Prize again in a few minutes)", "Info")
 		end
-		-- Back to the lobby spawn: the climb down is long.
-		sendToLobbySpawn(player)
+		-- Back to the lobby spawn (a moment later, so the popup isn't fighting the teleport).
+		task.delay(0.8, function()
+			sendToLobbySpawn(player)
+		end)
 	end)
 
 	local tileBusy: { [BasePart]: boolean } = {}
@@ -2091,17 +2087,13 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 				s.Part.CFrame = CFrame.new(s.Center) * CFrame.Angles(0, clock * s.Speed, 0)
 			end
 			for _, s in sliders do
+				-- The platform is moved by position AND given its velocity: the Humanoid carries whoever
+				-- stands on it by the floor's velocity (moving the character from the server fights the
+				-- player's own physics and rubber-bands).
 				local p = s.Part
-				local newPos = s.Base + Vector3.new(0, 0, 13 * math.sin(clock * s.Speed + s.Phase))
-				local delta = newPos - p.Position
-				for _, player in Players:GetPlayers() do
-					local character = player.Character
-					local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-					if root and character and standingOn(root, p.CFrame, p.Size) then
-						character:PivotTo(character:GetPivot() + delta)
-					end
-				end
-				p.Position = newPos
+				local phase = clock * s.Speed + s.Phase
+				p.Position = s.Base + Vector3.new(0, 0, 13 * math.sin(phase))
+				p.AssemblyLinearVelocity = Vector3.new(0, 0, 13 * s.Speed * math.cos(phase))
 			end
 			if fallClock > 0.3 then
 				fallClock = 0

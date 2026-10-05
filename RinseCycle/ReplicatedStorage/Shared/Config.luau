@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.11.0"
+Config.Version = "2.11.1"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1134,6 +1134,7 @@ Config.AbuseShow = ({
 	OwnerName = "EnderBuilda",
 	GiantScale = 38, -- how tall he is while he warms up
 	HeatScale = 46, -- ...and once the heat is turned up
+	ThanksGems = 100, -- everyone gets this at the end, for staying
 	HeatAt = 330, -- seconds after the start when he "turns up the heat" (until the end)
 	Pet = "AdminAbuse", -- the limited pet from the final round
 	-- Everything that happens, in order (see the Script at the bottom). Prizes scale with how many
@@ -1204,6 +1205,7 @@ Config.AbuseShow = ({
 --   heal     the holes close again and everything is put back
 --   obby     a = true / false: he builds the obby (it opens a few seconds later) / smashes it
 --   heat     the heat goes up (bigger, redder, darker, faster)
+--   thanks   everyone online gets ThanksGems for staying
 --   leave    the ending: he cuts a hole in the roof and flies out
 do
 	local S = {}
@@ -1313,6 +1315,7 @@ do
 	at(598, "say", "alright. thats enough. we are done here.")
 	at(602, "say", "time for me to go. watch the ceiling.")
 	at(605, "leave")
+	at(612, "thanks")
 	at(620, "heal")
 	Config.AbuseShow.Script = S
 end

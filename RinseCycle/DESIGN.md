@@ -1679,3 +1679,10 @@ Config.AbuseShow and the clock Config.Now. AdminServer's "Admin Abuse show" sect
 - Giant: gentle floor lock (dead zone, speed limit); leaps over the obby while it stands; real cylinders for rings/holes; the show Script has a "winner" attack (the effect chat voted for) so the voted effect is the signature one; `:abusefx` (Studio tab) tries every effect, the holes, the obby, heat, exit.
 - Room reacts to the heat (dark, red); show music (`Config.AbuseShow.Music`, attribute AbuseMusic) replaces the lobby playlist; the opening title plays once.
 - Pets: Collection has Normal / Golden / Rainbow / Limited tabs (found = coloured, not found = "?"); limited (Event) pets can't be merged. Puppy icon restored.
+
+## 6zp. Glitch fixes (v2.11.1)
+- Giant: no Explosion objects any more (light bursts instead); he has a hidden ForceField, BreakJointsOnDeath off and the Physics state, new parts are softened as they appear; his height is only locked while he walks (frozen during commands); the obby leap is one smooth arc.
+- Obby sliders are moved by position plus AssemblyLinearVelocity (the Humanoid carries by floor velocity); the server no longer teleports players on them.
+- Fireworks: rocket with a spark trail, a big particle burst, then four crackles; all particle emitters.
+- Everyone online gets `Config.AbuseShow.ThanksGems` (100) just before the exit. The show music preloads and starts 8 s before the first boom.
+- The Collection page replaces the pet grid (nothing shows through) with its own Back button.

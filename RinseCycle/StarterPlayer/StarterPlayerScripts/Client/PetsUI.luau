@@ -90,7 +90,9 @@ local root: Frame
 local petsContent: Frame
 local indexPanel: Frame
 local indexButton: TextButton
+local equipBestButton: TextButton
 local refreshIndex: () -> ()
+local toggleIndex: () -> ()
 local eggsContent: Frame
 
 -- Pets window
@@ -688,7 +690,7 @@ local function buildIndexPanel(parent: Frame)
 	indexPanel = Instance.new("Frame")
 	indexPanel.Name = "IndexPanel"
 	indexPanel.BackgroundColor3 = C.PanelDark
-	indexPanel.BackgroundTransparency = 0.05
+	indexPanel.BackgroundTransparency = 0
 	indexPanel.Position = UDim2.new(0, 0, 0, 48)
 	indexPanel.Size = UDim2.new(1, 0, 1, -48)
 	indexPanel.Visible = false
@@ -894,7 +896,7 @@ local function buildPetsWindow()
 			setMergeMode(not mergeMode)
 		end,
 	})
-	UIKit.Button({
+	equipBestButton = UIKit.Button({
 		Text = "Equip Best",
 		Size = UDim2.fromOffset(140, 40),
 		AnchorPoint = Vector2.new(1, 0),
@@ -919,11 +921,7 @@ local function buildPetsWindow()
 		Color = C.Warning,
 		Parent = header,
 		OnClick = function()
-			indexPanel.Visible = not indexPanel.Visible
-			indexButton.Text = if indexPanel.Visible then "Back" else "Collection"
-			if indexPanel.Visible then
-				refreshIndex()
-			end
+			toggleIndex()
 		end,
 	})
 
@@ -934,6 +932,22 @@ local function buildPetsWindow()
 	body.Size = UDim2.new(1, 0, 1, -48)
 	body.Parent = petsContent
 	buildIndexPanel(petsContent)
+	-- The collection is its own full page: the pet grid, the details and the Merge / Equip Best buttons
+	-- are hidden while it is open (nothing shows through), and Back returns to the pets.
+	toggleIndex = function()
+		local open = not indexPanel.Visible
+		if open and mergeMode then
+			setMergeMode(false)
+		end
+		indexPanel.Visible = open
+		body.Visible = not open
+		mergeButton.Visible = not open
+		equipBestButton.Visible = not open
+		indexButton.Text = if open then "Back" else "Collection"
+		if open then
+			refreshIndex()
+		end
+	end
 
 	gridScroll = Instance.new("ScrollingFrame")
 	gridScroll.Name = "Grid"

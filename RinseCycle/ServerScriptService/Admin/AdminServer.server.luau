@@ -5467,13 +5467,22 @@ do
 	local function plazaSpot(): Vector3
 		return Vector3.new(math.random(-80, 80), 0.2, math.random(-90, 55))
 	end
+	-- A burst of light (no Explosion object at all: those can hurt Humanoids, and this show never should).
 	local function harmlessBlast(pos: Vector3, radius: number)
-		local blast = Instance.new("Explosion") -- showy only: no damage, no force
-		blast.BlastPressure = 0
-		blast.BlastRadius = radius
-		blast.DestroyJointRadiusPercent = 0
-		blast.Position = pos
-		blast.Parent = workspace
+		local flash = Instance.new("Part")
+		flash.Shape = Enum.PartType.Ball
+		flash.Anchored = true
+		flash.CanCollide = false
+		flash.CanTouch = false
+		flash.CanQuery = false
+		flash.CastShadow = false
+		flash.Material = Enum.Material.Neon
+		flash.Color = Color3.fromRGB(255, 170, 80)
+		flash.Size = Vector3.new(2, 2, 2)
+		flash.Position = pos
+		flash.Parent = workspace
+		TweenService:Create(flash, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(radius * 2.2, radius * 2.2, radius * 2.2), Transparency = 1 }):Play()
+		Debris:AddItem(flash, 0.6)
 	end
 	local function neonPart(size: Vector3, color: Color3, shape: Enum.PartType?): Part
 		local part = Instance.new("Part")
@@ -5607,53 +5616,82 @@ do
 			end
 		end
 		fx.fireworks = function()
-			-- Big shells fired from over the table and over the obby: everyone can see them.
-			local count = if heat then 11 else 7
+			-- Minecraft style: a rocket (red, gold, blue...) streaks up from the table or the obby with a
+			-- spark trail, bursts big, then crackles in a few more booms. Everything is particle bursts,
+			-- so it stays smooth, and big enough to see from the obby.
+			local SHELLS = {
+				{ Color3.fromRGB(255, 70, 60), Color3.fromRGB(255, 200, 90) },
+				{ Color3.fromRGB(80, 170, 255), Color3.fromRGB(255, 255, 255) },
+				{ Color3.fromRGB(90, 255, 140), Color3.fromRGB(255, 255, 160) },
+				{ Color3.fromRGB(200, 110, 255), Color3.fromRGB(255, 150, 220) },
+				{ Color3.fromRGB(255, 190, 60), Color3.fromRGB(255, 90, 50) },
+			}
+			local function burst(at: Vector3, colors: { Color3 }, count: number, speed: number, size: number, life: number)
+				local anchor = Instance.new("Part")
+				anchor.Transparency = 1
+				anchor.Anchored = true
+				anchor.CanCollide = false
+				anchor.CanTouch = false
+				anchor.CanQuery = false
+				anchor.Size = Vector3.new(1, 1, 1)
+				anchor.Position = at
+				local e = Instance.new("ParticleEmitter")
+				e.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+				e.Color = ColorSequence.new(colors[1], colors[2])
+				e.Lifetime = NumberRange.new(life * 0.7, life)
+				e.Speed = NumberRange.new(speed * 0.55, speed)
+				e.SpreadAngle = Vector2.new(180, 180)
+				e.Acceleration = Vector3.new(0, -26, 0)
+				e.Drag = 1.6
+				e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, size), NumberSequenceKeypoint.new(0.7, size * 0.7), NumberSequenceKeypoint.new(1, 0) })
+				e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.8, 0.2), NumberSequenceKeypoint.new(1, 1) })
+				e.LightEmission = 1
+				e.Rate = 0
+				e.Parent = anchor
+				anchor.Parent = workspace
+				e:Emit(count)
+				-- the flash at the middle
+				local core = neonPart(Vector3.new(6, 6, 6), Color3.new(1, 1, 1), Enum.PartType.Ball)
+				core.Position = at
+				core.Parent = workspace
+				TweenService:Create(core, TweenInfo.new(0.45), { Size = Vector3.new(size * 9, size * 9, size * 9), Transparency = 1 }):Play()
+				Debris:AddItem(core, 0.5)
+				Debris:AddItem(anchor, life + 0.6)
+			end
+			local count = if heat then 9 else 6
 			for i = 1, count do
-				task.delay(i * 0.5, function()
-					local base = if i % 2 == 0 then plazaSpot() else Vector3.new(math.random(-20, 320), 2, math.random(90, 340))
-					local color = PALETTE[math.random(1, #PALETTE)]
-					local color2 = PALETTE[(i + 2) % #PALETTE + 1]
-					local rocket = neonPart(Vector3.new(6, 6, 6), Color3.fromRGB(255, 240, 200), Enum.PartType.Ball)
+				task.delay((i - 1) * 0.9, function()
+					local base = if i % 2 == 1 then plazaSpot() else Vector3.new(math.random(-20, 320), 2, math.random(90, 340))
+					local shell = SHELLS[(i - 1) % #SHELLS + 1]
+					-- the rocket: a bright head with a long spark tail
+					local rocket = neonPart(Vector3.new(3, 3, 3), Color3.new(1, 0.9, 0.7), Enum.PartType.Ball)
 					rocket.Position = base
 					rocket.Parent = workspace
 					local trail = Instance.new("ParticleEmitter")
 					trail.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-					trail.Color = ColorSequence.new(Color3.fromRGB(255, 220, 150))
-					trail.Lifetime = NumberRange.new(0.6, 1)
-					trail.Speed = NumberRange.new(5, 12)
-					trail.Rate = 90
-					trail.Size = NumberSequence.new(5, 0)
+					trail.Color = ColorSequence.new(shell[2], shell[1])
+					trail.Lifetime = NumberRange.new(0.7, 1.2)
+					trail.Speed = NumberRange.new(2, 8)
+					trail.SpreadAngle = Vector2.new(25, 25)
+					trail.Rate = 140
+					trail.Size = NumberSequence.new(4, 0)
 					trail.LightEmission = 1
 					trail.Parent = rocket
-					local top = base + Vector3.new(math.random(-40, 40), math.random(230, 330), math.random(-40, 40))
-					local rise = TweenService:Create(rocket, TweenInfo.new(1.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = top })
+					Remote.AbuseBoom:FireAllClients(0.5, base) -- the launch: shoom
+					local top = base + Vector3.new(math.random(-30, 30), math.random(220, 300), math.random(-30, 30))
+					local rise = TweenService:Create(rocket, TweenInfo.new(1.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = top })
 					rise.Completed:Connect(function()
 						rocket:Destroy()
-						-- two shells in one: a big sphere and an inner ring, with a flash
-						local flash = neonPart(Vector3.new(20, 20, 20), Color3.new(1, 1, 1), Enum.PartType.Ball)
-						flash.Position = top
-						flash.Parent = workspace
-						TweenService:Create(flash, TweenInfo.new(0.5), { Size = Vector3.new(150, 150, 150), Transparency = 1 }):Play()
-						Debris:AddItem(flash, 0.6)
-						for k = 1, 70 do
-							local dir = Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5)
-							dir = if dir.Magnitude > 0.01 then dir.Unit else Vector3.yAxis
-							local spark = neonPart(Vector3.new(9, 9, 9), if k % 3 == 0 then color2 else color, Enum.PartType.Ball)
-							spark.Position = top
-							spark.Parent = workspace
-							TweenService:Create(spark, TweenInfo.new(2.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = top + dir * math.random(110, 190) + Vector3.new(0, -34, 0), Transparency = 1, Size = Vector3.new(2, 2, 2) }):Play()
-							Debris:AddItem(spark, 2.4)
+						burst(top, shell, 140, 150, 16, 2.4)
+						Remote.AbuseBoom:FireAllClients(1.6, top) -- boom
+						-- boom, boom, boom: it crackles
+						for k = 1, 4 do
+							task.delay(0.45 + k * 0.28, function()
+								local p = top + Vector3.new(math.random(-90, 90), math.random(-70, 40), math.random(-90, 90))
+								burst(p, { shell[2], shell[1] }, 40, 70, 9, 1.6)
+								Remote.AbuseBoom:FireAllClients(1, p)
+							end)
 						end
-						for k = 1, 24 do
-							local a = k / 24 * math.pi * 2
-							local spark = neonPart(Vector3.new(7, 7, 7), color2, Enum.PartType.Ball)
-							spark.Position = top
-							spark.Parent = workspace
-							TweenService:Create(spark, TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = top + Vector3.new(math.cos(a) * 150, -20, math.sin(a) * 150), Transparency = 1, Size = Vector3.new(1.5, 1.5, 1.5) }):Play()
-							Debris:AddItem(spark, 2.2)
-						end
-						Remote.AbuseBoom:FireAllClients(1.4, top)
 					end)
 					rise:Play()
 				end)
@@ -5939,10 +5977,28 @@ do
 		pcall(function()
 			humanoid.EvaluateStateMachine = false
 		end)
+		-- Nothing can kill or break him: no death, no joints breaking, a (hidden) force field.
+		humanoid.BreakJointsOnDeath = false
+		pcall(function()
+			humanoid.MaxHealth = 1e9
+			humanoid.Health = 1e9
+			humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+		end)
+		local shield = Instance.new("ForceField")
+		shield.Visible = false
+		shield.Parent = model
 		model.Parent = workspace
 		-- Applying the description once the model is in the world makes sure the hair and clothes load.
 		pcall(function()
 			humanoid:ApplyDescription(desc)
+		end)
+		model.DescendantAdded:Connect(function(d)
+			if d:IsA("BasePart") then
+				d.CanCollide = false
+				d.CanTouch = false
+				d.CanQuery = false
+				d.Massless = true
+			end
 		end)
 		softenParts(model)
 		if giant then
@@ -6148,16 +6204,17 @@ do
 				angle += walkSpeed / RADIUS * dt
 				pos = Vector3.new(math.cos(angle) * RADIUS, ROOM_FLOOR, TABLE_CENTER.Z + math.sin(angle) * RADIUS)
 				face(Vector3.new(-math.sin(angle), 0, math.cos(angle)), dt)
-				-- Where the circle runs through the obby (a stretch on the south side) he leaps over it.
+				-- Where the circle runs through the obby (a stretch on the south side) he leaps over it: one
+				-- smooth arc that depends only on where he is on the circle (no easing state to fight).
 				local deg = math.deg(angle) % 360
-				local target = 0
+				local wasLeap = leapHeight
 				if LobbyBuilder.ObbyExists() and deg > 10 and deg < 104 then
-					local into, out = math.clamp((deg - 10) / 14, 0, 1), math.clamp((104 - deg) / 14, 0, 1)
-					target = 230 * math.min(into, out)
+					local f = (deg - 10) / 94
+					leapHeight = 230 * math.sin(math.pi * f) ^ 0.6
+				else
+					leapHeight = 0
 				end
-				local was = leapHeight
-				leapHeight += (target - leapHeight) * math.min(1, dt * 6)
-				if was > 20 and leapHeight <= 20 and target == 0 then
+				if wasLeap > 30 and leapHeight <= 30 and deg > 100 then
 					boom(3, Vector3.new(pos.X, ROOM_FLOOR, pos.Z)) -- lands
 				end
 			elseif state == "act" then
@@ -6176,12 +6233,13 @@ do
 					return
 				end
 			end
-			if state ~= "fly" then
-				-- Floor lock: the lowest sole sits on the floor, whatever the animation does.
+			if state == "walk" or state == "arrive" then
+				-- Floor lock: the lowest sole sits on the floor, whatever the animation does. It only runs
+				-- while he walks: while he stands and does a command his height is frozen.
 				-- Gently (a low gain can't oscillate even if the feet lag a frame), with a dead zone and a
 				-- speed limit: no more teleporting into the floor and back.
 				local low2 = math.min(lowestPoint(footL), lowestPoint(footR))
-				if low2 ~= math.huge and leapHeight < 1 then
+				if low2 ~= math.huge and leapHeight < 0.5 then
 					local above = math.clamp(rootY - low2, rootAbove * 0.85, rootAbove * 1.15)
 					local error = ROOM_FLOOR + above - rootY
 					if math.abs(error) > scaleNow * 0.03 then
@@ -6349,6 +6407,9 @@ do
 					bannerAll(string.format("Admin Abuse starts in %d minute%s! You can't start a round right now. Stay tuned for free game passes, Bubbles and surprises!", mins, if mins == 1 then "" else "s"))
 				end
 			end
+			if t >= -8 and t < 0 and once("premusic" .. tag) then
+				setMusic("Warm") -- the show music is loaded and fading in by the first boom
+			end
 			if t >= 0 and t < Show.ShowSeconds then
 				local wasHeat = heat
 				heat = t >= Show.HeatAt
@@ -6401,6 +6462,13 @@ do
 							openHole(step[3])
 						elseif kind == "heal" then
 							closeHoles()
+						elseif kind == "thanks" then
+							-- everyone online gets something for staying (this server's players; every server runs this)
+							for _, plr in ipairs(Players:GetPlayers()) do
+								if DataService.AddGems(plr, Show.ThanksGems) then
+									celebrate(plr, "Thanks for coming!", string.format("Everyone who stayed got %d Gems. See you in Chapter 4!", Show.ThanksGems), "@Gem")
+								end
+							end
 						elseif kind == "obby" then
 							if step[3] then
 								LobbyBuilder.OpenObby()
