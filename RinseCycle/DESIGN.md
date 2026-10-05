@@ -1739,3 +1739,7 @@ He only does effects (and the roof exit) when his angle round the table is clear
 - `SIT_LIFT` (hip height above the seat, in scales) and the sit/punch animation ids sit at the top of the sit code in AdminServer for tuning.
 - Poll card inset 4 px so the holder's clipping no longer squares off its rounded blue outline.
 - `scen_dishwasher.luau` also checks craters cut the apron and everything heals.
+
+### 6zza. Local test and private lobby (v2.12.10)
+- Studio tab (owner, works in the published game): "Global Admin Abuse event test" (`:abuseshow`, every server, as before), "Local Admin Abuse event test" (`:abuselocal`, this server only: while `localShow` is set, `publish` handles the show's message kinds locally instead of MessagingService, and `claim` always succeeds; the real event time is restored when the test ends) and "Private lobby" (`:privatelobby [join|new]`).
+- `:privatelobby`: reserves a server (`TeleportService:ReserveServer`), keeps its access code per owner in MemoryStore `RinseCycle_PrivateLobbies` (45 days), teleports the owner with `TeleportData.PrivateOwner`. In that server `guardPrivate` makes the first player who arrives as `PrivateOwner` the owner and kicks anyone else. Studio can't teleport (it says so).

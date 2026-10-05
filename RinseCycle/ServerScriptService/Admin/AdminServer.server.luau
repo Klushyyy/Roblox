@@ -136,7 +136,7 @@ local ALL_COMMANDS = {
 -- enough" - a Developer or a Founder still gets nothing.
 -- Nothing is hidden behind Studio any more: every command belongs to a staff tier (below), and
 -- the owner-only ones (staff ranks, gifted passes, wiping the log) are only on the owner's list.
-local STUDIO_ONLY_COMMANDS = { "abuseshow", "abusefx", "abusedebug", "notifytest" }
+local STUDIO_ONLY_COMMANDS = { "abuseshow", "abuselocal", "privatelobby", "abusefx", "abusedebug", "notifytest" }
 
 -- Commands FOUNDER alone gets, on top of everything Developer has.
 --
@@ -4530,6 +4530,33 @@ local function watchInvis(player)
 	end
 end
 
+-- A private lobby (see :privatelobby): the first player in a server who arrives with PrivateOwner set to
+-- their own id owns it; nobody else may stay.
+local privateOwnerId: number? = nil
+local function guardPrivate(player)
+	local ok, data = pcall(function()
+		return player:GetJoinData()
+	end)
+	local td = ok and type(data) == "table" and data.TeleportData or nil
+	if privateOwnerId == nil and type(td) == "table" and td.PrivateOwner == player.UserId and game.PrivateServerId ~= "" then
+		privateOwnerId = player.UserId
+		ReplicatedStorage:SetAttribute("PrivateLobby", true)
+		task.delay(4, function()
+			if player.Parent then
+				sendFeedback(player, "Private lobby: only you can join. Open the Studio tab for the Local Admin Abuse test.", false)
+			end
+		end)
+	end
+	if privateOwnerId ~= nil and player.UserId ~= privateOwnerId then
+		task.defer(function()
+			player:Kick("This lobby is private.")
+		end)
+	end
+end
+Players.PlayerAdded:Connect(guardPrivate)
+for _, player in ipairs(Players:GetPlayers()) do
+	task.spawn(guardPrivate, player)
+end
 Players.PlayerAdded:Connect(function(player)
 	afterArrival(player)
 	watchInvis(player)
@@ -4789,7 +4816,18 @@ do
 	local handlers = {}
 	local Commands = GlobalEvents.Commands
 
+	local localShow = false
+	-- While a LOCAL Admin Abuse test runs, everything the show publishes stays in this server (no other
+	-- server hears about it, and its votes and prizes are not shared).
+	local LOCAL_KINDS = { AbuseSchedule = true, AbuseEffect = true, AbuseSay = true, Banner = true, GiveAll = true, PetDrop = true, PassDrop = true, PollStart = true, PollTally = true, PollResult = true }
 	local function publish(data)
+		if localShow and LOCAL_KINDS[data.Kind] then
+			local handler = handlers[data.Kind]
+			if handler then
+				task.spawn(handler, data)
+			end
+			return false
+		end
 		local ok = pcall(function()
 			MessagingService:PublishAsync(TOPIC, data)
 		end)
@@ -5234,7 +5272,7 @@ do
 	end)
 	-- True on exactly one server per step (and on this one when MemoryStore isn't there: Studio).
 	local function claim(step: string): boolean
-		if not claimMap then
+		if localShow or not claimMap then
 			return true
 		end
 		local ok, result = pcall(function()
@@ -7261,7 +7299,13 @@ do
 			elseif t >= Show.ShowSeconds then
 				-- The show is over: everything is put away, and rounds can start again.
 				if once("end" .. tag) then
+					local wasLocal = localShow
 					resetShow()
+					localShow = false
+					if wasLocal and realStarts then
+						-- a local test is over: this server goes back to the real event time
+						handlers.AbuseSchedule({ Starts = realStarts, Ends = realEnds })
+					end
 					if t < Show.ShowSeconds + 120 then
 						bannerAll("ADMIN ABUSE IS OVER! You can start rounds again. Stay tuned for Chapter 4!")
 					end
@@ -7279,7 +7323,7 @@ do
 		end)
 	end
 
-	Commands.abuseshow = function(admin, text)
+	local function runAbuseShow(admin, text, localOnly: boolean)
 		local e = abuseEvent()
 		if not e then
 			sendFeedback(admin, "No Admin Abuse event is set up.", true)
@@ -7297,7 +7341,7 @@ do
 			starts = Config.Now() + math.floor(minutes * 60)
 			ends = starts + 3600
 		end
-		if claimMap then
+		if claimMap and not localOnly then
 			-- steps from an earlier try would otherwise count as already done
 			pcall(function()
 				for key in Show.Rounds do
@@ -7306,13 +7350,58 @@ do
 			end)
 		end
 		resetShow() -- (this server) put away anything from an earlier try
+		localShow = localOnly and arg ~= "reset"
 		local ok = publish({ Kind = "AbuseSchedule", Starts = starts, Ends = ends })
 		if arg ~= "reset" then
 			local mins = math.ceil((starts - Config.Now()) / 60)
 			publish({ Kind = "Banner", Text = string.format("Admin Abuse starts in %d minute%s! You can't start a round right now. Stay tuned for free game passes, Bubbles and surprises!", mins, if mins == 1 then "" else "s") })
 		end
-		sendFeedback(admin, if arg == "reset" then "Admin Abuse is back on its real time." else string.format("Admin Abuse show starts in %s%s. Rounds are paused from now.", Format.Time and Format.Time(starts - Config.Now()) or tostring(math.floor((starts - Config.Now()) / 60)) .. " min", if ok then " (every server)" else " (this server only)"), false)
-		logCommand(admin, "abuseshow", nil, arg, admin.Name .. " set the Admin Abuse show: " .. tostring(arg))
+		sendFeedback(admin, if arg == "reset" then "Admin Abuse is back on its real time." else string.format("Admin Abuse show starts in %s%s. Rounds are paused from now.", Format.Time and Format.Time(starts - Config.Now()) or tostring(math.floor((starts - Config.Now()) / 60)) .. " min", if localOnly then " (this server only: a local test)" elseif ok then " (every server)" else " (this server only)"), false)
+		logCommand(admin, if localOnly then "abuselocal" else "abuseshow", nil, arg, admin.Name .. " set the Admin Abuse show: " .. tostring(arg))
+	end
+	Commands.abuseshow = function(admin, text)
+		runAbuseShow(admin, text, false)
+	end
+	Commands.abuselocal = function(admin, text)
+		runAbuseShow(admin, text, true)
+	end
+
+	-- :privatelobby [join|new]: a lobby only the owner can enter. It is a reserved server (nobody can reach it
+	-- without its access code, which is only kept for the owner); and the first player in it must be the owner,
+	-- anyone else who somehow arrives is kicked. Teleports only work in the published game.
+	local privateMap = nil
+	pcall(function()
+		privateMap = game:GetService("MemoryStoreService"):GetHashMap("RinseCycle_PrivateLobbies")
+	end)
+	Commands.privatelobby = function(admin, text)
+		if RunService:IsStudio() then
+			sendFeedback(admin, "Private lobbies only work in the published game (Studio can't teleport). Use the Local Admin Abuse test here instead.", true)
+			return
+		end
+		local arg = string.lower(text:match("^%s*(%S*)") or "")
+		local key = tostring(admin.UserId)
+		local ok, err = pcall(function()
+			local code = nil
+			if arg ~= "new" and privateMap then
+				code = privateMap:GetAsync(key)
+			end
+			if not code then
+				code = TeleportService:ReserveServer(game.PlaceId)
+				if privateMap then
+					privateMap:SetAsync(key, code, 3888000)
+				end
+			end
+			local options = Instance.new("TeleportOptions")
+			options.ReservedServerAccessCode = code
+			options:SetTeleportData({ PrivateOwner = admin.UserId })
+			TeleportService:TeleportAsync(game.PlaceId, { admin }, options)
+		end)
+		if ok then
+			sendFeedback(admin, "Taking you to your private lobby...", false)
+		else
+			sendFeedback(admin, "Couldn't open the private lobby: " .. tostring(err), true)
+		end
+		logCommand(admin, "privatelobby", nil, arg, admin.Name .. " opened their private lobby")
 	end
 
 	Commands.abusedebug = function(admin, _text)

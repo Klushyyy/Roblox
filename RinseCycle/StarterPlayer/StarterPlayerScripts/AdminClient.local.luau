@@ -1048,7 +1048,7 @@ local COMMANDS: { Command } = ({
 		return list
 	end } } },
 	{ Name = "abusedebug", Icon = "🐞", Label = "Giant debug readout", Desc = "Toggles a floating readout above the Admin Abuse giant (state, height, floor, feet) and prints it to the Output once a second. Use it to see where he sinks or stops.", Group = "Studio", Target = "none", Inputs = {} },
-	{ Name = "abuseshow", Icon = "🎆", Label = "Admin Abuse show", Desc = "Starts the whole Admin Abuse show in every server: rounds pause, you get a giant lobby copy, chat lines, votes and prizes. Pick when it starts, or put the real time back.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+	{ Name = "abuseshow", Icon = "🎆", Label = "Global Admin Abuse event test", Desc = "Starts the whole Admin Abuse show in EVERY server (what everyone would see): rounds pause, a giant, chat lines, votes and prizes. Pick when it starts, or put the real time back.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		return {
 			{ Label = "Start in 15 seconds", Value = "0.25" },
 			{ Label = "Start in 1 minute", Value = "1" },
@@ -1056,6 +1056,22 @@ local COMMANDS: { Command } = ({
 			{ Label = "Start in 20 minutes", Value = "20" },
 			{ Label = "Start in 30 minutes", Value = "30" },
 			{ Label = "Back to the real time", Value = "reset" },
+		}
+	end } } },
+	{ Name = "abuselocal", Icon = "🧪", Label = "Local Admin Abuse event test", Desc = "Runs the whole Admin Abuse show in THIS server only (nothing is sent to other servers): the same show, to test it in the real game. Works in the published game too. Pick when it starts, or put the real time back.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+		return {
+			{ Label = "Start in 15 seconds", Value = "0.25" },
+			{ Label = "Start in 1 minute", Value = "1" },
+			{ Label = "Start in 5 minutes", Value = "5" },
+			{ Label = "Start in 20 minutes", Value = "20" },
+			{ Label = "Start in 30 minutes", Value = "30" },
+			{ Label = "Back to the real time", Value = "reset" },
+		}
+	end } } },
+	{ Name = "privatelobby", Icon = "🔒", Label = "Private lobby", Desc = "Takes you to a lobby only you can join (a private server of this game that nobody else can reach, not even friends). Combine it with the Local Admin Abuse event test to try the show in the real game. Only works in the published game.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+		return {
+			{ Label = "Take me to my private lobby", Value = "join" },
+			{ Label = "Make a fresh private lobby", Value = "new" },
 		}
 	end } } },
 	{ Name = "cancelcountdown", Icon = "🛑", Label = "Cancel countdown", Desc = "Removes the event countdown from everyone's screen, in every server.", Group = "Global", Target = "none", Danger = true },
