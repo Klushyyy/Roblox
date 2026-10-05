@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.12"
+Config.Version = "2.12.13"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1327,8 +1327,9 @@ do
 	at(580, "attack", "shockwave")
 	at(586, "attack", "barrage")
 	at(592, "attack", "laser")
-	at(598, "say", "alright. thats enough. we are done here.")
-	at(602, "say", "time for me to go. watch the ceiling.")
+	at(575, "attack", "parksouth")
+	at(598, "say", "alright. thats everything i had.")
+	at(602, "say", "thanks for coming. laters.")
 	at(605, "leave")
 	at(613, "thanks")
 	at(617, "heal")

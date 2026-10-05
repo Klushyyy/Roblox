@@ -5439,12 +5439,28 @@ do
 	local giant: Model? = nil
 	local giantConn: RBXScriptConnection? = nil
 	local giantHead: BasePart? = nil
+	-- The room's real lighting, taken before the show changes any of it (the rainbow and the heat both do), so
+	-- the end can put back exactly what was there.
+	local baseLighting: { [string]: any }? = nil
+	local function captureLighting()
+		if not baseLighting then
+			baseLighting = { ClockTime = Lighting.ClockTime, Brightness = Lighting.Brightness, Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient, ColorShift_Top = Lighting.ColorShift_Top }
+		end
+	end
+	local function restoreLighting()
+		if baseLighting then
+			local goal = baseLighting
+			baseLighting = nil
+			TweenService:Create(Lighting, TweenInfo.new(3), goal):Play()
+		end
+	end
 	local eyesFor: number? = nil -- how long the next eye-laser burst lasts (set just before it starts)
 	local giantLeave: (() -> ())? = nil
 	local giantSit: (() -> ())? = nil
 	local giantGesture: ((string?) -> ())? = nil -- arm pose for the dishwasher charge
 	local giantStand: (() -> ())? = nil
 	local giantChairShow: (() -> ())? = nil
+	local parkRequested = false -- the next time he passes the south side he stops there (to say goodbye and leave)
 	local chairShowBusy = false
 	local punchLaunch: Vector3? = nil -- set by the punch: the next table hole flings what is in it this way
 	local leaving = false -- set once he starts the exit: nothing respawns him afterwards
@@ -5467,6 +5483,7 @@ do
 		giantHead, giantLeave, giantRescale = nil, nil, nil
 		giantSit, giantStand, giantChairShow, punchLaunch, giantGesture = nil, nil, nil, nil, nil
 		chairShowBusy = false
+		parkRequested = false
 	end
 	local function ringAt(pos: Vector3, size: number, seconds: number, color: Color3)
 		local ring = Instance.new("Part")
@@ -6042,7 +6059,8 @@ do
 				return
 			end
 			discoBusy = true
-			local original = { Lighting.ColorShift_Top, Lighting.OutdoorAmbient }
+			captureLighting()
+			local original = { (baseLighting :: any).ColorShift_Top, (baseLighting :: any).OutdoorAmbient }
 			local wasLive = ReplicatedStorage:GetAttribute("AbuseLive") == true
 			task.spawn(function()
 				local maxSteps = if heat then 16 else 1500
@@ -6490,7 +6508,7 @@ do
 				glow.Parent = body
 				local lastShown = -1
 				while true do
-					if not body.Parent or giant == nil then
+					if not body.Parent then
 						cleanup() -- (the show was put away early: it never goes off)
 						return
 					end
@@ -6976,6 +6994,7 @@ do
 		local sitTrack = load("2506281703", Enum.AnimationPriority.Action, true)
 		local SIT_X, SIT_Z, SIT_TOP, SIT_LIFT = 0, -168, -43, 1.0 -- the chair; how far the hips sit above the seat (x scale)
 		local MOVE_TIME = 2.4
+		local lookYaw, nextLook, nextIdle = 0, 0, 0
 		local moveT0, moveFromPos, moveFromY = 0, pos, rootY
 		giantSit = function()
 			if state ~= "walk" then
@@ -7125,6 +7144,29 @@ do
 				end)
 				return
 			end
+			-- He leaves from the south side, in front of the couch where everyone can see: if he is somewhere else he
+			-- walks round there first and stops.
+			if state == "walk" then
+				parkRequested = true
+				task.spawn(function()
+					for _ = 1, 160 do
+						task.wait(0.25)
+						if giant ~= model or state == "park" then
+							break
+						end
+					end
+					parkRequested = false
+					if giant == model then
+						if state == "walk" then
+							state = "park" -- (took too long: leave from wherever he is)
+						end
+						if giantLeave then
+							giantLeave()
+						end
+					end
+				end)
+				return
+			end
 			leaving = true
 			state = "leave"
 			setWalking(false)
@@ -7157,10 +7199,45 @@ do
 					end
 					state = "fly"
 					flyHeight = 0
+					flySpeed = 40
+					setGesture(nil)
+					-- Iron Man: fire and sparks pour out of his feet and he is shot up through the hole
+					for _, foot in { footL, footR } do
+						if foot then
+							local flame = Instance.new("ParticleEmitter")
+							flame.Texture = "rbxasset://textures/particles/fire_main.dds"
+							flame.Color = ColorSequence.new(Color3.fromRGB(190, 230, 255), Color3.fromRGB(255, 110, 30))
+							flame.Lifetime = NumberRange.new(0.5, 1.1)
+							flame.Speed = NumberRange.new(60, 120)
+							flame.SpreadAngle = Vector2.new(12, 12)
+							flame.EmissionDirection = Enum.NormalId.Bottom
+							flame.Rate = 350
+							flame.Size = NumberSequence.new(scaleNow * 0.4, 0)
+							flame.Transparency = NumberSequence.new(0.1, 1)
+							flame.LightEmission = 1
+							flame.Parent = foot
+							local sparks = Instance.new("ParticleEmitter")
+							sparks.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+							sparks.Color = ColorSequence.new(Color3.fromRGB(255, 240, 160), Color3.fromRGB(255, 120, 40))
+							sparks.Lifetime = NumberRange.new(0.8, 1.8)
+							sparks.Speed = NumberRange.new(90, 220)
+							sparks.SpreadAngle = Vector2.new(25, 25)
+							sparks.EmissionDirection = Enum.NormalId.Bottom
+							sparks.Rate = 250
+							sparks.Size = NumberSequence.new(scaleNow * 0.22, 0)
+							sparks.LightEmission = 1
+							sparks.Parent = foot
+							local light = Instance.new("PointLight")
+							light.Color = Color3.fromRGB(255, 160, 70)
+							light.Range = 120
+							light.Brightness = 6
+							light.Parent = foot
+						end
+					end
 				end)
 				-- Once he is through, the ceiling mends itself.
 				task.delay(10, function()
-					LobbyBuilder.HealRoof(4)
+					LobbyBuilder.HealRoof(7)
 					boom(3, Vector3.new(hx, ROOF_Y - 200, hz))
 				end)
 			end)
@@ -7221,6 +7298,11 @@ do
 					leapHeight = 0
 					rollAngle = 0
 				end
+				if parkRequested and deg > 84 and deg < 96 and leapHeight < 5 then
+					state = "park"
+					parkRequested = false
+					setWalking(false)
+				end
 				if wasLeap > 30 and leapHeight <= 30 and deg > 100 then
 					boom(3, Vector3.new(pos.X, ROOM_FLOOR, pos.Z)) -- lands
 				end
@@ -7264,12 +7346,37 @@ do
 				end
 			elseif state == "seated" then
 				pos = Vector3.new(SIT_X, ROOM_FLOOR, SIT_Z)
-				rootY = SIT_TOP + SIT_LIFT * scaleNow
+				-- (he is not a statue: he sways a little, turns to look at different parts of the table, and every
+				-- few seconds raises an arm)
+				rootY = SIT_TOP + SIT_LIFT * scaleNow + math.sin(now * 1.3) * scaleNow * 0.04
 				leapHeight = 0
+				if not chairShowBusy then
+					if now >= nextLook then
+						nextLook = now + 2.2 + math.random() * 3
+						lookYaw = (math.random() - 0.5) * math.rad(110)
+					end
+					local want = Vector3.new(math.sin(lookYaw), 0, math.cos(lookYaw))
+					facing = facing:Lerp(want, math.clamp(dt * 1.6, 0, 1))
+					if facing.Magnitude > 1e-3 then
+						facing = facing.Unit
+					end
+					if now >= nextIdle and gestureNow == nil then
+						nextIdle = now + 4 + math.random() * 4
+						local g = ({ "point", "wave", "flex", "cheer" })[math.random(1, 4)]
+						setGesture(g)
+						task.delay(2.2, function()
+							if giant == model and state == "seated" and gestureNow == g then
+								setGesture(nil)
+							end
+						end)
+					end
+				end
+			elseif state == "park" then
+				face(TABLE_CENTER - pos, dt)
 			elseif state == "leave" then
 				face(TABLE_CENTER - pos, dt)
 			elseif state == "fly" then
-				flySpeed = math.min(520, flySpeed + 180 * dt)
+				flySpeed = math.min(460, flySpeed + 150 * dt)
 				flyHeight += flySpeed * dt
 				if flyHeight > ROOF_Y - ROOM_FLOOR + 330 then
 					removeGiant()
@@ -7331,6 +7438,10 @@ do
 			if name == "winner" then
 				name = chosenEffect
 			end
+			if name == "parksouth" then
+				parkRequested = true
+				return
+			end
 			if name == "chairshow" then
 				if giantChairShow then
 					giantChairShow()
@@ -7351,7 +7462,7 @@ do
 					local deg = math.deg(angle) % 360
 					return state == "walk" and deg > 80 and deg < 100 and leapHeight < 5
 				end
-				return state == "seated" or not hiddenNow()
+				return state == "seated" or state == "park" or not hiddenNow()
 			end
 			if not canAct() then
 				task.spawn(function()
@@ -7373,12 +7484,12 @@ do
 				setWalking(false)
 			end
 			-- an arm move that goes with it (the dishwasher and the nuke do their own)
-			if name ~= "dishwasher" and name ~= "nuke" and (state == "act" or state == "seated") then
+			if name ~= "dishwasher" and name ~= "nuke" and (state == "act" or state == "seated" or state == "park") then
 				local gesture = ({ "point", "cheer", "wave", "flex" })[(acts - 1) % 4 + 1]
 				setGesture(gesture)
-				if state == "seated" then
+				if state ~= "act" then
 					task.delay(3.2, function()
-						if giant == model and state == "seated" and gestureNow == gesture then
+						if giant == model and (state == "seated" or state == "park") and gestureNow == gesture then
 							setGesture(nil)
 						end
 					end)
@@ -7389,11 +7500,11 @@ do
 			-- Something extra with the act, never the same thing twice running: lasers a couple of times, then
 			-- fireballs, meteors and shockwaves, then lasers again with more beams, and so on.
 			local bonus = BONUS[(acts - 1) % #BONUS + 1]
-			if name ~= "dishwasher" and name ~= "nuke" and name ~= "bombs" and bonus ~= name and (state == "act" or state == "seated") and FX[bonus] then
+			if name ~= "dishwasher" and name ~= "nuke" and name ~= "bombs" and bonus ~= name and (state == "act" or state == "seated" or state == "park") and FX[bonus] then
 				task.delay(0.4, function()
-					if state == "act" or state == "seated" then
+					if state == "act" or state == "seated" or state == "park" then
 						if bonus == "eyes" then
-							eyesFor = if state == "seated" then 4 else math.max(1.2, stateUntil - os.clock() - 0.2)
+							eyesFor = if state ~= "act" then 4 else math.max(1.2, stateUntil - os.clock() - 0.2)
 						end
 						FX[bonus]()
 					end
@@ -7429,19 +7540,12 @@ do
 	-- The room reacts to the heat: it goes dark and red (and comes back).
 	local roomOriginal: { [string]: any }? = nil
 	local function roomHeat(on: boolean)
-		local goal
 		if on then
-			if not roomOriginal then
-				roomOriginal = { ClockTime = Lighting.ClockTime, Brightness = Lighting.Brightness, Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient }
-			end
-			goal = { ClockTime = 0.2, Brightness = 0.6, Ambient = Color3.fromRGB(70, 22, 26), OutdoorAmbient = Color3.fromRGB(96, 30, 30) }
-		elseif roomOriginal then
-			goal = roomOriginal
-			roomOriginal = nil
+			captureLighting()
+			TweenService:Create(Lighting, TweenInfo.new(4), { ClockTime = 0.2, Brightness = 0.6, Ambient = Color3.fromRGB(70, 22, 26), OutdoorAmbient = Color3.fromRGB(96, 30, 30) }):Play()
 		else
-			return
+			restoreLighting()
 		end
-		TweenService:Create(Lighting, TweenInfo.new(4), goal):Play()
 	end
 	local function setMusic(which: string?)
 		ReplicatedStorage:SetAttribute("AbuseMusic", which)
@@ -7459,6 +7563,7 @@ do
 		setObby(false)
 		LobbyBuilder.BreakObby()
 		LobbyBuilder.SetRescue(false)
+		restoreLighting()
 		LobbyBuilder.RepairDishwasher()
 		LobbyBuilder.RestoreProps()
 		clearFx()

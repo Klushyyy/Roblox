@@ -1754,3 +1754,9 @@ While he charges the dishwasher ball both arms go straight out in front, turned 
 - `attack nuke` (t=540): he throws a nuke onto the right side of the table; it sits there with a countdown over it that reaches 0 at `Show.NukeAt` (596), then it breaks a big area of that side (five real holes). The spawn and the obby are far from it.
 - Client: while `AbuseLive`, every ScreenGui except the show's own, polls, prizes, toasts and the admin panel fades out over 0.9 s and comes back at the end. `rollRank` refuses during the show (party pads were already locked by `Config.EventLockdown`).
 - `scen_dishwasher.luau` also covers the smash/restore of props; `scen_tableparts.luau` lists the table layers under hole 1.
+
+### 6zzd. Lighting restore, leaving from the south with thrusters, a living seated giant (v2.12.13)
+- `baseLighting` is captured before the rainbow or the heat touch the room and restored (`restoreLighting`) when the show is put away: the room no longer stays pink/rainbow.
+- He leaves in front of the couch (south, 84-96 deg): `parksouth` (t=575) makes him stop there; `giantLeave` parks him first if he is elsewhere. Farewell lines at 598/602 ("thats everything i had" / "thanks for coming. laters."). When he flies, flame + spark emitters pour out of both feet (plus a light), he starts slower (40 studs/s) so the rise can be seen, and the roof hole is mended over 7 s.
+- Hole mending: the broken rim tiles straighten in the same outer-to-inner sweep as the fallen tiles instead of all at the start.
+- Seated (and parked) he is no longer a statue: he sways, turns to look at different parts of the table every 2-5 s and raises an arm every 4-8 s.

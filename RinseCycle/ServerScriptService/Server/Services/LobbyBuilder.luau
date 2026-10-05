@@ -2511,10 +2511,20 @@ local function healRec(index: number, rec: HoleRec, total: number)
 				TweenService:Create(part, TweenInfo.new(0.9), { Transparency = tile.Transparency }):Play()
 			end)
 		end
+		-- the broken rim straightens out too, in the same sweep (outer ring first), not all at once
+		local rim = {}
 		for _, tile in rec.Tiles do
 			if not tile.Fall then
-				TweenService:Create(tile.Part, TweenInfo.new(total * 0.5, Enum.EasingStyle.Quad), { CFrame = tile.Flat }):Play()
+				table.insert(rim, tile)
 			end
+		end
+		table.sort(rim, function(a, b)
+			return a.D > b.D
+		end)
+		for i, tile in rim do
+			task.delay((i / math.max(1, #rim)) * total * 0.7, function()
+				TweenService:Create(tile.Part, TweenInfo.new(math.max(0.6, total * 0.12), Enum.EasingStyle.Quad), { CFrame = tile.Flat }):Play()
+			end)
 		end
 		task.delay(total * 0.8, function()
 			for _, prop in rec.Props do
