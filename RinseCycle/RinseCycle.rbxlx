@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.4"
+Config.Version = "2.12.5"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -9967,8 +9967,10 @@ do
 		local RADIUS = 300
 		local angle = math.pi / 2
 		local function hiddenNow(): boolean
+			-- Not where the chairs are (east and west of the table: lasers would pass through them) and not
+			-- directly behind the dishwasher / the chair at its end. South (spawn side) and the four corners are fine.
 			local deg = math.deg(angle) % 360
-			return deg &gt; 205 and deg &lt; 335
+			return deg &gt; 335 or deg &lt; 25 or (deg &gt; 155 and deg &lt; 205) or (deg &gt; 250 and deg &lt; 290)
 		end
 		local walkSpeed = 100
 		local state, stateUntil = "arrive", os.clock() + 2.5

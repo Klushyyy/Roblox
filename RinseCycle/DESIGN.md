@@ -1713,3 +1713,6 @@ Debug logs showed the idle animation leaves the feet ~113 studs under the floor,
 - He starts walking the instant the arrival flash fires (the 2.5 s "arrive" hold, a frozen walk pose, is gone).
 - Eye lasers last exactly as long as the act (`eyesFor`), so they never run on after he walks again. Acts are a little longer (4.6 s, 3.6 s in the heat).
 - Each use is different: 1, 2, 3, 4 lasers per eye (then repeat), and the pattern rotates circles / sweeps down the table / an opening spiral.
+
+### 6zv. Where he may act (v2.12.5)
+He only does effects (and the roof exit) when his angle round the table is clear of the chairs (east 335-25 deg, west 155-205 deg, directly behind the dishwasher 250-290 deg). South (the spawn side) and the four corners are allowed; otherwise the effect waits until he walks round to an allowed spot.

@@ -6312,8 +6312,10 @@ do
 		local RADIUS = 300
 		local angle = math.pi / 2
 		local function hiddenNow(): boolean
+			-- Not where the chairs are (east and west of the table: lasers would pass through them) and not
+			-- directly behind the dishwasher / the chair at its end. South (spawn side) and the four corners are fine.
 			local deg = math.deg(angle) % 360
-			return deg > 205 and deg < 335
+			return deg > 335 or deg < 25 or (deg > 155 and deg < 205) or (deg > 250 and deg < 290)
 		end
 		local walkSpeed = 100
 		local state, stateUntil = "arrive", os.clock() + 2.5

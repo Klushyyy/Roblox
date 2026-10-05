@@ -66,3 +66,4 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
 - v2.12.1: giant arm gestures via KeyframeSequence, per-frame pcall, wider floor lock, `:abusedebug`; heart/trade icons redrawn.
 - v2.12.3: giant eye lasers, effects wait while he is behind the dishwasher, spawn float snap.
 - v2.12.4: giant walks at the flash, eye lasers sized to the act, progressive laser counts and patterns.
+- v2.12.5: giant acts only away from the chairs and the dishwasher's back.
