@@ -77,3 +77,4 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
 - v2.12.13: lighting restored after the show, leaves from the south with foot thrusters, seated idle motion.
 - v2.12.14: fly offer, pads/prompts off during the show, nuke at the dishwasher spot, fewer odd poses, no z-fight, scen_dishwasher covers pads/prompts.
 - v2.12.15: poll visible during the show, pads closed in PartyService, smash UI per object, invisible hit boxes cleared.
+- v2.12.18: holes cut earlier pieces (real holes), no crack lines, fly + giant offers, bomb-shaped nuke, quick 5-4-3-2-1.

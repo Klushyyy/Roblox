@@ -6420,17 +6420,30 @@ do
 				end
 				return part
 			end
-			local olive = Color3.fromRGB(78, 88, 66)
-			local body = metal(Vector3.new(26, 8, 8), olive, Enum.PartType.Cylinder)
+			-- A proper bomb, like the real ones: a fat egg-shaped body with a hazard band, a short tail section and a cross of
+			-- big fins (not a long thin tube, which looked like a headphone jack).
+			local dark = Color3.fromRGB(52, 58, 54)
+			local function ellipsoid(size: Vector3, color: Color3): Part
+				local part = metal(size, color)
+				local mesh = Instance.new("SpecialMesh")
+				mesh.MeshType = Enum.MeshType.Sphere
+				mesh.Parent = part
+				return part
+			end
+			local body = ellipsoid(Vector3.new(34, 26, 26), dark)
 			add(body, CFrame.identity)
-			add(metal(Vector3.new(8, 8, 8), olive, Enum.PartType.Ball), CFrame.new(13, 0, 0))
-			for _, x in { -5, 5 } do
-				local band = neonPart(Vector3.new(1, 8.4, 8.4), Color3.fromRGB(255, 50, 40), Enum.PartType.Cylinder)
-				add(band, CFrame.new(x, 0, 0))
+			-- tail: a taper behind the body, then a boxed cage with a cross of fins
+			add(metal(Vector3.new(10, 15, 15), dark, Enum.PartType.Cylinder), CFrame.new(-19, 0, 0))
+			add(metal(Vector3.new(9, 19, 19), Color3.fromRGB(70, 76, 70)), CFrame.new(-27, 0, 0))
+			add(metal(Vector3.new(9, 30, 1), Color3.fromRGB(70, 76, 70)), CFrame.new(-27, 0, 0))
+			add(metal(Vector3.new(9, 1, 30), Color3.fromRGB(70, 76, 70)), CFrame.new(-27, 0, 0))
+			-- bands round the body: hazard yellow and red
+			add(neonPart(Vector3.new(3, 25.4, 25.4), Color3.fromRGB(255, 205, 40), Enum.PartType.Cylinder), CFrame.new(8, 0, 0))
+			for _, x in { -6, -1 } do
+				add(neonPart(Vector3.new(1.4, 25.8, 25.8), Color3.fromRGB(255, 50, 40), Enum.PartType.Cylinder), CFrame.new(x, 0, 0))
 			end
-			for k = 0, 2 do
-				add(metal(Vector3.new(5, 0.6, 6), Color3.fromRGB(60, 66, 54)), CFrame.new(-12, 0, 0) * CFrame.Angles(k * math.pi / 3, 0, 0) * CFrame.new(0, 4.5, 0))
-			end
+			-- a nose tip
+			add(metal(Vector3.new(4, 4, 4), Color3.fromRGB(120, 124, 120), Enum.PartType.Ball), CFrame.new(17, 0, 0))
 			local function place(cf: CFrame)
 				for i, p in parts do
 					p.CFrame = cf * offsets[i]
@@ -7517,26 +7530,54 @@ do
 		end
 	end
 
-	----------------------------------------------------------------- the fly offer
-	-- One random player in each server is offered flight for the rest of the show (30 seconds to answer, accept
-	-- or decline). It is not an advantage in the obby: the obby ignores checkpoints and the finish while flying.
+	----------------------------------------------------------------- the offers
+	-- Two random players in each server are offered something harmless and fun for the rest of the show: one
+	-- can fly, another becomes giant (30 seconds to accept or decline). Both are taken away when the show is put
+	-- away, when the player leaves (nothing is saved: coming back means normal), and flying is no advantage in
+	-- the obby (it ignores checkpoints and the finish while flying).
 	local offerId = 0
-	local pendingOffer: { [Player]: number } = {}
-	local flyers: { [Player]: boolean } = {}
+	local pendingOffer: { [Player]: { Id: number, Kind: string } } = {}
+	local perks: { [Player]: string } = {} -- accepted: "fly" or "giant"
+	local OFFER_TEXT = {
+		fly = "Do you want to be able to fly for the rest of the event?",
+		giant = "Do you want to be giant for the rest of the event?",
+	}
+	local function takePerk(plr: Player)
+		local kind = perks[plr]
+		perks[plr] = nil
+		if kind == "fly" then
+			pcall(function()
+				setFlying(plr, false)
+			end)
+		elseif kind == "giant" then
+			pcall(function()
+				setGiantScale(plr, 1)
+			end)
+		end
+	end
 	Remote.AbuseOfferReply.OnServerEvent:Connect(function(plr: Player, id: any, accepted: any)
-		if pendingOffer[plr] == nil or pendingOffer[plr] ~= id then
+		local offer = pendingOffer[plr]
+		if not offer or offer.Id ~= id then
 			return
 		end
 		pendingOffer[plr] = nil
-		if accepted == true and plr.Parent == Players then
-			flyers[plr] = true
-			setFlying(plr, true)
+		if accepted == true and plr.Parent == Players and ReplicatedStorage:GetAttribute("AbuseLive") == true then
+			perks[plr] = offer.Kind
+			if offer.Kind == "fly" then
+				setFlying(plr, true)
+			else
+				setGiantScale(plr, 4)
+			end
 		end
 	end)
-	local function offerFly()
+	Players.PlayerRemoving:Connect(function(plr)
+		perks[plr] = nil
+		pendingOffer[plr] = nil
+	end)
+	local function offerTo(kind: string)
 		local pool = {}
 		for _, plr in Players:GetPlayers() do
-			if plr.Character and not flyers[plr] and plr:GetAttribute("AdminInvis") ~= true then
+			if plr.Character and not perks[plr] and not pendingOffer[plr] and plr:GetAttribute("AdminInvis") ~= true then
 				table.insert(pool, plr)
 			end
 		end
@@ -7545,22 +7586,20 @@ do
 		end
 		local chosen = pool[math.random(1, #pool)]
 		offerId += 1
-		pendingOffer[chosen] = offerId
 		local myId = offerId
-		Remote.AbuseOffer:FireClient(chosen, myId, 30)
+		pendingOffer[chosen] = { Id = myId, Kind = kind }
+		Remote.AbuseOffer:FireClient(chosen, myId, 30, OFFER_TEXT[kind])
 		task.delay(31, function()
-			if pendingOffer[chosen] == myId then
+			if pendingOffer[chosen] and pendingOffer[chosen].Id == myId then
 				pendingOffer[chosen] = nil
 			end
 		end)
 	end
-	local function endFlyers()
-		for plr in flyers do
-			pcall(function()
-				setFlying(plr, false)
-			end)
+	local function endPerks()
+		for plr in perks do
+			takePerk(plr)
 		end
-		flyers, pendingOffer = {}, {}
+		perks, pendingOffer = {}, {}
 		Remote.AbuseOffer:FireAllClients(0, 0)
 	end
 
@@ -7612,7 +7651,7 @@ do
 		LobbyBuilder.BreakObby()
 		LobbyBuilder.SetRescue(false)
 		restoreLighting()
-		endFlyers()
+		endPerks()
 		LobbyBuilder.SetPadsEnabled(true)
 		LobbyBuilder.SetUiEnabled(true)
 		LobbyBuilder.RepairDishwasher()
@@ -7732,7 +7771,9 @@ do
 							say(step[3])
 						elseif kind == "attack" then
 							if step[3] == "flyoffer" then
-								offerFly()
+								offerTo("fly")
+							elseif step[3] == "giantoffer" then
+								offerTo("giant")
 							else
 								playEffect(step[3])
 							end

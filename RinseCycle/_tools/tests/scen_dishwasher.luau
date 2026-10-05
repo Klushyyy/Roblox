@@ -36,7 +36,26 @@ for _, d in lobby.Model:GetChildren() do
 	end
 end
 print("apron parts before/after crater (after should be 0):", apronBefore, apronAfter)
+-- A second and third hole after the first (the first one's pieces are cut too): nothing solid left in the middle.
+local function solidAt(x: number, z: number): number
+	local n = 0
+	for _, d in game:GetService("Workspace"):GetDescendants() do
+		if d:IsA("BasePart") and d.Anchored and d.CanCollide and d.Size.X > 0 then
+			local c = d.Position
+			if d.Position.Y < 1 and d.Position.Y > -16 and math.abs(c.X - x) < d.Size.X / 2 - 0.5 and math.abs(c.Z - z) < d.Size.Z / 2 - 0.5 and d.Parent ~= nil and d.Name ~= "Barrier" and d.Name ~= "RoomFloor" and d.Name ~= "Lawn" then
+				n += 1
+			end
+		end
+	end
+	return n
+end
+print("solid under (-60,-60) before:", solidAt(-60, -60), " (-20,-40):", solidAt(-20, -40))
 LB.OpenHole(1, Vector3.new(100, 50, 0))
+LB.OpenCrater(11, -60, -60, 10)
+LB.OpenCrater(12, -20, -40, 10)
+pump(1, G.frame)
+print("solid under (-60,-60) after (0):", solidAt(-60, -60), " (-20,-40) after (0):", solidAt(-20, -40))
+
 pump(1, G.frame)
 LB.HealHoles(1)
 pump(3, G.frame)

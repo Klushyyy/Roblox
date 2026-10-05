@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.16"
+Config.Version = "2.12.18"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1264,8 +1264,9 @@ do
 	at(240, "attack", "winner")
 	at(246, "say", "bombs. a red circle on the table is where one lands. get out of it, or fall in.")
 	at(248, "attack", "bombs")
-	at(251, "say", "one of you is about to get an offer. just one. you can say no.")
+	at(251, "say", "in every lobby, one person is about to be offered the chance to fly. someone else gets something else harmless. you can say no.")
 	at(254, "attack", "flyoffer")
+	at(257, "attack", "giantoffer")
 	at(258, "say", "i built it to be fair. mostly.")
 	at(268, "attack", "fountains")
 	at(272, "say", "the spinners are my favourite part.")
@@ -1310,17 +1311,22 @@ do
 	at(490, "attack", "lightning")
 	at(496, "attack", "ufo")
 	at(502, "attack", "blackhole")
-	at(508, "say", "the obby is about to come down. last chance.")
 	at(512, "attack", "laser")
 	at(518, "attack", "barrage")
 	at(524, "attack", "meteors")
 	at(530, "attack", "laser")
-	at(536, "say", "ok. the obby goes now.")
-	at(537, "obby", false)
+	at(531, "say", "all right. five seconds till the obby comes down.")
+	at(533, "say", "5")
+	at(534, "say", "4")
+	at(535, "say", "3")
+	at(536, "say", "2")
+	at(537, "say", "1")
+	at(538, "obby", false)
+	at(538, "say", "boom.")
 	at(548, "attack", "tornado")
 	at(554, "attack", "lightning")
-	at(536, "say", "that spot looks empty. i am redecorating.")
-	at(540, "attack", "nuke")
+	at(541, "say", "that spot looks empty. i am redecorating.")
+	at(543, "attack", "nuke")
 	at(560, "say", "one last big one. all of it. everything.")
 	at(564, "attack", "blackhole")
 	at(568, "attack", "meteors")

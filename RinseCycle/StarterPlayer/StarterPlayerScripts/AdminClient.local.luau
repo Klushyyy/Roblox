@@ -956,9 +956,12 @@ do
 		end
 		button("Accept", Color3.fromRGB(46, 190, 120), 0.27, true)
 		button("Decline", Color3.fromRGB(200, 70, 70), 0.73, false)
-		offer.OnClientEvent:Connect(function(id: any, seconds: any)
+		offer.OnClientEvent:Connect(function(id: any, seconds: any, message: any)
 			if type(id) ~= "number" or type(seconds) ~= "number" then
 				return
+			end
+			if type(message) == "string" then
+				text.Text = message
 			end
 			if seconds <= 0 then
 				currentId = 0
@@ -991,6 +994,9 @@ do
 				end
 				speak(text)
 				pcall(function()
+					if string.match(text, "^%d$") then
+						return -- (the 5, 4, 3, 2, 1 only go in the speech box, not into chat)
+					end
 					local channel = TextChatService:FindFirstChild("TextChannels") and TextChatService.TextChannels:FindFirstChild("RBXGeneral")
 					if channel then
 						local safe = string.gsub(string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"), ">", "&gt;")

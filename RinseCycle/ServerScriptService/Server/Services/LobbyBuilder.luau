@@ -2243,6 +2243,7 @@ type HoleRec = {
 	Radius: number,
 }
 local holes: { [number]: HoleRec } = {}
+local pieceFolderRoof: { [Instance]: boolean } = {} -- which hole folders hold ceiling pieces and which table pieces
 -- (TableApron is the slab under the planks: it has to be cut too, or a "hole" has a floor and nobody can fall through it)
 local TABLE_PART_NAMES = { SafetyFloor = true, TableSlab = true, Plank = true, Chamfer = true, TableApron = true }
 local TILE = 5.5
@@ -2316,6 +2317,23 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 			end
 		end
 	end
+	-- Pieces left standing by EARLIER holes are cut too (the originals are gone from the model by then: without
+	-- this a second hole next to or inside the first only had its props and glow, and the table stayed whole).
+	local fromPieces: { [BasePart]: boolean } = {}
+	for _, f in Workspace:GetChildren() do
+		if f:IsA("Folder") and pieceFolderRoof[f] == roof then
+			for _, p in f:GetChildren() do
+				if p:IsA("BasePart") and p.Name == "HolePiece" and p.Anchored then
+					local c, e = worldBox(p)
+					if c.X + e.X > cx - S and c.X - e.X < cx + S and c.Z + e.Z > cz - S and c.Z - e.Z < cz + S then
+						table.insert(sources, p)
+						fromPieces[p] = true
+					end
+				end
+			end
+		end
+	end
+	pieceFolderRoof[folder] = roof
 	local rng = Random.new(index * 97 + 5)
 	for _, p in sources do
 		local c, e = worldBox(p)
@@ -2377,26 +2395,15 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 			x = x1
 		end
 		p.Parent = nil
-		table.insert(rec.Hidden, p)
+		if not fromPieces[p] then
+			table.insert(rec.Hidden, p)
+		else
+			p:Destroy() -- (a piece of an earlier hole: replaced by the smaller pieces cut from it)
+		end
 	end
 
 	if not roof then
-		-- Cracks across the table around the rim.
-		for i = 1, 16 do
-			local a = rng:NextNumber(0, math.pi * 2)
-			local len = rng:NextNumber(8, 22)
-			local mid = R + 2 + len / 2
-			local crack = mkPart("Part", {
-				Name = "HoleCrack",
-				Size = Vector3.new(rng:NextNumber(0.5, 1.1), 0.1, len),
-				CFrame = CFrame.new(cx + math.cos(a) * mid, ORIGIN.Y + FLOOR_Y + 0.06, cz + math.sin(a) * mid) * CFrame.Angles(0, -a + math.pi / 2 + rng:NextNumber(-0.25, 0.25), 0),
-				Color = Color3.fromRGB(34, 20, 14),
-				Material = LOW,
-				CanCollide = false,
-				CastShadow = false,
-			}, folder)
-			table.insert(rec.Cracks, crack)
-		end
+		-- (no crack lines on the table: they just looked like black scribbles)
 		-- A glow and smoke from below.
 		local glow = mkPart("Part", { Name = "HoleGlow", Size = Vector3.new(2, 2, 2), CFrame = CFrame.new(cx, ORIGIN.Y - 14, cz), Transparency = 1, CanCollide = false, CastShadow = false }, folder)
 		mk("PointLight", { Color = Color3.fromRGB(255, 120, 50), Range = 70, Brightness = 3, Shadows = false }, glow)

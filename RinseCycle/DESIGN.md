@@ -1776,3 +1776,9 @@ While he charges the dishwasher ball both arms go straight out in front, turned 
 
 ### 6zzg. Titles go with what is hit (v2.12.16)
 `SmashProps` also switches off every SurfaceGui / BillboardGui whose part (or adornee) is within the target's radius, including ones on invisible parts that never fall (the "SOAP SHOP" lettering, the egg labels, the pet stand name), so each title vanishes the moment its thing is punched. `RestoreProps` turns them back on.
+
+### 6zzh. Holes cut the pieces of earlier holes, no cracks, two offers, real-bomb nuke, quick countdown (v2.12.18)
+- `cutDisc` now also cuts the standing pieces left by earlier holes (`pieceFolderRoof` tells table pieces from ceiling pieces). Before, once hole 1 had replaced the table's original parts with pieces, every later crater had nothing to cut: only its props and glow happened, and the table stayed whole. Crack lines are gone altogether. `scen_dishwasher.luau` checks nothing solid is left under a second and third hole.
+- Offers: at t=251 he says one person per lobby may be offered flight and someone else something else harmless; `flyoffer` (254) and `giantoffer` (257) each pick a different random player (30 s card, text sent with the offer). Accepting gives flight or `setGiantScale(plr, 4)`. `endPerks` takes both away when the show is put away, and leaving drops the perk (nothing is saved, so a rejoin is normal).
+- The nuke is a fat egg-shaped bomb with hazard bands, a tail and a cross of fins.
+- The obby ending: "all right. five seconds till the obby comes down." then 5, 4, 3, 2, 1 one a second in the speech box only (not chat), then it comes down with "boom."
