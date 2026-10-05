@@ -156,6 +156,10 @@ local function petOf(uid: string?)
 	return nil
 end
 local function canMergeWith(first, pet): boolean
+	local limited = Config.Pets[pet.Id]
+	if limited and limited.Event then
+		return false -- limited pets can't be upgraded
+	end
 	local tier = pet.Tier or 1
 	if tier >= #Config.PetTiers then
 		return false
@@ -657,7 +661,7 @@ function PetsUI._refreshGrid()
 	local shown = 0
 	for _, entry in list do
 		local key = entry.Id .. "#" .. (entry.Tier or 1)
-		local mergeable = (copies[key] or 0) >= MERGE_COUNT and (entry.Tier or 1) < #Config.PetTiers
+		local mergeable = (copies[key] or 0) >= MERGE_COUNT and (entry.Tier or 1) < #Config.PetTiers and not entry.Def.Event
 		if mergeMode and (not mergeable or (first and not canMergeWith(first, entry))) then
 			continue
 		end
@@ -675,13 +679,16 @@ function PetsUI._refreshGrid()
 end
 
 
--- The collection (index): every pet species and tier you have ever owned, set progress and the bonuses.
-local TIER_DOT = { Color3.fromRGB(190, 215, 240), Color3.fromRGB(255, 205, 60), Color3.fromRGB(255, 120, 220) }
+-- The collection (index): tabs for Normal / Golden / Rainbow / Limited. Every pet you have EVER owned
+-- (even if merged or deleted since) shows in colour; the rest are "?". Finishing a tier's tab pays the set prize.
+local TIER_DOT = { Color3.fromRGB(190, 215, 240), Color3.fromRGB(255, 205, 60), Color3.fromRGB(255, 120, 220), Color3.fromRGB(255, 130, 90) }
+local TAB_NAMES = { "Normal", "Golden", "Rainbow", "Limited" }
+local indexTab = 1
 local function buildIndexPanel(parent: Frame)
 	indexPanel = Instance.new("Frame")
 	indexPanel.Name = "IndexPanel"
 	indexPanel.BackgroundColor3 = C.PanelDark
-	indexPanel.BackgroundTransparency = 0.1
+	indexPanel.BackgroundTransparency = 0.05
 	indexPanel.Position = UDim2.new(0, 0, 0, 48)
 	indexPanel.Size = UDim2.new(1, 0, 1, -48)
 	indexPanel.Visible = false
@@ -689,24 +696,41 @@ local function buildIndexPanel(parent: Frame)
 	UIKit.Corner(indexPanel, 12)
 	indexPanel.Parent = parent
 
-	local sets = Instance.new("Frame")
-	sets.Name = "Sets"
-	sets.BackgroundTransparency = 1
-	sets.Size = UDim2.new(1, -16, 0, 74)
-	sets.Position = UDim2.fromOffset(8, 6)
-	sets.ZIndex = 21
-	sets.Parent = indexPanel
-	local setsLayout = Instance.new("UIListLayout")
-	setsLayout.FillDirection = Enum.FillDirection.Horizontal
-	setsLayout.Padding = UDim.new(0, 8)
-	setsLayout.Parent = sets
+	local tabs = Instance.new("Frame")
+	tabs.Name = "Tabs"
+	tabs.BackgroundTransparency = 1
+	tabs.Size = UDim2.new(1, -16, 0, 40)
+	tabs.Position = UDim2.fromOffset(8, 6)
+	tabs.ZIndex = 21
+	tabs.Parent = indexPanel
+	local tabLayout = Instance.new("UIListLayout")
+	tabLayout.FillDirection = Enum.FillDirection.Horizontal
+	tabLayout.Padding = UDim.new(0, 8)
+	tabLayout.Parent = tabs
+	local tabButtons: { TextButton } = {}
+
+	local info = UIKit.Label({ Name = "SetInfo", Text = "", TextSize = 18, TextScaled = true, Size = UDim2.new(1, -16, 0, 22), Position = UDim2.fromOffset(8, 52), ZIndex = 21, Parent = indexPanel })
+	local barBack = Instance.new("Frame")
+	barBack.Name = "BarBack"
+	barBack.BackgroundColor3 = C.PanelLight
+	barBack.Size = UDim2.new(1, -16, 0, 10)
+	barBack.Position = UDim2.fromOffset(8, 78)
+	barBack.ZIndex = 21
+	UIKit.Corner(barBack, 5)
+	barBack.Parent = indexPanel
+	local barFill = Instance.new("Frame")
+	barFill.BackgroundColor3 = C.Good
+	barFill.Size = UDim2.fromScale(0, 1)
+	barFill.ZIndex = 22
+	UIKit.Corner(barFill, 5)
+	barFill.Parent = barBack
 
 	local scroll = Instance.new("ScrollingFrame")
 	scroll.Name = "Species"
 	scroll.BackgroundTransparency = 1
 	scroll.BorderSizePixel = 0
-	scroll.Position = UDim2.fromOffset(8, 88)
-	scroll.Size = UDim2.new(1, -16, 1, -96)
+	scroll.Position = UDim2.fromOffset(8, 96)
+	scroll.Size = UDim2.new(1, -16, 1, -104)
 	scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	scroll.ScrollBarThickness = 8
@@ -714,7 +738,7 @@ local function buildIndexPanel(parent: Frame)
 	scroll.ZIndex = 21
 	scroll.Parent = indexPanel
 	local grid = Instance.new("UIGridLayout")
-	grid.CellSize = UDim2.fromOffset(122, 128)
+	grid.CellSize = UDim2.fromOffset(122, 126)
 	grid.CellPadding = UDim2.fromOffset(8, 8)
 	grid.SortOrder = Enum.SortOrder.LayoutOrder
 	grid.Parent = scroll
@@ -722,120 +746,109 @@ local function buildIndexPanel(parent: Frame)
 	refreshIndex = function()
 		local meta = ClientState.Meta
 		local index = meta and meta.PetIndex or {}
-		for _, child in sets:GetChildren() do
-			if child:IsA("Frame") then
-				child:Destroy()
-			end
+		for i, button in tabButtons do
+			UIKit.SetButtonColor(button, if i == indexTab then TIER_DOT[i] else C.PanelLight)
 		end
 		for _, child in scroll:GetChildren() do
 			if child:IsA("Frame") then
 				child:Destroy()
 			end
 		end
-		local species = Config.CollectionSpecies(false)
-		local limited = {}
-		for _, id in Config.CollectionSpecies(true) do
-			if Config.Pets[id].Event then
-				table.insert(limited, id)
-			end
-		end
-		local found = 0
-		for _, id in Config.CollectionSpecies(true) do
-			if (tonumber(index[id]) or 0) > 0 then
-				found += 1
-			end
-		end
-		-- Set cards.
-		for _, set in Config.Collection.Sets do
-			local have = 0
-			for _, id in species do
-				if Config.CollectionHas(index, id, set.Tier) then
-					have += 1
+		local limitedTab = indexTab == 4
+		local list: { string } = Config.CollectionSpecies(limitedTab)
+		if limitedTab then
+			local only = {}
+			for _, id in list do
+				if Config.Pets[id].Event then
+					table.insert(only, id)
 				end
 			end
-			local done = have >= #species
-			local card = UIKit.Card({ Size = UDim2.new(1 / 3, -6, 1, 0), Color = C.PanelLight, StrokeColor = TIER_DOT[set.Tier], Parent = sets })
-			card.ZIndex = 22
-			UIKit.Label({ Text = string.format("%s set  %d/%d", set.Name, have, #species), TextSize = 18, TextScaled = true, TextColor3 = TIER_DOT[set.Tier], Size = UDim2.new(1, -12, 0, 22), Position = UDim2.fromOffset(6, 4), ZIndex = 23, Parent = card })
-			local barBack = Instance.new("Frame")
-			barBack.BackgroundColor3 = C.PanelDark
-			barBack.Size = UDim2.new(1, -16, 0, 10)
-			barBack.Position = UDim2.fromOffset(8, 30)
-			barBack.ZIndex = 23
-			UIKit.Corner(barBack, 5)
-			barBack.Parent = card
-			local fill = Instance.new("Frame")
-			fill.BackgroundColor3 = if done then C.Good else TIER_DOT[set.Tier]
-			fill.Size = UDim2.fromScale(math.clamp(have / math.max(1, #species), 0, 1), 1)
-			fill.ZIndex = 24
-			UIKit.Corner(fill, 5)
-			fill.Parent = barBack
-			UIKit.Label({
-				Text = if done then string.format("Done! +%d%% coins", math.floor(set.Bonus * 100 + 0.5)) else string.format("Reward: +%d%% coins, %d Gems", math.floor(set.Bonus * 100 + 0.5), set.Gems),
-				TextSize = 14,
-				TextScaled = true,
-				TextColor3 = if done then C.Good else C.TextDim,
-				Size = UDim2.new(1, -12, 0, 22),
-				Position = UDim2.fromOffset(6, 46),
-				ZIndex = 23,
-				Parent = card,
-			})
+			list = only
 		end
-		-- Species cards.
-		local order = 0
-		local function speciesCard(id: string)
-			order += 1
+		-- progress line
+		local have = 0
+		for _, id in list do
+			local found = if limitedTab then (tonumber(index[id]) or 0) > 0 else Config.CollectionHas(index, id, indexTab)
+			if found then
+				have += 1
+			end
+		end
+		if limitedTab then
+			info.Text = string.format("Limited pets  %d/%d  -  exclusive, can't be merged, and gone for good when an event ends", have, #list)
+			info.TextColor3 = TIER_DOT[4]
+		else
+			local set = Config.Collection.Sets[indexTab]
+			local done = have >= #list
+			info.Text = string.format("%s set  %d/%d  -  %s", TAB_NAMES[indexTab], have, #list, if done then string.format("complete! +%d%% coins", math.floor(set.Bonus * 100 + 0.5)) else string.format("reward: +%d%% coins and %d Gems", math.floor(set.Bonus * 100 + 0.5), set.Gems))
+			info.TextColor3 = if done then C.Good else TIER_DOT[indexTab]
+		end
+		barFill.Size = UDim2.fromScale(math.clamp(have / math.max(1, #list), 0, 1), 1)
+		barFill.BackgroundColor3 = TIER_DOT[indexTab]
+		-- cards
+		for order, id in list do
 			local def = Config.Pets[id]
-			local bits = tonumber(index[id]) or 0
-			local card = UIKit.Card({ LayoutOrder = order, Color = C.PanelLight, StrokeColor = if bits > 0 then UIKit.RarityColor(def.Rarity) else C.Disabled, Parent = scroll })
+			local tierToShow = if limitedTab then 1 else indexTab
+			local found = if limitedTab then (tonumber(index[id]) or 0) > 0 else Config.CollectionHas(index, id, indexTab)
+			local card = UIKit.Card({ LayoutOrder = order, Color = C.PanelLight, StrokeColor = if found then UIKit.RarityColor(def.Rarity) else C.Disabled, Parent = scroll })
 			card.ZIndex = 22
-			if bits > 0 then
-				local best = if bit32.band(bits, 4) ~= 0 then 3 elseif bit32.band(bits, 2) ~= 0 then 2 else 1
+			if found then
 				local viewport = UIKit.Viewport({
-					Model = PetModels.Build(id, best),
-					Size = UDim2.fromOffset(100, 66),
+					Model = PetModels.Build(id, tierToShow),
+					Size = UDim2.fromOffset(102, 70),
 					Position = UDim2.new(0.5, 0, 0, 4),
 					AnchorPoint = Vector2.new(0.5, 0),
 					Parent = card,
 				})
 				viewport.ZIndex = 22
 			else
-				UIKit.Label({ Text = "?", TextSize = 44, TextColor3 = C.Disabled, Size = UDim2.new(1, 0, 0, 66), Position = UDim2.fromOffset(0, 4), ZIndex = 23, Parent = card })
+				UIKit.Label({ Text = "?", TextSize = 46, TextColor3 = C.Disabled, Size = UDim2.new(1, 0, 0, 70), Position = UDim2.fromOffset(0, 4), ZIndex = 23, Parent = card })
 			end
 			UIKit.Label({
-				Text = if bits > 0 then def.Name else "???",
+				Text = if found then def.Name else "???",
 				TextSize = 15,
 				TextScaled = true,
-				TextColor3 = if bits > 0 then UIKit.RarityColor(def.Rarity) else C.Disabled,
+				TextColor3 = if found then UIKit.RarityColor(def.Rarity) else C.Disabled,
 				Size = UDim2.new(1, -8, 0, 20),
-				Position = UDim2.fromOffset(4, 72),
+				Position = UDim2.fromOffset(4, 78),
 				ZIndex = 23,
 				Parent = card,
 			})
-			for t = 1, 3 do
-				local dot = Instance.new("Frame")
-				dot.Size = UDim2.fromOffset(18, 18)
-				dot.Position = UDim2.new(0.5, (t - 2) * 26, 1, -10)
-				dot.AnchorPoint = Vector2.new(0.5, 1)
-				dot.BackgroundColor3 = if Config.CollectionHas(index, id, t) then TIER_DOT[t] else C.PanelDark
-				dot.ZIndex = 23
-				UIKit.Corner(dot, 9)
-				UIKit.Stroke(dot, C.Ink, 2)
-				dot.Parent = card
+			UIKit.Label({
+				Text = if found then def.Rarity else "Not found yet",
+				TextSize = 13,
+				TextScaled = true,
+				TextColor3 = C.TextDim,
+				Size = UDim2.new(1, -8, 0, 16),
+				Position = UDim2.fromOffset(4, 100),
+				ZIndex = 23,
+				Parent = card,
+			})
+			if not found then
+				local shade = Instance.new("Frame")
+				shade.BackgroundColor3 = Color3.new(0, 0, 0)
+				shade.BackgroundTransparency = 0.45
+				shade.Size = UDim2.fromScale(1, 1)
+				shade.ZIndex = 24
+				UIKit.Corner(shade, 12)
+				shade.Parent = card
 			end
 		end
-		for _, id in species do
-			speciesCard(id)
-		end
-		for _, id in limited do
-			speciesCard(id)
-		end
-		indexButton.Text = "Back"
-		local label = indexPanel:FindFirstChild("Found")
-		if not label then
-			label = UIKit.Label({ Name = "Found", Text = "", TextSize = 14, TextColor3 = C.TextDim, AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -14, 1, -2), Size = UDim2.fromOffset(360, 18), TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 25, Parent = indexPanel })
-		end
-		(label :: TextLabel).Text = string.format("%d found  -  each pet found: +%.1f%% coins  -  dots: normal / Golden / Rainbow", found, Config.Collection.PerSpecies * 100)
+	end
+
+	for i, name in TAB_NAMES do
+		local button = UIKit.Button({
+			Text = name,
+			Size = UDim2.new(0.25, -6, 1, 0),
+			Color = C.PanelLight,
+			TextSize = 20,
+			Parent = tabs,
+			OnClick = function()
+				indexTab = i
+				refreshIndex()
+			end,
+		})
+		button.ZIndex = 22
+		table.insert(tabButtons, button)
 	end
 end
 

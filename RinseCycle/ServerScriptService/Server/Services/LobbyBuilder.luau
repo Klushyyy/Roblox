@@ -101,6 +101,7 @@ local NAVY = Color3.fromRGB(18, 55, 100)
 -- Build bookkeeping: yield every ~200 parts so the server never hitches.
 ----------------------------------------------------------------------------------------------------
 local lobby: Lobby? = nil
+local southWall: BasePart? = nil -- the table's south edge wall (opened while the obby stands)
 local partsBuilt = 0
 
 local function maybeYield()
@@ -438,15 +439,16 @@ local function buildGround(parent: Instance)
 	local fz0, fz1 = PLAZA_Z0 - FENCE_MARGIN, PLAZA_Z1 + FENCE_MARGIN
 	local h = 80
 	local w = 4
-	for _, spec in {
+	for _, spec: { any } in {
 		{ Vector3.new(fx1 - fx0 + w * 2, h, w), at(0, h / 2, fz0 - w / 2) },
-		-- the south wall has a gate (x -14..14) onto the obby
-		{ Vector3.new(fx1 - 14 + w, h, w), at((14 + fx1 + w) / 2, h / 2, fz1 + w / 2) },
-		{ Vector3.new(-14 - fx0 + w, h, w), at((fx0 - w - 14) / 2, h / 2, fz1 + w / 2) },
+		{ Vector3.new(fx1 - fx0 + w * 2, h, w), at(0, h / 2, fz1 + w / 2), true },
 		{ Vector3.new(w, h, fz1 - fz0), at(fx0 - w / 2, h / 2, (fz0 + fz1) / 2) },
 		{ Vector3.new(w, h, fz1 - fz0), at(fx1 + w / 2, h / 2, (fz0 + fz1) / 2) },
 	} do
-		mkPart("Part", { Name = "Barrier", Size = spec[1], CFrame = spec[2], Transparency = 1, CastShadow = false }, parent)
+		local wall = mkPart("Part", { Name = "Barrier", Size = spec[1], CFrame = spec[2], Transparency = 1, CastShadow = false }, parent)
+		if spec[3] then
+			southWall = wall -- opened while the obby stands (see OpenObby)
+		end
 	end
 end
 
@@ -1775,11 +1777,10 @@ local function setupLighting()
 end
 
 ----------------------------------------------------------------------------------------------------
--- The obby: behind the spawn (the opposite side of the carpet from the dishwasher), off the table's
--- edge and out over the room toward the sofa. Five checkpoints, five stages, a finish on a high
--- platform. Falling (or touching lava / a spinner) puts you back on your last checkpoint. The
--- course is anchored parts the server moves (spinners, sliders, vanishing tiles); the prize is
--- given from the finish pad (see Config.Obby; bigger during the Admin Abuse show).
+-- The obby (only exists while the Admin Abuse show has it open: LobbyBuilder.OpenObby builds it up
+-- piece by piece, LobbyBuilder.BreakObby smashes it and the pieces fade away). Behind the spawn, off
+-- the table's edge and out over the room toward the sofa: five checkpoints and seven stages, a
+-- finish on a high platform. Falling or touching a spinner puts you on your last checkpoint.
 ----------------------------------------------------------------------------------------------------
 local OBBY_COLORS = {
 	Color3.fromRGB(86, 168, 255),
@@ -1789,15 +1790,80 @@ local OBBY_COLORS = {
 	Color3.fromRGB(176, 140, 255),
 }
 local OBBY_CHECKPOINTS = 5
+local OBBY_BOX = { X0 = -30, X1 = 340, Z0 = 66, Z1 = 396 }
 
-local function buildObby(parent: Instance)
+local obbyModel: Model? = nil
+local obbyOpen = false -- built and playable
+local obbyBeat: RBXScriptConnection? = nil
+local obbyProgress: { [number]: number } = {} -- userId -> highest checkpoint reached
+local obbySpawnAt: { [number]: CFrame } = {}
+local obbyLastPrize: { [number]: number } = {}
+
+local function playerOfPart(hit: BasePart): Player?
+	local character = hit:FindFirstAncestorOfClass("Model")
+	return if character then Players:GetPlayerFromCharacter(character) else nil
+end
+
+local function onTouch(part: BasePart, fn: (BasePart) -> ())
+	pcall(function()
+		part.Touched:Connect(fn)
+	end)
+end
+
+local function notifyPlayer(player: Player, text: string, kind: string)
+	pcall(function()
+		Remotes.Event("Notify"):FireClient(player, text, kind)
+	end)
+end
+
+-- Is this player standing on a part (its top face, with a little slack)?
+local function standingOn(root: BasePart, cf: CFrame, size: Vector3): boolean
+	local rel = cf:PointToObjectSpace(root.Position)
+	return math.abs(rel.X) <= size.X / 2 + 1 and math.abs(rel.Z) <= size.Z / 2 + 1 and rel.Y > size.Y / 2 - 1 and rel.Y < size.Y / 2 + 9
+end
+
+local function sendToLobbySpawn(player: Player)
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not root then
+		return
+	end
+	local angle = math.random() * math.pi * 2
+	local pos = Vector3.new(ORIGIN.X + SPAWN.X + math.cos(angle) * 6, ORIGIN.Y + 4, ORIGIN.Z + SPAWN.Z + math.sin(angle) * 6)
+	;(character :: Model):PivotTo(CFrame.lookAt(pos, pos + Vector3.new(0, 0, -10)))
+	root.AssemblyLinearVelocity = Vector3.zero
+end
+
+local function sendToCheckpoint(player: Player)
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	local cf = obbySpawnAt[player.UserId]
+	if not root then
+		return
+	end
+	if not obbyOpen or not cf then
+		-- no checkpoint yet: the start pad
+		local pad = if obbyModel then obbyModel:FindFirstChild("Start") :: BasePart? else nil
+		if pad and obbyOpen then
+			cf = pad.CFrame
+		else
+			sendToLobbySpawn(player)
+			return
+		end
+	end
+	;(character :: Model):PivotTo((cf :: CFrame) + Vector3.new(0, 4, 0))
+	root.AssemblyLinearVelocity = Vector3.zero
+end
+
+local function constructObby(parent: Instance): { Model: Model, Parts: { BasePart } }
 	local model = mk("Model", { Name = "Obby" }, parent) :: Model
 	local colorIndex = 0
 	local function nextColor(): Color3
 		colorIndex = colorIndex % #OBBY_COLORS + 1
 		return OBBY_COLORS[colorIndex]
 	end
-	-- A chunky platform: a coloured slab with a darker underside (top surface at yTop).
+	-- A chunky platform: a coloured slab with a darker underside (top surface at yTop). extra.Bare:
+	-- no underside (parts that move or vanish).
 	local function plat(name: string, cx: number, yTop: number, cz: number, sx: number, sz: number, color: Color3?, extra: { [string]: any }?): BasePart
 		local c = color or nextColor()
 		local top = mkPart("Part", {
@@ -1816,48 +1882,46 @@ local function buildObby(parent: Instance)
 			end
 		end
 		if not (extra and extra.Bare) then
-			mkPart("Part", { Name = "Underside", Size = Vector3.new(sx - 1, 1.2, sz - 1), CFrame = at(cx, yTop - 2.5, cz), Color = shadeColor(c, 0.55), Material = LOW, CanCollide = false, CanQuery = false, CastShadow = false }, model)
+			mkPart("Part", { Name = "Underside", Size = Vector3.new(sx - 1.2, 1.2, sz - 1.2), CFrame = at(cx, yTop - 2.7, cz), Color = shadeColor(c, 0.55), Material = LOW, CanCollide = false, CanQuery = false, CastShadow = false }, model)
 		end
 		return top
 	end
 	local killParts: { BasePart } = {}
-	local function kill(name: string, size: Vector3, cf: CFrame, color: Color3, material: Enum.Material?): BasePart
+	local function kill(name: string, size: Vector3, cf: CFrame, color: Color3): BasePart
 		local part = mkPart("Part", {
 			Name = name,
 			Size = size,
 			CFrame = cf,
 			Color = color,
-			Material = material or Enum.Material.Neon,
+			Material = Enum.Material.Neon,
 			CanTouch = true,
 			CanCollide = false,
 			CastShadow = false,
 		}, model)
-		CollectionService:AddTag(part, "ObbyKill")
 		table.insert(killParts, part)
 		return part
 	end
 	local checkpointPads: { BasePart } = {}
-	local function checkpoint(index: number, cx: number, yTop: number, cz: number, sx: number?, sz: number?)
-		local pad = plat("Checkpoint" .. index, cx, yTop, cz, sx or 20, sz or 20, Color3.fromRGB(70, 205, 130))
+	local function checkpoint(index: number, cx: number, yTop: number, cz: number)
+		local pad = plat("Checkpoint" .. index, cx, yTop, cz, 20, 20, Color3.fromRGB(70, 205, 130))
 		pad:SetAttribute("Index", index)
-		CollectionService:AddTag(pad, "ObbyCheckpoint")
-		-- A glowing flag so it reads from far away.
-		mkPart("Part", decor({ Name = "FlagPole", Size = Vector3.new(0.6, 12, 0.6), CFrame = at(cx - (sx or 20) / 2 + 2, yTop + 6, cz - (sz or 20) / 2 + 2), Color = Color3.fromRGB(240, 240, 240), Material = LOW }), model)
-		mkPart("Part", decor({ Name = "Flag", Size = Vector3.new(0.4, 4, 6), CFrame = at(cx - (sx or 20) / 2 + 2, yTop + 10, cz - (sz or 20) / 2 + 5), Color = Color3.fromRGB(255, 255, 255), Material = Enum.Material.Neon }), model)
-		worldSign(pad, "CHECKPOINT " .. index, 22, 4, 14, Color3.fromRGB(150, 255, 190))
+		-- A glowing flag so it reads from far away (pole and flag don't share any face).
+		mkPart("Part", decor({ Name = "FlagPole", Size = Vector3.new(0.6, 12, 0.6), CFrame = at(cx - 8, yTop + 6.2, cz - 8), Color = Color3.fromRGB(240, 240, 240), Material = LOW }), model)
+		mkPart("Part", decor({ Name = "Flag", Size = Vector3.new(0.3, 4, 6), CFrame = at(cx - 8, yTop + 10, cz - 4.8), Color = Color3.fromRGB(255, 255, 255), Material = Enum.Material.Neon }), model)
+		worldSign(pad, "CHECKPOINT " .. index, 22, 4, 16, Color3.fromRGB(150, 255, 190))
 		table.insert(checkpointPads, pad)
 	end
 
 	local Y = 0.2
 
-	-- Start: a wide pad on the table's edge with a gate and a sign.
-	local startPad = plat("Start", 0, Y, 92.2, 28, 24, Color3.fromRGB(255, 255, 255))
+	-- Start: a wide pad on the table's edge with a gate and a sign (the sign hangs ABOVE the gate beam).
+	local startPad = plat("Start", 0, Y, 92.4, 28, 24, Color3.fromRGB(255, 255, 255))
 	for _, sx in { -13, 13 } do
-		mkPart("Part", decor({ Name = "GatePost", Size = Vector3.new(2, 22, 2), CFrame = at(sx, Y + 11, 92), Color = Color3.fromRGB(255, 205, 80), Material = LOW }), model)
+		mkPart("Part", decor({ Name = "GatePost", Size = Vector3.new(2, 22, 2), CFrame = at(sx, Y + 11, 92.4), Color = Color3.fromRGB(255, 205, 80), Material = LOW }), model)
 	end
-	local beam = mkPart("Part", decor({ Name = "GateBeam", Size = Vector3.new(30, 6, 2), CFrame = at(0, Y + 22, 92), Color = Color3.fromRGB(255, 124, 178), Material = LOW }), model)
-	worldSign(beam, "OBBY", 26, 6, 0, Color3.fromRGB(255, 255, 255))
-	worldSign(startPad, "Reach the top for a prize!", 24, 3, 6, Color3.fromRGB(255, 232, 140))
+	local gateBeam = mkPart("Part", decor({ Name = "GateBeam", Size = Vector3.new(31, 5, 3.4), CFrame = at(0, Y + 23.5, 92.4), Color = Color3.fromRGB(255, 124, 178), Material = LOW }), model)
+	worldSign(gateBeam, "OBBY", 26, 7, 8, Color3.fromRGB(255, 255, 255))
+	worldSign(startPad, "Reach the top for a prize!", 24, 3, 9, Color3.fromRGB(255, 232, 140))
 
 	-- Stage 1: hops (6 platforms, 6-stud gaps).
 	do
@@ -1869,9 +1933,7 @@ local function buildObby(parent: Instance)
 	end
 	checkpoint(1, -2, Y + 1.5, 210)
 
-	-- Stage 2: lava field with stepping stones (touch the lava and you go back).
-	kill("Lava", Vector3.new(60, 1, 84), at(0, Y - 0.2, 258), Color3.fromRGB(255, 96, 40))
-	kill("LavaGlow", Vector3.new(60, 0.4, 84), at(0, Y + 0.3, 258), Color3.fromRGB(255, 160, 60)).Transparency = 0.5
+	-- Stage 2: stepping stones over the drop (a fall puts you back).
 	do
 		local dx = { 0, -8, 0, 8, 0 }
 		for i = 1, 5 do
@@ -1886,216 +1948,603 @@ local function buildObby(parent: Instance)
 	for i, x in { 38, 66, 94 } do
 		local center = at(x, Y + 1.5 + 2.2, 300).Position
 		local bar = kill("Spinner" .. i, Vector3.new(26, 3, 2.4), CFrame.new(center), if i % 2 == 0 then Color3.fromRGB(255, 70, 90) else Color3.fromRGB(255, 190, 50))
-		mkPart("Part", decor({ Name = "SpinnerHub", Size = Vector3.new(4, 4, 4), CFrame = CFrame.new(center), Color = Color3.fromRGB(60, 64, 78), Material = LOW }), model)
+		mkPart("Part", decor({ Name = "SpinnerHub", Size = Vector3.new(4, 4.4, 4), CFrame = CFrame.new(center), Color = Color3.fromRGB(60, 64, 78), Material = LOW }), model)
 		table.insert(spinners, { Part = bar, Speed = (if i % 2 == 0 then -1 else 1) * (1.1 + i * 0.35), Center = center })
 	end
 	checkpoint(3, 134, Y + 1.5, 300)
 
-	-- Stage 4: three sliders crossing the way.
-	local sliders: { BasePart } = {}
+	-- Stage 4: three sliders crossing the way (they carry you).
+	local sliders: { { Part: BasePart, Base: Vector3, Phase: number, Speed: number } } = {}
 	for i, x in { 156, 171, 186 } do
 		local p = plat("Slider" .. i, x, Y + 1.5, 300, 8, 8, nil, { Bare = true })
-		table.insert(sliders, p)
+		table.insert(sliders, { Part = p, Base = p.Position, Phase = i * 1.7, Speed = 0.9 + i * 0.12 })
 	end
-	checkpoint(4, 214, Y + 1.5, 300)
+	checkpoint(4, 206, Y + 1.5, 300)
 
-	-- Stage 5: vanishing tiles.
+	-- Stage 5: vanishing tiles (they go almost the moment you touch them).
 	local tiles: { BasePart } = {}
 	for col = 1, 4 do
 		for row = -1, 1 do
-			local t = plat("Tile", 232 + (col - 1) * 11, Y + 1.5, 300 + row * 11, 8.5, 8.5, Color3.fromRGB(255, 228, 120), { Bare = true })
-			CollectionService:AddTag(t, "ObbyTile")
-			table.insert(tiles, t)
+			table.insert(tiles, plat("Tile", 226 + (col - 1) * 11, Y + 1.5, 300 + row * 11, 8.5, 8.5, Color3.fromRGB(255, 228, 120), { Bare = true }))
 		end
 	end
-	plat("Landing", 282, Y + 1.5, 300, 12, 12, nil)
 
-	-- Stage 6: balance beams (round the corner and back over the sofa), two gaps in the long one.
-	plat("Beam1", 282, Y + 3, 322, 3, 32, Color3.fromRGB(255, 255, 255))
-	plat("Corner", 282, Y + 3, 345, 10, 10, nil)
-	plat("Beam2a", 252, Y + 3, 345, 40, 3, Color3.fromRGB(255, 255, 255))
-	plat("Beam2b", 202, Y + 3, 345, 30, 3, Color3.fromRGB(255, 255, 255))
-	plat("Beam2c", 164, Y + 3, 345, 24, 3, Color3.fromRGB(255, 255, 255))
-	checkpoint(5, 134, Y + 3, 345)
+	-- Stage 6: a conveyor belt that runs against you.
+	local conveyor = plat("Conveyor", 285, Y + 1.5, 300, 30, 12, Color3.fromRGB(70, 74, 92), { Bare = true })
+	for i = -2, 2 do
+		mkPart("Part", decor({ Name = "ConveyorStripe", Size = Vector3.new(1.4, 0.2, 11), CFrame = at(285 + i * 6, Y + 1.6, 300), Color = Color3.fromRGB(255, 205, 60), Material = LOW }), model)
+	end
+	plat("Landing", 312, Y + 1.5, 300, 12, 12, nil)
 
-	-- Stage 7: the climb: stairs of small platforms up to the finish.
+	-- Stage 7: balance beams (round the corner and back over the sofa): thin ones.
+	plat("Beam1", 312, Y + 3, 322, 1.6, 32, Color3.fromRGB(255, 255, 255), { Bare = true })
+	plat("Corner", 312, Y + 3, 345, 10, 10, nil)
+	plat("Beam2a", 275.5, Y + 3, 345, 51, 1.6, Color3.fromRGB(255, 255, 255), { Bare = true })
+	plat("Beam2b", 220, Y + 3, 345, 48, 1.6, Color3.fromRGB(255, 255, 255), { Bare = true })
+	checkpoint(5, 180, Y + 3, 345)
+
+	-- Stage 8: the climb: stairs of small platforms up to the finish.
 	for i = 1, 8 do
-		plat("Stair" .. i, 134 - i * 12, Y + 3 + i * 3.5, 345 + (if i % 2 == 0 then 3 else -3), 7, 7)
+		plat("Stair" .. i, 180 - 10 - i * 11, Y + 3 + i * 3.5, 345 + (if i % 2 == 0 then 3 else -3), 7, 7)
 	end
-	local finish = plat("Finish", 12, Y + 3 + 8 * 3.5 + 3, 345, 24, 24, Color3.fromRGB(255, 205, 60))
-	finish:SetAttribute("Finish", true)
-	CollectionService:AddTag(finish, "ObbyFinish")
 	local finishTop = Y + 3 + 8 * 3.5 + 3
+	local finish = plat("Finish", 56, finishTop, 345, 24, 24, Color3.fromRGB(255, 205, 60))
 	for _, dz in { -10, 10 } do
-		mkPart("Part", decor({ Name = "FinishPost", Size = Vector3.new(2, 18, 2), CFrame = at(12, finishTop + 9, 345 + dz), Color = Color3.fromRGB(255, 124, 178), Material = LOW }), model)
+		mkPart("Part", decor({ Name = "FinishPost", Size = Vector3.new(2, 18, 2), CFrame = at(56, finishTop + 9, 345 + dz), Color = Color3.fromRGB(255, 124, 178), Material = LOW }), model)
 	end
-	local arch = mkPart("Part", decor({ Name = "FinishArch", Size = Vector3.new(2, 4, 22), CFrame = at(12, finishTop + 19, 345), Color = Color3.fromRGB(255, 124, 178), Material = LOW }), model)
-	worldSign(arch, "FINISH", 24, 6, 6, Color3.fromRGB(255, 255, 255))
+	local arch = mkPart("Part", decor({ Name = "FinishArch", Size = Vector3.new(3.4, 4, 22.6), CFrame = at(56, finishTop + 19.5, 345), Color = Color3.fromRGB(255, 124, 178), Material = LOW }), model)
+	worldSign(arch, "FINISH", 24, 7, 8, Color3.fromRGB(255, 255, 255))
 	-- The trophy: a gold cup of stacked blocks.
-	mkPart("Part", decor({ Name = "TrophyBase", Size = Vector3.new(6, 2, 6), CFrame = at(12, finishTop + 1, 345), Color = Color3.fromRGB(120, 80, 50), Material = LOW }), model)
-	mkPart("Part", decor({ Name = "TrophyStem", Size = Vector3.new(2, 4, 2), CFrame = at(12, finishTop + 4, 345), Color = Color3.fromRGB(255, 205, 60), Material = Enum.Material.Metal }), model)
-	mkPart("Part", decor({ Name = "TrophyCup", Size = Vector3.new(6, 5, 6), CFrame = at(12, finishTop + 8.5, 345), Color = Color3.fromRGB(255, 205, 60), Material = Enum.Material.Metal }), model)
+	mkPart("Part", decor({ Name = "TrophyBase", Size = Vector3.new(6, 2, 6), CFrame = at(56, finishTop + 1, 345), Color = Color3.fromRGB(120, 80, 50), Material = LOW }), model)
+	mkPart("Part", decor({ Name = "TrophyStem", Size = Vector3.new(2, 4, 2), CFrame = at(56, finishTop + 4, 345), Color = Color3.fromRGB(255, 205, 60), Material = Enum.Material.Metal }), model)
+	mkPart("Part", decor({ Name = "TrophyCup", Size = Vector3.new(6.4, 5, 6.4), CFrame = at(56, finishTop + 8.6, 345), Color = Color3.fromRGB(255, 215, 80), Material = Enum.Material.Metal }), model)
 
-	local function onTouch(part: BasePart, fn: (BasePart) -> ())
-		pcall(function()
-			part.Touched:Connect(fn)
-		end)
-	end
-
-	-- ----- Runtime (server only) -------------------------------------------------------------
-	local progress: { [number]: number } = {} -- userId -> highest checkpoint reached
-	local spawnAt: { [number]: CFrame } = {}
-	local lastHit: { [number]: number } = {}
-	local lastPrize: { [number]: number } = {}
-	local EVENT_ATTR = "AbuseObbyOpen"
-	local function playerOf(hit: BasePart): Player?
-		local character = hit:FindFirstAncestorOfClass("Model")
-		return if character then Players:GetPlayerFromCharacter(character) else nil
-	end
-	local function sendBack(player: Player)
-		local character = player.Character
-		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-		if not root then
-			return
-		end
-		local cf = spawnAt[player.UserId] or startPad.CFrame
-		;(character :: Model):PivotTo(cf + Vector3.new(0, 4, 0))
-		root.AssemblyLinearVelocity = Vector3.zero
-	end
-	local function notify(player: Player, text: string, kind: string)
-		pcall(function()
-			Remotes.Event("Notify"):FireClient(player, text, kind)
-		end)
-	end
-
+	-- ----- Runtime ----------------------------------------------------------------------------
 	for _, pad in checkpointPads do
 		onTouch(pad, function(hit)
-			local player = playerOf(hit)
+			local player = playerOfPart(hit)
 			local index = pad:GetAttribute("Index")
-			if player and type(index) == "number" and (progress[player.UserId] or 0) < index then
-				progress[player.UserId] = index
-				spawnAt[player.UserId] = pad.CFrame + Vector3.new(0, 1, 0)
-				notify(player, string.format("Checkpoint %d of %d!", index, OBBY_CHECKPOINTS), "Good")
+			if obbyOpen and player and type(index) == "number" and (obbyProgress[player.UserId] or 0) < index then
+				obbyProgress[player.UserId] = index
+				obbySpawnAt[player.UserId] = pad.CFrame + Vector3.new(0, 1, 0)
+				notifyPlayer(player, string.format("Checkpoint %d of %d!", index, OBBY_CHECKPOINTS), "Good")
 			end
 		end)
 	end
+	local lastHit: { [number]: number } = {}
 	for _, part in killParts do
-		do
-			onTouch(part, function(hit)
-				local player = playerOf(hit)
-				if player and os.clock() - (lastHit[player.UserId] or 0) > 0.6 then
-					lastHit[player.UserId] = os.clock()
-					sendBack(player)
+		onTouch(part, function(hit)
+			local player = playerOfPart(hit)
+			if obbyOpen and player and os.clock() - (lastHit[player.UserId] or 0) > 0.6 then
+				lastHit[player.UserId] = os.clock()
+				sendToCheckpoint(player)
+			end
+		end)
+	end
+	onTouch(finish, function(hit)
+		local player = playerOfPart(hit)
+		if not obbyOpen or not player or (obbyProgress[player.UserId] or 0) < OBBY_CHECKPOINTS then
+			return
+		end
+		obbyProgress[player.UserId] = 0
+		obbySpawnAt[player.UserId] = nil
+		local show = ReplicatedStorage:GetAttribute("AbuseObbyOpen") == true
+		local last = obbyLastPrize[player.UserId] or -1e9
+		local gems = if show then Config.Obby.ShowGems else Config.Obby.Gems
+		if show or os.clock() - last > Config.Obby.Cooldown then
+			obbyLastPrize[player.UserId] = os.clock()
+			task.spawn(function()
+				local okData, DataService = pcall(function()
+					return require(script.Parent:WaitForChild("DataService"))
+				end)
+				local okGift, GiftService = pcall(function()
+					return require(script.Parent:WaitForChild("GiftService"))
+				end)
+				if okData then
+					DataService.AddGems(player, gems)
 				end
+				if okGift then
+					(GiftService :: any).Celebrate(player, "You beat the obby!", string.format("You got %d Gems!", gems), "@Gem")
+				end
+			end)
+			-- The show hears who finished (it announces and rewards the first one in every server).
+			ReplicatedStorage:SetAttribute("AbuseObbyFinish", player.Name .. ":" .. tostring(os.clock()))
+		else
+			notifyPlayer(player, "You finished! (Prize again in a few minutes)", "Info")
+		end
+		-- Back to the lobby spawn: the climb down is long.
+		sendToLobbySpawn(player)
+	end)
+
+	local tileBusy: { [BasePart]: boolean } = {}
+	for _, t in tiles do
+		onTouch(t, function(hit)
+			if tileBusy[t] or not obbyOpen or not playerOfPart(hit) then
+				return
+			end
+			tileBusy[t] = true
+			task.delay(0.1, function()
+				TweenService:Create(t, TweenInfo.new(0.12), { Transparency = 1 }):Play()
+				task.wait(0.12)
+				t.CanCollide = false
+				task.wait(2.4)
+				if t.Parent then
+					t.CanCollide = true
+					TweenService:Create(t, TweenInfo.new(0.25), { Transparency = 0 }):Play()
+				end
+				tileBusy[t] = false
+			end)
+		end)
+	end
+	pcall(function()
+		conveyor.AssemblyLinearVelocity = Vector3.new(-15, 0, 0) -- anchored parts still carry whoever stands on them
+	end)
+
+	-- The moving parts, once a frame. Sliders carry the players standing on them.
+	local beat: any = RunService.Heartbeat
+	local clock, fallClock = 0, 0
+	if beat then
+		obbyBeat = beat:Connect(function(dt)
+			clock += dt
+			fallClock += dt
+			for _, s in spinners do
+				s.Part.CFrame = CFrame.new(s.Center) * CFrame.Angles(0, clock * s.Speed, 0)
+			end
+			for _, s in sliders do
+				local p = s.Part
+				local newPos = s.Base + Vector3.new(0, 0, 13 * math.sin(clock * s.Speed + s.Phase))
+				local delta = newPos - p.Position
+				for _, player in Players:GetPlayers() do
+					local character = player.Character
+					local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+					if root and character and standingOn(root, p.CFrame, p.Size) then
+						character:PivotTo(character:GetPivot() + delta)
+					end
+				end
+				p.Position = newPos
+			end
+			if fallClock > 0.3 then
+				fallClock = 0
+				for _, player in Players:GetPlayers() do
+					local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+					if root and obbyOpen then
+						local p = root.Position - ORIGIN
+						if p.Y < -35 and p.Y > -125 and p.X > OBBY_BOX.X0 and p.X < OBBY_BOX.X1 and p.Z > OBBY_BOX.Z0 and p.Z < OBBY_BOX.Z1 then
+							sendToCheckpoint(player)
+						end
+					end
+				end
+			end
+		end)
+	end
+
+	local parts: { BasePart } = {}
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") then
+			table.insert(parts, d)
+		end
+	end
+	return { Model = model, Parts = parts }
+end
+
+-- Builds the obby up piece by piece (about 10 seconds), then it is playable. The gate in the table's
+-- edge wall opens.
+function LobbyBuilder.OpenObby()
+	if obbyModel or not lobby then
+		return
+	end
+	local built = constructObby(lobby.Model)
+	obbyModel = built.Model
+	local n = #built.Parts
+	for i, part in built.Parts do
+		local finalCF, finalT, finalCollide = part.CFrame, part.Transparency, part.CanCollide
+		if finalT < 0.95 and not rawget(_G, "__RINSE_NO_ANIM") then
+			part.Transparency = 1
+			part.CanCollide = false
+			part.CFrame = finalCF - Vector3.new(0, 45, 0)
+			task.delay((i / n) * 9, function()
+				if not part.Parent or not obbyModel then
+					return
+				end
+				local tween = TweenService:Create(part, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Transparency = finalT, CFrame = finalCF })
+				tween.Completed:Connect(function()
+					if part.Parent then
+						part.CanCollide = finalCollide
+					end
+				end)
+				tween:Play()
 			end)
 		end
 	end
-	onTouch(finish, function(hit)
-		local player = playerOf(hit)
-		if not player or (progress[player.UserId] or 0) < OBBY_CHECKPOINTS then
-			return
+	task.delay(10, function()
+		if obbyModel == built.Model then
+			obbyOpen = true
+			local wall = southWall
+			if wall then
+				wall.CanCollide = false
+			end
 		end
-		progress[player.UserId] = 0
-		spawnAt[player.UserId] = nil
-		local show = ReplicatedStorage:GetAttribute(EVENT_ATTR) == true
-		local last = lastPrize[player.UserId] or -1e9
-		local gems = if show then Config.Obby.ShowGems else Config.Obby.Gems
-		local ok, DataService = pcall(function()
-			return require(script.Parent:WaitForChild("DataService"))
-		end)
-		local GiftService = nil
-		pcall(function()
-			GiftService = require(script.Parent:WaitForChild("GiftService"))
-		end)
-		if ok and (show or os.clock() - last > Config.Obby.Cooldown) then
-			lastPrize[player.UserId] = os.clock()
-			DataService.AddGems(player, gems)
-			if GiftService then
-				(GiftService :: any).Celebrate(player, "You beat the obby!", string.format("You got %d Gems!", gems), "@Gem")
-				-- The first finisher in this server during the show also wins a game pass.
-				if show and not ReplicatedStorage:GetAttribute("AbuseObbyWinner") then
-					ReplicatedStorage:SetAttribute("AbuseObbyWinner", player.Name)
-					local free = {}
-					for _, pass in Config.GamePasses do
-						if not (GiftService :: any).Owns(player, pass.Key) then
-							table.insert(free, pass)
-						end
+	end)
+end
+
+function LobbyBuilder.ObbyExists(): boolean
+	return obbyModel ~= nil
+end
+
+-- Smashes it: every piece drops to the floor, then fades away; the table's edge wall closes again.
+function LobbyBuilder.BreakObby()
+	local model = obbyModel
+	if not model then
+		return
+	end
+	obbyOpen = false
+	obbyModel = nil
+	if obbyBeat then
+		obbyBeat:Disconnect()
+		obbyBeat = nil
+	end
+	table.clear(obbyProgress)
+	table.clear(obbySpawnAt)
+	local wall = southWall
+	if wall then
+		wall.CanCollide = true
+	end
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") then
+			if d.Transparency >= 0.95 then
+				d:Destroy()
+			else
+				task.delay(math.random() * 2, function()
+					if not d.Parent then
+						return
 					end
-					if #free > 0 then
-						local pass = free[math.random(1, #free)]
-						;(GiftService :: any).GrantPass(player, pass.Key, "First to finish!", "You won " .. pass.Name .. " for finishing the obby first!")
+					d.Anchored = false
+					d.CanCollide = true
+					d.CanTouch = false
+					d.AssemblyLinearVelocity = Vector3.new(math.random(-30, 30), math.random(5, 35), math.random(-30, 30))
+					d.AssemblyAngularVelocity = Vector3.new(math.random(-6, 6), math.random(-6, 6), math.random(-6, 6))
+				end)
+			end
+		end
+	end
+	task.delay(6, function()
+		for _, d in model:GetDescendants() do
+			if d:IsA("BasePart") then
+				TweenService:Create(d, TweenInfo.new(2.4), { Transparency = 1 }):Play()
+			end
+		end
+	end)
+	task.delay(9, function()
+		model:Destroy()
+	end)
+end
+
+----------------------------------------------------------------------------------------------------
+-- Holes in the table (Admin Abuse). Config.AbuseShow.Holes = { { x, z, radius } }. The table top,
+-- slab and the invisible floor under it are cut into small tiles around the spot: the tiles inside
+-- the circle fall away, the ones on the rim tilt and crack, things standing there fall too, and
+-- HealHoles puts it all back (the hole closes in from the rim, the props return).
+----------------------------------------------------------------------------------------------------
+type Tile = { Part: BasePart, Flat: CFrame, D: number, Fall: boolean, Transparency: number }
+type HoleRec = {
+	Hidden: { BasePart },
+	Pieces: { Instance },
+	Tiles: { Tile },
+	Props: { { Part: BasePart, CF: CFrame, Anchored: boolean, Collide: boolean } },
+	Cracks: { BasePart },
+	Center: Vector3,
+	Radius: number,
+}
+local holes: { [number]: HoleRec } = {}
+local TABLE_PART_NAMES = { SafetyFloor = true, TableSlab = true, Plank = true, Chamfer = true }
+local TILE = 5.5
+
+local function worldBox(part: BasePart): (Vector3, Vector3)
+	local cf, s = part.CFrame, part.Size
+	local ex = (math.abs(cf.RightVector.X) * s.X + math.abs(cf.UpVector.X) * s.Y + math.abs(cf.LookVector.X) * s.Z) / 2
+	local ey = (math.abs(cf.RightVector.Y) * s.X + math.abs(cf.UpVector.Y) * s.Y + math.abs(cf.LookVector.Y) * s.Z) / 2
+	local ez = (math.abs(cf.RightVector.Z) * s.X + math.abs(cf.UpVector.Z) * s.Y + math.abs(cf.LookVector.Z) * s.Z) / 2
+	return cf.Position, Vector3.new(ex, ey, ez)
+end
+
+-- Makes `clone` the box [x0,x1] x [y0,y1] x [z0,z1] in world space (the source part's own turn kept).
+local function setBox(clone: BasePart, source: BasePart, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number)
+	local rot = source.CFrame.Rotation
+	local swapped = math.abs(rot.RightVector.X) < 0.5
+	local wx, wy, wz = x1 - x0, y1 - y0, z1 - z0
+	clone.Size = if swapped then Vector3.new(wz, wy, wx) else Vector3.new(wx, wy, wz)
+	clone.CFrame = CFrame.new((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2) * rot
+end
+
+function LobbyBuilder.OpenHole(index: number)
+	local def = (Config.AbuseShow :: any).Holes[index]
+	local model = lobby and lobby.Model
+	if not def or not model or holes[index] then
+		return
+	end
+	local cx, cz, R = ORIGIN.X + def[1], ORIGIN.Z + def[2], def[3]
+	local S = R + 10
+	local rec: HoleRec = { Hidden = {}, Pieces = {}, Tiles = {}, Props = {}, Cracks = {}, Center = Vector3.new(cx, ORIGIN.Y, cz), Radius = R }
+	holes[index] = rec
+	local folder = mk("Folder", { Name = "HolePieces" .. index }, Workspace) :: Folder
+	table.insert(rec.Pieces, folder)
+
+	-- Anyone close to it is moved clear first.
+	for _, player in Players:GetPlayers() do
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if root then
+			local offset = Vector3.new(root.Position.X - cx, 0, root.Position.Z - cz)
+			if offset.Magnitude < R + 6 and root.Position.Y < 60 then
+				local dir = if offset.Magnitude > 0.5 then offset.Unit else Vector3.new(0, 0, 1)
+				local out = Vector3.new(cx, 0, cz) + dir * (R + 18)
+				;(player.Character :: Model):PivotTo(CFrame.new(out.X, root.Position.Y + 2, out.Z))
+			end
+		end
+	end
+
+	local sources: { BasePart } = {}
+	for _, p in model:GetChildren() do
+		if p:IsA("BasePart") and TABLE_PART_NAMES[p.Name] then
+			local c, e = worldBox(p)
+			if c.X + e.X > cx - S and c.X - e.X < cx + S and c.Z + e.Z > cz - S and c.Z - e.Z < cz + S then
+				table.insert(sources, p)
+			end
+		end
+	end
+	local rng = Random.new(index * 97 + 5)
+	for _, p in sources do
+		local c, e = worldBox(p)
+		local invisible = p.Transparency >= 0.95
+		local px0, px1, pz0, pz1 = c.X - e.X, c.X + e.X, c.Z - e.Z, c.Z + e.Z
+		local y0, y1 = c.Y - e.Y, c.Y + e.Y
+		local ix0, ix1 = math.max(px0, cx - S), math.min(px1, cx + S)
+		local iz0, iz1 = math.max(pz0, cz - S), math.min(pz1, cz + S)
+		local function piece(x0: number, x1: number, z0: number, z1: number): BasePart
+			local clone = p:Clone() :: BasePart
+			clone.Name = "HolePiece"
+			setBox(clone, p, x0, x1, y0, y1, z0, z1)
+			clone.Parent = folder
+			return clone
+		end
+		if px0 < ix0 - 0.01 then
+			piece(px0, ix0, pz0, pz1)
+		end
+		if px1 > ix1 + 0.01 then
+			piece(ix1, px1, pz0, pz1)
+		end
+		if pz0 < iz0 - 0.01 then
+			piece(ix0, ix1, pz0, iz0)
+		end
+		if pz1 > iz1 + 0.01 then
+			piece(ix0, ix1, iz1, pz1)
+		end
+		local x = ix0
+		while x < ix1 - 0.01 do
+			local x1 = math.min(x + TILE, ix1)
+			local z = iz0
+			while z < iz1 - 0.01 do
+				local z1 = math.min(z + TILE, iz1)
+				local tcx, tcz = (x + x1) / 2, (z + z1) / 2
+				local d = math.sqrt((tcx - cx) ^ 2 + (tcz - cz) ^ 2) + (rng:NextNumber() - 0.5) * 6
+				if d < R then
+					if not invisible then
+						local tile = piece(x, x1, z, z1)
+						local flat = tile.CFrame
+						tile.Anchored = false
+						tile.CanCollide = true
+						table.insert(rec.Tiles, { Part = tile, Flat = flat, D = d, Fall = true, Transparency = tile.Transparency })
+						tile.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-8, 8), rng:NextNumber(-4, 6), rng:NextNumber(-8, 8))
+						tile.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-3, 3), rng:NextNumber(-3, 3), rng:NextNumber(-3, 3))
+					end
+				else
+					local tile = piece(x, x1, z, z1)
+					if d < R + 9 and not invisible then
+						-- the broken rim: crooked, a little sunk
+						local flat = tile.CFrame
+						local axis = Vector3.new(rng:NextNumber(-1, 1), 0, rng:NextNumber(-1, 1))
+						axis = if axis.Magnitude > 0.1 then axis.Unit else Vector3.xAxis
+						tile.CFrame = flat * CFrame.fromAxisAngle(flat:VectorToObjectSpace(axis), math.rad(rng:NextNumber(3, 9))) - Vector3.new(0, rng:NextNumber(0.1, 0.7), 0)
+						table.insert(rec.Tiles, { Part = tile, Flat = flat, D = d, Fall = false, Transparency = tile.Transparency })
 					end
 				end
+				z = z1
 			end
-		else
-			notify(player, "You finished! (Prize again in a few minutes)", "Info")
+			x = x1
 		end
-		-- Back to the start: the climb down is long.
-		spawnAt[player.UserId] = nil
-		sendBack(player)
-	end)
+		p.Parent = nil
+		table.insert(rec.Hidden, p)
+	end
 
-	-- Falling off puts you back on your checkpoint (checked a few times a second from the Heartbeat).
-	local function checkFalls()
+	-- Cracks across the table around the rim.
+	for i = 1, 16 do
+		local a = rng:NextNumber(0, math.pi * 2)
+		local len = rng:NextNumber(8, 22)
+		local mid = R + 2 + len / 2
+		local crack = mkPart("Part", {
+			Name = "HoleCrack",
+			Size = Vector3.new(rng:NextNumber(0.5, 1.1), 0.1, len),
+			CFrame = CFrame.new(cx + math.cos(a) * mid, ORIGIN.Y + FLOOR_Y + 0.06, cz + math.sin(a) * mid) * CFrame.Angles(0, -a + math.pi / 2 + rng:NextNumber(-0.25, 0.25), 0),
+			Color = Color3.fromRGB(34, 20, 14),
+			Material = LOW,
+			CanCollide = false,
+			CastShadow = false,
+		}, folder)
+		table.insert(rec.Cracks, crack)
+	end
+	-- A glow and smoke from below.
+	local glow = mkPart("Part", { Name = "HoleGlow", Size = Vector3.new(2, 2, 2), CFrame = CFrame.new(cx, ORIGIN.Y - 14, cz), Transparency = 1, CanCollide = false, CastShadow = false }, folder)
+	mk("PointLight", { Color = Color3.fromRGB(255, 120, 50), Range = 70, Brightness = 3, Shadows = false }, glow)
+	mk("ParticleEmitter", {
+		Texture = "rbxasset://textures/particles/smoke_main.dds",
+		Color = ColorSequence.new(Color3.fromRGB(60, 50, 46)),
+		Lifetime = NumberRange.new(2, 3.5),
+		Speed = NumberRange.new(10, 22),
+		SpreadAngle = Vector2.new(20, 20),
+		Rate = 14,
+		Size = NumberSequence.new(6, 16),
+		Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.55), NumberSequenceKeypoint.new(1, 1) }),
+		EmissionDirection = Enum.NormalId.Top,
+	}, glow)
+	mk("ParticleEmitter", {
+		Texture = "rbxasset://textures/particles/sparkles_main.dds",
+		Color = ColorSequence.new(Color3.fromRGB(255, 170, 70)),
+		Lifetime = NumberRange.new(1, 2),
+		Speed = NumberRange.new(20, 40),
+		SpreadAngle = Vector2.new(35, 35),
+		Rate = 18,
+		Size = NumberSequence.new(1.6, 0),
+		LightEmission = 1,
+		EmissionDirection = Enum.NormalId.Top,
+	}, glow)
+
+	-- Whatever stands in it falls with it (boards, cups, sponge, shakers...).
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") and d.Anchored and d.Transparency < 0.95 and d.Name ~= "Barrier" and not string.find(d.Name, "^Bubble") and not TABLE_PART_NAMES[d.Name] and d.Size.Y < 70 then
+			local dx, dz = d.Position.X - cx, d.Position.Z - cz
+			local y = d.Position.Y - ORIGIN.Y
+			if math.sqrt(dx * dx + dz * dz) < R + 4 and y > -1 and y < 60 and not d:IsDescendantOf(folder) then
+				table.insert(rec.Props, { Part = d, CF = d.CFrame, Anchored = d.Anchored :: boolean, Collide = d.CanCollide })
+			end
+		end
+	end
+	for _, prop in rec.Props do
+		task.delay(rng:NextNumber(0.1, 0.9), function()
+			prop.Part.Anchored = false
+			prop.Part.CanCollide = true
+			prop.Part.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-2, 2), rng:NextNumber(-2, 2), rng:NextNumber(-2, 2))
+		end)
+	end
+	-- Chunks flung out of it.
+	for i = 1, 20 do
+		local size = rng:NextNumber(1.2, 3.6)
+		local chunk = mkPart("Part", {
+			Name = "HoleChunk",
+			Size = Vector3.new(size, size * 0.6, size * 1.3),
+			CFrame = CFrame.new(cx + rng:NextNumber(-R * 0.6, R * 0.6), ORIGIN.Y + 2, cz + rng:NextNumber(-R * 0.6, R * 0.6)),
+			Color = if i % 3 == 0 then WOOD_DARK else WOOD_A,
+			Material = LOW,
+			Anchored = false,
+		}, folder)
+		chunk.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-40, 40), rng:NextNumber(40, 90), rng:NextNumber(-40, 40))
+		chunk.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-8, 8), rng:NextNumber(-8, 8), rng:NextNumber(-8, 8))
+		task.delay(7, function()
+			if chunk.Parent then
+				TweenService:Create(chunk, TweenInfo.new(1.5), { Transparency = 1 }):Play()
+				task.wait(1.6)
+				chunk:Destroy()
+			end
+		end)
+	end
+	-- The fallen tiles lie on the floor a while, then fade (kept for the repair).
+	task.delay(7, function()
+		for _, tile in rec.Tiles do
+			if tile.Fall and tile.Part.Parent then
+				TweenService:Create(tile.Part, TweenInfo.new(1.5), { Transparency = 1 }):Play()
+			end
+		end
+		task.wait(1.6)
+		for _, tile in rec.Tiles do
+			if tile.Fall then
+				tile.Part.Anchored = true
+				tile.Part.Parent = nil
+			end
+		end
+	end)
+end
+
+-- Everything comes back: the hole closes in from its rim over `seconds`, cracks fade, props return.
+function LobbyBuilder.HealHoles(seconds: number?)
+	local total = seconds or 8
+	for index, rec in holes do
+		holes[index] = nil
+		local folder = rec.Pieces[1]
+		for _, crack in rec.Cracks do
+			TweenService:Create(crack, TweenInfo.new(total * 0.6), { Transparency = 1 }):Play()
+		end
+		-- the fallen tiles reappear (outer ones first)
+		local fallen = {}
+		for _, tile in rec.Tiles do
+			if tile.Fall then
+				table.insert(fallen, tile)
+			end
+		end
+		table.sort(fallen, function(a, b)
+			return a.D > b.D
+		end)
+		for i, tile in fallen do
+			task.delay((i / math.max(1, #fallen)) * total * 0.7, function()
+				local part = tile.Part
+				part.Anchored = true
+				part.CanCollide = true
+				part.AssemblyLinearVelocity = Vector3.zero
+				part.AssemblyAngularVelocity = Vector3.zero
+				part.CFrame = tile.Flat
+				part.Transparency = 1
+				part.Parent = folder
+				TweenService:Create(part, TweenInfo.new(0.9), { Transparency = tile.Transparency }):Play()
+			end)
+		end
+		for _, tile in rec.Tiles do
+			if not tile.Fall then
+				TweenService:Create(tile.Part, TweenInfo.new(total * 0.5, Enum.EasingStyle.Quad), { CFrame = tile.Flat }):Play()
+			end
+		end
+		task.delay(total * 0.8, function()
+			for _, prop in rec.Props do
+				prop.Part.Anchored = true
+				prop.Part.AssemblyLinearVelocity = Vector3.zero
+				prop.Part.AssemblyAngularVelocity = Vector3.zero
+				prop.Part.CFrame = prop.CF
+				prop.Part.CanCollide = prop.Collide
+			end
+		end)
+		-- Finally the original parts go back (they are exactly what the pieces looked like).
+		task.delay(total + 1.5, function()
+			local model = lobby and lobby.Model
+			for _, p in rec.Hidden do
+				p.Parent = model
+			end
+			if folder then
+				folder:Destroy()
+			end
+			for _, prop in rec.Props do
+				prop.Part.Anchored = prop.Anchored
+			end
+		end)
+	end
+end
+
+-- While the show runs: anyone who ends up below the table (fell off an edge, into a hole...) is put
+-- back at the spawn. Inside the obby's area they go to their checkpoint instead (see the obby).
+local rescueBeat: RBXScriptConnection? = nil
+function LobbyBuilder.SetRescue(on: boolean)
+	if rescueBeat then
+		rescueBeat:Disconnect()
+		rescueBeat = nil
+	end
+	local beat: any = RunService.Heartbeat
+	if not on or not beat then
+		return
+	end
+	local clock = 0
+	rescueBeat = beat:Connect(function(dt)
+		clock += dt
+		if clock < 0.4 then
+			return
+		end
+		clock = 0
 		for _, player in Players:GetPlayers() do
 			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
 			if root then
 				local p = root.Position - ORIGIN
-				if p.Y < -35 and p.Y > -125 and math.abs(p.X) < 400 and p.Z > 66 and p.Z < 396 then
-					sendBack(player)
+				local inObbyBox = p.X > OBBY_BOX.X0 and p.X < OBBY_BOX.X1 and p.Z > OBBY_BOX.Z0 and p.Z < OBBY_BOX.Z1
+				local inTable = math.abs(p.X) < 150 and p.Z > -150 and p.Z < OBBY_BOX.Z1
+				if p.Y < -30 and p.Y > -125 and (inTable or inObbyBox) and not (inObbyBox and obbyOpen) then
+					sendToLobbySpawn(player)
 				end
 			end
 		end
-	end
-	pcall(function()
-		Players.PlayerRemoving:Connect(function(player)
-			progress[player.UserId] = nil
-			spawnAt[player.UserId] = nil
-		end)
 	end)
-
-	-- The moving parts.
-	for i, p in sliders do
-		local from = p.Position + Vector3.new(0, 0, -12)
-		local to = p.Position + Vector3.new(0, 0, 12)
-		p.Position = if i % 2 == 0 then to else from
-		local info = TweenInfo.new(2.6 + i * 0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
-		TweenService:Create(p, info, { Position = if i % 2 == 0 then from else to }):Play()
-	end
-	local angle, fallClock = 0, 0
-	local beat: any = RunService.Heartbeat
-	if not beat then
-		return -- (offline tools have no Heartbeat)
-	end
-	beat:Connect(function(dt)
-		angle += dt
-		fallClock += dt
-		if fallClock > 0.3 then
-			fallClock = 0
-			checkFalls()
-		end
-		for _, s in spinners do
-			s.Part.CFrame = CFrame.new(s.Center) * CFrame.Angles(0, angle * s.Speed, 0)
-		end
-	end)
-	for _, t in tiles do
-		local busy = false
-		onTouch(t, function(hit)
-			if busy or not playerOf(hit) then
-				return
-			end
-			busy = true
-			task.delay(0.5, function()
-				TweenService:Create(t, TweenInfo.new(0.3), { Transparency = 1 }):Play()
-				task.wait(0.3)
-				t.CanCollide = false
-				task.wait(3)
-				t.CanCollide = true
-				TweenService:Create(t, TweenInfo.new(0.3), { Transparency = 0 }):Play()
-				busy = false
-			end)
-		end)
-	end
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -2149,7 +2598,6 @@ function LobbyBuilder.Build(): Lobby
 	buildTreasureChest(model)
 	buildEventZone(model)
 	buildPathDressing(model)
-	buildObby(model)
 	buildDecorations(model)
 	setupLighting()
 

@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.10.0"
+Config.Version = "2.11.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1184,20 +1184,27 @@ Config.AbuseShow = ({
 			Chosen = "{text}. lets go.",
 		},
 	},
-	-- Where the table craters open (x, z on the plaza) and how far people are kept back.
-	Craters = { { -52, 14 }, { 54, -12 } },
-	CraterRadius = 36,
-	ObbyGems = 150,
+	-- Holes in the table: { x, z, radius } on the plaza. The first is where the Fastest Clean board and the
+	-- shakers stand, the second where the coffee cup and the soap bars are.
+	Holes = { { -84, -78, 24 }, { 86, 56, 22 } },
+	-- Show music (Roblox audio IDs; the first that loads is used, they play shuffled). Swap them for
+	-- any tracks you like. Warm plays while he warms up, Heat from the heat to the end.
+	Music = {
+		Warm = { 5410085694, 5410085763, 1842763322 },
+		Heat = { 1846368080, 5831804610, 79451196298919 },
+	},
 }) :: any
 
 -- The show, in order. { seconds after the start, kind, a, b }. Nothing here is random: it runs top to bottom.
 --   say      a = the line (chat + speech box)
 --   attack   a = effect name (beam, meteors, lightning, shockwave, barrage, fireworks, laser, blackhole, tornado, ufo, disco, fountains)
+--            or "winner" = whichever effect the chat voted for
 --   round    a = a key of Rounds
---   crater   a = which Craters entry opens
---   obby     a = true / false: the lobby obby opens / closes
---   heat     the heat goes up (bigger, redder, faster)
---   leave    the ending: he cuts a hole in the roof and flies out; the show is over a few seconds later
+--   hole     a = which Holes entry opens in the table
+--   heal     the holes close again and everything is put back
+--   obby     a = true / false: he builds the obby (it opens a few seconds later) / smashes it
+--   heat     the heat goes up (bigger, redder, darker, faster)
+--   leave    the ending: he cuts a hole in the roof and flies out
 do
 	local S = {}
 	local function at(t: number, kind: string, a: any?, b: any?)
@@ -1209,9 +1216,9 @@ do
 	at(16, "attack", "shockwave")
 	at(22, "say", "first thing: you decide what i hand out.")
 	at(26, "round", "Gifts")
-	at(31, "attack", "fireworks")
+	at(31, "attack", "beam")
 	at(38, "say", "bubbles or gems. dont overthink it.")
-	at(46, "attack", "meteors")
+	at(46, "attack", "fountains")
 	at(52, "say", "the vote closes in a few seconds.")
 	at(58, "attack", "lightning")
 	at(74, "say", "prizes are landing in your inventory right now.")
@@ -1222,34 +1229,35 @@ do
 	at(101, "round", "Passes")
 	at(106, "attack", "ufo")
 	at(118, "say", "if you didnt get one, dont worry. there is more.")
-	at(122, "attack", "tornado")
+	at(122, "attack", "shockwave")
 	at(132, "say", "you can feel that, right? thats the floor. it is not happy.")
-	at(136, "attack", "fireworks")
+	at(136, "attack", "disco")
 	at(144, "say", "next vote. you choose how i break things.")
 	at(147, "round", "Break")
 	at(152, "attack", "lightning")
-	at(164, "say", "i have strong feelings about the black hole. just saying.")
-	at(172, "attack", "shockwave")
-	at(190, "say", "good choice. i like where your heads are at.")
-	at(196, "say", "now hold still. im putting a hole in the table.")
-	at(199, "crater", 1)
-	at(206, "say", "that hole is not decorative. dont go near it.")
-	at(210, "attack", "beam")
-	at(216, "say", "ok. the obby is open. end of the table, behind the spawn.")
-	at(217, "obby", true)
-	at(222, "attack", "disco")
-	at(232, "say", "first one to the top gets a game pass. everyone who finishes gets gems.")
-	at(238, "attack", "meteors")
-	at(248, "say", "i built it to be fair. mostly.")
-	at(252, "attack", "tornado")
-	at(262, "say", "the spinners are my favourite part.")
-	at(266, "attack", "fountains")
-	at(276, "say", "fall off and its back to your last checkpoint. no mercy. ok, a little mercy.")
-	at(280, "attack", "ufo")
-	at(290, "say", "keep going. i can see you from up here. you are tiny. be proud.")
-	at(294, "attack", "fireworks")
-	at(304, "say", "the obby stays open for a while. no rush.")
-	at(308, "attack", "lightning")
+	at(164, "say", "choose carefully. i have to live with it too.")
+	at(172, "attack", "laser")
+	-- (the winning effect plays by itself when the vote is counted, around 182)
+	at(190, "say", "thats what you picked. dont blame me.")
+	at(196, "say", "right. the table. lets see how much it can take.")
+	at(199, "hole", 1)
+	at(207, "say", "stay off the edges. or dont. i get to watch either way.")
+	at(211, "attack", "beam")
+	at(217, "say", "now. im going to build something. give me a second.")
+	at(218, "obby", true)
+	at(230, "say", "an obby. behind the spawn, at the end of the table.")
+	at(236, "say", "everyone who finishes it gets gems. the first one to the top gets a game pass.")
+	at(240, "attack", "winner")
+	at(250, "attack", "lightning")
+	at(258, "say", "i built it to be fair. mostly.")
+	at(262, "attack", "fountains")
+	at(272, "say", "the spinners are my favourite part.")
+	at(276, "attack", "ufo")
+	at(286, "say", "fall off and its back to your last checkpoint. no mercy. ok, a little mercy.")
+	at(290, "attack", "winner")
+	at(300, "say", "keep going. i can see you from up here. you are tiny. be proud.")
+	at(304, "attack", "disco")
+	at(312, "attack", "lightning")
 	at(318, "say", "right. im done warming up.")
 	at(322, "attack", "shockwave")
 	-- Turn up the heat
@@ -1265,8 +1273,8 @@ do
 	at(378, "attack", "laser")
 	at(384, "say", "winners incoming. check your screen.")
 	at(388, "attack", "tornado")
-	at(394, "say", "second hole. why not.")
-	at(396, "crater", 2)
+	at(394, "say", "again. why not.")
+	at(396, "hole", 2)
 	at(404, "attack", "meteors")
 	at(410, "attack", "ufo")
 	at(416, "say", "nothing is balanced anymore and i love it.")
@@ -1285,26 +1293,27 @@ do
 	at(490, "attack", "lightning")
 	at(496, "attack", "ufo")
 	at(502, "attack", "blackhole")
-	at(508, "say", "the obby closes soon. last chance.")
+	at(508, "say", "the obby is about to come down. last chance.")
 	at(512, "attack", "fireworks")
 	at(518, "attack", "barrage")
 	at(524, "attack", "meteors")
 	at(530, "attack", "laser")
-	at(536, "obby", false)
-	at(536, "say", "obby is closed. thanks for the climb.")
-	at(540, "attack", "tornado")
-	at(546, "attack", "lightning")
-	at(552, "say", "ok. one last big one. all of it. everything.")
-	at(556, "attack", "blackhole")
-	at(560, "attack", "meteors")
-	at(564, "attack", "fireworks")
-	at(568, "attack", "lightning")
-	at(572, "attack", "shockwave")
-	at(578, "attack", "barrage")
-	at(584, "attack", "laser")
-	at(592, "say", "alright. thats enough. i think we are done.")
-	at(598, "say", "time for me to go. watch the ceiling.")
-	at(602, "leave")
+	at(536, "say", "ok. the obby goes now.")
+	at(537, "obby", false)
+	at(548, "attack", "tornado")
+	at(554, "attack", "lightning")
+	at(560, "say", "one last big one. all of it. everything.")
+	at(564, "attack", "blackhole")
+	at(568, "attack", "meteors")
+	at(572, "attack", "fireworks")
+	at(576, "attack", "lightning")
+	at(580, "attack", "shockwave")
+	at(586, "attack", "barrage")
+	at(592, "attack", "laser")
+	at(598, "say", "alright. thats enough. we are done here.")
+	at(602, "say", "time for me to go. watch the ceiling.")
+	at(605, "leave")
+	at(620, "heal")
 	Config.AbuseShow.Script = S
 end
 

@@ -35,8 +35,16 @@ local function fadeOut(sound: Sound, seconds: number?)
 end
 
 -- Plays the given playlist, shuffled, until something else is chosen.
+local function listIds(name: string): { number }
+	local show = (Config.AbuseShow :: any).Music
+	if string.sub(name, 1, 5) == "Abuse" and show then
+		return show[string.sub(name, 6)] or {}
+	end
+	return (Config.Music :: any)[name] or {}
+end
+
 local function playList(name: string)
-	local ids = (Config.Music :: any)[name] or {}
+	local ids = listIds(name)
 	if name == currentList and current then
 		return
 	end
@@ -102,6 +110,12 @@ local function playList(name: string)
 end
 
 local function refresh()
+	-- During the Admin Abuse show its own music plays (the server sets the attribute "AbuseMusic").
+	local show = ReplicatedStorage:GetAttribute("AbuseMusic")
+	if show == "Warm" or show == "Heat" then
+		playList("Abuse" .. show)
+		return
+	end
 	playList(if ClientState.Run then "Run" else "Lobby")
 end
 
@@ -130,6 +144,7 @@ function MusicPlayer.Init()
 			refresh()
 		end
 	end)
+	ReplicatedStorage:GetAttributeChangedSignal("AbuseMusic"):Connect(refresh)
 	refresh()
 end
 

@@ -892,6 +892,9 @@ local function merge(player: Player, rawUids: any): Types.RequestResult
 		if not uid or seen[uid] or not pet or not Config.Pets[pet.Id] then
 			return fail("Pick three different pets to merge.")
 		end
+		if Config.Pets[pet.Id].Event then
+			return fail("Limited pets can't be merged.")
+		end
 		local petTier = pet.Tier or 1
 		if petId and (pet.Id ~= petId or petTier ~= tier) then
 			return fail("Merging needs three of the SAME pet at the same tier.")

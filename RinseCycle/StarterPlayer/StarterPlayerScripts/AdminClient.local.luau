@@ -797,12 +797,14 @@ do
 		heatFrame.BackgroundTransparency = 0.78
 		TweenService:Create(heatFrame, TweenInfo.new(0.6), { BackgroundTransparency = 1 }):Play()
 	end
-	local lastIntro = 0
+	local lastIntroStart: any = nil
 	local function intro()
-		if os.clock() - lastIntro < 30 then
+		-- once per show (not on every big boom)
+		local key = ReplicatedStorage:GetAttribute("AbuseStarts") or -1
+		if lastIntroStart == key then
 			return
 		end
-		lastIntro = os.clock()
+		lastIntroStart = key
 		flash.BackgroundTransparency = 0.15
 		TweenService:Create(flash, TweenInfo.new(0.9), { BackgroundTransparency = 1 }):Play()
 		playTitle("ADMIN ABUSE", Colors.Coin)
@@ -1037,6 +1039,14 @@ local COMMANDS: { Command } = ({
 	end } } },
 	{ Name = "globalcountdown", Icon = "⏳", Label = "Event countdown", Desc = "A countdown on everyone's screen in EVERY server (and for anyone who joins later), then LIVE NOW for an hour. Pick the time, then type the event's name (blank = Admin Abuse).", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "1h", "6h", "12h", "24h", "48h", "3d", "7d" }) }, { Kind = "text", Placeholder = "Event name (blank = Admin Abuse)" } } },
 	{ Name = "notifytest", Icon = "🔔", Label = "Notification test", Desc = "Sends the \"daily reward is ready\" notification to you right now and says how it went: is the key found, is HTTP on, are you opted in.", Group = "Studio", Target = "none" },
+	{ Name = "abusefx", Icon = "💥", Label = "Test Admin Abuse effects", Desc = "Tries one piece of the Admin Abuse show on its own (it spawns the giant first): each effect, the table holes, the obby, the heat, the exit. 'Every effect' plays them all, 9 seconds apart.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+		local list = {}
+		for _, name in { "all", "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "hole1", "hole2", "heal", "obby", "obbybreak", "heat", "calm", "leave", "off" } do
+			local label = if name == "all" then "Every effect, one after another" elseif name == "off" then "Put everything away" elseif name == "heal" then "Close the table holes" elseif name == "hole1" then "Table hole 1" elseif name == "hole2" then "Table hole 2" elseif name == "obby" then "Build the obby" elseif name == "obbybreak" then "Smash the obby" elseif name == "heat" then "Turn up the heat" elseif name == "calm" then "Cool down" elseif name == "leave" then "The exit through the roof" else name
+			table.insert(list, { Label = label, Value = name })
+		end
+		return list
+	end } } },
 	{ Name = "abuseshow", Icon = "🎆", Label = "Admin Abuse show", Desc = "Starts the whole Admin Abuse show in every server: rounds pause, you get a giant lobby copy, chat lines, votes and prizes. Pick when it starts, or put the real time back.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		return {
 			{ Label = "Start in 15 seconds", Value = "0.25" },
