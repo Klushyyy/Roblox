@@ -37,6 +37,8 @@
 
 local IconArt = {}
 
+local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Config"))
+
 local INK = Color3.fromRGB(5, 16, 36)
 local WHITE = Color3.new(1, 1, 1)
 local SQRT2 = math.sqrt(2)
@@ -166,86 +168,6 @@ local function clipHolder(parent: Instance, clip: { number }?, px: number, grow:
 end
 
 
--- Polygons (hearts, arrows): drawn as stacked one-pixel strips (even-odd scanlines), so every point is a
--- real point and every edge is exactly where the corner list says. The outline is the same polygon
--- pushed outwards with mitred corners (not a blocky grow of each strip), so tips stay pointed.
-type Pt = { number }
-local function polyOffset(pts: { Pt }, d: number): { Pt }
-	if d <= 0 then
-		return pts
-	end
-	local n = #pts
-	local area = 0
-	for i = 1, n do
-		local a, b = pts[i], pts[i % n + 1]
-		area += a[1] * b[2] - b[1] * a[2]
-	end
-	local sign = if area > 0 then 1 else -1 -- which side is outside
-	local out: { Pt } = {}
-	for i = 1, n do
-		local prev, cur, nxt = pts[(i - 2) % n + 1], pts[i], pts[i % n + 1]
-		local function normal(a: Pt, b: Pt): (number, number)
-			local dx, dy = b[1] - a[1], b[2] - a[2]
-			local len = math.sqrt(dx * dx + dy * dy)
-			if len < 1e-9 then
-				return 0, 0
-			end
-			return sign * dy / len, -sign * dx / len
-		end
-		local n1x, n1y = normal(prev, cur)
-		local n2x, n2y = normal(cur, nxt)
-		local k = d / math.max(0.35, 1 + n1x * n2x + n1y * n2y) -- miter, kept from spiking
-		table.insert(out, { cur[1] + (n1x + n2x) * k, cur[2] + (n1y + n2y) * k })
-	end
-	return out
-end
-
-local function drawPoly(parent: Instance, s: Shape, px: number, grow: number, color: Color3, transparency: number)
-	local pts: { Pt } = {}
-	for _, p in s.pts do
-		table.insert(pts, { p[1] * px, p[2] * px })
-	end
-	pts = polyOffset(pts, grow)
-	local ymin, ymax = math.huge, -math.huge
-	for _, p in pts do
-		ymin = math.min(ymin, p[2])
-		ymax = math.max(ymax, p[2])
-	end
-	local fill = s.fill
-	local gradientFill = grow == 0 and typeof(fill) ~= "Color3"
-	local n = #pts
-	local firstRow, lastRow = math.floor(ymin), math.ceil(ymax) - 1
-	for row = firstRow, lastRow do
-		local yc = row + 0.5
-		local xs: { number } = {}
-		for i = 1, n do
-			local a, b = pts[i], pts[i % n + 1]
-			if (a[2] <= yc and b[2] > yc) or (b[2] <= yc and a[2] > yc) then
-				table.insert(xs, a[1] + (yc - a[2]) / (b[2] - a[2]) * (b[1] - a[1]))
-			end
-		end
-		table.sort(xs)
-		local rowColor = color
-		if gradientFill then
-			local t = math.clamp((yc - ymin) / math.max(1e-6, ymax - ymin), 0, 1)
-			rowColor = (fill[1] :: Color3):Lerp(fill[2] :: Color3, t)
-		end
-		for i = 1, #xs - 1, 2 do
-			local x0, x1 = math.floor(xs[i] + 0.5), math.floor(xs[i + 1] + 0.5)
-			if x1 > x0 then
-				local f = Instance.new("Frame")
-				f.BorderSizePixel = 0
-				f.BackgroundColor3 = rowColor
-				f.BackgroundTransparency = transparency
-				f.Position = UDim2.fromOffset(x0, row)
-				-- opaque strips overlap the next one by a pixel, so no hairline shows between them
-				f.Size = UDim2.fromOffset(x1 - x0, if transparency == 0 then 2 else 1)
-				f.Parent = parent
-			end
-		end
-	end
-end
-
 -- Draws one shape. `grow` > 0 draws the ink outline version (every edge pushed out by `grow` px).
 local function draw(parent: Instance, s: Shape, px: number, grow: number)
 	local fill = if grow > 0 then (s.ink or INK) else s.fill
@@ -310,8 +232,6 @@ local function draw(parent: Instance, s: Shape, px: number, grow: number)
 			g.Color = ColorSequence.new(fill[1], fill[2])
 		end
 		g.Parent = f
-	elseif kind == "poly" then
-		drawPoly(holder, s, px, grow, color, transparency)
 	elseif kind == "ring" then
 		-- UIStroke draws outside the circle; the outline is a thicker stroke round a smaller circle.
 		local d = s.d * px - grow * 2
@@ -722,35 +642,31 @@ ART.Bag = {
 	{ "rect", x = 0.22, y = 0.64, w = 0.05, h = 0.32, r = 0.5, fill = WHITE, t = 0.55 },
 }
 
--- Trade: two arrows passing each other (green right on top, blue left underneath). Each is one
--- polygon with a real point.
+-- Trade: two chunky arrows passing each other (green right on top, blue left underneath). Each is a
+-- shaft and two head strokes with round ends (rotated rounded bars, which Roblox smooths): a clean,
+-- even-width shape with no jagged tips, and one outline round the whole arrow.
 do
 	local function arrow(y: number, right: boolean, fill: any): { any }
-		local head, half, shaft = 0.22, 0.2, 0.075
-		local tip = if right then 0.9 else 0.1
-		local back = if right then tip - head else tip + head
-		local tail = if right then 0.1 else 0.9
+		local w = 0.15
+		local sgn = if right then 1 else -1
+		local tip = if right then 0.88 else 0.12
+		local tail = if right then 0.12 else 0.88
+		local back = tip - sgn * 0.25
 		return {
-			{ "poly", fill = fill, o = true, pts = {
-				{ tail, y - shaft },
-				{ back, y - shaft },
-				{ back, y - half },
-				{ tip, y },
-				{ back, y + half },
-				{ back, y + shaft },
-				{ tail, y + shaft },
-			} },
+			{ "line", x1 = tail, y1 = y, x2 = tip, y2 = y, w = w, fill = fill, o = true },
+			{ "line", x1 = tip, y1 = y, x2 = back, y2 = y - 0.2, w = w, fill = fill, o = true },
+			{ "line", x1 = tip, y1 = y, x2 = back, y2 = y + 0.2, w = w, fill = fill, o = true },
 		}
 	end
 	local shapes: { any } = {}
-	for _, s in arrow(0.68, false, { rgb(120, 200, 255), rgb(50, 140, 240) }) do
+	for _, s in arrow(0.7, false, rgb(66, 156, 250)) do
 		table.insert(shapes, s)
 	end
 	table.insert(shapes, "|")
-	for _, s in arrow(0.32, true, { rgb(120, 240, 170), rgb(40, 190, 110) }) do
+	for _, s in arrow(0.3, true, rgb(52, 208, 124)) do
 		table.insert(shapes, s)
 	end
-	table.insert(shapes, { "rect", x = 0.34, y = 0.285, w = 0.3, h = 0.03, r = 0.5, fill = WHITE, t = 0.45 })
+	table.insert(shapes, { "line", x1 = 0.2, y1 = 0.26, x2 = 0.5, y2 = 0.26, w = 0.035, fill = WHITE, t = 0.5 })
 	ART.Trade = shapes
 end
 
@@ -789,25 +705,19 @@ ART.Gavel = {
 }
 
 -- Free: a heart (two circles and a gradient-cut point).
+-- A heart: two round lobes on a square turned 45 degrees (so the bottom is a true point). Rounded
+-- shapes only, which Roblox smooths; one outline round the whole thing.
 do
-	-- the classic heart curve, point at the bottom, fitted to the canvas
-	local raw: { { number } } = {}
-	local xmin, xmax, ymin, ymax = math.huge, -math.huge, math.huge, -math.huge
-	for i = 0, 71 do
-		local t = i / 72 * math.pi * 2
-		local x = 16 * math.sin(t) ^ 3
-		local y = -(13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t))
-		table.insert(raw, { x, y })
-		xmin, xmax, ymin, ymax = math.min(xmin, x), math.max(xmax, x), math.min(ymin, y), math.max(ymax, y)
-	end
-	local pts: { { number } } = {}
-	for _, p in raw do
-		table.insert(pts, { 0.1 + (p[1] - xmin) / (xmax - xmin) * 0.8, 0.12 + (p[2] - ymin) / (ymax - ymin) * 0.76 })
-	end
+	local hd = 0.345 -- half the diagonal of the turned square
+	local cy = 0.5
+	local side = hd * SQRT2
+	local red = rgb(247, 78, 108)
 	ART.Love = {
-		{ "poly", pts = pts, fill = { rgb(255, 112, 136), rgb(224, 48, 84) }, o = true },
-		{ "disc", x = 0.27, y = 0.31, d = 0.13, fill = WHITE, t = 0.25 },
-		{ "disc", x = 0.36, y = 0.23, d = 0.06, fill = WHITE, t = 0.5 },
+		{ "disc", x = 0.5 - hd / 2, y = cy - hd / 2, d = side, fill = red, o = true },
+		{ "disc", x = 0.5 + hd / 2, y = cy - hd / 2, d = side, fill = red, o = true },
+		{ "diamond", x = 0.5, y = cy, hd = hd, fill = red, o = true },
+		{ "disc", x = 0.5 - hd / 2 - 0.02, y = cy - hd / 2 - 0.03, d = 0.14, fill = WHITE, t = 0.3 },
+		{ "disc", x = 0.5 - hd / 2 + 0.1, y = cy - hd / 2 - 0.12, d = 0.055, fill = WHITE, t = 0.55 },
 	}
 end
 
@@ -873,6 +783,23 @@ local HI_RES: { [string]: boolean } = {
 local HI_RES_SIZE = 120
 
 function IconArt.Draw(kind: string, px: number): Frame
+	-- An uploaded picture (Config.IconImages) wins over the drawn version, if one is set.
+	local imageId = tonumber((Config.IconImages :: any)[kind])
+	if imageId and imageId > 0 then
+		local holder = Instance.new("Frame")
+		holder.Name = kind .. "Icon"
+		holder.BackgroundTransparency = 1
+		holder.BorderSizePixel = 0
+		holder.Size = UDim2.fromOffset(px, px)
+		local image = Instance.new("ImageLabel")
+		image.BackgroundTransparency = 1
+		image.BorderSizePixel = 0
+		image.Size = UDim2.fromScale(1, 1)
+		image.Image = "rbxassetid://" .. tostring(math.floor(imageId))
+		image.ScaleType = Enum.ScaleType.Fit
+		image.Parent = holder
+		return holder
+	end
 	local root = Instance.new("Frame")
 	root.Name = kind .. "Icon"
 	root.BackgroundTransparency = 1

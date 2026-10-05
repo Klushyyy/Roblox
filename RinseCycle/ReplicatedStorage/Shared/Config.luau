@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.0"
+Config.Version = "2.12.1"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1010,6 +1010,13 @@ function Config.GetGroupId(): number
 	end)
 	return if ok and type(id) == "number" then id else 0
 end
+
+-- Optional uploaded pictures for drawn icons (IconArt): Config.IconImages.Love = 123456 uses that image
+-- instead of the drawn heart. 0 = use the drawn one. (Upload the PNGs in _art/ as Images.)
+Config.IconImages = {
+	Love = 0,
+	Trade = 0,
+} :: { [string]: number }
 
 -- Background music (MusicPlayer). The track IDs go in StoreIds > Music.
 Config.Music = {

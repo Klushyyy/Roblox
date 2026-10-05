@@ -63,3 +63,4 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
   - `scen_abuse`: the whole scripted Admin Abuse show on a fake clock (lockdown, polls closing, pass round, effect poll, craters, obby open, heat, final pet vote, no repeated lines, the end).
   - `scen_mobile` + `mobaudit.py`: phone-size screens (landscape and portrait), window dumps, and the smallest real text size per window.
   - Level 3 (castle hall, v2.7.0): `lune run harness.luau arena3 out.json` then render.py.
+- v2.12.1: giant arm gestures via KeyframeSequence, per-frame pcall, wider floor lock, `:abusedebug`; heart/trade icons redrawn.

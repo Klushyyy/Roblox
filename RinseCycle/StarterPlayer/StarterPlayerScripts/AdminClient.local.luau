@@ -1047,6 +1047,7 @@ local COMMANDS: { Command } = ({
 		end
 		return list
 	end } } },
+	{ Name = "abusedebug", Icon = "🐞", Label = "Giant debug readout", Desc = "Toggles a floating readout above the Admin Abuse giant (state, height, floor, feet) and prints it to the Output once a second. Use it to see where he sinks or stops.", Group = "Studio", Target = "none", Inputs = {} },
 	{ Name = "abuseshow", Icon = "🎆", Label = "Admin Abuse show", Desc = "Starts the whole Admin Abuse show in every server: rounds pause, you get a giant lobby copy, chat lines, votes and prizes. Pick when it starts, or put the real time back.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		return {
 			{ Label = "Start in 15 seconds", Value = "0.25" },

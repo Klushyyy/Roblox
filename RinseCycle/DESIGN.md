@@ -1693,3 +1693,10 @@ Config.AbuseShow and the clock Config.Now. AdminServer's "Admin Abuse show" sect
 - Fireworks run about 28 s (70 shells, all heights). Done line / disco line retimed.
 - Music: a new track loads first, then the old one fades out (3 s) as the new one fades in (2 s); tracks hand over 30 s before their end.
 - IconArt: new "poly" shape (stacked 1-px scanline strips, mitred outline) so the Love heart and the Trade arrows have real points.
+
+### 6zr. Giant fix + debug (v2.12.1)
+- The giant's arm code wrote `Motor6D.C0` (read-only from scripts); it threw every frame, aborted the Heartbeat and froze him mid-air. Arm gestures are now small runtime KeyframeSequence animations (upper arms only, Action priority); if one can't be registered he just doesn't gesture.
+- The whole per-frame step runs in `pcall`; on error he is still placed and a rate-limited warn names the error.
+- Floor lock is wider (0.5x-1.5x) and faster so pose changes (walk -> idle when an effect starts) can't sink him.
+- `:abusedebug` (Studio): floating readout above him (state, walking, gesture, rootY, feet height, leap, angle) plus a once-a-second print.
+- Heart (two discs + diamond) and Trade (line arrows) icons redrawn; `Config.IconImages` can point to uploaded PNGs.

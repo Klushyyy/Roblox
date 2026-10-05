@@ -136,7 +136,7 @@ local ALL_COMMANDS = {
 -- enough" - a Developer or a Founder still gets nothing.
 -- Nothing is hidden behind Studio any more: every command belongs to a staff tier (below), and
 -- the owner-only ones (staff ranks, gifted passes, wiping the log) are only on the owner's list.
-local STUDIO_ONLY_COMMANDS = { "abuseshow", "abusefx", "notifytest" }
+local STUDIO_ONLY_COMMANDS = { "abuseshow", "abusefx", "abusedebug", "notifytest" }
 
 -- Commands FOUNDER alone gets, on top of everything Developer has.
 --
@@ -5392,6 +5392,8 @@ do
 	-- foot sole every frame, so he never sinks into or hovers over the floor, and every footfall
 	-- booms. Between stops he does what the show's Script says (effects below; all harmless).
 	local Debris = game:GetService("Debris")
+	local KeyframeSequenceProvider = game:GetService("KeyframeSequenceProvider")
+	local giantDebug = false
 	local Lighting = game:GetService("Lighting")
 	local ROOM_FLOOR = -130 -- LobbyBuilder's room floor
 	local ROOF_Y = 330 -- LobbyBuilder's ceiling
@@ -6076,31 +6078,121 @@ do
 			tag.Parent = head
 		end
 
-		-- Arm poses by turning the shoulder joints (C0): they cannot move the hips.
-		local rShoulder = model:FindFirstChild("RightShoulder", true) :: Motor6D?
-		local lShoulder = model:FindFirstChild("LeftShoulder", true) :: Motor6D?
-		local rBase = if rShoulder then rShoulder.C0 else CFrame.identity
-		local lBase = if lShoulder then lShoulder.C0 else CFrame.identity
-		local armMode, armAlpha = "none", 0
-		local function applyArms(dt: number, now: number, active: boolean)
-			armAlpha += ((if active then 1 else 0) - armAlpha) * math.min(1, dt * 6)
-			if armAlpha < 0.002 and not active then
-				armAlpha = 0
+		-- Arm gestures: small runtime animations that pose only the upper arms (Motor6D properties can't be
+		-- written from a script; animations can). If one can't be made the giant simply doesn't gesture.
+		local gestureTracks: { [string]: AnimationTrack } = {}
+		local function makeGesture(name: string, right: CFrame?, left: CFrame?)
+			local ok, err = pcall(function()
+				local seq = Instance.new("KeyframeSequence")
+				seq.Name = "Gesture" .. name
+				seq.Priority = Enum.AnimationPriority.Action
+				seq.Loop = true
+				for i = 0, 1 do
+					local kf = Instance.new("Keyframe")
+					kf.Time = i * 0.5
+					local rootPose = Instance.new("Pose")
+					rootPose.Name = "HumanoidRootPose"
+					rootPose.Weight = 0
+					rootPose.Name = "HumanoidRootPart"
+					local lower = Instance.new("Pose")
+					lower.Name = "LowerTorso"
+					lower.Weight = 0
+					local upper = Instance.new("Pose")
+					upper.Name = "UpperTorso"
+					upper.Weight = 0
+					upper.Parent = lower
+					lower.Parent = rootPose
+					local wiggle = if name == "wave" and i == 1 then CFrame.Angles(0, 0, 0.35) else CFrame.identity
+					if right then
+						local r = Instance.new("Pose")
+						r.Name = "RightUpperArm"
+						r.CFrame = right * wiggle
+						r.Weight = 1
+						r.Parent = upper
+					end
+					if left then
+						local l = Instance.new("Pose")
+						l.Name = "LeftUpperArm"
+						l.CFrame = left
+						l.Weight = 1
+						l.Parent = upper
+					end
+					rootPose.Parent = kf
+					kf.Parent = seq
+				end
+				local hash = KeyframeSequenceProvider:RegisterKeyframeSequence(seq)
+				local anim = Instance.new("Animation")
+				anim.AnimationId = hash
+				local track = animator:LoadAnimation(anim)
+				track.Priority = Enum.AnimationPriority.Action
+				track.Looped = true
+				gestureTracks[name] = track
+			end)
+			if not ok then
+				warn("[AbuseGiant] gesture '" .. name .. "' unavailable: " .. tostring(err))
 			end
-			local right, left = CFrame.identity, CFrame.identity
-			if armMode == "point" then
-				right = CFrame.Angles(math.rad(95) * armAlpha, 0, 0)
-			elseif armMode == "wave" then
-				right = CFrame.Angles(0, 0, math.rad(150) * armAlpha + math.sin(now * 8) * 0.3 * armAlpha)
-			elseif armMode == "cheer" then
-				right = CFrame.Angles(0, 0, math.rad(165) * armAlpha)
-				left = CFrame.Angles(0, 0, -math.rad(165) * armAlpha)
+		end
+		makeGesture("point", CFrame.Angles(math.rad(-95), 0, 0), nil)
+		makeGesture("wave", CFrame.Angles(0, 0, math.rad(-150)), nil)
+		makeGesture("cheer", CFrame.Angles(0, 0, math.rad(-165)), CFrame.Angles(0, 0, math.rad(165)))
+		local gestureNow: string? = nil
+		local function setGesture(name: string?)
+			if name == gestureNow then
+				return
 			end
-			if rShoulder then
-				rShoulder.C0 = rBase * right
+			gestureNow = name
+			for key, track in gestureTracks do
+				pcall(function()
+					if key == name then
+						if not track.IsPlaying then
+							track:Play(0.3)
+						end
+					elseif track.IsPlaying then
+						track:Stop(0.3)
+					end
+				end)
 			end
-			if lShoulder then
-				lShoulder.C0 = lBase * left
+		end
+
+		-- Debugging: ":abusedebug" turns on a floating readout and prints. DEBUG is checked every frame.
+		local lastDebugPrint = 0
+		local lastErr = 0
+		local debugLabel: TextLabel? = nil
+		local function debugStep(info: { [string]: any })
+			if not giantDebug then
+				if debugLabel then
+					debugLabel.Parent:Destroy()
+					debugLabel = nil
+				end
+				return
+			end
+			if head and not debugLabel then
+				local gui = Instance.new("BillboardGui")
+				gui.Size = UDim2.fromOffset(520, 150)
+				gui.StudsOffsetWorldSpace = Vector3.new(0, head.Size.Y * 2.6, 0)
+				gui.AlwaysOnTop = true
+				gui.MaxDistance = 6000
+				local l = Instance.new("TextLabel")
+				l.Size = UDim2.fromScale(1, 1)
+				l.BackgroundColor3 = Color3.new(0, 0, 0)
+				l.BackgroundTransparency = 0.35
+				l.TextColor3 = Color3.new(1, 1, 1)
+				l.Font = Enum.Font.Code
+				l.TextSize = 18
+				l.Parent = gui
+				gui.Parent = head
+				debugLabel = l
+			end
+			local text = string.format(
+				"state=%s walking=%s gesture=%s\nrootY=%.1f rootAbove=%.1f scale=%.1f\nlow=%.2f floor=%.1f leap=%.1f\nangle=%.0f",
+				info.state, tostring(info.walking), tostring(gestureNow), info.rootY, info.rootAbove, info.scale, info.low, ROOM_FLOOR, info.leap, math.deg(info.angle) % 360
+			)
+			if debugLabel then
+				debugLabel.Text = text
+			end
+			if os.clock() - lastDebugPrint > 1 then
+				lastDebugPrint = os.clock()
+				print("[AbuseGiant] " .. string.gsub(text, "\n", " | "))
 			end
 		end
 
@@ -6160,14 +6252,14 @@ do
 			leaving = true
 			state = "leave"
 			setWalking(false)
-			armMode = "point"
+			setGesture("point")
 			commandText(":noclip")
 			local hx, hz = pos.X, pos.Z
 			task.delay(2, function()
 				if giant ~= model then
 					return
 				end
-				armMode = "cheer"
+				setGesture("cheer")
 				local from = if head then head.Position else pos + Vector3.new(0, 100, 0)
 				local target = Vector3.new(hx, ROOF_Y, hz)
 				local len = (target - from).Magnitude
@@ -6227,7 +6319,7 @@ do
 		task.wait(0.05)
 		stateUntil = os.clock() + 2.5
 
-		giantConn = RunService.Heartbeat:Connect(function(dt)
+		local function step(dt: number)
 			local now = os.clock()
 			walkSpeed = (if heat then 150 else 100) * scaleNow / Show.GiantScale
 			if state == "arrive" and now >= stateUntil then
@@ -6255,7 +6347,7 @@ do
 				if now >= stateUntil then
 					state = "walk"
 					setWalking(true)
-					armMode = "none"
+					setGesture(nil)
 				end
 			elseif state == "leave" then
 				face(TABLE_CENTER - pos, dt)
@@ -6267,20 +6359,20 @@ do
 					return
 				end
 			end
-			applyArms(dt, now, state == "act" or state == "leave" or state == "fly")
 			if state ~= "fly" then
 				-- Floor lock: the lowest sole sits on the floor, whatever the animation does. Gently (a low
 				-- gain can't oscillate even if the feet lag a frame), with a dead zone and a speed limit.
 				local low2 = math.min(lowestPoint(footL), lowestPoint(footR))
 				if low2 ~= math.huge and leapHeight < 0.5 then
-					local above = math.clamp(rootY - low2, rootAbove * 0.9, rootAbove * 1.1)
+					local above = math.clamp(rootY - low2, rootAbove * 0.5, rootAbove * 1.5)
 					local error = ROOM_FLOOR + above - rootY
-					if math.abs(error) > scaleNow * 0.03 then
-						rootY += math.clamp(error * math.min(1, dt * 4), -scaleNow * dt, scaleNow * dt)
+					if math.abs(error) > scaleNow * 0.02 then
+						rootY += math.clamp(error * math.min(1, dt * 12), -scaleNow * dt * 8, scaleNow * dt * 8)
 					end
 				end
 			end
 			local y = if state == "fly" then rootY + flyHeight else rootY + leapHeight
+			debugStep({ state = state, walking = walkTrack ~= nil and walkTrack.IsPlaying, rootY = rootY, rootAbove = rootAbove, scale = scaleNow, low = math.min(lowestPoint(footL), lowestPoint(footR)) - ROOM_FLOOR, leap = leapHeight, angle = angle })
 			root.CFrame = CFrame.lookAt(Vector3.new(pos.X, y, pos.Z), Vector3.new(pos.X + facing.X, y, pos.Z + facing.Z))
 			-- Footfalls: a foot that was lifted and is back on the floor is a step: boom.
 			if state == "walk" and leapHeight < 6 then
@@ -6300,6 +6392,20 @@ do
 					footfall(root)
 				end
 			end
+		end
+		giantConn = RunService.Heartbeat:Connect(function(dt)
+			local ok, err = pcall(step, dt)
+			if not ok then
+				-- (one bad frame must never freeze him: place him anyway, and say what happened)
+				if os.clock() - lastErr > 2 then
+					lastErr = os.clock()
+					warn("[AbuseGiant] step failed: " .. tostring(err))
+				end
+				pcall(function()
+					local y = rootY + leapHeight
+					root.CFrame = CFrame.lookAt(Vector3.new(pos.X, y, pos.Z), Vector3.new(pos.X + facing.X, y, pos.Z + facing.Z))
+				end)
+			end
 		end)
 		-- The script stops him and raises an arm when he does something.
 		playEffect = function(name: string)
@@ -6314,7 +6420,7 @@ do
 			if state == "walk" then
 				state, stateUntil = "act", os.clock() + (if heat then 2.6 else 3.4)
 				setWalking(false)
-				armMode = if acts % 3 == 0 then "cheer" elseif acts % 3 == 1 then "wave" else "point"
+				setGesture(if acts % 3 == 0 then "cheer" elseif acts % 3 == 1 then "wave" else "point")
 			end
 			commandText(nil)
 			task.delay(0.8, effect)
@@ -6574,6 +6680,11 @@ do
 		end
 		sendFeedback(admin, if arg == "reset" then "Admin Abuse is back on its real time." else string.format("Admin Abuse show starts in %s%s. Rounds are paused from now.", Format.Time and Format.Time(starts - Config.Now()) or tostring(math.floor((starts - Config.Now()) / 60)) .. " min", if ok then " (every server)" else " (this server only)"), false)
 		logCommand(admin, "abuseshow", nil, arg, admin.Name .. " set the Admin Abuse show: " .. tostring(arg))
+	end
+
+	Commands.abusedebug = function(admin, _text)
+		giantDebug = not giantDebug
+		sendFeedback(admin, if giantDebug then "Giant debug is ON (readout above him, prints in Output)." else "Giant debug is off.", false)
 	end
 
 	-- :abusefx <name> (Studio tab): try one piece of the show on its own (it spawns the giant if needed).

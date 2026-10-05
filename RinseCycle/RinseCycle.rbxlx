@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.0"
+Config.Version = "2.12.1"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1014,6 +1014,13 @@ function Config.GetGroupId(): number
 	end)
 	return if ok and type(id) == "number" then id else 0
 end
+
+-- Optional uploaded pictures for drawn icons (IconArt): Config.IconImages.Love = 123456 uses that image
+-- instead of the drawn heart. 0 = use the drawn one. (Upload the PNGs in _art/ as Images.)
+Config.IconImages = {
+	Love = 0,
+	Trade = 0,
+} :: { [string]: number }
 
 -- Background music (MusicPlayer). The track IDs go in StoreIds &gt; Music.
 Config.Music = {
@@ -3784,7 +3791,7 @@ local ALL_COMMANDS = {
 -- enough" - a Developer or a Founder still gets nothing.
 -- Nothing is hidden behind Studio any more: every command belongs to a staff tier (below), and
 -- the owner-only ones (staff ranks, gifted passes, wiping the log) are only on the owner's list.
-local STUDIO_ONLY_COMMANDS = { "abuseshow", "abusefx", "notifytest" }
+local STUDIO_ONLY_COMMANDS = { "abuseshow", "abusefx", "abusedebug", "notifytest" }
 
 -- Commands FOUNDER alone gets, on top of everything Developer has.
 --
@@ -9040,6 +9047,8 @@ do
 	-- foot sole every frame, so he never sinks into or hovers over the floor, and every footfall
 	-- booms. Between stops he does what the show's Script says (effects below; all harmless).
 	local Debris = game:GetService("Debris")
+	local KeyframeSequenceProvider = game:GetService("KeyframeSequenceProvider")
+	local giantDebug = false
 	local Lighting = game:GetService("Lighting")
 	local ROOM_FLOOR = -130 -- LobbyBuilder's room floor
 	local ROOF_Y = 330 -- LobbyBuilder's ceiling
@@ -9724,31 +9733,121 @@ do
 			tag.Parent = head
 		end
 
-		-- Arm poses by turning the shoulder joints (C0): they cannot move the hips.
-		local rShoulder = model:FindFirstChild("RightShoulder", true) :: Motor6D?
-		local lShoulder = model:FindFirstChild("LeftShoulder", true) :: Motor6D?
-		local rBase = if rShoulder then rShoulder.C0 else CFrame.identity
-		local lBase = if lShoulder then lShoulder.C0 else CFrame.identity
-		local armMode, armAlpha = "none", 0
-		local function applyArms(dt: number, now: number, active: boolean)
-			armAlpha += ((if active then 1 else 0) - armAlpha) * math.min(1, dt * 6)
-			if armAlpha &lt; 0.002 and not active then
-				armAlpha = 0
+		-- Arm gestures: small runtime animations that pose only the upper arms (Motor6D properties can't be
+		-- written from a script; animations can). If one can't be made the giant simply doesn't gesture.
+		local gestureTracks: { [string]: AnimationTrack } = {}
+		local function makeGesture(name: string, right: CFrame?, left: CFrame?)
+			local ok, err = pcall(function()
+				local seq = Instance.new("KeyframeSequence")
+				seq.Name = "Gesture" .. name
+				seq.Priority = Enum.AnimationPriority.Action
+				seq.Loop = true
+				for i = 0, 1 do
+					local kf = Instance.new("Keyframe")
+					kf.Time = i * 0.5
+					local rootPose = Instance.new("Pose")
+					rootPose.Name = "HumanoidRootPose"
+					rootPose.Weight = 0
+					rootPose.Name = "HumanoidRootPart"
+					local lower = Instance.new("Pose")
+					lower.Name = "LowerTorso"
+					lower.Weight = 0
+					local upper = Instance.new("Pose")
+					upper.Name = "UpperTorso"
+					upper.Weight = 0
+					upper.Parent = lower
+					lower.Parent = rootPose
+					local wiggle = if name == "wave" and i == 1 then CFrame.Angles(0, 0, 0.35) else CFrame.identity
+					if right then
+						local r = Instance.new("Pose")
+						r.Name = "RightUpperArm"
+						r.CFrame = right * wiggle
+						r.Weight = 1
+						r.Parent = upper
+					end
+					if left then
+						local l = Instance.new("Pose")
+						l.Name = "LeftUpperArm"
+						l.CFrame = left
+						l.Weight = 1
+						l.Parent = upper
+					end
+					rootPose.Parent = kf
+					kf.Parent = seq
+				end
+				local hash = KeyframeSequenceProvider:RegisterKeyframeSequence(seq)
+				local anim = Instance.new("Animation")
+				anim.AnimationId = hash
+				local track = animator:LoadAnimation(anim)
+				track.Priority = Enum.AnimationPriority.Action
+				track.Looped = true
+				gestureTracks[name] = track
+			end)
+			if not ok then
+				warn("[AbuseGiant] gesture '" .. name .. "' unavailable: " .. tostring(err))
 			end
-			local right, left = CFrame.identity, CFrame.identity
-			if armMode == "point" then
-				right = CFrame.Angles(math.rad(95) * armAlpha, 0, 0)
-			elseif armMode == "wave" then
-				right = CFrame.Angles(0, 0, math.rad(150) * armAlpha + math.sin(now * 8) * 0.3 * armAlpha)
-			elseif armMode == "cheer" then
-				right = CFrame.Angles(0, 0, math.rad(165) * armAlpha)
-				left = CFrame.Angles(0, 0, -math.rad(165) * armAlpha)
+		end
+		makeGesture("point", CFrame.Angles(math.rad(-95), 0, 0), nil)
+		makeGesture("wave", CFrame.Angles(0, 0, math.rad(-150)), nil)
+		makeGesture("cheer", CFrame.Angles(0, 0, math.rad(-165)), CFrame.Angles(0, 0, math.rad(165)))
+		local gestureNow: string? = nil
+		local function setGesture(name: string?)
+			if name == gestureNow then
+				return
 			end
-			if rShoulder then
-				rShoulder.C0 = rBase * right
+			gestureNow = name
+			for key, track in gestureTracks do
+				pcall(function()
+					if key == name then
+						if not track.IsPlaying then
+							track:Play(0.3)
+						end
+					elseif track.IsPlaying then
+						track:Stop(0.3)
+					end
+				end)
 			end
-			if lShoulder then
-				lShoulder.C0 = lBase * left
+		end
+
+		-- Debugging: ":abusedebug" turns on a floating readout and prints. DEBUG is checked every frame.
+		local lastDebugPrint = 0
+		local lastErr = 0
+		local debugLabel: TextLabel? = nil
+		local function debugStep(info: { [string]: any })
+			if not giantDebug then
+				if debugLabel then
+					debugLabel.Parent:Destroy()
+					debugLabel = nil
+				end
+				return
+			end
+			if head and not debugLabel then
+				local gui = Instance.new("BillboardGui")
+				gui.Size = UDim2.fromOffset(520, 150)
+				gui.StudsOffsetWorldSpace = Vector3.new(0, head.Size.Y * 2.6, 0)
+				gui.AlwaysOnTop = true
+				gui.MaxDistance = 6000
+				local l = Instance.new("TextLabel")
+				l.Size = UDim2.fromScale(1, 1)
+				l.BackgroundColor3 = Color3.new(0, 0, 0)
+				l.BackgroundTransparency = 0.35
+				l.TextColor3 = Color3.new(1, 1, 1)
+				l.Font = Enum.Font.Code
+				l.TextSize = 18
+				l.Parent = gui
+				gui.Parent = head
+				debugLabel = l
+			end
+			local text = string.format(
+				"state=%s walking=%s gesture=%s\nrootY=%.1f rootAbove=%.1f scale=%.1f\nlow=%.2f floor=%.1f leap=%.1f\nangle=%.0f",
+				info.state, tostring(info.walking), tostring(gestureNow), info.rootY, info.rootAbove, info.scale, info.low, ROOM_FLOOR, info.leap, math.deg(info.angle) % 360
+			)
+			if debugLabel then
+				debugLabel.Text = text
+			end
+			if os.clock() - lastDebugPrint &gt; 1 then
+				lastDebugPrint = os.clock()
+				print("[AbuseGiant] " .. string.gsub(text, "\n", " | "))
 			end
 		end
 
@@ -9808,14 +9907,14 @@ do
 			leaving = true
 			state = "leave"
 			setWalking(false)
-			armMode = "point"
+			setGesture("point")
 			commandText(":noclip")
 			local hx, hz = pos.X, pos.Z
 			task.delay(2, function()
 				if giant ~= model then
 					return
 				end
-				armMode = "cheer"
+				setGesture("cheer")
 				local from = if head then head.Position else pos + Vector3.new(0, 100, 0)
 				local target = Vector3.new(hx, ROOF_Y, hz)
 				local len = (target - from).Magnitude
@@ -9875,7 +9974,7 @@ do
 		task.wait(0.05)
 		stateUntil = os.clock() + 2.5
 
-		giantConn = RunService.Heartbeat:Connect(function(dt)
+		local function step(dt: number)
 			local now = os.clock()
 			walkSpeed = (if heat then 150 else 100) * scaleNow / Show.GiantScale
 			if state == "arrive" and now &gt;= stateUntil then
@@ -9903,7 +10002,7 @@ do
 				if now &gt;= stateUntil then
 					state = "walk"
 					setWalking(true)
-					armMode = "none"
+					setGesture(nil)
 				end
 			elseif state == "leave" then
 				face(TABLE_CENTER - pos, dt)
@@ -9915,20 +10014,20 @@ do
 					return
 				end
 			end
-			applyArms(dt, now, state == "act" or state == "leave" or state == "fly")
 			if state ~= "fly" then
 				-- Floor lock: the lowest sole sits on the floor, whatever the animation does. Gently (a low
 				-- gain can't oscillate even if the feet lag a frame), with a dead zone and a speed limit.
 				local low2 = math.min(lowestPoint(footL), lowestPoint(footR))
 				if low2 ~= math.huge and leapHeight &lt; 0.5 then
-					local above = math.clamp(rootY - low2, rootAbove * 0.9, rootAbove * 1.1)
+					local above = math.clamp(rootY - low2, rootAbove * 0.5, rootAbove * 1.5)
 					local error = ROOM_FLOOR + above - rootY
-					if math.abs(error) &gt; scaleNow * 0.03 then
-						rootY += math.clamp(error * math.min(1, dt * 4), -scaleNow * dt, scaleNow * dt)
+					if math.abs(error) &gt; scaleNow * 0.02 then
+						rootY += math.clamp(error * math.min(1, dt * 12), -scaleNow * dt * 8, scaleNow * dt * 8)
 					end
 				end
 			end
 			local y = if state == "fly" then rootY + flyHeight else rootY + leapHeight
+			debugStep({ state = state, walking = walkTrack ~= nil and walkTrack.IsPlaying, rootY = rootY, rootAbove = rootAbove, scale = scaleNow, low = math.min(lowestPoint(footL), lowestPoint(footR)) - ROOM_FLOOR, leap = leapHeight, angle = angle })
 			root.CFrame = CFrame.lookAt(Vector3.new(pos.X, y, pos.Z), Vector3.new(pos.X + facing.X, y, pos.Z + facing.Z))
 			-- Footfalls: a foot that was lifted and is back on the floor is a step: boom.
 			if state == "walk" and leapHeight &lt; 6 then
@@ -9948,6 +10047,20 @@ do
 					footfall(root)
 				end
 			end
+		end
+		giantConn = RunService.Heartbeat:Connect(function(dt)
+			local ok, err = pcall(step, dt)
+			if not ok then
+				-- (one bad frame must never freeze him: place him anyway, and say what happened)
+				if os.clock() - lastErr &gt; 2 then
+					lastErr = os.clock()
+					warn("[AbuseGiant] step failed: " .. tostring(err))
+				end
+				pcall(function()
+					local y = rootY + leapHeight
+					root.CFrame = CFrame.lookAt(Vector3.new(pos.X, y, pos.Z), Vector3.new(pos.X + facing.X, y, pos.Z + facing.Z))
+				end)
+			end
 		end)
 		-- The script stops him and raises an arm when he does something.
 		playEffect = function(name: string)
@@ -9962,7 +10075,7 @@ do
 			if state == "walk" then
 				state, stateUntil = "act", os.clock() + (if heat then 2.6 else 3.4)
 				setWalking(false)
-				armMode = if acts % 3 == 0 then "cheer" elseif acts % 3 == 1 then "wave" else "point"
+				setGesture(if acts % 3 == 0 then "cheer" elseif acts % 3 == 1 then "wave" else "point")
 			end
 			commandText(nil)
 			task.delay(0.8, effect)
@@ -10222,6 +10335,11 @@ do
 		end
 		sendFeedback(admin, if arg == "reset" then "Admin Abuse is back on its real time." else string.format("Admin Abuse show starts in %s%s. Rounds are paused from now.", Format.Time and Format.Time(starts - Config.Now()) or tostring(math.floor((starts - Config.Now()) / 60)) .. " min", if ok then " (every server)" else " (this server only)"), false)
 		logCommand(admin, "abuseshow", nil, arg, admin.Name .. " set the Admin Abuse show: " .. tostring(arg))
+	end
+
+	Commands.abusedebug = function(admin, _text)
+		giantDebug = not giantDebug
+		sendFeedback(admin, if giantDebug then "Giant debug is ON (readout above him, prints in Output)." else "Giant debug is off.", false)
 	end
 
 	-- :abusefx &lt;name&gt; (Studio tab): try one piece of the show on its own (it spawns the giant if needed).
@@ -35341,6 +35459,8 @@ return HUD</ProtectedString></Properties></Item>
 
 local IconArt = {}
 
+local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Config"))
+
 local INK = Color3.fromRGB(5, 16, 36)
 local WHITE = Color3.new(1, 1, 1)
 local SQRT2 = math.sqrt(2)
@@ -35470,86 +35590,6 @@ local function clipHolder(parent: Instance, clip: { number }?, px: number, grow:
 end
 
 
--- Polygons (hearts, arrows): drawn as stacked one-pixel strips (even-odd scanlines), so every point is a
--- real point and every edge is exactly where the corner list says. The outline is the same polygon
--- pushed outwards with mitred corners (not a blocky grow of each strip), so tips stay pointed.
-type Pt = { number }
-local function polyOffset(pts: { Pt }, d: number): { Pt }
-	if d &lt;= 0 then
-		return pts
-	end
-	local n = #pts
-	local area = 0
-	for i = 1, n do
-		local a, b = pts[i], pts[i % n + 1]
-		area += a[1] * b[2] - b[1] * a[2]
-	end
-	local sign = if area &gt; 0 then 1 else -1 -- which side is outside
-	local out: { Pt } = {}
-	for i = 1, n do
-		local prev, cur, nxt = pts[(i - 2) % n + 1], pts[i], pts[i % n + 1]
-		local function normal(a: Pt, b: Pt): (number, number)
-			local dx, dy = b[1] - a[1], b[2] - a[2]
-			local len = math.sqrt(dx * dx + dy * dy)
-			if len &lt; 1e-9 then
-				return 0, 0
-			end
-			return sign * dy / len, -sign * dx / len
-		end
-		local n1x, n1y = normal(prev, cur)
-		local n2x, n2y = normal(cur, nxt)
-		local k = d / math.max(0.35, 1 + n1x * n2x + n1y * n2y) -- miter, kept from spiking
-		table.insert(out, { cur[1] + (n1x + n2x) * k, cur[2] + (n1y + n2y) * k })
-	end
-	return out
-end
-
-local function drawPoly(parent: Instance, s: Shape, px: number, grow: number, color: Color3, transparency: number)
-	local pts: { Pt } = {}
-	for _, p in s.pts do
-		table.insert(pts, { p[1] * px, p[2] * px })
-	end
-	pts = polyOffset(pts, grow)
-	local ymin, ymax = math.huge, -math.huge
-	for _, p in pts do
-		ymin = math.min(ymin, p[2])
-		ymax = math.max(ymax, p[2])
-	end
-	local fill = s.fill
-	local gradientFill = grow == 0 and typeof(fill) ~= "Color3"
-	local n = #pts
-	local firstRow, lastRow = math.floor(ymin), math.ceil(ymax) - 1
-	for row = firstRow, lastRow do
-		local yc = row + 0.5
-		local xs: { number } = {}
-		for i = 1, n do
-			local a, b = pts[i], pts[i % n + 1]
-			if (a[2] &lt;= yc and b[2] &gt; yc) or (b[2] &lt;= yc and a[2] &gt; yc) then
-				table.insert(xs, a[1] + (yc - a[2]) / (b[2] - a[2]) * (b[1] - a[1]))
-			end
-		end
-		table.sort(xs)
-		local rowColor = color
-		if gradientFill then
-			local t = math.clamp((yc - ymin) / math.max(1e-6, ymax - ymin), 0, 1)
-			rowColor = (fill[1] :: Color3):Lerp(fill[2] :: Color3, t)
-		end
-		for i = 1, #xs - 1, 2 do
-			local x0, x1 = math.floor(xs[i] + 0.5), math.floor(xs[i + 1] + 0.5)
-			if x1 &gt; x0 then
-				local f = Instance.new("Frame")
-				f.BorderSizePixel = 0
-				f.BackgroundColor3 = rowColor
-				f.BackgroundTransparency = transparency
-				f.Position = UDim2.fromOffset(x0, row)
-				-- opaque strips overlap the next one by a pixel, so no hairline shows between them
-				f.Size = UDim2.fromOffset(x1 - x0, if transparency == 0 then 2 else 1)
-				f.Parent = parent
-			end
-		end
-	end
-end
-
 -- Draws one shape. `grow` &gt; 0 draws the ink outline version (every edge pushed out by `grow` px).
 local function draw(parent: Instance, s: Shape, px: number, grow: number)
 	local fill = if grow &gt; 0 then (s.ink or INK) else s.fill
@@ -35614,8 +35654,6 @@ local function draw(parent: Instance, s: Shape, px: number, grow: number)
 			g.Color = ColorSequence.new(fill[1], fill[2])
 		end
 		g.Parent = f
-	elseif kind == "poly" then
-		drawPoly(holder, s, px, grow, color, transparency)
 	elseif kind == "ring" then
 		-- UIStroke draws outside the circle; the outline is a thicker stroke round a smaller circle.
 		local d = s.d * px - grow * 2
@@ -36026,35 +36064,31 @@ ART.Bag = {
 	{ "rect", x = 0.22, y = 0.64, w = 0.05, h = 0.32, r = 0.5, fill = WHITE, t = 0.55 },
 }
 
--- Trade: two arrows passing each other (green right on top, blue left underneath). Each is one
--- polygon with a real point.
+-- Trade: two chunky arrows passing each other (green right on top, blue left underneath). Each is a
+-- shaft and two head strokes with round ends (rotated rounded bars, which Roblox smooths): a clean,
+-- even-width shape with no jagged tips, and one outline round the whole arrow.
 do
 	local function arrow(y: number, right: boolean, fill: any): { any }
-		local head, half, shaft = 0.22, 0.2, 0.075
-		local tip = if right then 0.9 else 0.1
-		local back = if right then tip - head else tip + head
-		local tail = if right then 0.1 else 0.9
+		local w = 0.15
+		local sgn = if right then 1 else -1
+		local tip = if right then 0.88 else 0.12
+		local tail = if right then 0.12 else 0.88
+		local back = tip - sgn * 0.25
 		return {
-			{ "poly", fill = fill, o = true, pts = {
-				{ tail, y - shaft },
-				{ back, y - shaft },
-				{ back, y - half },
-				{ tip, y },
-				{ back, y + half },
-				{ back, y + shaft },
-				{ tail, y + shaft },
-			} },
+			{ "line", x1 = tail, y1 = y, x2 = tip, y2 = y, w = w, fill = fill, o = true },
+			{ "line", x1 = tip, y1 = y, x2 = back, y2 = y - 0.2, w = w, fill = fill, o = true },
+			{ "line", x1 = tip, y1 = y, x2 = back, y2 = y + 0.2, w = w, fill = fill, o = true },
 		}
 	end
 	local shapes: { any } = {}
-	for _, s in arrow(0.68, false, { rgb(120, 200, 255), rgb(50, 140, 240) }) do
+	for _, s in arrow(0.7, false, rgb(66, 156, 250)) do
 		table.insert(shapes, s)
 	end
 	table.insert(shapes, "|")
-	for _, s in arrow(0.32, true, { rgb(120, 240, 170), rgb(40, 190, 110) }) do
+	for _, s in arrow(0.3, true, rgb(52, 208, 124)) do
 		table.insert(shapes, s)
 	end
-	table.insert(shapes, { "rect", x = 0.34, y = 0.285, w = 0.3, h = 0.03, r = 0.5, fill = WHITE, t = 0.45 })
+	table.insert(shapes, { "line", x1 = 0.2, y1 = 0.26, x2 = 0.5, y2 = 0.26, w = 0.035, fill = WHITE, t = 0.5 })
 	ART.Trade = shapes
 end
 
@@ -36093,25 +36127,19 @@ ART.Gavel = {
 }
 
 -- Free: a heart (two circles and a gradient-cut point).
+-- A heart: two round lobes on a square turned 45 degrees (so the bottom is a true point). Rounded
+-- shapes only, which Roblox smooths; one outline round the whole thing.
 do
-	-- the classic heart curve, point at the bottom, fitted to the canvas
-	local raw: { { number } } = {}
-	local xmin, xmax, ymin, ymax = math.huge, -math.huge, math.huge, -math.huge
-	for i = 0, 71 do
-		local t = i / 72 * math.pi * 2
-		local x = 16 * math.sin(t) ^ 3
-		local y = -(13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t))
-		table.insert(raw, { x, y })
-		xmin, xmax, ymin, ymax = math.min(xmin, x), math.max(xmax, x), math.min(ymin, y), math.max(ymax, y)
-	end
-	local pts: { { number } } = {}
-	for _, p in raw do
-		table.insert(pts, { 0.1 + (p[1] - xmin) / (xmax - xmin) * 0.8, 0.12 + (p[2] - ymin) / (ymax - ymin) * 0.76 })
-	end
+	local hd = 0.345 -- half the diagonal of the turned square
+	local cy = 0.5
+	local side = hd * SQRT2
+	local red = rgb(247, 78, 108)
 	ART.Love = {
-		{ "poly", pts = pts, fill = { rgb(255, 112, 136), rgb(224, 48, 84) }, o = true },
-		{ "disc", x = 0.27, y = 0.31, d = 0.13, fill = WHITE, t = 0.25 },
-		{ "disc", x = 0.36, y = 0.23, d = 0.06, fill = WHITE, t = 0.5 },
+		{ "disc", x = 0.5 - hd / 2, y = cy - hd / 2, d = side, fill = red, o = true },
+		{ "disc", x = 0.5 + hd / 2, y = cy - hd / 2, d = side, fill = red, o = true },
+		{ "diamond", x = 0.5, y = cy, hd = hd, fill = red, o = true },
+		{ "disc", x = 0.5 - hd / 2 - 0.02, y = cy - hd / 2 - 0.03, d = 0.14, fill = WHITE, t = 0.3 },
+		{ "disc", x = 0.5 - hd / 2 + 0.1, y = cy - hd / 2 - 0.12, d = 0.055, fill = WHITE, t = 0.55 },
 	}
 end
 
@@ -36177,6 +36205,23 @@ local HI_RES: { [string]: boolean } = {
 local HI_RES_SIZE = 120
 
 function IconArt.Draw(kind: string, px: number): Frame
+	-- An uploaded picture (Config.IconImages) wins over the drawn version, if one is set.
+	local imageId = tonumber((Config.IconImages :: any)[kind])
+	if imageId and imageId &gt; 0 then
+		local holder = Instance.new("Frame")
+		holder.Name = kind .. "Icon"
+		holder.BackgroundTransparency = 1
+		holder.BorderSizePixel = 0
+		holder.Size = UDim2.fromOffset(px, px)
+		local image = Instance.new("ImageLabel")
+		image.BackgroundTransparency = 1
+		image.BorderSizePixel = 0
+		image.Size = UDim2.fromScale(1, 1)
+		image.Image = "rbxassetid://" .. tostring(math.floor(imageId))
+		image.ScaleType = Enum.ScaleType.Fit
+		image.Parent = holder
+		return holder
+	end
 	local root = Instance.new("Frame")
 	root.Name = kind .. "Icon"
 	root.BackgroundTransparency = 1
@@ -50730,6 +50775,7 @@ local COMMANDS: { Command } = ({
 		end
 		return list
 	end } } },
+	{ Name = "abusedebug", Icon = "🐞", Label = "Giant debug readout", Desc = "Toggles a floating readout above the Admin Abuse giant (state, height, floor, feet) and prints it to the Output once a second. Use it to see where he sinks or stops.", Group = "Studio", Target = "none", Inputs = {} },
 	{ Name = "abuseshow", Icon = "🎆", Label = "Admin Abuse show", Desc = "Starts the whole Admin Abuse show in every server: rounds pause, you get a giant lobby copy, chat lines, votes and prizes. Pick when it starts, or put the real time back.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		return {
 			{ Label = "Start in 15 seconds", Value = "0.25" },
