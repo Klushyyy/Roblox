@@ -1703,3 +1703,8 @@ Config.AbuseShow and the clock Config.Now. AdminServer's "Admin Abuse show" sect
 
 ### 6zs. Giant stands on the walk pose (v2.12.2)
 Debug logs showed the idle animation leaves the feet ~113 studs under the floor, and the old floor-lock clamp (0.5-1.5x) couldn't follow. He no longer uses idle: standing still is the walk cycle frozen (speed 0). The floor lock clamp is 0.3-4x and snaps (instead of sliding) when a pose change moves the feet more than 2 scales.
+
+### 6zt. Eye lasers, hidden side, spawn snap (v2.12.3)
+- Arm gestures removed (they bent the arms oddly). During every act he fires two eye lasers (`fx.eyes`, also `:abusefx eyes`) that sweep opposite ways over the table, leaving glowing scorch dots that fade.
+- Behind the dishwasher (angle 205-335) nobody can see him: effects and the roof exit wait (up to ~16 s) until he is round on the visible side.
+- Characters: a fresh character that hangs in the air (floor material Air, no vertical speed, not flying) is snapped onto the ground within the first 3 s.

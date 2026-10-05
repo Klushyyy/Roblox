@@ -5844,6 +5844,93 @@ do
 				ship:Destroy()
 			end)
 		end
+		-- Two lasers out of his eyes that sweep the table and leave a glowing trail on it.
+		local eyesBusy = false
+		fx.eyes = function()
+			if eyesBusy or not giantHead then
+				return
+			end
+			eyesBusy = true
+			local headPart = giantHead :: BasePart
+			local DURATION = if heat then 4.5 else 5.5
+			local beams = {
+				neonPart(Vector3.new(4, 4, 10), Color3.fromRGB(255, 60, 60)),
+				neonPart(Vector3.new(4, 4, 10), Color3.fromRGB(255, 60, 60)),
+			}
+			local sparks = {}
+			for i, b in beams do
+				b.Parent = workspace
+				local anchor = Instance.new("Part")
+				anchor.Transparency = 1
+				anchor.Anchored = true
+				anchor.CanCollide = false
+				anchor.CanQuery = false
+				anchor.Size = Vector3.one
+				local e = Instance.new("ParticleEmitter")
+				e.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+				e.Color = ColorSequence.new(Color3.fromRGB(255, 240, 140), Color3.fromRGB(255, 80, 40))
+				e.Lifetime = NumberRange.new(0.5, 1)
+				e.Speed = NumberRange.new(10, 30)
+				e.SpreadAngle = Vector2.new(70, 70)
+				e.Rate = 60
+				e.Size = NumberSequence.new(3, 0)
+				e.LightEmission = 1
+				e.Parent = anchor
+				anchor.Parent = workspace
+				sparks[i] = anchor
+			end
+			local t0 = os.clock()
+			local lastDot = 0
+			local conn: RBXScriptConnection? = nil
+			local function finish()
+				if conn then
+					conn:Disconnect()
+				end
+				for _, b in beams do
+					b:Destroy()
+				end
+				for _, a in sparks do
+					Debris:AddItem(a, 1)
+					local e = a:FindFirstChildOfClass("ParticleEmitter")
+					if e then
+						e.Enabled = false
+					end
+				end
+				eyesBusy = false
+			end
+			conn = RunService.Heartbeat:Connect(function()
+				local t = os.clock() - t0
+				if t > DURATION or not headPart.Parent then
+					finish()
+					return
+				end
+				local fade = math.max(0.05, math.min(1, t / 0.3, (DURATION - t) / 0.4))
+				local dotNow = os.clock() - lastDot > 0.06
+				for i, b in beams do
+					-- the eyes: either side of his face, at the front
+					local from = (headPart.CFrame * CFrame.new((if i == 1 then -0.22 else 0.22) * headPart.Size.X, 0.08 * headPart.Size.Y, -0.5 * headPart.Size.Z)).Position
+					-- each eye draws a sweeping curve over the table (opposite ways round)
+					local a = t * 1.5 * (if i == 1 then 1 else -1) + (if i == 1 then 0 else math.pi)
+					local r = 35 + 25 * math.sin(t * 2.2 + i)
+					local target = Vector3.new(math.cos(a) * r, 0.5, 15 + math.sin(a) * r * 1.1)
+					local len = (target - from).Magnitude
+					b.Size = Vector3.new(4 * fade, 4 * fade, len)
+					b.CFrame = CFrame.lookAt(from, target) * CFrame.new(0, 0, -len / 2)
+					sparks[i].Position = target + Vector3.new(0, 1, 0)
+					if dotNow then
+						local dot = neonPart(Vector3.new(0.3, 4, 4), Color3.fromRGB(255, 150, 50), Enum.PartType.Cylinder)
+						dot.CFrame = CFrame.new(target.X, 0.35, target.Z) * CFrame.Angles(0, 0, math.rad(90))
+						dot.Parent = workspace
+						TweenService:Create(dot, TweenInfo.new(2.5), { Transparency = 1, Color = Color3.fromRGB(120, 30, 20) }):Play()
+						Debris:AddItem(dot, 2.6)
+					end
+				end
+				if dotNow then
+					lastDot = os.clock()
+				end
+			end)
+			Remote.AbuseBoom:FireAllClients(1.4, Vector3.new(0, 0, 15))
+		end
 		local discoBusy = false
 		fx.disco = function()
 			if discoBusy then
@@ -6138,9 +6225,6 @@ do
 				warn("[AbuseGiant] gesture '" .. name .. "' unavailable: " .. tostring(err))
 			end
 		end
-		makeGesture("point", CFrame.Angles(math.rad(-95), 0, 0), nil)
-		makeGesture("wave", CFrame.Angles(0, 0, math.rad(-150)), nil)
-		makeGesture("cheer", CFrame.Angles(0, 0, math.rad(-165)), CFrame.Angles(0, 0, math.rad(165)))
 		local gestureNow: string? = nil
 		local function setGesture(name: string?)
 			if name == gestureNow then
@@ -6202,9 +6286,14 @@ do
 			end
 		end
 
-		-- A circle round the table.
+		-- A circle round the table. Behind the dishwasher building (the north side) nobody in the lobby can see
+		-- him, so he does nothing there: effects and the exit wait until he is back round on the visible side.
 		local RADIUS = 300
 		local angle = math.pi / 2
+		local function hiddenNow(): boolean
+			local deg = math.deg(angle) % 360
+			return deg > 205 and deg < 335
+		end
 		local walkSpeed = 100
 		local state, stateUntil = "arrive", os.clock() + 2.5
 		local facing = Vector3.new(-1, 0, 0)
@@ -6249,6 +6338,21 @@ do
 		-- and the ceiling mends itself. (Nothing respawns him afterwards: `leaving` stays set.)
 		giantLeave = function()
 			if state == "leave" or state == "fly" then
+				return
+			end
+			if hiddenNow() then
+				-- not while he is behind the dishwasher: nobody could see it
+				task.spawn(function()
+					for _ = 1, 40 do
+						task.wait(0.5)
+						if giant ~= model or not hiddenNow() then
+							break
+						end
+					end
+					if giant == model and giantLeave then
+						giantLeave()
+					end
+				end)
 				return
 			end
 			leaving = true
@@ -6420,14 +6524,30 @@ do
 			if not effect or giant ~= model or state == "leave" or state == "fly" then
 				return
 			end
+			if hiddenNow() then
+				task.spawn(function()
+					for _ = 1, 40 do
+						task.wait(0.4)
+						if giant ~= model or state == "leave" or state == "fly" or not hiddenNow() then
+							break
+						end
+					end
+					if giant == model and not hiddenNow() then
+						playEffect(name)
+					end
+				end)
+				return
+			end
 			acts += 1
 			if state == "walk" then
 				state, stateUntil = "act", os.clock() + (if heat then 2.6 else 3.4)
 				setWalking(false)
-				setGesture(if acts % 3 == 0 then "cheer" elseif acts % 3 == 1 then "wave" else "point")
 			end
 			commandText(nil)
 			task.delay(0.8, effect)
+			if name ~= "eyes" and state == "act" and FX.eyes then
+				task.delay(0.4, FX.eyes)
+			end
 			if name == "meteors" or name == "blackhole" or name == "tornado" then
 				Remote.AbuseBoom:FireAllClients(2.5, Vector3.new(0, 0, 0))
 			end
@@ -6692,7 +6812,7 @@ do
 	end
 
 	-- :abusefx <name> (Studio tab): try one piece of the show on its own (it spawns the giant if needed).
-	local FX_NAMES = { "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains" }
+	local FX_NAMES = { "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes" }
 	Commands.abusefx = function(admin, text)
 		local arg = string.lower(text:match("^%s*(%S*)") or "")
 		local function needGiant(): boolean

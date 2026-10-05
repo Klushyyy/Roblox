@@ -67,6 +67,34 @@ local function onCharacterAdded(player: Player, character: Model)
 		humanoid.WalkSpeed = speed
 	end
 
+	-- A fresh character that hangs in the air (spawned a bit high, or held there while things load) is put
+	-- on the ground straight away instead of floating for a second.
+	task.spawn(function()
+		local root = character:WaitForChild("HumanoidRootPart", 10) :: BasePart?
+		if not humanoid or not root then
+			return
+		end
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = { character }
+		for _ = 1, 30 do
+			task.wait(0.1)
+			if not character.Parent or humanoid.Health <= 0 then
+				return
+			end
+			if humanoid.FloorMaterial == Enum.Material.Air and math.abs(root.AssemblyLinearVelocity.Y) < 1 and not root:FindFirstChildOfClass("LinearVelocity") then
+				local hit = workspace:Raycast(root.Position, Vector3.new(0, -40, 0), params)
+				if hit then
+					local gap = root.Position.Y - hit.Position.Y - (humanoid.HipHeight + root.Size.Y / 2)
+					if gap > 0.4 then
+						character:PivotTo(character:GetPivot() - Vector3.new(0, gap, 0))
+						root.AssemblyLinearVelocity = Vector3.zero
+					end
+				end
+			end
+		end
+	end)
+
 	-- Let services decide where this player should be (party pad, dishwasher, lobby).
 	task.defer(function()
 		for _, resolve in respawnResolvers do

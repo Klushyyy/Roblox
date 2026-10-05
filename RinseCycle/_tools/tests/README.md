@@ -64,3 +64,4 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
   - `scen_mobile` + `mobaudit.py`: phone-size screens (landscape and portrait), window dumps, and the smallest real text size per window.
   - Level 3 (castle hall, v2.7.0): `lune run harness.luau arena3 out.json` then render.py.
 - v2.12.1: giant arm gestures via KeyframeSequence, per-frame pcall, wider floor lock, `:abusedebug`; heart/trade icons redrawn.
+- v2.12.3: giant eye lasers, effects wait while he is behind the dishwasher, spawn float snap.
