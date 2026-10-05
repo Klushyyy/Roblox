@@ -79,3 +79,4 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
 - v2.12.15: poll visible during the show, pads closed in PartyService, smash UI per object, invisible hit boxes cleared.
 - v2.12.18: holes cut earlier pieces (real holes), no crack lines, fly + giant offers, bomb-shaped nuke, quick 5-4-3-2-1.
 - v2.12.19: bigger nuke that breaks half the table, slow glow/fire fade, pet hunt with Glitch Fox, new ending timeline.
+- v2.12.20: touching the room floor always sends you back to spawn (scen_floor).

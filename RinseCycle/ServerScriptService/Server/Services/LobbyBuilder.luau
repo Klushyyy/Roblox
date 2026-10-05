@@ -2946,13 +2946,14 @@ end
 -- While the show runs: anyone who ends up below the table (fell off an edge, into a hole...) is put
 -- back at the spawn. Inside the obby's area they go to their checkpoint instead (see the obby).
 local rescueBeat: RBXScriptConnection? = nil
+-- Always on, event or not (the event no longer switches it off): anyone who ends up below the table, on the
+-- room floor or anywhere between, is sent straight back to the spawn. It catches glitches and cheats alike.
 function LobbyBuilder.SetRescue(on: boolean)
-	if rescueBeat then
-		rescueBeat:Disconnect()
-		rescueBeat = nil
+	if rescueBeat or not on then
+		return
 	end
 	local beat: any = RunService.Heartbeat
-	if not on or not beat then
+	if not beat then
 		return
 	end
 	local clock = 0
@@ -2967,8 +2968,8 @@ function LobbyBuilder.SetRescue(on: boolean)
 			if root then
 				local p = root.Position - ORIGIN
 				local inObbyBox = p.X > OBBY_BOX.X0 and p.X < OBBY_BOX.X1 and p.Z > OBBY_BOX.Z0 and p.Z < OBBY_BOX.Z1
-				local inTable = math.abs(p.X) < 150 and p.Z > -150 and p.Z < OBBY_BOX.Z1
-				if p.Y < -30 and p.Y > -125 and (inTable or inObbyBox) and not (inObbyBox and obbyOpen) then
+				local inRoom = math.abs(p.X) < ROOM_X and p.Z > ROOM_Z0 and p.Z < ROOM_Z1
+				if p.Y < -30 and p.Y > -150 and (inRoom or inObbyBox) and not (inObbyBox and obbyOpen) then
 					sendToLobbySpawn(player)
 				end
 			end
@@ -3041,6 +3042,7 @@ function LobbyBuilder.Build(): Lobby
 		workspace.Terrain:Clear()
 	end)
 	buildGarden(model)
+	LobbyBuilder.SetRescue(true)
 	return built
 end
 
