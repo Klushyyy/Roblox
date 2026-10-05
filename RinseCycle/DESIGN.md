@@ -1732,3 +1732,10 @@ He only does effects (and the roof exit) when his angle round the table is clear
 - The roof exit hole is radius 128 (was 64).
 - The show ends sooner after he leaves: leave 605, thanks 613, heal 617, ShowSeconds 624 (was 640).
 - Every glowing/temporary part (`neonPart`, scorch, fire, craters, bombs) is tracked and faded out by `clearFx()` when the show resets, so no orange glow is left behind.
+
+### 6zz. Chair, punch, real craters, poll corners (v2.12.9)
+- Script order: two laps, then `dishwasher` (t=44), `sit` (t=84: he leaps onto the chair at the end of the table, z=-168, and plays the R15 sit animation; effects and lasers continue from the seat), `punch` (t=197: he turns to the Fastest Clean board and punches; `punchLaunch` makes the t=199 `hole 1` fling the board and what stood on it the way the fist went), `stand` (t=205: he leaps back to the circle and walks on). Bombs moved to t=248 (own slot, not with a meteor shower).
+- Table holes now cut `TableApron` too, so they go all the way through and can be fallen into. Bomb craters are real holes (`LobbyBuilder.OpenCrater`, radius 9, indexes 10+, mended by HealHoles); 4-5 per round, spaced out, never on the two big holes; people near them are moved clear and flung out.
+- `SIT_LIFT` (hip height above the seat, in scales) and the sit/punch animation ids sit at the top of the sit code in AdminServer for tuning.
+- Poll card inset 4 px so the holder's clipping no longer squares off its rounded blue outline.
+- `scen_dishwasher.luau` also checks craters cut the apron and everything heals.

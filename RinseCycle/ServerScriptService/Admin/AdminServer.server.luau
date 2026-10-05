@@ -5403,6 +5403,10 @@ do
 	local giantHead: BasePart? = nil
 	local eyesFor: number? = nil -- how long the next eye-laser burst lasts (set just before it starts)
 	local giantLeave: (() -> ())? = nil
+	local giantSit: (() -> ())? = nil
+	local giantStand: (() -> ())? = nil
+	local giantPunch: (() -> ())? = nil
+	local punchLaunch: Vector3? = nil -- set by the punch: the next table hole flings what is in it this way
 	local leaving = false -- set once he starts the exit: nothing respawns him afterwards
 	local giantRescale: ((number, number) -> ())? = nil
 	local boom: (number, Vector3) -> () = function() end
@@ -5421,6 +5425,7 @@ do
 			end
 		end
 		giantHead, giantLeave, giantRescale = nil, nil, nil
+		giantSit, giantStand, giantPunch, punchLaunch = nil, nil, nil, nil
 	end
 	local function ringAt(pos: Vector3, size: number, seconds: number, color: Color3)
 		local ring = Instance.new("Part")
@@ -6191,6 +6196,7 @@ do
 		-- Bombs: red circles show where each one will land; two seconds and a half later it does, and anyone
 		-- standing in the circle is thrown out of it (no damage). Each leaves a small crater until the show ends.
 		-- Two rounds, ten seconds apart.
+		local craterCount = 9 -- hole indexes 10 and up belong to the bomb craters
 		local function bombRound(round: number)
 			local spots: { Vector3 } = {}
 			local function clampSpot(v: Vector3): Vector3
@@ -6204,14 +6210,41 @@ do
 				end
 			end
 			-- (a few scattered ones so there are always several, even with one player)
-			local target = math.min(14, 7 + round * 3)
-			while #spots < target do
-				table.insert(spots, clampSpot(plazaSpot()))
+			-- (a few scattered ones so there are always several, even with one player; never close together or
+			-- on the two big holes)
+			local function spaced(v: Vector3): boolean
+				for _, other in spots do
+					if (other - v).Magnitude < 30 then
+						return false
+					end
+				end
+				for _, def in Show.Holes do
+					if (Vector3.new(def[1], 0.25, def[2]) - v).Magnitude < def[3] + 22 then
+						return false
+					end
+				end
+				return true
 			end
-			while #spots > 14 do
+			local near = spots
+			spots = {}
+			for _, v in near do
+				if spaced(v) then
+					table.insert(spots, v)
+				end
+			end
+			local target = math.min(6, 3 + round)
+			local tries = 0
+			while #spots < target and tries < 80 do
+				tries += 1
+				local v = clampSpot(plazaSpot())
+				if spaced(v) then
+					table.insert(spots, v)
+				end
+			end
+			while #spots > 6 do
 				table.remove(spots, math.random(1, #spots))
 			end
-			local RADIUS, FALL = 15, 2.6
+			local RADIUS, FALL = 14, 2.6
 			for i, spot in spots do
 				task.delay((i - 1) * 0.08, function()
 					local warn = neonPart(Vector3.new(0.3, RADIUS * 2, RADIUS * 2), Color3.fromRGB(255, 50, 40), Enum.PartType.Cylinder)
@@ -6247,49 +6280,24 @@ do
 						harmlessBlast(spot + Vector3.new(0, 4, 0), 26)
 						Remote.AbuseBoom:FireAllClients(1.8, spot)
 						ringAt(spot, 60, 0.6, Color3.fromRGB(255, 170, 70))
-						-- thrown clear of the circle
+						-- a real hole through the table (the bits near it are moved clear), then whoever was close is thrown out
+						craterCount += 1
+						LobbyBuilder.OpenCrater(craterCount, spot.X, spot.Z, 9)
 						for _, plr in Players:GetPlayers() do
 							local c = plr.Character
 							local r = c and c:FindFirstChild("HumanoidRootPart") :: BasePart?
 							local hum = c and c:FindFirstChildOfClass("Humanoid")
 							if r and hum then
 								local off = Vector3.new(r.Position.X - spot.X, 0, r.Position.Z - spot.Z)
-								if off.Magnitude < RADIUS and r.Position.Y < spot.Y + 40 then
+								if off.Magnitude < 40 and r.Position.Y < spot.Y + 40 then
 									local dir = if off.Magnitude > 0.5 then off.Unit else Vector3.new(math.random() - 0.5, 0, math.random() - 0.5).Unit
 									pcall(function()
 										hum:ChangeState(Enum.HumanoidStateType.Freefall)
-										r.AssemblyLinearVelocity = dir * 90 + Vector3.new(0, 55, 0)
+										r.AssemblyLinearVelocity = dir * 70 + Vector3.new(0, 45, 0)
 									end)
 								end
 							end
 						end
-						-- the crater: a dark scorched dent with a lighter rim (stays until the show is over)
-						local rim = Instance.new("Part")
-						rim.Shape = Enum.PartType.Cylinder
-						rim.Anchored = true
-						rim.CanCollide = false
-						rim.CanQuery = false
-						rim.CanTouch = false
-						rim.CastShadow = false
-						rim.Color = Color3.fromRGB(150, 108, 74)
-						rim.Material = Enum.Material.Slate
-						rim.Size = Vector3.new(0.12, 15, 15)
-						rim.CFrame = CFrame.new(spot.X, 0.22, spot.Z) * CFrame.Angles(0, 0, math.rad(90))
-						rim.Parent = workspace
-						local pit = Instance.new("Part")
-						pit.Shape = Enum.PartType.Cylinder
-						pit.Anchored = true
-						pit.CanCollide = false
-						pit.CanQuery = false
-						pit.CanTouch = false
-						pit.CastShadow = false
-						pit.Color = Color3.fromRGB(28, 20, 16)
-						pit.Material = Enum.Material.Slate
-						pit.Size = Vector3.new(0.12, 10.5, 10.5)
-						pit.CFrame = CFrame.new(spot.X, 0.26, spot.Z) * CFrame.Angles(0, 0, math.rad(90))
-						pit.Parent = workspace
-						track(rim)
-						track(pit)
 					end)
 					fall:Play()
 				end)
@@ -6347,7 +6355,8 @@ do
 			return
 		end
 		local pos = Vector3.new(def[1], 0.2, def[2])
-		LobbyBuilder.OpenHole(index)
+		LobbyBuilder.OpenHole(index, punchLaunch)
+		punchLaunch = nil
 		boom(3, pos)
 		for i = 1, 3 do
 			task.delay(i * 0.3, function()
@@ -6670,6 +6679,62 @@ do
 				walkTrack:AdjustSpeed(if on then walkSpeed / (16 * scaleNow) * 1.5 else 0)
 			end
 		end
+		-- Sitting on the chair at the end of the table (behind the dishwasher), punching the leaderboard off the
+		-- table from there, and standing up again. (Animation ids are Roblox's default R15 sit and tool-slash.)
+		local sitTrack = load("2506281703", Enum.AnimationPriority.Action, true)
+		local punchTrack = load("2410679501", Enum.AnimationPriority.Action2, false)
+		local SIT_X, SIT_Z, SIT_TOP, SIT_LIFT = 0, -168, -43, 1.0 -- the chair; how far the hips sit above the seat (x scale)
+		local MOVE_TIME = 2.4
+		local moveT0, moveFromPos, moveFromY = 0, pos, rootY
+		giantSit = function()
+			if state ~= "walk" then
+				return
+			end
+			state = "sitleap"
+			moveT0, moveFromPos, moveFromY = os.clock(), pos, rootY
+			if walkTrack then
+				walkTrack:Stop(0.3)
+			end
+			commandText(":sit")
+		end
+		giantStand = function()
+			if state ~= "seated" then
+				return
+			end
+			state = "standleap"
+			moveT0, moveFromPos, moveFromY = os.clock(), pos, rootY
+			if sitTrack then
+				sitTrack:Stop(0.3)
+			end
+			commandText(":stand")
+		end
+		giantPunch = function()
+			if state ~= "seated" then
+				return
+			end
+			local board = Vector3.new(-80, 0, -74) -- the Fastest Clean board
+			local flat = board - Vector3.new(pos.X, 0, pos.Z)
+			local dir = if flat.Magnitude > 1 then flat.Unit else Vector3.new(0, 0, 1)
+			facing = Vector3.new(dir.X, 0, dir.Z)
+			if punchTrack then
+				punchTrack:Play(0.1)
+			end
+			-- the board flies the way the fist went (the next "hole" step uses it)
+			punchLaunch = dir * 150 + Vector3.new(0, 70, 0)
+			task.delay(0.9, function()
+				if giant == model then
+					Remote.AbuseBoom:FireAllClients(2.4, board)
+					harmlessBlast(board + Vector3.new(0, 10, 0), 22)
+					ringAt(board, 260, 0.8, Color3.fromRGB(255, 230, 160))
+				end
+			end)
+			task.delay(2.2, function()
+				if giant == model and state == "seated" then
+					facing = Vector3.new(0, 0, 1)
+				end
+			end)
+		end
+
 		-- Bigger (or smaller) over a few seconds; the floor lock follows by itself.
 		giantRescale = function(target: number, seconds: number)
 			task.spawn(function()
@@ -6694,7 +6759,7 @@ do
 			if state == "leave" or state == "fly" then
 				return
 			end
-			if hiddenNow() then
+			if hiddenNow() and state ~= "seated" then
 				-- not while he is behind the dishwasher: nobody could see it
 				task.spawn(function()
 					for _ = 1, 40 do
@@ -6815,6 +6880,41 @@ do
 					setWalking(true)
 					setGesture(nil)
 				end
+			elseif state == "sitleap" or state == "standleap" then
+				local f = math.clamp((now - moveT0) / MOVE_TIME, 0, 1)
+				local e = smooth(f)
+				local toPos, toY
+				if state == "sitleap" then
+					toPos = Vector3.new(SIT_X, ROOM_FLOOR, SIT_Z)
+					toY = SIT_TOP + SIT_LIFT * scaleNow
+					face(Vector3.new(0, 0, 1), dt)
+				else
+					toPos = Vector3.new(0, ROOM_FLOOR, TABLE_CENTER.Z - RADIUS)
+					toY = ROOM_FLOOR + rootAbove
+					face(Vector3.new(1, 0, 0), dt)
+				end
+				pos = moveFromPos:Lerp(toPos, e)
+				rootY = moveFromY + (toY - moveFromY) * e
+				leapHeight = math.max(0, math.min(150, ROOF_Y - 25 - 3.7 * scaleNow - rootY)) * math.sin(math.pi * f)
+				if f >= 1 then
+					leapHeight = 0
+					boom(3, Vector3.new(toPos.X, ROOM_FLOOR, toPos.Z))
+					if state == "sitleap" then
+						state = "seated"
+						facing = Vector3.new(0, 0, 1)
+						if sitTrack then
+							sitTrack:Play(0.2)
+						end
+					else
+						angle = 3 * math.pi / 2
+						state = "walk"
+						setWalking(true)
+					end
+				end
+			elseif state == "seated" then
+				pos = Vector3.new(SIT_X, ROOM_FLOOR, SIT_Z)
+				rootY = SIT_TOP + SIT_LIFT * scaleNow
+				leapHeight = 0
 			elseif state == "leave" then
 				face(TABLE_CENTER - pos, dt)
 			elseif state == "fly" then
@@ -6825,7 +6925,7 @@ do
 					return
 				end
 			end
-			if state ~= "fly" then
+			if state ~= "fly" and state ~= "sitleap" and state ~= "standleap" and state ~= "seated" then
 				-- Floor lock: the lowest sole sits on the floor, whatever the animation does. Gently (a low
 				-- gain can't oscillate even if the feet lag a frame), with a dead zone and a speed limit.
 				local low2 = math.min(lowestPoint(footL), lowestPoint(footR))
@@ -6880,6 +6980,34 @@ do
 			if name == "winner" then
 				name = chosenEffect
 			end
+			if name == "sit" then
+				task.spawn(function()
+					for _ = 1, 200 do
+						if giant ~= model or leaving then
+							return
+						end
+						local d = math.deg(angle) % 360
+						if state == "walk" and d > 255 and d < 285 and leapHeight < 5 then
+							if giantSit then
+								giantSit()
+							end
+							return
+						end
+						task.wait(0.2)
+					end
+				end)
+				return
+			elseif name == "stand" then
+				if giantStand then
+					giantStand()
+				end
+				return
+			elseif name == "punch" then
+				if giantPunch then
+					giantPunch()
+				end
+				return
+			end
 			local effect = FX[name]
 			if not effect or giant ~= model or state == "leave" or state == "fly" then
 				return
@@ -6891,7 +7019,7 @@ do
 					local deg = math.deg(angle) % 360
 					return state == "walk" and deg > 80 and deg < 100 and leapHeight < 5
 				end
-				return not hiddenNow()
+				return state == "seated" or not hiddenNow()
 			end
 			if not canAct() then
 				task.spawn(function()
@@ -6917,11 +7045,11 @@ do
 			-- Something extra with the act, never the same thing twice running: lasers a couple of times, then
 			-- fireballs, meteors and shockwaves, then lasers again with more beams, and so on.
 			local bonus = BONUS[(acts - 1) % #BONUS + 1]
-			if name ~= "dishwasher" and name ~= "bombs" and bonus ~= name and state == "act" and FX[bonus] then
+			if name ~= "dishwasher" and name ~= "bombs" and bonus ~= name and (state == "act" or state == "seated") and FX[bonus] then
 				task.delay(0.4, function()
-					if state == "act" then
+					if state == "act" or state == "seated" then
 						if bonus == "eyes" then
-							eyesFor = math.max(1.2, stateUntil - os.clock() - 0.2)
+							eyesFor = if state == "seated" then 4 else math.max(1.2, stateUntil - os.clock() - 0.2)
 						end
 						FX[bonus]()
 					end
@@ -7193,7 +7321,7 @@ do
 	end
 
 	-- :abusefx <name> (Studio tab): try one piece of the show on its own (it spawns the giant if needed).
-	local FX_NAMES = { "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes", "fireballs", "dishwasher", "bombs" }
+	local FX_NAMES = { "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes", "fireballs", "dishwasher", "bombs", "sit", "punch", "stand" }
 	Commands.abusefx = function(admin, text)
 		local arg = string.lower(text:match("^%s*(%S*)") or "")
 		local function needGiant(): boolean

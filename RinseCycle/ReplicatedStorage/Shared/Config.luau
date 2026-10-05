@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.8"
+Config.Version = "2.12.9"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1227,14 +1227,16 @@ do
 	at(26, "round", "Gifts")
 	at(31, "attack", "beam")
 	at(38, "say", "bubbles or gems. dont overthink it.")
-	at(46, "attack", "fountains")
+	at(41, "say", "see that machine? i never liked it.")
+	at(44, "attack", "dishwasher")
+	at(62, "attack", "fountains")
 	at(52, "say", "the vote closes in a few seconds.")
-	at(58, "attack", "lightning")
+	at(68, "attack", "lightning")
 	at(74, "say", "prizes are landing in your inventory right now.")
 	at(78, "attack", "barrage")
 	at(86, "say", "that was the easy part.")
-	at(88, "say", "see that machine? i never liked it.")
-	at(90, "attack", "dishwasher")
+	at(80, "say", "my legs hurt. im sitting down for this bit.")
+	at(84, "attack", "sit")
 	at(114, "attack", "laser")
 	at(98, "say", "this next one isnt a vote.")
 	at(101, "round", "Passes")
@@ -1249,11 +1251,12 @@ do
 	at(164, "say", "choose carefully. i have to live with it too.")
 	at(172, "attack", "laser")
 	-- (the winning effect plays by itself when the vote is counted, around 182)
-	at(176, "say", "bombs. a red circle on the table means it is about to land there. move.")
-	at(178, "attack", "bombs")
 	at(190, "say", "thats what you picked. dont blame me.")
 	at(196, "say", "right. the table. lets see how much it can take.")
+	at(197, "attack", "punch")
 	at(199, "hole", 1)
+	at(204, "say", "right. stretching my legs.")
+	at(205, "attack", "stand")
 	at(207, "say", "stay off the edges. or dont. i get to watch either way.")
 	at(211, "attack", "beam")
 	at(217, "say", "now. im going to build something. give me a second.")
@@ -1261,9 +1264,10 @@ do
 	at(230, "say", "an obby. behind the spawn, at the end of the table.")
 	at(236, "say", "everyone who finishes it gets gems. the first one to the top gets a game pass.")
 	at(240, "attack", "winner")
-	at(250, "attack", "lightning")
+	at(246, "say", "bombs. a red circle on the table is where one lands. get out of it, or fall in.")
+	at(248, "attack", "bombs")
 	at(258, "say", "i built it to be fair. mostly.")
-	at(262, "attack", "fountains")
+	at(268, "attack", "fountains")
 	at(272, "say", "the spinners are my favourite part.")
 	at(276, "attack", "ufo")
 	at(286, "say", "fall off and its back to your last checkpoint. no mercy. ok, a little mercy.")

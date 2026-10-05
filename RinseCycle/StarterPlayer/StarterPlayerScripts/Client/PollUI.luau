@@ -124,8 +124,9 @@ function PollUI.Init()
 
 	local card = UIKit.Card({
 		Name = "Poll",
-		Position = UDim2.fromOffset(0, TAB_H),
-		Size = UDim2.new(1, 0, 0, CARD_H),
+		-- (inset: the holder clips to a rectangle, which cut the blue outline off at the rounded corners)
+		Position = UDim2.fromOffset(4, TAB_H + 2),
+		Size = UDim2.new(1, -8, 0, CARD_H - 6),
 		Color = Colors.PanelDark,
 		Parent = slider,
 	})

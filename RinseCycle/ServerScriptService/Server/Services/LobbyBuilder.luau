@@ -2234,7 +2234,8 @@ type HoleRec = {
 	Radius: number,
 }
 local holes: { [number]: HoleRec } = {}
-local TABLE_PART_NAMES = { SafetyFloor = true, TableSlab = true, Plank = true, Chamfer = true }
+-- (TableApron is the slab under the planks: it has to be cut too, or a "hole" has a floor and nobody can fall through it)
+local TABLE_PART_NAMES = { SafetyFloor = true, TableSlab = true, Plank = true, Chamfer = true, TableApron = true }
 local TILE = 5.5
 
 local function worldBox(part: BasePart): (Vector3, Vector3)
@@ -2258,7 +2259,7 @@ local ROOF_PART_NAMES = { Ceiling = true, CeilingBeam = true, Crown = true }
 
 -- Cuts a round hole (tiles fall, rim tilts) in the named parts around (x, z). opts.Roof: the ceiling
 -- (bigger tiles, no props / cracks / glow, and the falling tiles never collide with anyone).
-local function cutDisc(index: number, holeX: number, holeZ: number, R: number, names: { [string]: boolean }, opts: { Roof: boolean? })
+local function cutDisc(index: number, holeX: number, holeZ: number, R: number, names: { [string]: boolean }, opts: { Roof: boolean?, Launch: Vector3? })
 	local model = lobby and lobby.Model
 	if not model or holes[index] then
 		return
@@ -2416,6 +2417,11 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 				prop.Part.Anchored = false
 				prop.Part.CanCollide = true
 				prop.Part.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-2, 2), rng:NextNumber(-2, 2), rng:NextNumber(-2, 2))
+				if opts.Launch then
+					-- punched: it flies off in the direction of the punch
+					prop.Part.AssemblyLinearVelocity = opts.Launch + Vector3.new(rng:NextNumber(-12, 12), rng:NextNumber(0, 25), rng:NextNumber(-12, 12))
+					prop.Part.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-9, 9), rng:NextNumber(-9, 9), rng:NextNumber(-9, 9))
+				end
 			end)
 		end
 		-- Chunks flung out of it.
@@ -2457,11 +2463,16 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 	end)
 end
 
-function LobbyBuilder.OpenHole(index: number)
+function LobbyBuilder.OpenHole(index: number, launch: Vector3?)
 	local def = (Config.AbuseShow :: any).Holes[index]
 	if def then
-		cutDisc(index, def[1], def[2], def[3], TABLE_PART_NAMES, {})
+		cutDisc(index, def[1], def[2], def[3], TABLE_PART_NAMES, { Launch = launch })
 	end
+end
+
+-- A bomb crater: a real hole through the whole table (index 10 and up), mended by HealHoles.
+function LobbyBuilder.OpenCrater(index: number, x: number, z: number, radius: number)
+	cutDisc(index, x, z, radius, TABLE_PART_NAMES, {})
 end
 
 -- A hole in the ceiling (the giant's exit). It heals with HealRoof (or HealHoles).
