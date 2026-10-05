@@ -1726,3 +1726,9 @@ He only does effects (and the roof exit) when his angle round the table is clear
 - Fireballs leave scorch marks on the table (fade over 12 s).
 - Over the obby he does two forward somersaults instead of a plain jump. The leap height is capped so his head (3.7 x scale, it swings round in the flips) stays 25 studs under the ceiling; HeatScale 46 -> 42.
 - `_tools/tests/scen_dishwasher.luau` checks break/repair.
+
+### 6zy. Bombs, bigger roof hole, faster ending, full fade (v2.12.8)
+- `attack bombs` (t=178, `:abusefx bombs`): red pulsing circles mark where each bomb will land (near players standing on the table, plus scattered ones, 7-14 per round, only on the table). 2.6 s later the bomb lands, throws anyone inside the circle out (velocity, no damage) and leaves a small crater (dark pit with a lighter rim). A second round follows 10 s later. Craters stay until the show ends.
+- The roof exit hole is radius 128 (was 64).
+- The show ends sooner after he leaves: leave 605, thanks 613, heal 617, ShowSeconds 624 (was 640).
+- Every glowing/temporary part (`neonPart`, scorch, fire, craters, bombs) is tracked and faded out by `clearFx()` when the show resets, so no orange glow is left behind.

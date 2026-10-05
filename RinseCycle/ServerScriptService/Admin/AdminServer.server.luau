@@ -5488,6 +5488,41 @@ do
 		TweenService:Create(flash, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(radius * 2.2, radius * 2.2, radius * 2.2), Transparency = 1 }):Play()
 		Debris:AddItem(flash, 0.6)
 	end
+	-- Every glowing / temporary part of the show is remembered, so the end of the show can fade the lot away.
+	local fxParts: { Instance } = {}
+	local function track(inst: Instance)
+		if #fxParts > 600 then
+			local keep = {}
+			for _, p in fxParts do
+				if p.Parent then
+					table.insert(keep, p)
+				end
+			end
+			fxParts = keep
+		end
+		table.insert(fxParts, inst)
+	end
+	local function clearFx()
+		local list = fxParts
+		fxParts = {}
+		for _, p in list do
+			if p.Parent then
+				if p:IsA("BasePart") then
+					TweenService:Create(p, TweenInfo.new(1.2), { Transparency = 1 }):Play()
+				end
+				for _, d in p:GetDescendants() do
+					if d:IsA("Light") then
+						d.Enabled = false
+					elseif d:IsA("ParticleEmitter") then
+						d.Enabled = false
+					end
+				end
+				task.delay(1.3, function()
+					p:Destroy()
+				end)
+			end
+		end
+	end
 	local function neonPart(size: Vector3, color: Color3, shape: Enum.PartType?): Part
 		local part = Instance.new("Part")
 		part.Anchored = true
@@ -5501,6 +5536,7 @@ do
 		if shape then
 			part.Shape = shape
 		end
+		track(part)
 		return part
 	end
 	local function upright(part: BasePart, pos: Vector3)
@@ -6021,6 +6057,7 @@ do
 						scorch.Size = Vector3.new(0.2, 14, 14)
 						scorch.CFrame = CFrame.new(spot.X, 0.3, spot.Z) * CFrame.Angles(0, 0, math.rad(90))
 						scorch.Parent = workspace
+						track(scorch)
 						TweenService:Create(scorch, TweenInfo.new(12, Enum.EasingStyle.Linear), { Transparency = 1 }):Play()
 						Debris:AddItem(scorch, 12.5)
 						Remote.AbuseBoom:FireAllClients(1.3, spot) -- the table shakes
@@ -6140,6 +6177,7 @@ do
 					e.Parent = fire
 				end
 				fire.Parent = workspace
+				track(fire)
 				Debris:AddItem(fire, 40)
 				task.delay(30, function()
 					for _, e in fire:GetChildren() do
@@ -6148,6 +6186,121 @@ do
 						end
 					end
 				end)
+			end)
+		end
+		-- Bombs: red circles show where each one will land; two seconds and a half later it does, and anyone
+		-- standing in the circle is thrown out of it (no damage). Each leaves a small crater until the show ends.
+		-- Two rounds, ten seconds apart.
+		local function bombRound(round: number)
+			local spots: { Vector3 } = {}
+			local function clampSpot(v: Vector3): Vector3
+				return Vector3.new(math.clamp(v.X, -75, 75), 0.25, math.clamp(v.Z, -85, 55))
+			end
+			for _, plr in Players:GetPlayers() do
+				local c = plr.Character
+				local r = c and c:FindFirstChild("HumanoidRootPart") :: BasePart?
+				if r and r.Position.Y > -5 and r.Position.Y < 120 and math.abs(r.Position.X) < 100 and r.Position.Z > -100 and r.Position.Z < 60 then
+					table.insert(spots, clampSpot(r.Position + Vector3.new(math.random(-12, 12), 0, math.random(-12, 12))))
+				end
+			end
+			-- (a few scattered ones so there are always several, even with one player)
+			local target = math.min(14, 7 + round * 3)
+			while #spots < target do
+				table.insert(spots, clampSpot(plazaSpot()))
+			end
+			while #spots > 14 do
+				table.remove(spots, math.random(1, #spots))
+			end
+			local RADIUS, FALL = 15, 2.6
+			for i, spot in spots do
+				task.delay((i - 1) * 0.08, function()
+					local warn = neonPart(Vector3.new(0.3, RADIUS * 2, RADIUS * 2), Color3.fromRGB(255, 50, 40), Enum.PartType.Cylinder)
+					warn.Transparency = 0.55
+					warn.CFrame = CFrame.new(spot.X, 0.4, spot.Z) * CFrame.Angles(0, 0, math.rad(90))
+					warn.Parent = workspace
+					TweenService:Create(warn, TweenInfo.new(0.3, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1, true), { Transparency = 0.15 }):Play()
+					local bomb = Instance.new("Part")
+					bomb.Shape = Enum.PartType.Ball
+					bomb.Size = Vector3.new(8, 8, 8)
+					bomb.Color = Color3.fromRGB(38, 38, 46)
+					bomb.Material = Enum.Material.Metal
+					bomb.Anchored = true
+					bomb.CanCollide = false
+					bomb.CanTouch = false
+					bomb.CanQuery = false
+					bomb.Position = spot + Vector3.new(math.random(-20, 20), 280, math.random(-20, 20))
+					local smoke = Instance.new("ParticleEmitter")
+					smoke.Texture = "rbxasset://textures/particles/smoke_main.dds"
+					smoke.Color = ColorSequence.new(Color3.fromRGB(90, 90, 96))
+					smoke.Lifetime = NumberRange.new(0.6, 1)
+					smoke.Rate = 40
+					smoke.Speed = NumberRange.new(0, 3)
+					smoke.Size = NumberSequence.new(5, 1)
+					smoke.Parent = bomb
+					bomb.Parent = workspace
+					track(warn)
+					track(bomb)
+					local fall = TweenService:Create(bomb, TweenInfo.new(FALL, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = spot + Vector3.new(0, 4, 0) })
+					fall.Completed:Connect(function()
+						bomb:Destroy()
+						warn:Destroy()
+						harmlessBlast(spot + Vector3.new(0, 4, 0), 26)
+						Remote.AbuseBoom:FireAllClients(1.8, spot)
+						ringAt(spot, 60, 0.6, Color3.fromRGB(255, 170, 70))
+						-- thrown clear of the circle
+						for _, plr in Players:GetPlayers() do
+							local c = plr.Character
+							local r = c and c:FindFirstChild("HumanoidRootPart") :: BasePart?
+							local hum = c and c:FindFirstChildOfClass("Humanoid")
+							if r and hum then
+								local off = Vector3.new(r.Position.X - spot.X, 0, r.Position.Z - spot.Z)
+								if off.Magnitude < RADIUS and r.Position.Y < spot.Y + 40 then
+									local dir = if off.Magnitude > 0.5 then off.Unit else Vector3.new(math.random() - 0.5, 0, math.random() - 0.5).Unit
+									pcall(function()
+										hum:ChangeState(Enum.HumanoidStateType.Freefall)
+										r.AssemblyLinearVelocity = dir * 90 + Vector3.new(0, 55, 0)
+									end)
+								end
+							end
+						end
+						-- the crater: a dark scorched dent with a lighter rim (stays until the show is over)
+						local rim = Instance.new("Part")
+						rim.Shape = Enum.PartType.Cylinder
+						rim.Anchored = true
+						rim.CanCollide = false
+						rim.CanQuery = false
+						rim.CanTouch = false
+						rim.CastShadow = false
+						rim.Color = Color3.fromRGB(150, 108, 74)
+						rim.Material = Enum.Material.Slate
+						rim.Size = Vector3.new(0.12, 15, 15)
+						rim.CFrame = CFrame.new(spot.X, 0.22, spot.Z) * CFrame.Angles(0, 0, math.rad(90))
+						rim.Parent = workspace
+						local pit = Instance.new("Part")
+						pit.Shape = Enum.PartType.Cylinder
+						pit.Anchored = true
+						pit.CanCollide = false
+						pit.CanQuery = false
+						pit.CanTouch = false
+						pit.CastShadow = false
+						pit.Color = Color3.fromRGB(28, 20, 16)
+						pit.Material = Enum.Material.Slate
+						pit.Size = Vector3.new(0.12, 10.5, 10.5)
+						pit.CFrame = CFrame.new(spot.X, 0.26, spot.Z) * CFrame.Angles(0, 0, math.rad(90))
+						pit.Parent = workspace
+						track(rim)
+						track(pit)
+					end)
+					fall:Play()
+				end)
+			end
+		end
+		fx.bombs = function()
+			bombRound(1)
+			task.delay(10, function()
+				if giant then
+					bombRound(2)
+				end
 			end)
 		end
 		fx.fountains = function()
@@ -6575,7 +6728,7 @@ do
 				laser.Parent = workspace
 				Debris:AddItem(laser, 2.5)
 				TweenService:Create(laser, TweenInfo.new(2.5), { Transparency = 0.7 }):Play()
-				LobbyBuilder.OpenRoofHole(hx, hz, 64) -- a real round hole in the ceiling
+				LobbyBuilder.OpenRoofHole(hx, hz, 128) -- a real round hole in the ceiling
 				for i = 0, 5 do
 					task.delay(i * 0.45, function()
 						Remote.AbuseBoom:FireAllClients(2.4, Vector3.new(hx, ROOF_Y, hz))
@@ -6756,7 +6909,7 @@ do
 			end
 			acts += 1
 			if state == "walk" then
-				state, stateUntil = "act", os.clock() + (if name == "dishwasher" then 10 else if heat then 3.6 else 4.6)
+				state, stateUntil = "act", os.clock() + (if name == "dishwasher" then 10 elseif name == "bombs" then 6 elseif heat then 3.6 else 4.6)
 				setWalking(false)
 			end
 			commandText(nil)
@@ -6764,7 +6917,7 @@ do
 			-- Something extra with the act, never the same thing twice running: lasers a couple of times, then
 			-- fireballs, meteors and shockwaves, then lasers again with more beams, and so on.
 			local bonus = BONUS[(acts - 1) % #BONUS + 1]
-			if name ~= "dishwasher" and bonus ~= name and state == "act" and FX[bonus] then
+			if name ~= "dishwasher" and name ~= "bombs" and bonus ~= name and state == "act" and FX[bonus] then
 				task.delay(0.4, function()
 					if state == "act" then
 						if bonus == "eyes" then
@@ -6835,6 +6988,7 @@ do
 		LobbyBuilder.BreakObby()
 		LobbyBuilder.SetRescue(false)
 		LobbyBuilder.RepairDishwasher()
+		clearFx()
 	end
 	-- The first player to finish the obby (in any server) wins a game pass, announced to everyone.
 	ReplicatedStorage:GetAttributeChangedSignal("AbuseObbyFinish"):Connect(function()
@@ -7039,7 +7193,7 @@ do
 	end
 
 	-- :abusefx <name> (Studio tab): try one piece of the show on its own (it spawns the giant if needed).
-	local FX_NAMES = { "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes", "fireballs", "dishwasher" }
+	local FX_NAMES = { "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes", "fireballs", "dishwasher", "bombs" }
 	Commands.abusefx = function(admin, text)
 		local arg = string.lower(text:match("^%s*(%S*)") or "")
 		local function needGiant(): boolean

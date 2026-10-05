@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.7"
+Config.Version = "2.12.8"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1135,7 +1135,7 @@ Config.UpcomingEvents = {
 Config.AbuseShow = ({
 	EventKey = "AdminAbuse",
 	PreSeconds = 1800, -- rounds can't start this long before the event
-	ShowSeconds = 640, -- the whole show, from the first boom to the end (rounds are paused for it)
+	ShowSeconds = 624, -- the whole show, from the first boom to the end (rounds are paused for it)
 	Warnings = { 1800, 900, 300, 60 }, -- banners this many seconds before the start
 	OwnerUserId = 2297538363,
 	OwnerName = "EnderBuilda",
@@ -1249,6 +1249,8 @@ do
 	at(164, "say", "choose carefully. i have to live with it too.")
 	at(172, "attack", "laser")
 	-- (the winning effect plays by itself when the vote is counted, around 182)
+	at(176, "say", "bombs. a red circle on the table means it is about to land there. move.")
+	at(178, "attack", "bombs")
 	at(190, "say", "thats what you picked. dont blame me.")
 	at(196, "say", "right. the table. lets see how much it can take.")
 	at(199, "hole", 1)
@@ -1324,8 +1326,8 @@ do
 	at(598, "say", "alright. thats enough. we are done here.")
 	at(602, "say", "time for me to go. watch the ceiling.")
 	at(605, "leave")
-	at(612, "thanks")
-	at(620, "heal")
+	at(613, "thanks")
+	at(617, "heal")
 	Config.AbuseShow.Script = S
 end
 
