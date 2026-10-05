@@ -6758,7 +6758,8 @@ do
 							rec.Dir = want.Unit
 						end
 						rec.Dir = rec.Dir.Unit
-						local speed = if rec.Holding > 0 then 7 else (if flee.Magnitude > 0.05 then 40 else 22)
+						-- (a bit slower than before, and almost stuck while someone holds E / taps and holds the prompt)
+						local speed = if rec.Holding > 0 then 1.5 else (if flee.Magnitude > 0.05 then 30 else 16)
 						-- never into a hole in the table or off its edge: turn away until the next step is on solid table
 						local nx, nz = pos.X + rec.Dir.X * speed * dt, pos.Z + rec.Dir.Z * speed * dt
 						if not bounded(nx, nz) then
