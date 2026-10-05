@@ -1720,3 +1720,9 @@ He only does effects (and the roof exit) when his angle round the table is clear
 ### 6zw. Varied extras, persistent rainbow (v2.12.6)
 - Every act gets an extra from `BONUS` (eyes, eyes, fireballs, meteors, eyes, fireballs, shockwave, eyes, barrage, fireballs, eyes), never the scripted effect itself. Eye lasers grow 1-4 per eye; `fx.fireballs` (`:abusefx fireballs`) rains more fireballs each use and shakes the table.
 - `disco` now keeps the world rainbow until the heat starts (it only restores ColorShift when heat is on, so it never fights the red). The line before it says "the world needs some colour."
+
+### 6zx. Dishwasher smash, somersault leap, roof-safe (v2.12.7)
+- t=90 s (`attack dishwasher`): he waits until he is on the south side (80-100 deg, on the ground), gathers a glowing ball in front of his chest (3.2 s, swelling, rumbling), fires it at the dishwasher; it blows apart (`LobbyBuilder.BreakDishwasher`: parts go invisible/non-solid, up to 190 coloured chunks fly out) and burns for 30 s. Everything is put back at the end (`RepairDishwasher`, called by `resetShow`). `:abusefx dishwasher` tests it.
+- Fireballs leave scorch marks on the table (fade over 12 s).
+- Over the obby he does two forward somersaults instead of a plain jump. The leap height is capped so his head (3.7 x scale, it swings round in the flips) stays 25 studs under the ceiling; HeatScale 46 -> 42.
+- `_tools/tests/scen_dishwasher.luau` checks break/repair.

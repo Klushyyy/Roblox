@@ -6009,6 +6009,20 @@ do
 					fall.Completed:Connect(function()
 						ball:Destroy()
 						harmlessBlast(spot + Vector3.new(0, 4, 0), 18)
+						local scorch = Instance.new("Part")
+						scorch.Shape = Enum.PartType.Cylinder
+						scorch.Anchored = true
+						scorch.CanCollide = false
+						scorch.CanQuery = false
+						scorch.CanTouch = false
+						scorch.CastShadow = false
+						scorch.Color = Color3.fromRGB(30, 22, 18)
+						scorch.Material = Enum.Material.Slate
+						scorch.Size = Vector3.new(0.2, 14, 14)
+						scorch.CFrame = CFrame.new(spot.X, 0.3, spot.Z) * CFrame.Angles(0, 0, math.rad(90))
+						scorch.Parent = workspace
+						TweenService:Create(scorch, TweenInfo.new(12, Enum.EasingStyle.Linear), { Transparency = 1 }):Play()
+						Debris:AddItem(scorch, 12.5)
 						Remote.AbuseBoom:FireAllClients(1.3, spot) -- the table shakes
 						local ring = neonPart(Vector3.new(0.4, 6, 6), Color3.fromRGB(255, 170, 60), Enum.PartType.Cylinder)
 						ring.CFrame = CFrame.new(spot.X, 0.4, spot.Z) * CFrame.Angles(0, 0, math.rad(90))
@@ -6020,6 +6034,121 @@ do
 					Debris:AddItem(ball, 2)
 				end)
 			end
+		end
+		-- The big one: he gathers a glowing ball in front of his chest, then fires it at the giant dishwasher,
+		-- which blows apart into pieces that fly everywhere.
+		fx.dishwasher = function()
+			local model = giant
+			local rootPart = model and model:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if not model or not rootPart or LobbyBuilder.DishwasherBroken() then
+				return
+			end
+			local unit = if giantHead then giantHead.Size.Y else 45
+			local function chest(): Vector3
+				return rootPart.Position + rootPart.CFrame.LookVector * (unit * 1.0) + Vector3.new(0, unit * 1.0, 0)
+			end
+			local ball = neonPart(Vector3.new(6, 6, 6), Color3.fromRGB(255, 230, 150), Enum.PartType.Ball)
+			ball.Position = chest()
+			local light = Instance.new("PointLight")
+			light.Range = 90
+			light.Brightness = 6
+			light.Color = Color3.fromRGB(255, 190, 90)
+			light.Parent = ball
+			local glow = Instance.new("ParticleEmitter")
+			glow.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+			glow.Color = ColorSequence.new(Color3.fromRGB(255, 240, 160), Color3.fromRGB(255, 120, 40))
+			glow.Lifetime = NumberRange.new(0.4, 0.9)
+			glow.Speed = NumberRange.new(5, 25)
+			glow.SpreadAngle = Vector2.new(180, 180)
+			glow.Rate = 120
+			glow.Size = NumberSequence.new(10, 0)
+			glow.LightEmission = 1
+			glow.Parent = ball
+			ball.Parent = workspace
+			local CHARGE, FLIGHT = 3.2, 1.3
+			local target = Vector3.new(0, 28, -78) -- the front of the dishwasher
+			task.spawn(function()
+				local t0 = os.clock()
+				-- charging: it swells and throbs in front of him while the room rumbles
+				local lastRumble = 0
+				while giant == model do
+					local t = os.clock() - t0
+					if t >= CHARGE then
+						break
+					end
+					local f = t / CHARGE
+					local size = 6 + 60 * f * f + math.sin(t * 22) * 2.5 * f
+					ball.Size = Vector3.new(size, size, size)
+					ball.Position = chest()
+					light.Brightness = 4 + 10 * f
+					if t - lastRumble > 0.5 then
+						lastRumble = t
+						Remote.AbuseBoom:FireAllClients(0.5 + f, ball.Position)
+					end
+					task.wait()
+				end
+				if giant ~= model then
+					ball:Destroy()
+					return
+				end
+				-- fired
+				Remote.AbuseBoom:FireAllClients(2.2, ball.Position)
+				local from = ball.Position
+				local f0 = os.clock()
+				while true do
+					local f = (os.clock() - f0) / FLIGHT
+					if f >= 1 then
+						break
+					end
+					ball.Position = from:Lerp(target, f)
+					task.wait()
+				end
+				ball:Destroy()
+				-- impact
+				LobbyBuilder.BreakDishwasher(target)
+				local flash = neonPart(Vector3.new(30, 30, 30), Color3.new(1, 1, 1), Enum.PartType.Ball)
+				flash.Position = target
+				flash.Parent = workspace
+				TweenService:Create(flash, TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(420, 420, 420), Transparency = 1 }):Play()
+				Debris:AddItem(flash, 1)
+				for i = 0, 3 do
+					task.delay(i * 0.15, function()
+						ringAt(Vector3.new(0, 2, -78), 200 + i * 160, 1, Color3.fromRGB(255, 190, 90))
+						Remote.AbuseBoom:FireAllClients(3.4, target)
+					end)
+				end
+				-- the wreck burns and smokes for a while
+				local fire = Instance.new("Part")
+				fire.Transparency = 1
+				fire.Anchored = true
+				fire.CanCollide = false
+				fire.CanQuery = false
+				fire.Size = Vector3.new(60, 2, 20)
+				fire.Position = Vector3.new(0, 4, -88)
+				for _, kind in { "fire", "smoke" } do
+					local e = Instance.new("ParticleEmitter")
+					e.Texture = if kind == "fire" then "rbxasset://textures/particles/fire_main.dds" else "rbxasset://textures/particles/smoke_main.dds"
+					e.Color = if kind == "fire" then ColorSequence.new(Color3.fromRGB(255, 200, 80), Color3.fromRGB(255, 70, 20)) else ColorSequence.new(Color3.fromRGB(60, 60, 64))
+					e.Lifetime = NumberRange.new(1, 2.4)
+					e.Speed = NumberRange.new(6, 18)
+					e.SpreadAngle = Vector2.new(25, 25)
+					e.EmissionDirection = Enum.NormalId.Top
+					e.Rate = if kind == "fire" then 25 else 14
+					e.Size = NumberSequence.new(if kind == "fire" then 9 else 14, 3)
+					e.Transparency = NumberSequence.new(if kind == "fire" then 0.2 else 0.5, 1)
+					e.LightEmission = if kind == "fire" then 1 else 0
+					e.Parent = fire
+				end
+				fire.Parent = workspace
+				Debris:AddItem(fire, 40)
+				task.delay(30, function()
+					for _, e in fire:GetChildren() do
+						if e:IsA("ParticleEmitter") then
+							e.Enabled = false
+						end
+					end
+				end)
+			end)
 		end
 		fx.fountains = function()
 			for i = 1, if heat then 8 else 5 do
@@ -6371,6 +6500,7 @@ do
 		local acts = 0
 		local BONUS = { "eyes", "eyes", "fireballs", "meteors", "eyes", "fireballs", "shockwave", "eyes", "barrage", "fireballs", "eyes" }
 		local flyHeight, flySpeed = 0, 60
+		local rollAngle = 0 -- the somersault he does while he leaps
 		local leapHeight = 0 -- how far he is above the floor while jumping over the obby
 		local function face(dir: Vector3, dt: number)
 			local flat = Vector3.new(dir.X, 0, dir.Z)
@@ -6514,9 +6644,13 @@ do
 				local deg = math.deg(angle) % 360
 				local wasLeap = leapHeight
 				if LobbyBuilder.ObbyExists() and deg > 8 and deg < 120 then
-					leapHeight = 215 * math.min(smooth((deg - 8) / 14), smooth((120 - deg) / 14))
+					-- (never higher than the ceiling allows: his head, which swings round during the flips, stays under it)
+					local ceilingRoom = ROOF_Y - 25 - 3.7 * scaleNow - rootY
+					leapHeight = math.max(0, math.min(215, ceilingRoom)) * math.min(smooth((deg - 8) / 14), smooth((120 - deg) / 14))
+					rollAngle = -math.pi * 4 * smooth((deg - 24) / 74) -- two forward flips over the obby
 				else
 					leapHeight = 0
+					rollAngle = 0
 				end
 				if wasLeap > 30 and leapHeight <= 30 and deg > 100 then
 					boom(3, Vector3.new(pos.X, ROOM_FLOOR, pos.Z)) -- lands
@@ -6554,7 +6688,7 @@ do
 			end
 			local y = if state == "fly" then rootY + flyHeight else rootY + leapHeight
 			debugStep({ state = state, walking = walkTrack ~= nil and walkTrack.IsPlaying, rootY = rootY, rootAbove = rootAbove, scale = scaleNow, low = math.min(lowestPoint(footL), lowestPoint(footR)) - ROOM_FLOOR, leap = leapHeight, angle = angle })
-			root.CFrame = CFrame.lookAt(Vector3.new(pos.X, y, pos.Z), Vector3.new(pos.X + facing.X, y, pos.Z + facing.Z))
+			root.CFrame = CFrame.lookAt(Vector3.new(pos.X, y, pos.Z), Vector3.new(pos.X + facing.X, y, pos.Z + facing.Z)) * CFrame.Angles(if state == "walk" then rollAngle else 0, 0, 0)
 			-- Footfalls: a foot that was lifted and is back on the floor is a step: boom.
 			if state == "walk" and leapHeight < 6 then
 				for side, foot in { L = footL, R = footR } do
@@ -6597,15 +6731,24 @@ do
 			if not effect or giant ~= model or state == "leave" or state == "fly" then
 				return
 			end
-			if hiddenNow() then
+			-- Where and when he may do it: away from the chairs and the dishwasher's back (the dishwasher smash
+			-- itself needs him on the south side, in front of the couch, on the ground).
+			local function canAct(): boolean
+				if name == "dishwasher" then
+					local deg = math.deg(angle) % 360
+					return state == "walk" and deg > 80 and deg < 100 and leapHeight < 5
+				end
+				return not hiddenNow()
+			end
+			if not canAct() then
 				task.spawn(function()
-					for _ = 1, 40 do
-						task.wait(0.4)
-						if giant ~= model or state == "leave" or state == "fly" or not hiddenNow() then
+					for _ = 1, 100 do
+						task.wait(0.25)
+						if giant ~= model or state == "leave" or state == "fly" or canAct() then
 							break
 						end
 					end
-					if giant == model and not hiddenNow() then
+					if giant == model and state ~= "leave" and state ~= "fly" and canAct() then
 						playEffect(name)
 					end
 				end)
@@ -6613,7 +6756,7 @@ do
 			end
 			acts += 1
 			if state == "walk" then
-				state, stateUntil = "act", os.clock() + (if heat then 3.6 else 4.6)
+				state, stateUntil = "act", os.clock() + (if name == "dishwasher" then 10 else if heat then 3.6 else 4.6)
 				setWalking(false)
 			end
 			commandText(nil)
@@ -6621,7 +6764,7 @@ do
 			-- Something extra with the act, never the same thing twice running: lasers a couple of times, then
 			-- fireballs, meteors and shockwaves, then lasers again with more beams, and so on.
 			local bonus = BONUS[(acts - 1) % #BONUS + 1]
-			if bonus ~= name and state == "act" and FX[bonus] then
+			if name ~= "dishwasher" and bonus ~= name and state == "act" and FX[bonus] then
 				task.delay(0.4, function()
 					if state == "act" then
 						if bonus == "eyes" then
@@ -6691,6 +6834,7 @@ do
 		setObby(false)
 		LobbyBuilder.BreakObby()
 		LobbyBuilder.SetRescue(false)
+		LobbyBuilder.RepairDishwasher()
 	end
 	-- The first player to finish the obby (in any server) wins a game pass, announced to everyone.
 	ReplicatedStorage:GetAttributeChangedSignal("AbuseObbyFinish"):Connect(function()
@@ -6895,7 +7039,7 @@ do
 	end
 
 	-- :abusefx <name> (Studio tab): try one piece of the show on its own (it spawns the giant if needed).
-	local FX_NAMES = { "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes", "fireballs" }
+	local FX_NAMES = { "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes", "fireballs", "dishwasher" }
 	Commands.abusefx = function(admin, text)
 		local arg = string.lower(text:match("^%s*(%S*)") or "")
 		local function needGiant(): boolean

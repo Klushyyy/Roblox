@@ -101,6 +101,7 @@ local NAVY = Color3.fromRGB(18, 55, 100)
 -- Build bookkeeping: yield every ~200 parts so the server never hitches.
 ----------------------------------------------------------------------------------------------------
 local lobby: Lobby? = nil
+local dishwasherFolder: Folder? = nil -- every part of the big dishwasher building (so the show can smash it)
 local southWall: BasePart? = nil -- the table's south edge wall (opened while the obby stands)
 local partsBuilt = 0
 
@@ -923,7 +924,11 @@ end
 ----------------------------------------------------------------------------------------------------
 -- The giant dishwasher building at the back (the game's "barn"), with the title on its control panel.
 ----------------------------------------------------------------------------------------------------
-local function buildDishwasherBuilding(parent: Instance)
+local function buildDishwasherBuilding(lobbyParent: Instance)
+	local parent = Instance.new("Folder")
+	parent.Name = "DishwasherBuilding"
+	parent.Parent = lobbyParent
+	dishwasherFolder = parent
 	local w, h, d = 84, 52, 26
 	local z = HATCHERY_Z - d / 2
 	-- Low-poly body: flat white box on a navy plinth, a wooden worktop slab on top with an overhang,
@@ -2528,6 +2533,89 @@ end
 function LobbyBuilder.HealHoles(seconds: number?)
 	for index, rec in holes do
 		healRec(index, rec, seconds or 8)
+	end
+end
+
+-- The show smashes the big dishwasher: every part goes invisible and non-solid and flies apart as
+-- chunks of the same colours; RepairDishwasher puts it all back.
+local dishwasherSaved: { [BasePart]: { number | boolean } }? = nil
+local dishwasherChunks: { BasePart } = {}
+function LobbyBuilder.DishwasherBroken(): boolean
+	return dishwasherSaved ~= nil
+end
+function LobbyBuilder.BreakDishwasher(impact: Vector3)
+	local folder = dishwasherFolder
+	if not folder or dishwasherSaved then
+		return
+	end
+	local saved: { [BasePart]: { number | boolean } } = {}
+	dishwasherSaved = saved
+	local rng = Random.new()
+	local budget = 190
+	for _, d in folder:GetDescendants() do
+		if d:IsA("BasePart") then
+			saved[d] = { d.Transparency, d.CanCollide, d.CanQuery }
+			if d.Transparency < 0.9 and budget > 0 then
+				local vol = d.Size.X * d.Size.Y * d.Size.Z
+				local n = math.clamp(math.floor(vol / 1800), 1, 40)
+				n = math.min(n, budget)
+				for _ = 1, n do
+					local chunk = Instance.new("Part")
+					local big = math.max(d.Size.X, d.Size.Y, d.Size.Z)
+					local sz = math.clamp(big / 4, 1.5, 7)
+					chunk.Size = Vector3.new(sz * rng:NextNumber(0.6, 1.4), sz * rng:NextNumber(0.6, 1.4), sz * rng:NextNumber(0.6, 1.4))
+					chunk.Color = d.Color
+					chunk.Material = d.Material
+					chunk.TopSurface = Enum.SurfaceType.Smooth
+					chunk.BottomSurface = Enum.SurfaceType.Smooth
+					local local_ = Vector3.new(rng:NextNumber(-0.5, 0.5) * d.Size.X, rng:NextNumber(-0.5, 0.5) * d.Size.Y, rng:NextNumber(-0.5, 0.5) * d.Size.Z)
+					chunk.CFrame = d.CFrame * CFrame.new(local_) * CFrame.Angles(rng:NextNumber(0, 6), rng:NextNumber(0, 6), rng:NextNumber(0, 6))
+					chunk.CanTouch = false
+					chunk.Parent = Workspace
+					local away = chunk.Position - impact
+					local dir = if away.Magnitude > 0.1 then away.Unit else Vector3.new(0, 0, 1)
+					chunk.AssemblyLinearVelocity = dir * rng:NextNumber(40, 130) + Vector3.new(rng:NextNumber(-25, 25), rng:NextNumber(40, 130), rng:NextNumber(-25, 25))
+					chunk.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-12, 12), rng:NextNumber(-12, 12), rng:NextNumber(-12, 12))
+					table.insert(dishwasherChunks, chunk)
+					budget -= 1
+				end
+			end
+			d.Transparency = 1
+			d.CanCollide = false
+			d.CanQuery = false
+		elseif d:IsA("ParticleEmitter") then
+			d.Enabled = false
+		end
+	end
+end
+function LobbyBuilder.RepairDishwasher()
+	local saved = dishwasherSaved
+	if not saved then
+		return
+	end
+	dishwasherSaved = nil
+	local chunks = dishwasherChunks
+	dishwasherChunks = {}
+	for _, c in chunks do
+		TweenService:Create(c, TweenInfo.new(1.5), { Transparency = 1 }):Play()
+		c.CanCollide = false
+		task.delay(1.6, function()
+			c:Destroy()
+		end)
+	end
+	for part, orig in saved do
+		if part.Parent then
+			TweenService:Create(part, TweenInfo.new(1.5), { Transparency = orig[1] :: number }):Play()
+			part.CanCollide = orig[2] :: boolean
+			part.CanQuery = orig[3] :: boolean
+		end
+	end
+	if dishwasherFolder then
+		for _, e in dishwasherFolder:GetDescendants() do
+			if e:IsA("ParticleEmitter") then
+				e.Enabled = true
+			end
+		end
 	end
 end
 

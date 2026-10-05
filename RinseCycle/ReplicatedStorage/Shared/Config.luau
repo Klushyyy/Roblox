@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.6"
+Config.Version = "2.12.7"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1140,7 +1140,7 @@ Config.AbuseShow = ({
 	OwnerUserId = 2297538363,
 	OwnerName = "EnderBuilda",
 	GiantScale = 38, -- how tall he is while he warms up
-	HeatScale = 46, -- ...and once the heat is turned up
+	HeatScale = 42, -- ...and once the heat is turned up
 	ThanksGems = 100, -- everyone gets this at the end, for staying
 	HeatAt = 330, -- seconds after the start when he "turns up the heat" (until the end)
 	Pet = "AdminAbuse", -- the limited pet from the final round
@@ -1233,7 +1233,9 @@ do
 	at(74, "say", "prizes are landing in your inventory right now.")
 	at(78, "attack", "barrage")
 	at(86, "say", "that was the easy part.")
-	at(90, "attack", "laser")
+	at(88, "say", "see that machine? i never liked it.")
+	at(90, "attack", "dishwasher")
+	at(114, "attack", "laser")
 	at(98, "say", "this next one isnt a vote.")
 	at(101, "round", "Passes")
 	at(106, "attack", "ufo")
