@@ -1708,3 +1708,8 @@ Debug logs showed the idle animation leaves the feet ~113 studs under the floor,
 - Arm gestures removed (they bent the arms oddly). During every act he fires two eye lasers (`fx.eyes`, also `:abusefx eyes`) that sweep opposite ways over the table, leaving glowing scorch dots that fade.
 - Behind the dishwasher (angle 205-335) nobody can see him: effects and the roof exit wait (up to ~16 s) until he is round on the visible side.
 - Characters: a fresh character that hangs in the air (floor material Air, no vertical speed, not flying) is snapped onto the ground within the first 3 s.
+
+### 6zu. Arrival without a frozen pose; varied eye lasers (v2.12.4)
+- He starts walking the instant the arrival flash fires (the 2.5 s "arrive" hold, a frozen walk pose, is gone).
+- Eye lasers last exactly as long as the act (`eyesFor`), so they never run on after he walks again. Acts are a little longer (4.6 s, 3.6 s in the heat).
+- Each use is different: 1, 2, 3, 4 lasers per eye (then repeat), and the pattern rotates circles / sweeps down the table / an opening spiral.

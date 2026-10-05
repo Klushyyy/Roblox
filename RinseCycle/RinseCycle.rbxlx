@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.3"
+Config.Version = "2.12.4"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -9056,6 +9056,7 @@ do
 	local giant: Model? = nil
 	local giantConn: RBXScriptConnection? = nil
 	local giantHead: BasePart? = nil
+	local eyesFor: number? = nil -- how long the next eye-laser burst lasts (set just before it starts)
 	local giantLeave: (() -&gt; ())? = nil
 	local leaving = false -- set once he starts the exit: nothing respawns him afterwards
 	local giantRescale: ((number, number) -&gt; ())? = nil
@@ -9499,22 +9500,27 @@ do
 				ship:Destroy()
 			end)
 		end
-		-- Two lasers out of his eyes that sweep the table and leave a glowing trail on it.
+		-- Lasers out of his eyes that draw glowing trails on the table. Each use is different: it grows from one
+		-- laser per eye up to four per eye, and the pattern changes (circles, sweeps across, a spiral out).
 		local eyesBusy = false
+		local eyesUses = 0
 		fx.eyes = function()
 			if eyesBusy or not giantHead then
 				return
 			end
 			eyesBusy = true
+			eyesUses += 1
 			local headPart = giantHead :: BasePart
-			local DURATION = if heat then 4.5 else 5.5
-			local beams = {
-				neonPart(Vector3.new(4, 4, 10), Color3.fromRGB(255, 60, 60)),
-				neonPart(Vector3.new(4, 4, 10), Color3.fromRGB(255, 60, 60)),
-			}
-			local sparks = {}
-			for i, b in beams do
+			local DURATION = eyesFor or 5.5
+			eyesFor = nil
+			local perEye = (eyesUses - 1) % 4 + 1
+			local pattern = (eyesUses - 1) % 3 -- 0 circles, 1 sweeps, 2 spiral
+			local count = perEye * 2
+			local beams, sparks = {}, {}
+			for i = 1, count do
+				local b = neonPart(Vector3.new(4, 4, 10), if i % 2 == 1 then Color3.fromRGB(255, 60, 60) else Color3.fromRGB(255, 120, 60))
 				b.Parent = workspace
+				beams[i] = b
 				local anchor = Instance.new("Part")
 				anchor.Transparency = 1
 				anchor.Anchored = true
@@ -9527,7 +9533,7 @@ do
 				e.Lifetime = NumberRange.new(0.5, 1)
 				e.Speed = NumberRange.new(10, 30)
 				e.SpreadAngle = Vector2.new(70, 70)
-				e.Rate = 60
+				e.Rate = 40
 				e.Size = NumberSequence.new(3, 0)
 				e.LightEmission = 1
 				e.Parent = anchor
@@ -9559,15 +9565,30 @@ do
 					finish()
 					return
 				end
-				local fade = math.max(0.05, math.min(1, t / 0.3, (DURATION - t) / 0.4))
+				local fade = math.max(0.05, math.min(1, t / 0.25, (DURATION - t) / 0.3))
 				local dotNow = os.clock() - lastDot &gt; 0.06
+				local progress = t / DURATION
 				for i, b in beams do
-					-- the eyes: either side of his face, at the front
-					local from = (headPart.CFrame * CFrame.new((if i == 1 then -0.22 else 0.22) * headPart.Size.X, 0.08 * headPart.Size.Y, -0.5 * headPart.Size.Z)).Position
-					-- each eye draws a sweeping curve over the table (opposite ways round)
-					local a = t * 1.5 * (if i == 1 then 1 else -1) + (if i == 1 then 0 else math.pi)
-					local r = 35 + 25 * math.sin(t * 2.2 + i)
-					local target = Vector3.new(math.cos(a) * r, 0.5, 15 + math.sin(a) * r * 1.1)
+					local left = i % 2 == 1
+					local from = (headPart.CFrame * CFrame.new((if left then -0.22 else 0.22) * headPart.Size.X, 0.08 * headPart.Size.Y, -0.5 * headPart.Size.Z)).Position
+					local phase = (i - 1) / count * math.pi * 2
+					local dir = if left then 1 else -1
+					local x, z
+					if pattern == 0 then
+						local a = t * 1.5 * dir + phase
+						local r = 35 + 25 * math.sin(t * 2.2 + i)
+						x, z = math.cos(a) * r, 15 + math.sin(a) * r * 1.1
+					elseif pattern == 1 then
+						-- sweeping lines: side to side while moving down the table
+						x = math.sin(t * 3 + phase) * 65
+						z = 15 + (progress * 2 - 1) * 65 * dir
+					else
+						-- a spiral that opens out
+						local a = t * 4 * dir + phase
+						local r = 8 + 70 * progress
+						x, z = math.cos(a) * r, 15 + math.sin(a) * r
+					end
+					local target = Vector3.new(x, 0.5, z)
 					local len = (target - from).Magnitude
 					b.Size = Vector3.new(4 * fade, 4 * fade, len)
 					b.CFrame = CFrame.lookAt(from, target) * CFrame.new(0, 0, -len / 2)
@@ -10078,7 +10099,9 @@ do
 		end
 		root.CFrame = CFrame.lookAt(Vector3.new(pos.X, rootY, pos.Z), Vector3.new(pos.X + facing.X, rootY, pos.Z + facing.Z))
 		task.wait(0.05)
-		stateUntil = os.clock() + 2.5
+		-- (he moves the instant the flash goes off: no standing about in a frozen pose)
+		state = "walk"
+		setWalking(true)
 
 		local function step(dt: number)
 			local now = os.clock()
@@ -10195,13 +10218,18 @@ do
 			end
 			acts += 1
 			if state == "walk" then
-				state, stateUntil = "act", os.clock() + (if heat then 2.6 else 3.4)
+				state, stateUntil = "act", os.clock() + (if heat then 3.6 else 4.6)
 				setWalking(false)
 			end
 			commandText(nil)
 			task.delay(0.8, effect)
 			if name ~= "eyes" and state == "act" and FX.eyes then
-				task.delay(0.4, FX.eyes)
+				task.delay(0.4, function()
+					if state == "act" then
+						eyesFor = math.max(1.2, stateUntil - os.clock() - 0.2)
+						FX.eyes()
+					end
+				end)
 			end
 			if name == "meteors" or name == "blackhole" or name == "tornado" then
 				Remote.AbuseBoom:FireAllClients(2.5, Vector3.new(0, 0, 0))
