@@ -817,7 +817,7 @@ do
 	end)
 	-- While the show is live every other window and the whole HUD fade away (nothing in them is usable then
 	-- anyway), and come back when it is over. Polls, prizes, the show's own text and the admin panel stay.
-	local UI_KEEP = { AbuseTimer = true, AbuseTalk = true, AbuseFx = true, PollUI = true, Celebrate = true, UIKitToasts = true, AdminStatus = true, AdminPanel = true }
+	local UI_KEEP = { AbuseTimer = true, AbuseTalk = true, AbuseFx = true, PollUI = true, Celebrate = true, UIKitToasts = true, AdminStatus = true, AdminPanel = true, AbuseOffer = true }
 	local uiHidden: { [ScreenGui]: boolean } = {}
 	local function setLiveUi(live: boolean)
 		local pg = player:FindFirstChildOfClass("PlayerGui")
@@ -880,6 +880,108 @@ do
 	if ReplicatedStorage:GetAttribute("AbuseLive") == true then
 		setLiveUi(true)
 	end
+	-- The fly offer: one player per server gets a card with 30 seconds to accept or decline.
+	task.spawn(function()
+		local offer = ReplicatedStorage:WaitForChild("AbuseOffer", 120) :: RemoteEvent?
+		local reply = ReplicatedStorage:WaitForChild("AbuseOfferReply", 120) :: RemoteEvent?
+		local pg = player:WaitForChild("PlayerGui", 60)
+		if not offer or not reply or not pg then
+			return
+		end
+		local gui = Instance.new("ScreenGui")
+		gui.Name = "AbuseOffer"
+		gui.ResetOnSpawn = false
+		gui.DisplayOrder = 9
+		gui.Enabled = false
+		gui.Parent = pg
+		local card = Instance.new("Frame")
+		card.AnchorPoint = Vector2.new(0.5, 1)
+		card.Position = UDim2.new(0.5, 0, 1, -150)
+		card.Size = UDim2.fromOffset(440, 150)
+		card.BackgroundColor3 = Color3.fromRGB(14, 36, 72)
+		card.Parent = gui
+		do
+			local corner = Instance.new("UICorner")
+			corner.CornerRadius = UDim.new(0, 16)
+			corner.Parent = card
+			local stroke = Instance.new("UIStroke")
+			stroke.Color = Color3.fromRGB(255, 213, 74)
+			stroke.Thickness = 3
+			stroke.Parent = card
+		end
+		local text = Instance.new("TextLabel")
+		text.BackgroundTransparency = 1
+		text.Position = UDim2.fromOffset(16, 10)
+		text.Size = UDim2.new(1, -32, 0, 70)
+		text.Font = Enum.Font.GothamBold
+		text.TextScaled = true
+		text.TextWrapped = true
+		text.TextColor3 = Color3.new(1, 1, 1)
+		text.Text = "Want to be able to fly for the rest of the event?"
+		text.Parent = card
+		local timerLabel = Instance.new("TextLabel")
+		timerLabel.BackgroundTransparency = 1
+		timerLabel.Position = UDim2.fromOffset(16, 80)
+		timerLabel.Size = UDim2.new(1, -32, 0, 18)
+		timerLabel.Font = Enum.Font.GothamMedium
+		timerLabel.TextSize = 14
+		timerLabel.TextColor3 = Color3.fromRGB(170, 190, 220)
+		timerLabel.Parent = card
+		local currentId, ends = 0, 0
+		local function answer(accepted: boolean)
+			if currentId ~= 0 then
+				reply:FireServer(currentId, accepted)
+			end
+			currentId = 0
+			gui.Enabled = false
+		end
+		local function button(label: string, color: Color3, x: number, accepted: boolean)
+			local b = Instance.new("TextButton")
+			b.AnchorPoint = Vector2.new(0.5, 1)
+			b.Position = UDim2.new(x, 0, 1, -12)
+			b.Size = UDim2.new(0.42, 0, 0, 38)
+			b.BackgroundColor3 = color
+			b.Font = Enum.Font.GothamBold
+			b.TextSize = 18
+			b.TextColor3 = Color3.new(1, 1, 1)
+			b.Text = label
+			b.AutoButtonColor = true
+			local c = Instance.new("UICorner")
+			c.CornerRadius = UDim.new(0, 10)
+			c.Parent = b
+			b.Activated:Connect(function()
+				answer(accepted)
+			end)
+			b.Parent = card
+		end
+		button("Accept", Color3.fromRGB(46, 190, 120), 0.27, true)
+		button("Decline", Color3.fromRGB(200, 70, 70), 0.73, false)
+		offer.OnClientEvent:Connect(function(id: any, seconds: any)
+			if type(id) ~= "number" or type(seconds) ~= "number" then
+				return
+			end
+			if seconds <= 0 then
+				currentId = 0
+				gui.Enabled = false
+				return
+			end
+			currentId = id
+			ends = os.clock() + seconds
+			gui.Enabled = true
+			task.spawn(function()
+				while gui.Enabled and currentId == id do
+					local left = math.max(0, math.ceil(ends - os.clock()))
+					timerLabel.Text = string.format("%d seconds left to decide", left)
+					if left <= 0 then
+						currentId = 0
+						gui.Enabled = false
+						break
+					end
+					task.wait(0.25)
+				end
+			end)
+		end)
+	end)
 	task.spawn(function()
 		local say = ReplicatedStorage:WaitForChild("AbuseSay", 120)
 		if say then

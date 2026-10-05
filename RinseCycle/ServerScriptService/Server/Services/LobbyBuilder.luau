@@ -1999,11 +1999,20 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 	mkPart("Part", decor({ Name = "TrophyCup", Size = Vector3.new(6.4, 5, 6.4), CFrame = at(56, finishTop + 8.6, 345), Color = Color3.fromRGB(255, 215, 80), Material = Enum.Material.Metal }), model)
 
 	-- ----- Runtime ----------------------------------------------------------------------------
+	-- Flying (the admin fly, or the one the show offers) doesn't count: no checkpoint or finish while in the air.
+	local function flyingNow(player: Player): boolean
+		local ch = player.Character
+		local root = ch and ch:FindFirstChild("HumanoidRootPart")
+		if not root then
+			return false
+		end
+		return root:FindFirstChildWhichIsA("LinearVelocity") ~= nil or root:FindFirstChildWhichIsA("BodyVelocity") ~= nil or root:FindFirstChildWhichIsA("BodyPosition") ~= nil
+	end
 	for _, pad in checkpointPads do
 		onTouch(pad, function(hit)
 			local player = playerOfPart(hit)
 			local index = pad:GetAttribute("Index")
-			if obbyOpen and player and type(index) == "number" and (obbyProgress[player.UserId] or 0) < index then
+			if obbyOpen and player and not flyingNow(player) and type(index) == "number" and (obbyProgress[player.UserId] or 0) < index then
 				obbyProgress[player.UserId] = index
 				obbySpawnAt[player.UserId] = pad.CFrame + Vector3.new(0, 1, 0)
 				notifyPlayer(player, string.format("Checkpoint %d of %d!", index, OBBY_CHECKPOINTS), "Good")
@@ -2022,7 +2031,7 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 	end
 	onTouch(finish, function(hit)
 		local player = playerOfPart(hit)
-		if not obbyOpen or not player or (obbyProgress[player.UserId] or 0) < OBBY_CHECKPOINTS then
+		if not obbyOpen or not player or flyingNow(player) or (obbyProgress[player.UserId] or 0) < OBBY_CHECKPOINTS then
 			return
 		end
 		obbyProgress[player.UserId] = 0
@@ -2743,6 +2752,75 @@ function LobbyBuilder.RestoreProps()
 		prompt.Enabled = true
 	end
 	smashedProps, smashedSet, smashedPrompts = {}, {}, {}
+end
+
+-- While the show runs the party pads do nothing at all: nothing on them is solid or touchable, and
+-- their prompts are off (the "0/8" signs stay). Everything is put back afterwards.
+local padSaved: { [BasePart]: { boolean } } = {}
+function LobbyBuilder.SetPadsEnabled(on: boolean)
+	local model = lobby and lobby.Model
+	if not model then
+		return
+	end
+	if on then
+		for part, orig in padSaved do
+			if part.Parent then
+				part.CanCollide = orig[1]
+				part.CanTouch = orig[2]
+			end
+		end
+		padSaved = {}
+		return
+	end
+	for _, child in model:GetChildren() do
+		if child:IsA("Model") and string.sub(child.Name, 1, 3) == "Pad" then
+			for _, d in child:GetDescendants() do
+				if d:IsA("BasePart") and not padSaved[d] then
+					padSaved[d] = { d.CanCollide, d.CanTouch }
+					d.CanTouch = false
+					if d.CollisionGroup == "PadBarrier" or d.Name:find("Barrier") or d.Name:find("Wall") or d.Name:find("Gate") then
+						d.CanCollide = false
+					end
+				end
+			end
+		end
+	end
+end
+
+-- The lobby's own prompts ("Open Shop", the chest, the eggs...) and floating labels are switched off for the
+-- show (so nothing offers to open something that has just been smashed); the pad signs stay.
+local uiOff: { Instance } = {}
+function LobbyBuilder.SetUiEnabled(on: boolean)
+	local model = lobby and lobby.Model
+	if not model then
+		return
+	end
+	if on then
+		for _, inst in uiOff do
+			if inst.Parent then
+				(inst :: any).Enabled = true
+			end
+		end
+		uiOff = {}
+		return
+	end
+	for _, d in model:GetDescendants() do
+		if (d:IsA("ProximityPrompt") or d:IsA("BillboardGui")) and d.Enabled then
+			local inPad = false
+			local anc = d.Parent
+			while anc and anc ~= model do
+				if anc:IsA("Model") and string.sub(anc.Name, 1, 3) == "Pad" then
+					inPad = true
+					break
+				end
+				anc = anc.Parent
+			end
+			if not inPad and d.Name ~= "PadGui" then
+				table.insert(uiOff, d)
+				d.Enabled = false
+			end
+		end
+	end
 end
 
 function LobbyBuilder.HealRoof(seconds: number?)

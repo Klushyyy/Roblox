@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.13"
+Config.Version = "2.12.14"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1264,6 +1264,8 @@ do
 	at(240, "attack", "winner")
 	at(246, "say", "bombs. a red circle on the table is where one lands. get out of it, or fall in.")
 	at(248, "attack", "bombs")
+	at(251, "say", "one of you is about to get an offer. just one. you can say no.")
+	at(254, "attack", "flyoffer")
 	at(258, "say", "i built it to be fair. mostly.")
 	at(268, "attack", "fountains")
 	at(272, "say", "the spinners are my favourite part.")
@@ -1317,7 +1319,7 @@ do
 	at(537, "obby", false)
 	at(548, "attack", "tornado")
 	at(554, "attack", "lightning")
-	at(536, "say", "i brought something. stay off the right side of the table.")
+	at(536, "say", "that spot looks empty. i am redecorating.")
 	at(540, "attack", "nuke")
 	at(560, "say", "one last big one. all of it. everything.")
 	at(564, "attack", "blackhole")

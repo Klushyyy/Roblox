@@ -696,6 +696,12 @@ Remote.AbuseSay.Parent = ReplicatedStorage
 Remote.AbuseBoom = Instance.new("RemoteEvent") -- S->C (strength, position): a stomp or blast: shakes the screen
 Remote.AbuseBoom.Name = "AbuseBoom"
 Remote.AbuseBoom.Parent = ReplicatedStorage
+Remote.AbuseOffer = Instance.new("RemoteEvent") -- S->C (offer id, seconds): "do you want to fly?" (seconds 0 closes it)
+Remote.AbuseOffer.Name = "AbuseOffer"
+Remote.AbuseOffer.Parent = ReplicatedStorage
+Remote.AbuseOfferReply = Instance.new("RemoteEvent") -- C->S (offer id, accepted)
+Remote.AbuseOfferReply.Name = "AbuseOfferReply"
+Remote.AbuseOfferReply.Parent = ReplicatedStorage
 Remote.AdminSetFlying = Instance.new("RemoteEvent")
 Remote.AdminSetFlying.Name = "AdminSetFlying"
 Remote.AdminSetFlying.Parent = ReplicatedStorage
@@ -5227,6 +5233,7 @@ do
 	-- reset" puts the real time back.
 	local Show = Config.AbuseShow
 	local LobbyBuilder = require(GameServices:WaitForChild("LobbyBuilder"))
+	local PartyService = require(GameServices:WaitForChild("PartyService"))
 	local function abuseEvent(): any
 		for _, e in Config.UpcomingEvents do
 			if e.Key == Show.EventKey then
@@ -6038,8 +6045,8 @@ do
 					b.CFrame = CFrame.lookAt(from, target) * CFrame.new(0, 0, -len / 2)
 					sparks[i].Position = target + Vector3.new(0, 1, 0)
 					if dotNow then
-						local dot = neonPart(Vector3.new(0.3, 4, 4), Color3.fromRGB(255, 150, 50), Enum.PartType.Cylinder)
-						dot.CFrame = CFrame.new(target.X, 0.35, target.Z) * CFrame.Angles(0, 0, math.rad(90))
+						local dot = neonPart(Vector3.new(0.5, 4, 4), Color3.fromRGB(255, 150, 50), Enum.PartType.Cylinder)
+						dot.CFrame = CFrame.new(target.X, 1.0, target.Z) * CFrame.Angles(0, 0, math.rad(90))
 						dot.Parent = workspace
 						TweenService:Create(dot, TweenInfo.new(2.5), { Transparency = 1, Color = Color3.fromRGB(120, 30, 20) }):Play()
 						Debris:AddItem(dot, 2.6)
@@ -6109,24 +6116,16 @@ do
 					fall.Completed:Connect(function()
 						ball:Destroy()
 						harmlessBlast(spot + Vector3.new(0, 4, 0), 18)
-						local scorch = Instance.new("Part")
-						scorch.Shape = Enum.PartType.Cylinder
-						scorch.Anchored = true
-						scorch.CanCollide = false
-						scorch.CanQuery = false
-						scorch.CanTouch = false
-						scorch.CastShadow = false
-						scorch.Color = Color3.fromRGB(30, 22, 18)
-						scorch.Material = Enum.Material.Slate
-						scorch.Size = Vector3.new(0.2, 14, 14)
-						scorch.CFrame = CFrame.new(spot.X, 0.3, spot.Z) * CFrame.Angles(0, 0, math.rad(90))
-						scorch.Parent = workspace
-						track(scorch)
-						TweenService:Create(scorch, TweenInfo.new(12, Enum.EasingStyle.Linear), { Transparency = 1 }):Play()
-						Debris:AddItem(scorch, 12.5)
+						-- a short glow where it landed (no dark marks left on the table: they looked like black lines)
+						local ember = neonPart(Vector3.new(0.5, 16, 16), Color3.fromRGB(255, 130, 50), Enum.PartType.Cylinder)
+						ember.Transparency = 0.5
+						ember.CFrame = CFrame.new(spot.X, 1.2, spot.Z) * CFrame.Angles(0, 0, math.rad(90))
+						ember.Parent = workspace
+						TweenService:Create(ember, TweenInfo.new(1.6), { Transparency = 1, Size = Vector3.new(0.5, 26, 26) }):Play()
+						Debris:AddItem(ember, 1.7)
 						Remote.AbuseBoom:FireAllClients(1.3, spot) -- the table shakes
 						local ring = neonPart(Vector3.new(0.4, 6, 6), Color3.fromRGB(255, 170, 60), Enum.PartType.Cylinder)
-						ring.CFrame = CFrame.new(spot.X, 0.4, spot.Z) * CFrame.Angles(0, 0, math.rad(90))
+						ring.CFrame = CFrame.new(spot.X, 1.0, spot.Z) * CFrame.Angles(0, 0, math.rad(90))
 						ring.Parent = workspace
 						TweenService:Create(ring, TweenInfo.new(0.6), { Size = Vector3.new(0.4, 40, 40), Transparency = 1 }):Play()
 						Debris:AddItem(ring, 0.7)
@@ -6316,9 +6315,9 @@ do
 			local RADIUS, FALL = 14, 2.6
 			for i, spot in spots do
 				task.delay((i - 1) * 0.08, function()
-					local warn = neonPart(Vector3.new(0.3, RADIUS * 2, RADIUS * 2), Color3.fromRGB(255, 50, 40), Enum.PartType.Cylinder)
+					local warn = neonPart(Vector3.new(0.5, RADIUS * 2, RADIUS * 2), Color3.fromRGB(255, 50, 40), Enum.PartType.Cylinder)
 					warn.Transparency = 0.55
-					warn.CFrame = CFrame.new(spot.X, 0.4, spot.Z) * CFrame.Angles(0, 0, math.rad(90))
+					warn.CFrame = CFrame.new(spot.X, 1.3, spot.Z) * CFrame.Angles(0, 0, math.rad(90))
 					warn.Parent = workspace
 					TweenService:Create(warn, TweenInfo.new(0.3, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1, true), { Transparency = 0.15 }):Play()
 					local bomb = Instance.new("Part")
@@ -6465,7 +6464,7 @@ do
 				if giantGesture then
 					giantGesture(nil)
 				end
-				local target = Vector3.new(60, 4.5, -32)
+				local target = Vector3.new(0, 4.5, -89) -- where the dishwasher stood
 				local from = hands()
 				local f0 = os.clock()
 				local FLIGHT = 1.7
@@ -6540,7 +6539,7 @@ do
 					end)
 				end
 				-- the table breaks open round it (the big hole in the middle, a few smaller ones)
-				for _, c in { { 0, 0, 30 }, { -38, -12, 17 }, { 32, 16, 17 }, { -8, 38, 15 }, { 8, -42, 15 } } do
+				for _, c in { { 0, 0, 28 }, { -38, -4, 15 }, { 38, -4, 15 }, { -12, 30, 13 }, { 14, 34, 13 } } do
 					craterCount += 1
 					local cx = math.clamp(target.X + c[1], -90, 90)
 					local cz = math.clamp(target.Z + c[2], -96, 24)
@@ -6879,8 +6878,8 @@ do
 		makeAnim("charge", { { 0, Ry(24) * Rx(90), Ry(-24) * Rx(90) }, { 0.5, Ry(24) * Rx(90), Ry(-24) * Rx(90) } }, true)
 		-- one-shots
 		makeAnim("slamR", { { 0, ID }, { 0.4, Rz(165) }, { 0.7, Rz(60) * Rx(40) }, { 1.2, Rz(60) * Rx(40) }, { 1.5, ID } }, false)
-		makeAnim("punchR", { { 0, ID }, { 0.25, Rx(-45) }, { 0.5, Rx(95) }, { 0.95, Rx(95) }, { 1.3, ID } }, false)
-		makeAnim("punchL", { { 0, ID, ID }, { 0.25, nil, Rx(-45) }, { 0.5, nil, Rx(95) }, { 0.95, nil, Rx(95) }, { 1.3, nil, ID } }, false)
+		makeAnim("punchR", { { 0, ID }, { 0.15, Rx(-45) }, { 0.3, Rx(95) }, { 0.55, Rx(95) }, { 0.8, ID } }, false)
+		makeAnim("punchL", { { 0, ID, ID }, { 0.15, nil, Rx(-45) }, { 0.3, nil, Rx(95) }, { 0.55, nil, Rx(95) }, { 0.8, nil, ID } }, false)
 		local gestureNow: string? = nil
 		local function setGesture(name: string?)
 			if name == gestureNow then
@@ -7003,7 +7002,11 @@ do
 			state = "sitleap"
 			moveT0, moveFromPos, moveFromY = os.clock(), pos, rootY
 			if walkTrack then
-				walkTrack:Stop(0.3)
+				walkTrack:Stop(0.4)
+			end
+			-- (he folds into the sitting pose while he is in the air, so there is no pop when he lands)
+			if sitTrack then
+				sitTrack:Play(0.6)
 			end
 			commandText(":sit")
 		end
@@ -7084,14 +7087,14 @@ do
 						turnTo(t.Pos)
 						local right = t.Pos.X < seat.X -- (facing +Z, his right hand is the -X side)
 						playAnim(if right then "punchR" else "punchL")
-						task.wait(0.55)
+						task.wait(0.32)
 						if not alive() then
 							break
 						end
 						local dir = Vector3.new(t.Pos.X - seat.X, 0, t.Pos.Z - seat.Z).Unit
 						LobbyBuilder.SmashProps(t.Pos, t.Radius, dir * 110 + Vector3.new(0, 40, 0))
 						impactAt(t.Pos, 14, false)
-						task.wait(1.0)
+						task.wait(0.45)
 					end
 					if alive() then
 						facing = Vector3.new(0, 0, 1)
@@ -7335,9 +7338,6 @@ do
 					if state == "sitleap" then
 						state = "seated"
 						facing = Vector3.new(0, 0, 1)
-						if sitTrack then
-							sitTrack:Play(0.2)
-						end
 					else
 						angle = 3 * math.pi / 2
 						state = "walk"
@@ -7485,7 +7485,8 @@ do
 			end
 			-- an arm move that goes with it (the dishwasher and the nuke do their own)
 			if name ~= "dishwasher" and name ~= "nuke" and (state == "act" or state == "seated" or state == "park") then
-				local gesture = ({ "point", "cheer", "wave", "flex" })[(acts - 1) % 4 + 1]
+				-- (while he shoots lasers from his eyes his arms are held out to the sides, never in front of his face)
+				local gesture = if BONUS[(acts - 1) % #BONUS + 1] == "eyes" then "flex" else ({ "point", "cheer", "wave", "flex" })[(acts - 1) % 4 + 1]
 				setGesture(gesture)
 				if state ~= "act" then
 					task.delay(3.2, function()
@@ -7514,6 +7515,53 @@ do
 				Remote.AbuseBoom:FireAllClients(2.5, Vector3.new(0, 0, 0))
 			end
 		end
+	end
+
+	----------------------------------------------------------------- the fly offer
+	-- One random player in each server is offered flight for the rest of the show (30 seconds to answer, accept
+	-- or decline). It is not an advantage in the obby: the obby ignores checkpoints and the finish while flying.
+	local offerId = 0
+	local pendingOffer: { [Player]: number } = {}
+	local flyers: { [Player]: boolean } = {}
+	Remote.AbuseOfferReply.OnServerEvent:Connect(function(plr: Player, id: any, accepted: any)
+		if pendingOffer[plr] == nil or pendingOffer[plr] ~= id then
+			return
+		end
+		pendingOffer[plr] = nil
+		if accepted == true and plr.Parent == Players then
+			flyers[plr] = true
+			setFlying(plr, true)
+		end
+	end)
+	local function offerFly()
+		local pool = {}
+		for _, plr in Players:GetPlayers() do
+			if plr.Character and not flyers[plr] and plr:GetAttribute("AdminInvis") ~= true then
+				table.insert(pool, plr)
+			end
+		end
+		if #pool == 0 then
+			return
+		end
+		local chosen = pool[math.random(1, #pool)]
+		offerId += 1
+		pendingOffer[chosen] = offerId
+		local myId = offerId
+		Remote.AbuseOffer:FireClient(chosen, myId, 30)
+		task.delay(31, function()
+			if pendingOffer[chosen] == myId then
+				pendingOffer[chosen] = nil
+			end
+		end)
+	end
+	local function endFlyers()
+		for plr in flyers do
+			pcall(function()
+				setFlying(plr, false)
+			end)
+		end
+		flyers, pendingOffer = {}, {}
+		Remote.AbuseOffer:FireAllClients(0, 0)
 	end
 
 	----------------------------------------------------------------- the clock
@@ -7564,6 +7612,9 @@ do
 		LobbyBuilder.BreakObby()
 		LobbyBuilder.SetRescue(false)
 		restoreLighting()
+		endFlyers()
+		LobbyBuilder.SetPadsEnabled(true)
+		LobbyBuilder.SetUiEnabled(true)
 		LobbyBuilder.RepairDishwasher()
 		LobbyBuilder.RestoreProps()
 		clearFx()
@@ -7633,6 +7684,17 @@ do
 					ReplicatedStorage:SetAttribute("AbuseLive", true)
 					LobbyBuilder.SetBarriers(true) -- no invisible walls for the whole show
 					LobbyBuilder.SetRescue(true)
+					-- party pads and the lobby's prompts and labels are off for the whole show; anyone inside a pad is
+					-- walked out of it
+					LobbyBuilder.SetPadsEnabled(false)
+					LobbyBuilder.SetUiEnabled(false)
+					for _, plr in Players:GetPlayers() do
+						pcall(function()
+							if PartyService.IsInParty(plr) then
+								PartyService.RemovePlayer(plr)
+							end
+						end)
+					end
 					setMusic("Warm")
 				end
 				if heat ~= wasHeat then
@@ -7670,7 +7732,11 @@ do
 						if kind == "say" then
 							say(step[3])
 						elseif kind == "attack" then
-							playEffect(step[3])
+							if step[3] == "flyoffer" then
+								offerFly()
+							else
+								playEffect(step[3])
+							end
 						elseif kind == "round" then
 							if claim("round" .. step[3] .. ":" .. tag) then
 								runRound(Show.Rounds[step[3]])

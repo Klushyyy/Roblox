@@ -62,3 +62,25 @@ for _, d in lobby.Model:GetDescendants() do
 	end
 end
 print("loose parts after restore (should be 0):", still)
+
+-- Pads and prompts off for the show, and back.
+LB.SetPadsEnabled(false)
+LB.SetUiEnabled(false)
+local padTouch, promptsOn = 0, 0
+for _, d in lobby.Model:GetDescendants() do
+	if d:IsA("BasePart") and d:IsDescendantOf(lobby.Model) and d.Parent and d.Parent.Name:sub(1, 3) == "Pad" and d.CanTouch then
+		padTouch += 1
+	elseif d:IsA("ProximityPrompt") and d.Enabled then
+		promptsOn += 1
+	end
+end
+print("pad parts still touchable (0):", padTouch, " prompts still on (0):", promptsOn)
+LB.SetPadsEnabled(true)
+LB.SetUiEnabled(true)
+local back = 0
+for _, d in lobby.Model:GetDescendants() do
+	if d:IsA("ProximityPrompt") and d.Enabled then
+		back += 1
+	end
+end
+print("prompts back on:", back > 0)
