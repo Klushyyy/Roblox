@@ -5442,6 +5442,7 @@ do
 	local eyesFor: number? = nil -- how long the next eye-laser burst lasts (set just before it starts)
 	local giantLeave: (() -> ())? = nil
 	local giantSit: (() -> ())? = nil
+	local giantGesture: ((string?) -> ())? = nil -- arm pose for the dishwasher charge
 	local giantStand: (() -> ())? = nil
 	local giantPunch: (() -> ())? = nil
 	local punchLaunch: Vector3? = nil -- set by the punch: the next table hole flings what is in it this way
@@ -5463,7 +5464,7 @@ do
 			end
 		end
 		giantHead, giantLeave, giantRescale = nil, nil, nil
-		giantSit, giantStand, giantPunch, punchLaunch = nil, nil, nil, nil
+		giantSit, giantStand, giantPunch, punchLaunch, giantGesture = nil, nil, nil, nil, nil
 	end
 	local function ringAt(pos: Vector3, size: number, seconds: number, color: Color3)
 		local ring = Instance.new("Part")
@@ -6124,11 +6125,16 @@ do
 				return
 			end
 			local unit = if giantHead then giantHead.Size.Y else 45
-			local function chest(): Vector3
-				return rootPart.Position + rootPart.CFrame.LookVector * (unit * 1.0) + Vector3.new(0, unit * 1.0, 0)
+			-- where his hands meet: out in front of his chest (a head is about 1.2 studs tall at scale 1)
+			local scale = unit / 1.2
+			local function chest(ballSize: number): Vector3
+				return rootPart.Position + rootPart.CFrame.LookVector * (scale * 3.1 + ballSize * 0.25) + Vector3.new(0, scale * 1.4, 0)
 			end
 			local ball = neonPart(Vector3.new(6, 6, 6), Color3.fromRGB(255, 230, 150), Enum.PartType.Ball)
-			ball.Position = chest()
+			if giantGesture then
+				giantGesture("charge")
+			end
+			ball.Position = chest(6)
 			local light = Instance.new("PointLight")
 			light.Range = 90
 			light.Brightness = 6
@@ -6159,7 +6165,7 @@ do
 					local f = t / CHARGE
 					local size = 6 + 60 * f * f + math.sin(t * 22) * 2.5 * f
 					ball.Size = Vector3.new(size, size, size)
-					ball.Position = chest()
+					ball.Position = chest(size)
 					light.Brightness = 4 + 10 * f
 					if t - lastRumble > 0.5 then
 						lastRumble = t
@@ -6173,6 +6179,11 @@ do
 				end
 				-- fired
 				Remote.AbuseBoom:FireAllClients(2.2, ball.Position)
+				task.delay(FLIGHT, function()
+					if giantGesture then
+						giantGesture(nil)
+					end
+				end)
 				local from = ball.Position
 				local f0 = os.clock()
 				while true do
@@ -6640,6 +6651,10 @@ do
 				end)
 			end
 		end
+		-- Both arms straight out in front, turned in towards each other so the hands meet (R15: raising an arm
+		-- forward is +90 deg about X; the yaw brings the hands to the middle). Used while he charges the ball.
+		makeGesture("charge", CFrame.Angles(0, math.rad(24), 0) * CFrame.Angles(math.rad(90), 0, 0), CFrame.Angles(0, math.rad(-24), 0) * CFrame.Angles(math.rad(90), 0, 0))
+		giantGesture = setGesture
 
 		-- Debugging: ":abusedebug" turns on a floating readout and prints. DEBUG is checked every frame.
 		local lastDebugPrint = 0
