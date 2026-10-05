@@ -1773,3 +1773,6 @@ While he charges the dishwasher ball both arms go straight out in front, turned 
 - PartyService: the pad loop no longer admits anyone while `Config.EventLockdown()` is on (pads were position-checked, so disabling their touch/collision was not enough; that is what let people walk into a pad and get stuck).
 - The lobby prompts and labels are no longer switched off at show start. They go off only with the thing they belong to: when `SmashProps` hits it or a crater swallows it (`switchOffUiOn`), and come back when it is restored/healed.
 - Invisible solid parts (hit boxes) near what is smashed are made non-solid (`smashedInvisible`) and restored afterwards, so nobody can jump onto a block where the shop or eggs were.
+
+### 6zzg. Titles go with what is hit (v2.12.16)
+`SmashProps` also switches off every SurfaceGui / BillboardGui whose part (or adornee) is within the target's radius, including ones on invisible parts that never fall (the "SOAP SHOP" lettering, the egg labels, the pet stand name), so each title vanishes the moment its thing is punched. `RestoreProps` turns them back on.

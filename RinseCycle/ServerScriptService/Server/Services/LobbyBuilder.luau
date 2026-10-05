@@ -2738,6 +2738,18 @@ function LobbyBuilder.SmashProps(center: Vector3, radius: number, launch: Vector
 				d.CanCollide = false
 				d.CanQuery = false
 			end
+		elseif (d:IsA("SurfaceGui") or d:IsA("BillboardGui")) and d.Enabled then
+			-- The title of what is being hit ("SOAP SHOP", "BUBBLE EGG 50 BUBBLES", the pet stand's name...): it goes
+			-- the moment its thing is hit, even when it sits on an invisible part that does not fall.
+			local anchorPart = (if d:IsA("BillboardGui") then d.Adornee else nil) or d.Parent
+			if anchorPart and anchorPart:IsA("BasePart") and not (dishwasherFolder and anchorPart:IsDescendantOf(dishwasherFolder)) then
+				local dx, dz = anchorPart.Position.X - cx, anchorPart.Position.Z - cz
+				local y = anchorPart.Position.Y - ORIGIN.Y
+				if math.sqrt(dx * dx + dz * dz) < radius + 2 and y > -1 and y < 70 then
+					table.insert(smashedUi, d)
+					d.Enabled = false
+				end
+			end
 		elseif d:IsA("ProximityPrompt") and d.Enabled then
 			local part = d.Parent
 			if part and part:IsA("BasePart") then
