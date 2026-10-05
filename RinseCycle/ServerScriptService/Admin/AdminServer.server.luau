@@ -5400,6 +5400,7 @@ do
 	local giantConn: RBXScriptConnection? = nil
 	local giantHead: BasePart? = nil
 	local giantLeave: (() -> ())? = nil
+	local leaving = false -- set once he starts the exit: nothing respawns him afterwards
 	local giantRescale: ((number, number) -> ())? = nil
 	local boom: (number, Vector3) -> () = function() end
 	local function removeGiant()
@@ -5658,9 +5659,9 @@ do
 				Debris:AddItem(core, 0.5)
 				Debris:AddItem(anchor, life + 0.6)
 			end
-			local count = if heat then 9 else 6
+			local count = 70 -- about 28 seconds of them
 			for i = 1, count do
-				task.delay((i - 1) * 0.9, function()
+				task.delay((i - 1) * 0.4, function()
 					local base = if i % 2 == 1 then plazaSpot() else Vector3.new(math.random(-20, 320), 2, math.random(90, 340))
 					local shell = SHELLS[(i - 1) % #SHELLS + 1]
 					-- the rocket: a bright head with a long spark tail
@@ -5677,19 +5678,20 @@ do
 					trail.Size = NumberSequence.new(4, 0)
 					trail.LightEmission = 1
 					trail.Parent = rocket
-					Remote.AbuseBoom:FireAllClients(0.5, base) -- the launch: shoom
-					local top = base + Vector3.new(math.random(-30, 30), math.random(220, 300), math.random(-30, 30))
-					local rise = TweenService:Create(rocket, TweenInfo.new(1.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = top })
+					Remote.AbuseBoom:FireAllClients(0.3, base) -- the launch: shoom
+					local height = math.random(60, 340) -- all heights, low pops to high shells
+					local top = base + Vector3.new(math.random(-40, 40), height, math.random(-40, 40))
+					local rise = TweenService:Create(rocket, TweenInfo.new(0.5 + height / 260, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = top })
 					rise.Completed:Connect(function()
 						rocket:Destroy()
-						burst(top, shell, 140, 150, 16, 2.4)
-						Remote.AbuseBoom:FireAllClients(1.6, top) -- boom
+						burst(top, shell, 120, 40 + height * 0.35, 12 + height * 0.01, 2.2)
+						Remote.AbuseBoom:FireAllClients(1.1, top) -- boom
 						-- boom, boom, boom: it crackles
-						for k = 1, 4 do
+						for k = 1, 3 do
 							task.delay(0.45 + k * 0.28, function()
-								local p = top + Vector3.new(math.random(-90, 90), math.random(-70, 40), math.random(-90, 90))
-								burst(p, { shell[2], shell[1] }, 40, 70, 9, 1.6)
-								Remote.AbuseBoom:FireAllClients(1, p)
+								local p = top + Vector3.new(math.random(-80, 80), math.random(-60, 30), math.random(-80, 80))
+								burst(p, { shell[2], shell[1] }, 36, 60, 8, 1.5)
+								Remote.AbuseBoom:FireAllClients(0.6, p)
 							end)
 						end
 					end)
@@ -5970,7 +5972,7 @@ do
 		end
 		root.Anchored = true
 		model.PrimaryPart = root
-		model:PivotTo(CFrame.new(0, ROOM_FLOOR + 50, 330))
+		model:PivotTo(CFrame.new(0, ROOM_FLOOR + 6000, 0)) -- built far away, out of sight, until it appears with a bang
 		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 		-- No state machine: it moves the hips up and down (the "sinking into the floor"), but the
 		-- Humanoid stays so the clothes and hair (layered or not) render and animate.
@@ -6018,10 +6020,38 @@ do
 		giant = model
 		local scaleNow = baseScale
 
+		-- Animations (Roblox's default R15 walk and idle). The emotes (wave, point, cheer) are NOT used: they
+		-- move the hips, which on a giant is tens of studs (that was the "teleporting into the floor").
+		local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+		local function load(id: string, priority: Enum.AnimationPriority, looped: boolean): AnimationTrack?
+			local track: AnimationTrack? = nil
+			pcall(function()
+				local anim = Instance.new("Animation")
+				anim.AnimationId = "rbxassetid://" .. id
+				track = animator:LoadAnimation(anim)
+				if track then
+					track.Priority = priority
+					track.Looped = looped
+				end
+			end)
+			return track
+		end
+		local walkTrack = load("507777826", Enum.AnimationPriority.Movement, true)
+		local idleTrack = load("507766388", Enum.AnimationPriority.Idle, true)
+		if idleTrack then
+			idleTrack:Play()
+		end
+		task.wait(0.8) -- (still far away and out of sight) let the pose settle before measuring it
+
 		local footL = model:FindFirstChild("LeftFoot") :: BasePart?
 		local footR = model:FindFirstChild("RightFoot") :: BasePart?
 		local low = math.min(lowestPoint(footL), lowestPoint(footR))
 		local rootAbove = if low == math.huge then humanoid.HipHeight + root.Size.Y / 2 else root.Position.Y - low
+		-- (a sane range: the hips' own height is the other way to know it)
+		local hipAbove = humanoid.HipHeight + root.Size.Y / 2
+		if hipAbove > 0 and (rootAbove < hipAbove * 0.6 or rootAbove > hipAbove * 1.6) then
+			rootAbove = hipAbove
+		end
 		local rootAboveBase = rootAbove / baseScale
 		local rootY = ROOM_FLOOR + rootAbove
 
@@ -6046,28 +6076,32 @@ do
 			tag.Parent = head
 		end
 
-		-- Animations (Roblox's default R15 set).
-		local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
-		local function load(id: string, priority: Enum.AnimationPriority, looped: boolean): AnimationTrack?
-			local track: AnimationTrack? = nil
-			pcall(function()
-				local anim = Instance.new("Animation")
-				anim.AnimationId = "rbxassetid://" .. id
-				track = animator:LoadAnimation(anim)
-				if track then
-					track.Priority = priority
-					track.Looped = looped
-				end
-			end)
-			return track
-		end
-		local walkTrack = load("507777826", Enum.AnimationPriority.Movement, true)
-		local idleTrack = load("507766388", Enum.AnimationPriority.Idle, true)
-		local waveTrack = load("507770239", Enum.AnimationPriority.Action, false)
-		local pointTrack = load("507770453", Enum.AnimationPriority.Action, false)
-		local cheerTrack = load("507770677", Enum.AnimationPriority.Action, true)
-		if idleTrack then
-			idleTrack:Play()
+		-- Arm poses by turning the shoulder joints (C0): they cannot move the hips.
+		local rShoulder = model:FindFirstChild("RightShoulder", true) :: Motor6D?
+		local lShoulder = model:FindFirstChild("LeftShoulder", true) :: Motor6D?
+		local rBase = if rShoulder then rShoulder.C0 else CFrame.identity
+		local lBase = if lShoulder then lShoulder.C0 else CFrame.identity
+		local armMode, armAlpha = "none", 0
+		local function applyArms(dt: number, now: number, active: boolean)
+			armAlpha += ((if active then 1 else 0) - armAlpha) * math.min(1, dt * 6)
+			if armAlpha < 0.002 and not active then
+				armAlpha = 0
+			end
+			local right, left = CFrame.identity, CFrame.identity
+			if armMode == "point" then
+				right = CFrame.Angles(math.rad(95) * armAlpha, 0, 0)
+			elseif armMode == "wave" then
+				right = CFrame.Angles(0, 0, math.rad(150) * armAlpha + math.sin(now * 8) * 0.3 * armAlpha)
+			elseif armMode == "cheer" then
+				right = CFrame.Angles(0, 0, math.rad(165) * armAlpha)
+				left = CFrame.Angles(0, 0, -math.rad(165) * armAlpha)
+			end
+			if rShoulder then
+				rShoulder.C0 = rBase * right
+			end
+			if lShoulder then
+				lShoulder.C0 = lBase * left
+			end
 		end
 
 		-- A circle round the table.
@@ -6078,7 +6112,7 @@ do
 		local facing = Vector3.new(-1, 0, 0)
 		local pos = Vector3.new(0, ROOM_FLOOR, TABLE_CENTER.Z + RADIUS)
 		local acts = 0
-		local flyHeight, flySpeed = 0, 80
+		local flyHeight, flySpeed = 0, 60
 		local leapHeight = 0 -- how far he is above the floor while jumping over the obby
 		local function face(dir: Vector3, dt: number)
 			local flat = Vector3.new(dir.X, 0, dir.Z)
@@ -6117,52 +6151,36 @@ do
 				end
 			end)
 		end
-		-- The exit: he types a command, cuts a hole in the ceiling with a laser, flies up through it, and
-		-- the ceiling mends itself.
+		-- The exit: he types a command, cuts a round hole in the ceiling with a laser, flies up through it,
+		-- and the ceiling mends itself. (Nothing respawns him afterwards: `leaving` stays set.)
 		giantLeave = function()
 			if state == "leave" or state == "fly" then
 				return
 			end
+			leaving = true
 			state = "leave"
 			setWalking(false)
-			if idleTrack then
-				idleTrack:Play(0.3)
-			end
+			armMode = "point"
 			commandText(":noclip")
-			if pointTrack then
-				pointTrack:Play(0.2)
-			end
 			local hx, hz = pos.X, pos.Z
 			task.delay(2, function()
 				if giant ~= model then
 					return
 				end
+				armMode = "cheer"
 				local from = if head then head.Position else pos + Vector3.new(0, 100, 0)
 				local target = Vector3.new(hx, ROOF_Y, hz)
 				local len = (target - from).Magnitude
 				local laser = neonPart(Vector3.new(10, 10, len), Color3.fromRGB(255, 70, 60))
 				laser.CFrame = CFrame.lookAt(from, target) * CFrame.new(0, 0, -len / 2)
 				laser.Parent = workspace
-				Debris:AddItem(laser, 3)
-				TweenService:Create(laser, TweenInfo.new(3), { Transparency = 0.6 }):Play()
-				local hole = neonPart(Vector3.new(0.6, 4, 4), Color3.fromRGB(2, 2, 6), Enum.PartType.Cylinder)
-				hole.Material = Enum.Material.SmoothPlastic
-				upright(hole, Vector3.new(hx, ROOF_Y - 1.2, hz))
-				hole.Parent = workspace
-				local rim = neonPart(Vector3.new(0.5, 6, 6), Color3.fromRGB(255, 130, 40), Enum.PartType.Cylinder)
-				upright(rim, Vector3.new(hx, ROOF_Y - 1.4, hz))
-				rim.Parent = workspace
-				TweenService:Create(hole, TweenInfo.new(2.6, Enum.EasingStyle.Quad), { Size = Vector3.new(0.6, 150, 150) }):Play()
-				TweenService:Create(rim, TweenInfo.new(2.6, Enum.EasingStyle.Quad), { Size = Vector3.new(0.5, 168, 168) }):Play()
+				Debris:AddItem(laser, 2.5)
+				TweenService:Create(laser, TweenInfo.new(2.5), { Transparency = 0.7 }):Play()
+				LobbyBuilder.OpenRoofHole(hx, hz, 64) -- a real round hole in the ceiling
 				for i = 0, 5 do
-					task.delay(i * 0.5, function()
+					task.delay(i * 0.45, function()
 						Remote.AbuseBoom:FireAllClients(2.4, Vector3.new(hx, ROOF_Y, hz))
-						local rubble = neonPart(Vector3.new(8, 8, 8), Color3.fromRGB(150, 130, 110))
-						rubble.Material = Enum.Material.Slate
-						rubble.Position = Vector3.new(hx + math.random(-60, 60), ROOF_Y - 6, hz + math.random(-60, 60))
-						rubble.Parent = workspace
-						TweenService:Create(rubble, TweenInfo.new(1.6, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = Vector3.new(rubble.Position.X, 0.2, rubble.Position.Z) }):Play()
-						Debris:AddItem(rubble, 1.8)
+						harmlessBlast(Vector3.new(hx + math.random(-50, 50), ROOF_Y - 8, hz + math.random(-50, 50)), 20)
 					end)
 				end
 				task.delay(3, function()
@@ -6171,17 +6189,11 @@ do
 					end
 					state = "fly"
 					flyHeight = 0
-					if cheerTrack then
-						cheerTrack:Play(0.2)
-					end
 				end)
-				-- Once he is through, the hole closes and the ceiling is whole again.
-				task.delay(8.5, function()
-					TweenService:Create(hole, TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Size = Vector3.new(0.6, 2, 2) }):Play()
-					TweenService:Create(rim, TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Size = Vector3.new(0.5, 2, 2) }):Play()
-					Debris:AddItem(hole, 2.2)
-					Debris:AddItem(rim, 2.2)
-					boom(3, Vector3.new(hx, ROOF_Y, hz))
+				-- Once he is through, the ceiling mends itself.
+				task.delay(10, function()
+					LobbyBuilder.HealRoof(4)
+					boom(3, Vector3.new(hx, ROOF_Y - 200, hz))
 				end)
 			end)
 		end
@@ -6192,6 +6204,28 @@ do
 			lastStep = os.clock()
 			boom(if heat then 1.8 else 1.4, Vector3.new(foot.Position.X, ROOM_FLOOR, foot.Position.Z))
 		end
+		local function smooth(x: number): number
+			x = math.clamp(x, 0, 1)
+			return x * x * (3 - 2 * x)
+		end
+
+		-- The arrival: a flash and a blast where he stands, and only then is he there.
+		local arrival = Vector3.new(pos.X, ROOM_FLOOR + 110, pos.Z)
+		local flash = neonPart(Vector3.new(30, 30, 30), Color3.new(1, 1, 1), Enum.PartType.Ball)
+		flash.Position = arrival
+		flash.Parent = workspace
+		TweenService:Create(flash, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(520, 520, 520), Transparency = 1 }):Play()
+		Debris:AddItem(flash, 0.8)
+		boom(3, Vector3.new(pos.X, ROOM_FLOOR, pos.Z))
+		for i = 1, 3 do
+			task.delay(i * 0.12, function()
+				ringAt(Vector3.new(pos.X, ROOM_FLOOR, pos.Z), 500 + i * 300, 1.1, Color3.fromRGB(255, 220, 140))
+				Remote.AbuseBoom:FireAllClients(3, arrival)
+			end)
+		end
+		root.CFrame = CFrame.lookAt(Vector3.new(pos.X, rootY, pos.Z), Vector3.new(pos.X + facing.X, rootY, pos.Z + facing.Z))
+		task.wait(0.05)
+		stateUntil = os.clock() + 2.5
 
 		giantConn = RunService.Heartbeat:Connect(function(dt)
 			local now = os.clock()
@@ -6204,13 +6238,12 @@ do
 				angle += walkSpeed / RADIUS * dt
 				pos = Vector3.new(math.cos(angle) * RADIUS, ROOM_FLOOR, TABLE_CENTER.Z + math.sin(angle) * RADIUS)
 				face(Vector3.new(-math.sin(angle), 0, math.cos(angle)), dt)
-				-- Where the circle runs through the obby (a stretch on the south side) he leaps over it: one
-				-- smooth arc that depends only on where he is on the circle (no easing state to fight).
+				-- Where the circle runs through the obby (the south side) he leaps over ALL of it: up over a
+				-- few degrees, flat above it, down again. A pure function of the angle (no easing to fight).
 				local deg = math.deg(angle) % 360
 				local wasLeap = leapHeight
-				if LobbyBuilder.ObbyExists() and deg > 10 and deg < 104 then
-					local f = (deg - 10) / 94
-					leapHeight = 230 * math.sin(math.pi * f) ^ 0.6
+				if LobbyBuilder.ObbyExists() and deg > 8 and deg < 120 then
+					leapHeight = 215 * math.min(smooth((deg - 8) / 14), smooth((120 - deg) / 14))
 				else
 					leapHeight = 0
 				end
@@ -6222,29 +6255,28 @@ do
 				if now >= stateUntil then
 					state = "walk"
 					setWalking(true)
+					armMode = "none"
 				end
 			elseif state == "leave" then
 				face(TABLE_CENTER - pos, dt)
 			elseif state == "fly" then
-				flySpeed = math.min(620, flySpeed + 260 * dt)
+				flySpeed = math.min(520, flySpeed + 180 * dt)
 				flyHeight += flySpeed * dt
-				if flyHeight > ROOF_Y - ROOM_FLOOR + 320 then
+				if flyHeight > ROOF_Y - ROOM_FLOOR + 330 then
 					removeGiant()
 					return
 				end
 			end
-			if state == "walk" or state == "arrive" then
-				-- Floor lock: the lowest sole sits on the floor, whatever the animation does. It only runs
-				-- while he walks: while he stands and does a command his height is frozen.
-				-- Gently (a low gain can't oscillate even if the feet lag a frame), with a dead zone and a
-				-- speed limit: no more teleporting into the floor and back.
+			applyArms(dt, now, state == "act" or state == "leave" or state == "fly")
+			if state ~= "fly" then
+				-- Floor lock: the lowest sole sits on the floor, whatever the animation does. Gently (a low
+				-- gain can't oscillate even if the feet lag a frame), with a dead zone and a speed limit.
 				local low2 = math.min(lowestPoint(footL), lowestPoint(footR))
 				if low2 ~= math.huge and leapHeight < 0.5 then
-					local above = math.clamp(rootY - low2, rootAbove * 0.85, rootAbove * 1.15)
+					local above = math.clamp(rootY - low2, rootAbove * 0.9, rootAbove * 1.1)
 					local error = ROOM_FLOOR + above - rootY
 					if math.abs(error) > scaleNow * 0.03 then
-						local step = math.clamp(error * math.min(1, dt * 4), -scaleNow * dt, scaleNow * dt)
-						rootY += step
+						rootY += math.clamp(error * math.min(1, dt * 4), -scaleNow * dt, scaleNow * dt)
 					end
 				end
 			end
@@ -6269,7 +6301,7 @@ do
 				end
 			end
 		end)
-		-- The script stops him to point (or wave) when he attacks.
+		-- The script stops him and raises an arm when he does something.
 		playEffect = function(name: string)
 			if name == "winner" then
 				name = chosenEffect
@@ -6282,18 +6314,7 @@ do
 			if state == "walk" then
 				state, stateUntil = "act", os.clock() + (if heat then 2.6 else 3.4)
 				setWalking(false)
-				if idleTrack then
-					idleTrack:Play(0.3)
-				end
-				local gesture = if acts % 3 == 0 then cheerTrack elseif acts % 3 == 1 then waveTrack else pointTrack
-				if gesture then
-					gesture:Play(0.2)
-					if gesture == cheerTrack then
-						task.delay(2.4, function()
-							gesture:Stop(0.3)
-						end)
-					end
-				end
+				armMode = if acts % 3 == 0 then "cheer" elseif acts % 3 == 1 then "wave" else "point"
 			end
 			commandText(nil)
 			task.delay(0.8, effect)
@@ -6301,7 +6322,6 @@ do
 				Remote.AbuseBoom:FireAllClients(2.5, Vector3.new(0, 0, 0))
 			end
 		end
-		boom(3, Vector3.new(0, ROOM_FLOOR, 330)) -- the arrival
 	end
 
 	----------------------------------------------------------------- the clock
@@ -6346,7 +6366,9 @@ do
 		ReplicatedStorage:SetAttribute("AbuseMusic", which)
 	end
 	local function resetShow()
+		leaving = false
 		removeGiant()
+		LobbyBuilder.SetBarriers(false)
 		closeHoles()
 		heat = false
 		ReplicatedStorage:SetAttribute("AbuseHeat", false)
@@ -6366,11 +6388,18 @@ do
 			return
 		end
 		task.spawn(function()
-			if not claim("obbyfirst:" .. tostring(e.Starts)) then
+			-- ONE popup per finisher (the gems were already added): the first finisher in any server also
+			-- wins a game pass, announced once in the speech box (no banner on top of everything).
+			local plr = Players:FindFirstChild(name)
+			local gems = Config.Obby.ShowGems
+			local first = claim("obbyfirst:" .. tostring(e.Starts))
+			if not (plr and plr:IsA("Player")) then
+				if first then
+					publish({ Kind = "AbuseSay", Text = name .. " finished the obby first and wins a game pass. well done." })
+				end
 				return
 			end
-			local plr = Players:FindFirstChild(name)
-			if plr and plr:IsA("Player") then
+			if first then
 				local passes = DataService.GetPasses and DataService.GetPasses(plr) or {}
 				local free = {}
 				for _, pass in ipairs(Config.GamePasses) do
@@ -6381,14 +6410,15 @@ do
 				if #free > 0 then
 					local pass = free[math.random(1, #free)]
 					setGamepassGrant(plr, pass, true, false)
-					celebrate(plr, "First to finish!", "You finished the obby first and won " .. pass.Name .. "!", pass.Icon)
+					celebrate(plr, "First to finish!", string.format("You won %s and %d Gems for finishing the obby first!", pass.Name, gems), pass.Icon)
 				else
 					DataService.AddGems(plr, 100)
-					celebrate(plr, "First to finish!", "You finished the obby first! 100 Gems (you own every pass).", "@Gem")
+					celebrate(plr, "First to finish!", string.format("You finished first! %d Gems, plus 100 more because you own every pass.", gems), "@Gem")
 				end
+				publish({ Kind = "AbuseSay", Text = name .. " finished the obby first and wins a game pass. well done." })
+			else
+				celebrate(plr, "You beat the obby!", string.format("You got %d Gems!", gems), "@Gem")
 			end
-			publish({ Kind = "Banner", Text = name .. " finished the obby first and wins a game pass!" })
-			publish({ Kind = "AbuseSay", Text = name .. " finished first. well done. now do it again, i built more." })
 		end)
 	end)
 	task.spawn(function()
@@ -6407,14 +6437,12 @@ do
 					bannerAll(string.format("Admin Abuse starts in %d minute%s! You can't start a round right now. Stay tuned for free game passes, Bubbles and surprises!", mins, if mins == 1 then "" else "s"))
 				end
 			end
-			if t >= -8 and t < 0 and once("premusic" .. tag) then
-				setMusic("Warm") -- the show music is loaded and fading in by the first boom
-			end
 			if t >= 0 and t < Show.ShowSeconds then
 				local wasHeat = heat
 				heat = t >= Show.HeatAt
 				if once("live" .. tag) then
 					ReplicatedStorage:SetAttribute("AbuseLive", true)
+					LobbyBuilder.SetBarriers(true) -- no invisible walls for the whole show
 					LobbyBuilder.SetRescue(true)
 					setMusic("Warm")
 				end
@@ -6443,7 +6471,7 @@ do
 						end)
 					end
 				end
-				if not RunServers.IsRunServer and t >= 3 and t < Show.ShowSeconds - 12 then
+				if not RunServers.IsRunServer and t >= 3 and not leaving then
 					task.spawn(spawnGiant)
 				end
 				-- The script, in order.

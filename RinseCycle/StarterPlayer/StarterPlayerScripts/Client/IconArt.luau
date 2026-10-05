@@ -165,6 +165,87 @@ local function clipHolder(parent: Instance, clip: { number }?, px: number, grow:
 	return holder, x0, y0
 end
 
+
+-- Polygons (hearts, arrows): drawn as stacked one-pixel strips (even-odd scanlines), so every point is a
+-- real point and every edge is exactly where the corner list says. The outline is the same polygon
+-- pushed outwards with mitred corners (not a blocky grow of each strip), so tips stay pointed.
+type Pt = { number }
+local function polyOffset(pts: { Pt }, d: number): { Pt }
+	if d <= 0 then
+		return pts
+	end
+	local n = #pts
+	local area = 0
+	for i = 1, n do
+		local a, b = pts[i], pts[i % n + 1]
+		area += a[1] * b[2] - b[1] * a[2]
+	end
+	local sign = if area > 0 then 1 else -1 -- which side is outside
+	local out: { Pt } = {}
+	for i = 1, n do
+		local prev, cur, nxt = pts[(i - 2) % n + 1], pts[i], pts[i % n + 1]
+		local function normal(a: Pt, b: Pt): (number, number)
+			local dx, dy = b[1] - a[1], b[2] - a[2]
+			local len = math.sqrt(dx * dx + dy * dy)
+			if len < 1e-9 then
+				return 0, 0
+			end
+			return sign * dy / len, -sign * dx / len
+		end
+		local n1x, n1y = normal(prev, cur)
+		local n2x, n2y = normal(cur, nxt)
+		local k = d / math.max(0.35, 1 + n1x * n2x + n1y * n2y) -- miter, kept from spiking
+		table.insert(out, { cur[1] + (n1x + n2x) * k, cur[2] + (n1y + n2y) * k })
+	end
+	return out
+end
+
+local function drawPoly(parent: Instance, s: Shape, px: number, grow: number, color: Color3, transparency: number)
+	local pts: { Pt } = {}
+	for _, p in s.pts do
+		table.insert(pts, { p[1] * px, p[2] * px })
+	end
+	pts = polyOffset(pts, grow)
+	local ymin, ymax = math.huge, -math.huge
+	for _, p in pts do
+		ymin = math.min(ymin, p[2])
+		ymax = math.max(ymax, p[2])
+	end
+	local fill = s.fill
+	local gradientFill = grow == 0 and typeof(fill) ~= "Color3"
+	local n = #pts
+	local firstRow, lastRow = math.floor(ymin), math.ceil(ymax) - 1
+	for row = firstRow, lastRow do
+		local yc = row + 0.5
+		local xs: { number } = {}
+		for i = 1, n do
+			local a, b = pts[i], pts[i % n + 1]
+			if (a[2] <= yc and b[2] > yc) or (b[2] <= yc and a[2] > yc) then
+				table.insert(xs, a[1] + (yc - a[2]) / (b[2] - a[2]) * (b[1] - a[1]))
+			end
+		end
+		table.sort(xs)
+		local rowColor = color
+		if gradientFill then
+			local t = math.clamp((yc - ymin) / math.max(1e-6, ymax - ymin), 0, 1)
+			rowColor = (fill[1] :: Color3):Lerp(fill[2] :: Color3, t)
+		end
+		for i = 1, #xs - 1, 2 do
+			local x0, x1 = math.floor(xs[i] + 0.5), math.floor(xs[i + 1] + 0.5)
+			if x1 > x0 then
+				local f = Instance.new("Frame")
+				f.BorderSizePixel = 0
+				f.BackgroundColor3 = rowColor
+				f.BackgroundTransparency = transparency
+				f.Position = UDim2.fromOffset(x0, row)
+				-- opaque strips overlap the next one by a pixel, so no hairline shows between them
+				f.Size = UDim2.fromOffset(x1 - x0, if transparency == 0 then 2 else 1)
+				f.Parent = parent
+			end
+		end
+	end
+end
+
 -- Draws one shape. `grow` > 0 draws the ink outline version (every edge pushed out by `grow` px).
 local function draw(parent: Instance, s: Shape, px: number, grow: number)
 	local fill = if grow > 0 then (s.ink or INK) else s.fill
@@ -229,6 +310,8 @@ local function draw(parent: Instance, s: Shape, px: number, grow: number)
 			g.Color = ColorSequence.new(fill[1], fill[2])
 		end
 		g.Parent = f
+	elseif kind == "poly" then
+		drawPoly(holder, s, px, grow, color, transparency)
 	elseif kind == "ring" then
 		-- UIStroke draws outside the circle; the outline is a thicker stroke round a smaller circle.
 		local d = s.d * px - grow * 2
@@ -639,32 +722,35 @@ ART.Bag = {
 	{ "rect", x = 0.22, y = 0.64, w = 0.05, h = 0.32, r = 0.5, fill = WHITE, t = 0.55 },
 }
 
--- Trade: two arrows passing each other (green right on top, blue left underneath).
+-- Trade: two arrows passing each other (green right on top, blue left underneath). Each is one
+-- polygon with a real point.
 do
-	local a = 0.2 -- arrowhead half-height
 	local function arrow(y: number, right: boolean, fill: any): { any }
-		local tipX = if right then 0.9 else 0.1
-		local backX = if right then tipX - a else tipX + a
-		local shaftFrom = if right then 0.12 else 0.88
-		local cx = (shaftFrom + backX) / 2
-		local nudge = 0.004 -- the two halves overlap by half a pixel: no seam
-		local half = a / 2
-		local x = if right then backX + half else backX - half
+		local head, half, shaft = 0.22, 0.2, 0.075
+		local tip = if right then 0.9 else 0.1
+		local back = if right then tip - head else tip + head
+		local tail = if right then 0.1 else 0.9
 		return {
-			{ "rect", x = cx, y = y, w = math.abs(backX - shaftFrom) + 0.04, h = 0.15, r = 0.5, fill = fill, o = true },
-			{ "tri", x = x, y = y - half + nudge, s = a, keep = if right then "bl" else "br", fill = fill, o = true },
-			{ "tri", x = x, y = y + half - nudge, s = a, keep = if right then "tl" else "tr", fill = fill, o = true },
+			{ "poly", fill = fill, o = true, pts = {
+				{ tail, y - shaft },
+				{ back, y - shaft },
+				{ back, y - half },
+				{ tip, y },
+				{ back, y + half },
+				{ back, y + shaft },
+				{ tail, y + shaft },
+			} },
 		}
 	end
 	local shapes: { any } = {}
-	for _, s in arrow(0.66, false, rgb(70, 170, 255)) do
+	for _, s in arrow(0.68, false, { rgb(120, 200, 255), rgb(50, 140, 240) }) do
 		table.insert(shapes, s)
 	end
 	table.insert(shapes, "|")
-	for _, s in arrow(0.32, true, rgb(70, 220, 140)) do
+	for _, s in arrow(0.32, true, { rgb(120, 240, 170), rgb(40, 190, 110) }) do
 		table.insert(shapes, s)
 	end
-	table.insert(shapes, { "rect", x = 0.36, y = 0.29, w = 0.36, h = 0.035, r = 0.5, fill = WHITE, t = 0.45 })
+	table.insert(shapes, { "rect", x = 0.34, y = 0.285, w = 0.3, h = 0.03, r = 0.5, fill = WHITE, t = 0.45 })
 	ART.Trade = shapes
 end
 
@@ -703,15 +789,27 @@ ART.Gavel = {
 }
 
 -- Free: a heart (two circles and a gradient-cut point).
-ART.Love = {
-	{ "disc", x = 0.31, y = 0.38, d = 0.42, fill = rgb(244, 76, 104), o = true },
-	{ "disc", x = 0.69, y = 0.38, d = 0.42, fill = rgb(244, 76, 104), o = true },
-	{ "tri", x = 0.3, y = 0.66, s = 0.4, keep = "tr", fill = rgb(244, 76, 104), o = true },
-	{ "tri", x = 0.7, y = 0.66, s = 0.4, keep = "tl", fill = rgb(244, 76, 104), o = true },
-	{ "rect", x = 0.5, y = 0.52, w = 0.4, h = 0.28, fill = rgb(244, 76, 104) },
-	{ "disc", x = 0.27, y = 0.32, d = 0.13, fill = WHITE, t = 0.2 },
-	{ "disc", x = 0.36, y = 0.24, d = 0.06, fill = WHITE, t = 0.45 },
-}
+do
+	-- the classic heart curve, point at the bottom, fitted to the canvas
+	local raw: { { number } } = {}
+	local xmin, xmax, ymin, ymax = math.huge, -math.huge, math.huge, -math.huge
+	for i = 0, 71 do
+		local t = i / 72 * math.pi * 2
+		local x = 16 * math.sin(t) ^ 3
+		local y = -(13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t))
+		table.insert(raw, { x, y })
+		xmin, xmax, ymin, ymax = math.min(xmin, x), math.max(xmax, x), math.min(ymin, y), math.max(ymax, y)
+	end
+	local pts: { { number } } = {}
+	for _, p in raw do
+		table.insert(pts, { 0.1 + (p[1] - xmin) / (xmax - xmin) * 0.8, 0.12 + (p[2] - ymin) / (ymax - ymin) * 0.76 })
+	end
+	ART.Love = {
+		{ "poly", pts = pts, fill = { rgb(255, 112, 136), rgb(224, 48, 84) }, o = true },
+		{ "disc", x = 0.27, y = 0.31, d = 0.13, fill = WHITE, t = 0.25 },
+		{ "disc", x = 0.36, y = 0.23, d = 0.06, fill = WHITE, t = 0.5 },
+	}
+end
 
 -- Upgrades: a green book with a big up arrow on the cover.
 do

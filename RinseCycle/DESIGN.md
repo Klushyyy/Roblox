@@ -1686,3 +1686,10 @@ Config.AbuseShow and the clock Config.Now. AdminServer's "Admin Abuse show" sect
 - Fireworks: rocket with a spark trail, a big particle burst, then four crackles; all particle emitters.
 - Everyone online gets `Config.AbuseShow.ThanksGems` (100) just before the exit. The show music preloads and starts 8 s before the first boom.
 - The Collection page replaces the pet grid (nothing shows through) with its own Back button.
+
+## 6zq. Exit, entrance, borders, music, icons (v2.12.0)
+- Giant: built far away and out of sight, measured, then appears with a flash, rings and a blast. No emote animations (they moved the hips by tens of studs on a giant); arms are posed by turning the shoulder joints (point / wave / cheer). The floor lock runs in every state except flying and leaping. He leaps over the whole obby (rise, flat, land). The exit cuts a real round hole in the ceiling (`LobbyBuilder.OpenRoofHole`, healed with `HealRoof`) and he is never respawned afterwards (`leaving`).
+- The invisible table walls are open for the whole show (`SetBarriers`); when it ends anyone outside them is put back at the spawn. Obby beams are 0.8 wide. Obby finishing shows ONE popup (the first finisher's includes the game pass; no banner).
+- Fireworks run about 28 s (70 shells, all heights). Done line / disco line retimed.
+- Music: a new track loads first, then the old one fades out (3 s) as the new one fades in (2 s); tracks hand over 30 s before their end.
+- IconArt: new "poly" shape (stacked 1-px scanline strips, mitred outline) so the Love heart and the Trade arrows have real points.

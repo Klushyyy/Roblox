@@ -1,7 +1,7 @@
 --[[
 	MusicPlayer - background music. The lobby and dishwasher runs each have their own playlist
 	(Config.Music, IDs from StoreIds > Music), played shuffled, one track after another. Each track
-	crossfades into the next (the next one starts CROSSFADE seconds before the end), and there's a
+	crossfades into the next (the next one starts 30 seconds before the end), and there's a
 	short fade when switching between lobby and run. A "Music" button in the left column turns it
 	off / on (remembered for this session). Plays nothing until track IDs are filled in.
 ]]
@@ -17,8 +17,9 @@ local ClientState = require(Client:WaitForChild("ClientState"))
 
 local MusicPlayer = {}
 
-local FADE = 0.6
-local CROSSFADE = 4 -- seconds the end of one track overlaps the start of the next
+local FADE = 1.2 -- a plain switch (lobby <-> run)
+local FADE_OUT = 3 -- the old track fades out over this...
+local FADE_IN = 2 -- ...while the next fades in over this
 
 local initialized = false
 local enabled = true
@@ -43,6 +44,10 @@ local function listIds(name: string): { number }
 	return (Config.Music :: any)[name] or {}
 end
 
+-- Plays the given playlist, shuffled, until something else is chosen. There is never silence: a new
+-- track is started and loaded first, and only then does the old one fade out (3 s) as the new one
+-- fades in (2 s). Tracks hand over 30 seconds before they end (a long track often ends in a quiet
+-- tail), or 6 s before for short ones.
 local function playList(name: string)
 	local ids = listIds(name)
 	if name == currentList and current then
@@ -51,17 +56,18 @@ local function playList(name: string)
 	currentList = name
 	token += 1
 	local myToken = token
-	if current then
-		fadeOut(current)
-		current = nil
-	end
+	local previous: Sound? = current
+	current = nil
 	if not enabled or #ids == 0 then
+		if previous then
+			fadeOut(previous, FADE)
+		end
 		return
 	end
 	task.spawn(function()
 		local order = table.clone(ids)
-		local firstTrack = true
 		local index = 0
+		local failures = 0
 		while myToken == token do
 			index += 1
 			if index > #order then
@@ -79,32 +85,49 @@ local function playList(name: string)
 			sound.Parent = SoundService
 			current = sound
 			sound:Play()
-			TweenService:Create(sound, TweenInfo.new(if firstTrack then FADE else CROSSFADE), { Volume = Config.Music.Volume }):Play()
-			firstTrack = false
-			-- Wait for the track to near its end (or something else to take over); a track that
-			-- never loads is skipped after a while.
+			-- wait for it to load before the old one fades out (a track that never loads is skipped)
 			local started = os.clock()
-			local crossfading = false
+			while myToken == token and sound.Parent and not sound.IsLoaded and os.clock() - started < 8 do
+				task.wait(0.1)
+			end
+			if myToken ~= token or not sound.Parent then
+				return -- another playlist took over (it fades this one out)
+			end
+			if not sound.IsLoaded then
+				sound:Destroy()
+				current = previous
+				failures += 1
+				if failures >= #order * 2 then
+					if previous then
+						fadeOut(previous, FADE)
+						current = nil
+					end
+					return
+				end
+				continue
+			end
+			TweenService:Create(sound, TweenInfo.new(FADE_IN), { Volume = Config.Music.Volume }):Play()
+			if previous then
+				fadeOut(previous, FADE_OUT)
+				previous = nil
+			end
+			-- play until it is time to hand over to the next track
 			while myToken == token and sound.Parent do
-				if sound.IsLoaded and not sound.IsPlaying and os.clock() - started > 2 then
-					break
+				if sound.IsLoaded and sound.TimeLength > 0 then
+					local handOver = if sound.TimeLength > 75 then sound.TimeLength - 30 else math.max(1, sound.TimeLength - 6)
+					if sound.TimePosition >= handOver then
+						break
+					end
 				end
-				if sound.IsLoaded and sound.TimeLength > CROSSFADE * 3 and sound.TimePosition >= sound.TimeLength - CROSSFADE then
-					crossfading = true
-					break
+				if not sound.IsPlaying and os.clock() - started > 12 then
+					break -- it stopped by itself
 				end
-				if not sound.IsLoaded and os.clock() - started > 15 then
-					break
-				end
-				task.wait(0.5)
+				task.wait(0.4)
 			end
-			if myToken == token and sound.Parent then
-				if crossfading then
-					fadeOut(sound, CROSSFADE) -- the next track fades in over it
-				else
-					sound:Destroy()
-				end
+			if myToken ~= token then
+				return
 			end
+			previous = sound
 		end
 	end)
 end

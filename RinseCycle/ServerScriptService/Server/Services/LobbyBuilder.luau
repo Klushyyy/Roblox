@@ -1971,10 +1971,10 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 	plat("Landing", 312, Y + 1.5, 300, 12, 12, nil)
 
 	-- Stage 7: balance beams (round the corner and back over the sofa): thin ones.
-	plat("Beam1", 312, Y + 3, 322, 1.6, 32, Color3.fromRGB(255, 255, 255), { Bare = true })
+	plat("Beam1", 312, Y + 3, 322, 0.8, 32, Color3.fromRGB(255, 255, 255), { Bare = true })
 	plat("Corner", 312, Y + 3, 345, 10, 10, nil)
-	plat("Beam2a", 275.5, Y + 3, 345, 51, 1.6, Color3.fromRGB(255, 255, 255), { Bare = true })
-	plat("Beam2b", 220, Y + 3, 345, 48, 1.6, Color3.fromRGB(255, 255, 255), { Bare = true })
+	plat("Beam2a", 275.5, Y + 3, 345, 51, 0.8, Color3.fromRGB(255, 255, 255), { Bare = true })
+	plat("Beam2b", 220, Y + 3, 345, 48, 0.8, Color3.fromRGB(255, 255, 255), { Bare = true })
 	checkpoint(5, 180, Y + 3, 345)
 
 	-- Stage 8: the climb: stairs of small platforms up to the finish.
@@ -2037,7 +2037,8 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 				if okData then
 					DataService.AddGems(player, gems)
 				end
-				if okGift then
+				if okGift and not show then
+					-- (during the show the director shows ONE popup for it: first finisher or not)
 					(GiftService :: any).Celebrate(player, "You beat the obby!", string.format("You got %d Gems!", gems), "@Gem")
 				end
 			end)
@@ -2248,13 +2249,18 @@ local function setBox(clone: BasePart, source: BasePart, x0: number, x1: number,
 	clone.CFrame = CFrame.new((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2) * rot
 end
 
-function LobbyBuilder.OpenHole(index: number)
-	local def = (Config.AbuseShow :: any).Holes[index]
+local ROOF_PART_NAMES = { Ceiling = true, CeilingBeam = true, Crown = true }
+
+-- Cuts a round hole (tiles fall, rim tilts) in the named parts around (x, z). opts.Roof: the ceiling
+-- (bigger tiles, no props / cracks / glow, and the falling tiles never collide with anyone).
+local function cutDisc(index: number, holeX: number, holeZ: number, R: number, names: { [string]: boolean }, opts: { Roof: boolean? })
 	local model = lobby and lobby.Model
-	if not def or not model or holes[index] then
+	if not model or holes[index] then
 		return
 	end
-	local cx, cz, R = ORIGIN.X + def[1], ORIGIN.Z + def[2], def[3]
+	local roof = opts.Roof == true
+	local TILE = if roof then 11 else TILE
+	local cx, cz = ORIGIN.X + holeX, ORIGIN.Z + holeZ
 	local S = R + 10
 	local rec: HoleRec = { Hidden = {}, Pieces = {}, Tiles = {}, Props = {}, Cracks = {}, Center = Vector3.new(cx, ORIGIN.Y, cz), Radius = R }
 	holes[index] = rec
@@ -2276,7 +2282,7 @@ function LobbyBuilder.OpenHole(index: number)
 
 	local sources: { BasePart } = {}
 	for _, p in model:GetChildren() do
-		if p:IsA("BasePart") and TABLE_PART_NAMES[p.Name] then
+		if p:IsA("BasePart") and names[p.Name] then
 			local c, e = worldBox(p)
 			if c.X + e.X > cx - S and c.X - e.X < cx + S and c.Z + e.Z > cz - S and c.Z - e.Z < cz + S then
 				table.insert(sources, p)
@@ -2323,7 +2329,7 @@ function LobbyBuilder.OpenHole(index: number)
 						local tile = piece(x, x1, z, z1)
 						local flat = tile.CFrame
 						tile.Anchored = false
-						tile.CanCollide = true
+						tile.CanCollide = not roof
 						table.insert(rec.Tiles, { Part = tile, Flat = flat, D = d, Fall = true, Transparency = tile.Transparency })
 						tile.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-8, 8), rng:NextNumber(-4, 6), rng:NextNumber(-8, 8))
 						tile.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-3, 3), rng:NextNumber(-3, 3), rng:NextNumber(-3, 3))
@@ -2347,85 +2353,87 @@ function LobbyBuilder.OpenHole(index: number)
 		table.insert(rec.Hidden, p)
 	end
 
-	-- Cracks across the table around the rim.
-	for i = 1, 16 do
-		local a = rng:NextNumber(0, math.pi * 2)
-		local len = rng:NextNumber(8, 22)
-		local mid = R + 2 + len / 2
-		local crack = mkPart("Part", {
-			Name = "HoleCrack",
-			Size = Vector3.new(rng:NextNumber(0.5, 1.1), 0.1, len),
-			CFrame = CFrame.new(cx + math.cos(a) * mid, ORIGIN.Y + FLOOR_Y + 0.06, cz + math.sin(a) * mid) * CFrame.Angles(0, -a + math.pi / 2 + rng:NextNumber(-0.25, 0.25), 0),
-			Color = Color3.fromRGB(34, 20, 14),
-			Material = LOW,
-			CanCollide = false,
-			CastShadow = false,
-		}, folder)
-		table.insert(rec.Cracks, crack)
-	end
-	-- A glow and smoke from below.
-	local glow = mkPart("Part", { Name = "HoleGlow", Size = Vector3.new(2, 2, 2), CFrame = CFrame.new(cx, ORIGIN.Y - 14, cz), Transparency = 1, CanCollide = false, CastShadow = false }, folder)
-	mk("PointLight", { Color = Color3.fromRGB(255, 120, 50), Range = 70, Brightness = 3, Shadows = false }, glow)
-	mk("ParticleEmitter", {
-		Texture = "rbxasset://textures/particles/smoke_main.dds",
-		Color = ColorSequence.new(Color3.fromRGB(60, 50, 46)),
-		Lifetime = NumberRange.new(2, 3.5),
-		Speed = NumberRange.new(10, 22),
-		SpreadAngle = Vector2.new(20, 20),
-		Rate = 14,
-		Size = NumberSequence.new(6, 16),
-		Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.55), NumberSequenceKeypoint.new(1, 1) }),
-		EmissionDirection = Enum.NormalId.Top,
-	}, glow)
-	mk("ParticleEmitter", {
-		Texture = "rbxasset://textures/particles/sparkles_main.dds",
-		Color = ColorSequence.new(Color3.fromRGB(255, 170, 70)),
-		Lifetime = NumberRange.new(1, 2),
-		Speed = NumberRange.new(20, 40),
-		SpreadAngle = Vector2.new(35, 35),
-		Rate = 18,
-		Size = NumberSequence.new(1.6, 0),
-		LightEmission = 1,
-		EmissionDirection = Enum.NormalId.Top,
-	}, glow)
+	if not roof then
+		-- Cracks across the table around the rim.
+		for i = 1, 16 do
+			local a = rng:NextNumber(0, math.pi * 2)
+			local len = rng:NextNumber(8, 22)
+			local mid = R + 2 + len / 2
+			local crack = mkPart("Part", {
+				Name = "HoleCrack",
+				Size = Vector3.new(rng:NextNumber(0.5, 1.1), 0.1, len),
+				CFrame = CFrame.new(cx + math.cos(a) * mid, ORIGIN.Y + FLOOR_Y + 0.06, cz + math.sin(a) * mid) * CFrame.Angles(0, -a + math.pi / 2 + rng:NextNumber(-0.25, 0.25), 0),
+				Color = Color3.fromRGB(34, 20, 14),
+				Material = LOW,
+				CanCollide = false,
+				CastShadow = false,
+			}, folder)
+			table.insert(rec.Cracks, crack)
+		end
+		-- A glow and smoke from below.
+		local glow = mkPart("Part", { Name = "HoleGlow", Size = Vector3.new(2, 2, 2), CFrame = CFrame.new(cx, ORIGIN.Y - 14, cz), Transparency = 1, CanCollide = false, CastShadow = false }, folder)
+		mk("PointLight", { Color = Color3.fromRGB(255, 120, 50), Range = 70, Brightness = 3, Shadows = false }, glow)
+		mk("ParticleEmitter", {
+			Texture = "rbxasset://textures/particles/smoke_main.dds",
+			Color = ColorSequence.new(Color3.fromRGB(60, 50, 46)),
+			Lifetime = NumberRange.new(2, 3.5),
+			Speed = NumberRange.new(10, 22),
+			SpreadAngle = Vector2.new(20, 20),
+			Rate = 14,
+			Size = NumberSequence.new(6, 16),
+			Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.55), NumberSequenceKeypoint.new(1, 1) }),
+			EmissionDirection = Enum.NormalId.Top,
+		}, glow)
+		mk("ParticleEmitter", {
+			Texture = "rbxasset://textures/particles/sparkles_main.dds",
+			Color = ColorSequence.new(Color3.fromRGB(255, 170, 70)),
+			Lifetime = NumberRange.new(1, 2),
+			Speed = NumberRange.new(20, 40),
+			SpreadAngle = Vector2.new(35, 35),
+			Rate = 18,
+			Size = NumberSequence.new(1.6, 0),
+			LightEmission = 1,
+			EmissionDirection = Enum.NormalId.Top,
+		}, glow)
 
-	-- Whatever stands in it falls with it (boards, cups, sponge, shakers...).
-	for _, d in model:GetDescendants() do
-		if d:IsA("BasePart") and d.Anchored and d.Transparency < 0.95 and d.Name ~= "Barrier" and not string.find(d.Name, "^Bubble") and not TABLE_PART_NAMES[d.Name] and d.Size.Y < 70 then
-			local dx, dz = d.Position.X - cx, d.Position.Z - cz
-			local y = d.Position.Y - ORIGIN.Y
-			if math.sqrt(dx * dx + dz * dz) < R + 4 and y > -1 and y < 60 and not d:IsDescendantOf(folder) then
-				table.insert(rec.Props, { Part = d, CF = d.CFrame, Anchored = d.Anchored :: boolean, Collide = d.CanCollide })
+		-- Whatever stands in it falls with it (boards, cups, sponge, shakers...).
+		for _, d in model:GetDescendants() do
+			if d:IsA("BasePart") and d.Anchored and d.Transparency < 0.95 and d.Name ~= "Barrier" and not string.find(d.Name, "^Bubble") and not TABLE_PART_NAMES[d.Name] and d.Size.Y < 70 then
+				local dx, dz = d.Position.X - cx, d.Position.Z - cz
+				local y = d.Position.Y - ORIGIN.Y
+				if math.sqrt(dx * dx + dz * dz) < R + 4 and y > -1 and y < 60 and not d:IsDescendantOf(folder) then
+					table.insert(rec.Props, { Part = d, CF = d.CFrame, Anchored = d.Anchored :: boolean, Collide = d.CanCollide })
+				end
 			end
 		end
-	end
-	for _, prop in rec.Props do
-		task.delay(rng:NextNumber(0.1, 0.9), function()
-			prop.Part.Anchored = false
-			prop.Part.CanCollide = true
-			prop.Part.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-2, 2), rng:NextNumber(-2, 2), rng:NextNumber(-2, 2))
-		end)
-	end
-	-- Chunks flung out of it.
-	for i = 1, 20 do
-		local size = rng:NextNumber(1.2, 3.6)
-		local chunk = mkPart("Part", {
-			Name = "HoleChunk",
-			Size = Vector3.new(size, size * 0.6, size * 1.3),
-			CFrame = CFrame.new(cx + rng:NextNumber(-R * 0.6, R * 0.6), ORIGIN.Y + 2, cz + rng:NextNumber(-R * 0.6, R * 0.6)),
-			Color = if i % 3 == 0 then WOOD_DARK else WOOD_A,
-			Material = LOW,
-			Anchored = false,
-		}, folder)
-		chunk.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-40, 40), rng:NextNumber(40, 90), rng:NextNumber(-40, 40))
-		chunk.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-8, 8), rng:NextNumber(-8, 8), rng:NextNumber(-8, 8))
-		task.delay(7, function()
-			if chunk.Parent then
-				TweenService:Create(chunk, TweenInfo.new(1.5), { Transparency = 1 }):Play()
-				task.wait(1.6)
-				chunk:Destroy()
-			end
-		end)
+		for _, prop in rec.Props do
+			task.delay(rng:NextNumber(0.1, 0.9), function()
+				prop.Part.Anchored = false
+				prop.Part.CanCollide = true
+				prop.Part.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-2, 2), rng:NextNumber(-2, 2), rng:NextNumber(-2, 2))
+			end)
+		end
+		-- Chunks flung out of it.
+		for i = 1, 20 do
+			local size = rng:NextNumber(1.2, 3.6)
+			local chunk = mkPart("Part", {
+				Name = "HoleChunk",
+				Size = Vector3.new(size, size * 0.6, size * 1.3),
+				CFrame = CFrame.new(cx + rng:NextNumber(-R * 0.6, R * 0.6), ORIGIN.Y + 2, cz + rng:NextNumber(-R * 0.6, R * 0.6)),
+				Color = if i % 3 == 0 then WOOD_DARK else WOOD_A,
+				Material = LOW,
+				Anchored = false,
+			}, folder)
+			chunk.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-40, 40), rng:NextNumber(40, 90), rng:NextNumber(-40, 40))
+			chunk.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-8, 8), rng:NextNumber(-8, 8), rng:NextNumber(-8, 8))
+			task.delay(7, function()
+				if chunk.Parent then
+					TweenService:Create(chunk, TweenInfo.new(1.5), { Transparency = 1 }):Play()
+					task.wait(1.6)
+					chunk:Destroy()
+				end
+			end)
+		end
 	end
 	-- The fallen tiles lie on the floor a while, then fade (kept for the repair).
 	task.delay(7, function()
@@ -2444,10 +2452,21 @@ function LobbyBuilder.OpenHole(index: number)
 	end)
 end
 
+function LobbyBuilder.OpenHole(index: number)
+	local def = (Config.AbuseShow :: any).Holes[index]
+	if def then
+		cutDisc(index, def[1], def[2], def[3], TABLE_PART_NAMES, {})
+	end
+end
+
+-- A hole in the ceiling (the giant's exit). It heals with HealRoof (or HealHoles).
+function LobbyBuilder.OpenRoofHole(x: number, z: number, radius: number)
+	cutDisc(100, x, z, radius, ROOF_PART_NAMES, { Roof = true })
+end
+
 -- Everything comes back: the hole closes in from its rim over `seconds`, cracks fade, props return.
-function LobbyBuilder.HealHoles(seconds: number?)
-	local total = seconds or 8
-	for index, rec in holes do
+local function healRec(index: number, rec: HoleRec, total: number)
+	do
 		holes[index] = nil
 		local folder = rec.Pieces[1]
 		for _, crack in rec.Cracks do
@@ -2503,6 +2522,44 @@ function LobbyBuilder.HealHoles(seconds: number?)
 				prop.Part.Anchored = prop.Anchored
 			end
 		end)
+	end
+end
+
+function LobbyBuilder.HealHoles(seconds: number?)
+	for index, rec in holes do
+		healRec(index, rec, seconds or 8)
+	end
+end
+
+function LobbyBuilder.HealRoof(seconds: number?)
+	local rec = holes[100]
+	if rec then
+		healRec(100, rec, seconds or 4)
+	end
+end
+
+-- The invisible walls round the table: open (no collision) for the whole Admin Abuse show, then closed
+-- again; anyone left outside when they close is put back at the spawn.
+function LobbyBuilder.SetBarriers(open: boolean)
+	local model = lobby and lobby.Model
+	if not model then
+		return
+	end
+	for _, d in model:GetChildren() do
+		if d:IsA("BasePart") and d.Name == "Barrier" then
+			d.CanCollide = not open
+		end
+	end
+	if not open then
+		for _, player in Players:GetPlayers() do
+			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if root then
+				local p = root.Position - ORIGIN
+				if math.abs(p.X) > PLAZA_X + FENCE_MARGIN or p.Z < PLAZA_Z0 - FENCE_MARGIN or p.Z > PLAZA_Z1 + FENCE_MARGIN or p.Y < -20 then
+					sendToLobbySpawn(player)
+				end
+			end
+		end
 	end
 end
 

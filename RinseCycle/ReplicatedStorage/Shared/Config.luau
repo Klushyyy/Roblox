@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.11.1"
+Config.Version = "2.12.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1158,7 +1158,7 @@ Config.AbuseShow = ({
 			Kind = "Announce",
 			Option = { Kind = "Passes", Share = 0.1 },
 			Intro = "this one isnt a vote. a random game pass is going to {players}. no, you cant pick.",
-			Done = "done. if you won, check your screen. if you didnt, i feel nothing.",
+			Done = "done. winners, check your screen. everyone else, dont worry. there is more.",
 		},
 		Break = {
 			Kind = "Poll",
@@ -1230,10 +1230,10 @@ do
 	at(98, "say", "this next one isnt a vote.")
 	at(101, "round", "Passes")
 	at(106, "attack", "ufo")
-	at(118, "say", "if you didnt get one, dont worry. there is more.")
 	at(122, "attack", "shockwave")
-	at(132, "say", "you can feel that, right? thats the floor. it is not happy.")
-	at(136, "attack", "disco")
+	at(126, "say", "you can feel that, right? thats the floor. it is not happy.")
+	at(134, "say", "the table needs some colour. one second.")
+	at(138, "attack", "disco")
 	at(144, "say", "next vote. you choose how i break things.")
 	at(147, "round", "Break")
 	at(152, "attack", "lightning")
@@ -1286,7 +1286,7 @@ do
 	at(438, "say", "if you are still in the obby, keep going.")
 	at(442, "attack", "blackhole")
 	at(450, "attack", "disco")
-	at(456, "attack", "fireworks")
+	at(456, "attack", "lightning")
 	at(462, "say", "i have the keys and no supervision.")
 	at(466, "attack", "laser")
 	at(474, "attack", "meteors")
@@ -1296,7 +1296,7 @@ do
 	at(496, "attack", "ufo")
 	at(502, "attack", "blackhole")
 	at(508, "say", "the obby is about to come down. last chance.")
-	at(512, "attack", "fireworks")
+	at(512, "attack", "laser")
 	at(518, "attack", "barrage")
 	at(524, "attack", "meteors")
 	at(530, "attack", "laser")

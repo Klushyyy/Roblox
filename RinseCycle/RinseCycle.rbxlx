@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.11.1"
+Config.Version = "2.12.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1162,7 +1162,7 @@ Config.AbuseShow = ({
 			Kind = "Announce",
 			Option = { Kind = "Passes", Share = 0.1 },
 			Intro = "this one isnt a vote. a random game pass is going to {players}. no, you cant pick.",
-			Done = "done. if you won, check your screen. if you didnt, i feel nothing.",
+			Done = "done. winners, check your screen. everyone else, dont worry. there is more.",
 		},
 		Break = {
 			Kind = "Poll",
@@ -1234,10 +1234,10 @@ do
 	at(98, "say", "this next one isnt a vote.")
 	at(101, "round", "Passes")
 	at(106, "attack", "ufo")
-	at(118, "say", "if you didnt get one, dont worry. there is more.")
 	at(122, "attack", "shockwave")
-	at(132, "say", "you can feel that, right? thats the floor. it is not happy.")
-	at(136, "attack", "disco")
+	at(126, "say", "you can feel that, right? thats the floor. it is not happy.")
+	at(134, "say", "the table needs some colour. one second.")
+	at(138, "attack", "disco")
 	at(144, "say", "next vote. you choose how i break things.")
 	at(147, "round", "Break")
 	at(152, "attack", "lightning")
@@ -1290,7 +1290,7 @@ do
 	at(438, "say", "if you are still in the obby, keep going.")
 	at(442, "attack", "blackhole")
 	at(450, "attack", "disco")
-	at(456, "attack", "fireworks")
+	at(456, "attack", "lightning")
 	at(462, "say", "i have the keys and no supervision.")
 	at(466, "attack", "laser")
 	at(474, "attack", "meteors")
@@ -1300,7 +1300,7 @@ do
 	at(496, "attack", "ufo")
 	at(502, "attack", "blackhole")
 	at(508, "say", "the obby is about to come down. last chance.")
-	at(512, "attack", "fireworks")
+	at(512, "attack", "laser")
 	at(518, "attack", "barrage")
 	at(524, "attack", "meteors")
 	at(530, "attack", "laser")
@@ -9048,6 +9048,7 @@ do
 	local giantConn: RBXScriptConnection? = nil
 	local giantHead: BasePart? = nil
 	local giantLeave: (() -&gt; ())? = nil
+	local leaving = false -- set once he starts the exit: nothing respawns him afterwards
 	local giantRescale: ((number, number) -&gt; ())? = nil
 	local boom: (number, Vector3) -&gt; () = function() end
 	local function removeGiant()
@@ -9306,9 +9307,9 @@ do
 				Debris:AddItem(core, 0.5)
 				Debris:AddItem(anchor, life + 0.6)
 			end
-			local count = if heat then 9 else 6
+			local count = 70 -- about 28 seconds of them
 			for i = 1, count do
-				task.delay((i - 1) * 0.9, function()
+				task.delay((i - 1) * 0.4, function()
 					local base = if i % 2 == 1 then plazaSpot() else Vector3.new(math.random(-20, 320), 2, math.random(90, 340))
 					local shell = SHELLS[(i - 1) % #SHELLS + 1]
 					-- the rocket: a bright head with a long spark tail
@@ -9325,19 +9326,20 @@ do
 					trail.Size = NumberSequence.new(4, 0)
 					trail.LightEmission = 1
 					trail.Parent = rocket
-					Remote.AbuseBoom:FireAllClients(0.5, base) -- the launch: shoom
-					local top = base + Vector3.new(math.random(-30, 30), math.random(220, 300), math.random(-30, 30))
-					local rise = TweenService:Create(rocket, TweenInfo.new(1.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = top })
+					Remote.AbuseBoom:FireAllClients(0.3, base) -- the launch: shoom
+					local height = math.random(60, 340) -- all heights, low pops to high shells
+					local top = base + Vector3.new(math.random(-40, 40), height, math.random(-40, 40))
+					local rise = TweenService:Create(rocket, TweenInfo.new(0.5 + height / 260, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = top })
 					rise.Completed:Connect(function()
 						rocket:Destroy()
-						burst(top, shell, 140, 150, 16, 2.4)
-						Remote.AbuseBoom:FireAllClients(1.6, top) -- boom
+						burst(top, shell, 120, 40 + height * 0.35, 12 + height * 0.01, 2.2)
+						Remote.AbuseBoom:FireAllClients(1.1, top) -- boom
 						-- boom, boom, boom: it crackles
-						for k = 1, 4 do
+						for k = 1, 3 do
 							task.delay(0.45 + k * 0.28, function()
-								local p = top + Vector3.new(math.random(-90, 90), math.random(-70, 40), math.random(-90, 90))
-								burst(p, { shell[2], shell[1] }, 40, 70, 9, 1.6)
-								Remote.AbuseBoom:FireAllClients(1, p)
+								local p = top + Vector3.new(math.random(-80, 80), math.random(-60, 30), math.random(-80, 80))
+								burst(p, { shell[2], shell[1] }, 36, 60, 8, 1.5)
+								Remote.AbuseBoom:FireAllClients(0.6, p)
 							end)
 						end
 					end)
@@ -9618,7 +9620,7 @@ do
 		end
 		root.Anchored = true
 		model.PrimaryPart = root
-		model:PivotTo(CFrame.new(0, ROOM_FLOOR + 50, 330))
+		model:PivotTo(CFrame.new(0, ROOM_FLOOR + 6000, 0)) -- built far away, out of sight, until it appears with a bang
 		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 		-- No state machine: it moves the hips up and down (the "sinking into the floor"), but the
 		-- Humanoid stays so the clothes and hair (layered or not) render and animate.
@@ -9666,10 +9668,38 @@ do
 		giant = model
 		local scaleNow = baseScale
 
+		-- Animations (Roblox's default R15 walk and idle). The emotes (wave, point, cheer) are NOT used: they
+		-- move the hips, which on a giant is tens of studs (that was the "teleporting into the floor").
+		local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+		local function load(id: string, priority: Enum.AnimationPriority, looped: boolean): AnimationTrack?
+			local track: AnimationTrack? = nil
+			pcall(function()
+				local anim = Instance.new("Animation")
+				anim.AnimationId = "rbxassetid://" .. id
+				track = animator:LoadAnimation(anim)
+				if track then
+					track.Priority = priority
+					track.Looped = looped
+				end
+			end)
+			return track
+		end
+		local walkTrack = load("507777826", Enum.AnimationPriority.Movement, true)
+		local idleTrack = load("507766388", Enum.AnimationPriority.Idle, true)
+		if idleTrack then
+			idleTrack:Play()
+		end
+		task.wait(0.8) -- (still far away and out of sight) let the pose settle before measuring it
+
 		local footL = model:FindFirstChild("LeftFoot") :: BasePart?
 		local footR = model:FindFirstChild("RightFoot") :: BasePart?
 		local low = math.min(lowestPoint(footL), lowestPoint(footR))
 		local rootAbove = if low == math.huge then humanoid.HipHeight + root.Size.Y / 2 else root.Position.Y - low
+		-- (a sane range: the hips' own height is the other way to know it)
+		local hipAbove = humanoid.HipHeight + root.Size.Y / 2
+		if hipAbove &gt; 0 and (rootAbove &lt; hipAbove * 0.6 or rootAbove &gt; hipAbove * 1.6) then
+			rootAbove = hipAbove
+		end
 		local rootAboveBase = rootAbove / baseScale
 		local rootY = ROOM_FLOOR + rootAbove
 
@@ -9694,28 +9724,32 @@ do
 			tag.Parent = head
 		end
 
-		-- Animations (Roblox's default R15 set).
-		local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
-		local function load(id: string, priority: Enum.AnimationPriority, looped: boolean): AnimationTrack?
-			local track: AnimationTrack? = nil
-			pcall(function()
-				local anim = Instance.new("Animation")
-				anim.AnimationId = "rbxassetid://" .. id
-				track = animator:LoadAnimation(anim)
-				if track then
-					track.Priority = priority
-					track.Looped = looped
-				end
-			end)
-			return track
-		end
-		local walkTrack = load("507777826", Enum.AnimationPriority.Movement, true)
-		local idleTrack = load("507766388", Enum.AnimationPriority.Idle, true)
-		local waveTrack = load("507770239", Enum.AnimationPriority.Action, false)
-		local pointTrack = load("507770453", Enum.AnimationPriority.Action, false)
-		local cheerTrack = load("507770677", Enum.AnimationPriority.Action, true)
-		if idleTrack then
-			idleTrack:Play()
+		-- Arm poses by turning the shoulder joints (C0): they cannot move the hips.
+		local rShoulder = model:FindFirstChild("RightShoulder", true) :: Motor6D?
+		local lShoulder = model:FindFirstChild("LeftShoulder", true) :: Motor6D?
+		local rBase = if rShoulder then rShoulder.C0 else CFrame.identity
+		local lBase = if lShoulder then lShoulder.C0 else CFrame.identity
+		local armMode, armAlpha = "none", 0
+		local function applyArms(dt: number, now: number, active: boolean)
+			armAlpha += ((if active then 1 else 0) - armAlpha) * math.min(1, dt * 6)
+			if armAlpha &lt; 0.002 and not active then
+				armAlpha = 0
+			end
+			local right, left = CFrame.identity, CFrame.identity
+			if armMode == "point" then
+				right = CFrame.Angles(math.rad(95) * armAlpha, 0, 0)
+			elseif armMode == "wave" then
+				right = CFrame.Angles(0, 0, math.rad(150) * armAlpha + math.sin(now * 8) * 0.3 * armAlpha)
+			elseif armMode == "cheer" then
+				right = CFrame.Angles(0, 0, math.rad(165) * armAlpha)
+				left = CFrame.Angles(0, 0, -math.rad(165) * armAlpha)
+			end
+			if rShoulder then
+				rShoulder.C0 = rBase * right
+			end
+			if lShoulder then
+				lShoulder.C0 = lBase * left
+			end
 		end
 
 		-- A circle round the table.
@@ -9726,7 +9760,7 @@ do
 		local facing = Vector3.new(-1, 0, 0)
 		local pos = Vector3.new(0, ROOM_FLOOR, TABLE_CENTER.Z + RADIUS)
 		local acts = 0
-		local flyHeight, flySpeed = 0, 80
+		local flyHeight, flySpeed = 0, 60
 		local leapHeight = 0 -- how far he is above the floor while jumping over the obby
 		local function face(dir: Vector3, dt: number)
 			local flat = Vector3.new(dir.X, 0, dir.Z)
@@ -9765,52 +9799,36 @@ do
 				end
 			end)
 		end
-		-- The exit: he types a command, cuts a hole in the ceiling with a laser, flies up through it, and
-		-- the ceiling mends itself.
+		-- The exit: he types a command, cuts a round hole in the ceiling with a laser, flies up through it,
+		-- and the ceiling mends itself. (Nothing respawns him afterwards: `leaving` stays set.)
 		giantLeave = function()
 			if state == "leave" or state == "fly" then
 				return
 			end
+			leaving = true
 			state = "leave"
 			setWalking(false)
-			if idleTrack then
-				idleTrack:Play(0.3)
-			end
+			armMode = "point"
 			commandText(":noclip")
-			if pointTrack then
-				pointTrack:Play(0.2)
-			end
 			local hx, hz = pos.X, pos.Z
 			task.delay(2, function()
 				if giant ~= model then
 					return
 				end
+				armMode = "cheer"
 				local from = if head then head.Position else pos + Vector3.new(0, 100, 0)
 				local target = Vector3.new(hx, ROOF_Y, hz)
 				local len = (target - from).Magnitude
 				local laser = neonPart(Vector3.new(10, 10, len), Color3.fromRGB(255, 70, 60))
 				laser.CFrame = CFrame.lookAt(from, target) * CFrame.new(0, 0, -len / 2)
 				laser.Parent = workspace
-				Debris:AddItem(laser, 3)
-				TweenService:Create(laser, TweenInfo.new(3), { Transparency = 0.6 }):Play()
-				local hole = neonPart(Vector3.new(0.6, 4, 4), Color3.fromRGB(2, 2, 6), Enum.PartType.Cylinder)
-				hole.Material = Enum.Material.SmoothPlastic
-				upright(hole, Vector3.new(hx, ROOF_Y - 1.2, hz))
-				hole.Parent = workspace
-				local rim = neonPart(Vector3.new(0.5, 6, 6), Color3.fromRGB(255, 130, 40), Enum.PartType.Cylinder)
-				upright(rim, Vector3.new(hx, ROOF_Y - 1.4, hz))
-				rim.Parent = workspace
-				TweenService:Create(hole, TweenInfo.new(2.6, Enum.EasingStyle.Quad), { Size = Vector3.new(0.6, 150, 150) }):Play()
-				TweenService:Create(rim, TweenInfo.new(2.6, Enum.EasingStyle.Quad), { Size = Vector3.new(0.5, 168, 168) }):Play()
+				Debris:AddItem(laser, 2.5)
+				TweenService:Create(laser, TweenInfo.new(2.5), { Transparency = 0.7 }):Play()
+				LobbyBuilder.OpenRoofHole(hx, hz, 64) -- a real round hole in the ceiling
 				for i = 0, 5 do
-					task.delay(i * 0.5, function()
+					task.delay(i * 0.45, function()
 						Remote.AbuseBoom:FireAllClients(2.4, Vector3.new(hx, ROOF_Y, hz))
-						local rubble = neonPart(Vector3.new(8, 8, 8), Color3.fromRGB(150, 130, 110))
-						rubble.Material = Enum.Material.Slate
-						rubble.Position = Vector3.new(hx + math.random(-60, 60), ROOF_Y - 6, hz + math.random(-60, 60))
-						rubble.Parent = workspace
-						TweenService:Create(rubble, TweenInfo.new(1.6, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = Vector3.new(rubble.Position.X, 0.2, rubble.Position.Z) }):Play()
-						Debris:AddItem(rubble, 1.8)
+						harmlessBlast(Vector3.new(hx + math.random(-50, 50), ROOF_Y - 8, hz + math.random(-50, 50)), 20)
 					end)
 				end
 				task.delay(3, function()
@@ -9819,17 +9837,11 @@ do
 					end
 					state = "fly"
 					flyHeight = 0
-					if cheerTrack then
-						cheerTrack:Play(0.2)
-					end
 				end)
-				-- Once he is through, the hole closes and the ceiling is whole again.
-				task.delay(8.5, function()
-					TweenService:Create(hole, TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Size = Vector3.new(0.6, 2, 2) }):Play()
-					TweenService:Create(rim, TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Size = Vector3.new(0.5, 2, 2) }):Play()
-					Debris:AddItem(hole, 2.2)
-					Debris:AddItem(rim, 2.2)
-					boom(3, Vector3.new(hx, ROOF_Y, hz))
+				-- Once he is through, the ceiling mends itself.
+				task.delay(10, function()
+					LobbyBuilder.HealRoof(4)
+					boom(3, Vector3.new(hx, ROOF_Y - 200, hz))
 				end)
 			end)
 		end
@@ -9840,6 +9852,28 @@ do
 			lastStep = os.clock()
 			boom(if heat then 1.8 else 1.4, Vector3.new(foot.Position.X, ROOM_FLOOR, foot.Position.Z))
 		end
+		local function smooth(x: number): number
+			x = math.clamp(x, 0, 1)
+			return x * x * (3 - 2 * x)
+		end
+
+		-- The arrival: a flash and a blast where he stands, and only then is he there.
+		local arrival = Vector3.new(pos.X, ROOM_FLOOR + 110, pos.Z)
+		local flash = neonPart(Vector3.new(30, 30, 30), Color3.new(1, 1, 1), Enum.PartType.Ball)
+		flash.Position = arrival
+		flash.Parent = workspace
+		TweenService:Create(flash, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(520, 520, 520), Transparency = 1 }):Play()
+		Debris:AddItem(flash, 0.8)
+		boom(3, Vector3.new(pos.X, ROOM_FLOOR, pos.Z))
+		for i = 1, 3 do
+			task.delay(i * 0.12, function()
+				ringAt(Vector3.new(pos.X, ROOM_FLOOR, pos.Z), 500 + i * 300, 1.1, Color3.fromRGB(255, 220, 140))
+				Remote.AbuseBoom:FireAllClients(3, arrival)
+			end)
+		end
+		root.CFrame = CFrame.lookAt(Vector3.new(pos.X, rootY, pos.Z), Vector3.new(pos.X + facing.X, rootY, pos.Z + facing.Z))
+		task.wait(0.05)
+		stateUntil = os.clock() + 2.5
 
 		giantConn = RunService.Heartbeat:Connect(function(dt)
 			local now = os.clock()
@@ -9852,13 +9886,12 @@ do
 				angle += walkSpeed / RADIUS * dt
 				pos = Vector3.new(math.cos(angle) * RADIUS, ROOM_FLOOR, TABLE_CENTER.Z + math.sin(angle) * RADIUS)
 				face(Vector3.new(-math.sin(angle), 0, math.cos(angle)), dt)
-				-- Where the circle runs through the obby (a stretch on the south side) he leaps over it: one
-				-- smooth arc that depends only on where he is on the circle (no easing state to fight).
+				-- Where the circle runs through the obby (the south side) he leaps over ALL of it: up over a
+				-- few degrees, flat above it, down again. A pure function of the angle (no easing to fight).
 				local deg = math.deg(angle) % 360
 				local wasLeap = leapHeight
-				if LobbyBuilder.ObbyExists() and deg &gt; 10 and deg &lt; 104 then
-					local f = (deg - 10) / 94
-					leapHeight = 230 * math.sin(math.pi * f) ^ 0.6
+				if LobbyBuilder.ObbyExists() and deg &gt; 8 and deg &lt; 120 then
+					leapHeight = 215 * math.min(smooth((deg - 8) / 14), smooth((120 - deg) / 14))
 				else
 					leapHeight = 0
 				end
@@ -9870,29 +9903,28 @@ do
 				if now &gt;= stateUntil then
 					state = "walk"
 					setWalking(true)
+					armMode = "none"
 				end
 			elseif state == "leave" then
 				face(TABLE_CENTER - pos, dt)
 			elseif state == "fly" then
-				flySpeed = math.min(620, flySpeed + 260 * dt)
+				flySpeed = math.min(520, flySpeed + 180 * dt)
 				flyHeight += flySpeed * dt
-				if flyHeight &gt; ROOF_Y - ROOM_FLOOR + 320 then
+				if flyHeight &gt; ROOF_Y - ROOM_FLOOR + 330 then
 					removeGiant()
 					return
 				end
 			end
-			if state == "walk" or state == "arrive" then
-				-- Floor lock: the lowest sole sits on the floor, whatever the animation does. It only runs
-				-- while he walks: while he stands and does a command his height is frozen.
-				-- Gently (a low gain can't oscillate even if the feet lag a frame), with a dead zone and a
-				-- speed limit: no more teleporting into the floor and back.
+			applyArms(dt, now, state == "act" or state == "leave" or state == "fly")
+			if state ~= "fly" then
+				-- Floor lock: the lowest sole sits on the floor, whatever the animation does. Gently (a low
+				-- gain can't oscillate even if the feet lag a frame), with a dead zone and a speed limit.
 				local low2 = math.min(lowestPoint(footL), lowestPoint(footR))
 				if low2 ~= math.huge and leapHeight &lt; 0.5 then
-					local above = math.clamp(rootY - low2, rootAbove * 0.85, rootAbove * 1.15)
+					local above = math.clamp(rootY - low2, rootAbove * 0.9, rootAbove * 1.1)
 					local error = ROOM_FLOOR + above - rootY
 					if math.abs(error) &gt; scaleNow * 0.03 then
-						local step = math.clamp(error * math.min(1, dt * 4), -scaleNow * dt, scaleNow * dt)
-						rootY += step
+						rootY += math.clamp(error * math.min(1, dt * 4), -scaleNow * dt, scaleNow * dt)
 					end
 				end
 			end
@@ -9917,7 +9949,7 @@ do
 				end
 			end
 		end)
-		-- The script stops him to point (or wave) when he attacks.
+		-- The script stops him and raises an arm when he does something.
 		playEffect = function(name: string)
 			if name == "winner" then
 				name = chosenEffect
@@ -9930,18 +9962,7 @@ do
 			if state == "walk" then
 				state, stateUntil = "act", os.clock() + (if heat then 2.6 else 3.4)
 				setWalking(false)
-				if idleTrack then
-					idleTrack:Play(0.3)
-				end
-				local gesture = if acts % 3 == 0 then cheerTrack elseif acts % 3 == 1 then waveTrack else pointTrack
-				if gesture then
-					gesture:Play(0.2)
-					if gesture == cheerTrack then
-						task.delay(2.4, function()
-							gesture:Stop(0.3)
-						end)
-					end
-				end
+				armMode = if acts % 3 == 0 then "cheer" elseif acts % 3 == 1 then "wave" else "point"
 			end
 			commandText(nil)
 			task.delay(0.8, effect)
@@ -9949,7 +9970,6 @@ do
 				Remote.AbuseBoom:FireAllClients(2.5, Vector3.new(0, 0, 0))
 			end
 		end
-		boom(3, Vector3.new(0, ROOM_FLOOR, 330)) -- the arrival
 	end
 
 	----------------------------------------------------------------- the clock
@@ -9994,7 +10014,9 @@ do
 		ReplicatedStorage:SetAttribute("AbuseMusic", which)
 	end
 	local function resetShow()
+		leaving = false
 		removeGiant()
+		LobbyBuilder.SetBarriers(false)
 		closeHoles()
 		heat = false
 		ReplicatedStorage:SetAttribute("AbuseHeat", false)
@@ -10014,11 +10036,18 @@ do
 			return
 		end
 		task.spawn(function()
-			if not claim("obbyfirst:" .. tostring(e.Starts)) then
+			-- ONE popup per finisher (the gems were already added): the first finisher in any server also
+			-- wins a game pass, announced once in the speech box (no banner on top of everything).
+			local plr = Players:FindFirstChild(name)
+			local gems = Config.Obby.ShowGems
+			local first = claim("obbyfirst:" .. tostring(e.Starts))
+			if not (plr and plr:IsA("Player")) then
+				if first then
+					publish({ Kind = "AbuseSay", Text = name .. " finished the obby first and wins a game pass. well done." })
+				end
 				return
 			end
-			local plr = Players:FindFirstChild(name)
-			if plr and plr:IsA("Player") then
+			if first then
 				local passes = DataService.GetPasses and DataService.GetPasses(plr) or {}
 				local free = {}
 				for _, pass in ipairs(Config.GamePasses) do
@@ -10029,14 +10058,15 @@ do
 				if #free &gt; 0 then
 					local pass = free[math.random(1, #free)]
 					setGamepassGrant(plr, pass, true, false)
-					celebrate(plr, "First to finish!", "You finished the obby first and won " .. pass.Name .. "!", pass.Icon)
+					celebrate(plr, "First to finish!", string.format("You won %s and %d Gems for finishing the obby first!", pass.Name, gems), pass.Icon)
 				else
 					DataService.AddGems(plr, 100)
-					celebrate(plr, "First to finish!", "You finished the obby first! 100 Gems (you own every pass).", "@Gem")
+					celebrate(plr, "First to finish!", string.format("You finished first! %d Gems, plus 100 more because you own every pass.", gems), "@Gem")
 				end
+				publish({ Kind = "AbuseSay", Text = name .. " finished the obby first and wins a game pass. well done." })
+			else
+				celebrate(plr, "You beat the obby!", string.format("You got %d Gems!", gems), "@Gem")
 			end
-			publish({ Kind = "Banner", Text = name .. " finished the obby first and wins a game pass!" })
-			publish({ Kind = "AbuseSay", Text = name .. " finished first. well done. now do it again, i built more." })
 		end)
 	end)
 	task.spawn(function()
@@ -10055,14 +10085,12 @@ do
 					bannerAll(string.format("Admin Abuse starts in %d minute%s! You can't start a round right now. Stay tuned for free game passes, Bubbles and surprises!", mins, if mins == 1 then "" else "s"))
 				end
 			end
-			if t &gt;= -8 and t &lt; 0 and once("premusic" .. tag) then
-				setMusic("Warm") -- the show music is loaded and fading in by the first boom
-			end
 			if t &gt;= 0 and t &lt; Show.ShowSeconds then
 				local wasHeat = heat
 				heat = t &gt;= Show.HeatAt
 				if once("live" .. tag) then
 					ReplicatedStorage:SetAttribute("AbuseLive", true)
+					LobbyBuilder.SetBarriers(true) -- no invisible walls for the whole show
 					LobbyBuilder.SetRescue(true)
 					setMusic("Warm")
 				end
@@ -10091,7 +10119,7 @@ do
 						end)
 					end
 				end
-				if not RunServers.IsRunServer and t &gt;= 3 and t &lt; Show.ShowSeconds - 12 then
+				if not RunServers.IsRunServer and t &gt;= 3 and not leaving then
 					task.spawn(spawnGiant)
 				end
 				-- The script, in order.
@@ -20802,10 +20830,10 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 	plat("Landing", 312, Y + 1.5, 300, 12, 12, nil)
 
 	-- Stage 7: balance beams (round the corner and back over the sofa): thin ones.
-	plat("Beam1", 312, Y + 3, 322, 1.6, 32, Color3.fromRGB(255, 255, 255), { Bare = true })
+	plat("Beam1", 312, Y + 3, 322, 0.8, 32, Color3.fromRGB(255, 255, 255), { Bare = true })
 	plat("Corner", 312, Y + 3, 345, 10, 10, nil)
-	plat("Beam2a", 275.5, Y + 3, 345, 51, 1.6, Color3.fromRGB(255, 255, 255), { Bare = true })
-	plat("Beam2b", 220, Y + 3, 345, 48, 1.6, Color3.fromRGB(255, 255, 255), { Bare = true })
+	plat("Beam2a", 275.5, Y + 3, 345, 51, 0.8, Color3.fromRGB(255, 255, 255), { Bare = true })
+	plat("Beam2b", 220, Y + 3, 345, 48, 0.8, Color3.fromRGB(255, 255, 255), { Bare = true })
 	checkpoint(5, 180, Y + 3, 345)
 
 	-- Stage 8: the climb: stairs of small platforms up to the finish.
@@ -20868,7 +20896,8 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 				if okData then
 					DataService.AddGems(player, gems)
 				end
-				if okGift then
+				if okGift and not show then
+					-- (during the show the director shows ONE popup for it: first finisher or not)
 					(GiftService :: any).Celebrate(player, "You beat the obby!", string.format("You got %d Gems!", gems), "@Gem")
 				end
 			end)
@@ -21079,13 +21108,18 @@ local function setBox(clone: BasePart, source: BasePart, x0: number, x1: number,
 	clone.CFrame = CFrame.new((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2) * rot
 end
 
-function LobbyBuilder.OpenHole(index: number)
-	local def = (Config.AbuseShow :: any).Holes[index]
+local ROOF_PART_NAMES = { Ceiling = true, CeilingBeam = true, Crown = true }
+
+-- Cuts a round hole (tiles fall, rim tilts) in the named parts around (x, z). opts.Roof: the ceiling
+-- (bigger tiles, no props / cracks / glow, and the falling tiles never collide with anyone).
+local function cutDisc(index: number, holeX: number, holeZ: number, R: number, names: { [string]: boolean }, opts: { Roof: boolean? })
 	local model = lobby and lobby.Model
-	if not def or not model or holes[index] then
+	if not model or holes[index] then
 		return
 	end
-	local cx, cz, R = ORIGIN.X + def[1], ORIGIN.Z + def[2], def[3]
+	local roof = opts.Roof == true
+	local TILE = if roof then 11 else TILE
+	local cx, cz = ORIGIN.X + holeX, ORIGIN.Z + holeZ
 	local S = R + 10
 	local rec: HoleRec = { Hidden = {}, Pieces = {}, Tiles = {}, Props = {}, Cracks = {}, Center = Vector3.new(cx, ORIGIN.Y, cz), Radius = R }
 	holes[index] = rec
@@ -21107,7 +21141,7 @@ function LobbyBuilder.OpenHole(index: number)
 
 	local sources: { BasePart } = {}
 	for _, p in model:GetChildren() do
-		if p:IsA("BasePart") and TABLE_PART_NAMES[p.Name] then
+		if p:IsA("BasePart") and names[p.Name] then
 			local c, e = worldBox(p)
 			if c.X + e.X &gt; cx - S and c.X - e.X &lt; cx + S and c.Z + e.Z &gt; cz - S and c.Z - e.Z &lt; cz + S then
 				table.insert(sources, p)
@@ -21154,7 +21188,7 @@ function LobbyBuilder.OpenHole(index: number)
 						local tile = piece(x, x1, z, z1)
 						local flat = tile.CFrame
 						tile.Anchored = false
-						tile.CanCollide = true
+						tile.CanCollide = not roof
 						table.insert(rec.Tiles, { Part = tile, Flat = flat, D = d, Fall = true, Transparency = tile.Transparency })
 						tile.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-8, 8), rng:NextNumber(-4, 6), rng:NextNumber(-8, 8))
 						tile.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-3, 3), rng:NextNumber(-3, 3), rng:NextNumber(-3, 3))
@@ -21178,85 +21212,87 @@ function LobbyBuilder.OpenHole(index: number)
 		table.insert(rec.Hidden, p)
 	end
 
-	-- Cracks across the table around the rim.
-	for i = 1, 16 do
-		local a = rng:NextNumber(0, math.pi * 2)
-		local len = rng:NextNumber(8, 22)
-		local mid = R + 2 + len / 2
-		local crack = mkPart("Part", {
-			Name = "HoleCrack",
-			Size = Vector3.new(rng:NextNumber(0.5, 1.1), 0.1, len),
-			CFrame = CFrame.new(cx + math.cos(a) * mid, ORIGIN.Y + FLOOR_Y + 0.06, cz + math.sin(a) * mid) * CFrame.Angles(0, -a + math.pi / 2 + rng:NextNumber(-0.25, 0.25), 0),
-			Color = Color3.fromRGB(34, 20, 14),
-			Material = LOW,
-			CanCollide = false,
-			CastShadow = false,
-		}, folder)
-		table.insert(rec.Cracks, crack)
-	end
-	-- A glow and smoke from below.
-	local glow = mkPart("Part", { Name = "HoleGlow", Size = Vector3.new(2, 2, 2), CFrame = CFrame.new(cx, ORIGIN.Y - 14, cz), Transparency = 1, CanCollide = false, CastShadow = false }, folder)
-	mk("PointLight", { Color = Color3.fromRGB(255, 120, 50), Range = 70, Brightness = 3, Shadows = false }, glow)
-	mk("ParticleEmitter", {
-		Texture = "rbxasset://textures/particles/smoke_main.dds",
-		Color = ColorSequence.new(Color3.fromRGB(60, 50, 46)),
-		Lifetime = NumberRange.new(2, 3.5),
-		Speed = NumberRange.new(10, 22),
-		SpreadAngle = Vector2.new(20, 20),
-		Rate = 14,
-		Size = NumberSequence.new(6, 16),
-		Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.55), NumberSequenceKeypoint.new(1, 1) }),
-		EmissionDirection = Enum.NormalId.Top,
-	}, glow)
-	mk("ParticleEmitter", {
-		Texture = "rbxasset://textures/particles/sparkles_main.dds",
-		Color = ColorSequence.new(Color3.fromRGB(255, 170, 70)),
-		Lifetime = NumberRange.new(1, 2),
-		Speed = NumberRange.new(20, 40),
-		SpreadAngle = Vector2.new(35, 35),
-		Rate = 18,
-		Size = NumberSequence.new(1.6, 0),
-		LightEmission = 1,
-		EmissionDirection = Enum.NormalId.Top,
-	}, glow)
+	if not roof then
+		-- Cracks across the table around the rim.
+		for i = 1, 16 do
+			local a = rng:NextNumber(0, math.pi * 2)
+			local len = rng:NextNumber(8, 22)
+			local mid = R + 2 + len / 2
+			local crack = mkPart("Part", {
+				Name = "HoleCrack",
+				Size = Vector3.new(rng:NextNumber(0.5, 1.1), 0.1, len),
+				CFrame = CFrame.new(cx + math.cos(a) * mid, ORIGIN.Y + FLOOR_Y + 0.06, cz + math.sin(a) * mid) * CFrame.Angles(0, -a + math.pi / 2 + rng:NextNumber(-0.25, 0.25), 0),
+				Color = Color3.fromRGB(34, 20, 14),
+				Material = LOW,
+				CanCollide = false,
+				CastShadow = false,
+			}, folder)
+			table.insert(rec.Cracks, crack)
+		end
+		-- A glow and smoke from below.
+		local glow = mkPart("Part", { Name = "HoleGlow", Size = Vector3.new(2, 2, 2), CFrame = CFrame.new(cx, ORIGIN.Y - 14, cz), Transparency = 1, CanCollide = false, CastShadow = false }, folder)
+		mk("PointLight", { Color = Color3.fromRGB(255, 120, 50), Range = 70, Brightness = 3, Shadows = false }, glow)
+		mk("ParticleEmitter", {
+			Texture = "rbxasset://textures/particles/smoke_main.dds",
+			Color = ColorSequence.new(Color3.fromRGB(60, 50, 46)),
+			Lifetime = NumberRange.new(2, 3.5),
+			Speed = NumberRange.new(10, 22),
+			SpreadAngle = Vector2.new(20, 20),
+			Rate = 14,
+			Size = NumberSequence.new(6, 16),
+			Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.55), NumberSequenceKeypoint.new(1, 1) }),
+			EmissionDirection = Enum.NormalId.Top,
+		}, glow)
+		mk("ParticleEmitter", {
+			Texture = "rbxasset://textures/particles/sparkles_main.dds",
+			Color = ColorSequence.new(Color3.fromRGB(255, 170, 70)),
+			Lifetime = NumberRange.new(1, 2),
+			Speed = NumberRange.new(20, 40),
+			SpreadAngle = Vector2.new(35, 35),
+			Rate = 18,
+			Size = NumberSequence.new(1.6, 0),
+			LightEmission = 1,
+			EmissionDirection = Enum.NormalId.Top,
+		}, glow)
 
-	-- Whatever stands in it falls with it (boards, cups, sponge, shakers...).
-	for _, d in model:GetDescendants() do
-		if d:IsA("BasePart") and d.Anchored and d.Transparency &lt; 0.95 and d.Name ~= "Barrier" and not string.find(d.Name, "^Bubble") and not TABLE_PART_NAMES[d.Name] and d.Size.Y &lt; 70 then
-			local dx, dz = d.Position.X - cx, d.Position.Z - cz
-			local y = d.Position.Y - ORIGIN.Y
-			if math.sqrt(dx * dx + dz * dz) &lt; R + 4 and y &gt; -1 and y &lt; 60 and not d:IsDescendantOf(folder) then
-				table.insert(rec.Props, { Part = d, CF = d.CFrame, Anchored = d.Anchored :: boolean, Collide = d.CanCollide })
+		-- Whatever stands in it falls with it (boards, cups, sponge, shakers...).
+		for _, d in model:GetDescendants() do
+			if d:IsA("BasePart") and d.Anchored and d.Transparency &lt; 0.95 and d.Name ~= "Barrier" and not string.find(d.Name, "^Bubble") and not TABLE_PART_NAMES[d.Name] and d.Size.Y &lt; 70 then
+				local dx, dz = d.Position.X - cx, d.Position.Z - cz
+				local y = d.Position.Y - ORIGIN.Y
+				if math.sqrt(dx * dx + dz * dz) &lt; R + 4 and y &gt; -1 and y &lt; 60 and not d:IsDescendantOf(folder) then
+					table.insert(rec.Props, { Part = d, CF = d.CFrame, Anchored = d.Anchored :: boolean, Collide = d.CanCollide })
+				end
 			end
 		end
-	end
-	for _, prop in rec.Props do
-		task.delay(rng:NextNumber(0.1, 0.9), function()
-			prop.Part.Anchored = false
-			prop.Part.CanCollide = true
-			prop.Part.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-2, 2), rng:NextNumber(-2, 2), rng:NextNumber(-2, 2))
-		end)
-	end
-	-- Chunks flung out of it.
-	for i = 1, 20 do
-		local size = rng:NextNumber(1.2, 3.6)
-		local chunk = mkPart("Part", {
-			Name = "HoleChunk",
-			Size = Vector3.new(size, size * 0.6, size * 1.3),
-			CFrame = CFrame.new(cx + rng:NextNumber(-R * 0.6, R * 0.6), ORIGIN.Y + 2, cz + rng:NextNumber(-R * 0.6, R * 0.6)),
-			Color = if i % 3 == 0 then WOOD_DARK else WOOD_A,
-			Material = LOW,
-			Anchored = false,
-		}, folder)
-		chunk.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-40, 40), rng:NextNumber(40, 90), rng:NextNumber(-40, 40))
-		chunk.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-8, 8), rng:NextNumber(-8, 8), rng:NextNumber(-8, 8))
-		task.delay(7, function()
-			if chunk.Parent then
-				TweenService:Create(chunk, TweenInfo.new(1.5), { Transparency = 1 }):Play()
-				task.wait(1.6)
-				chunk:Destroy()
-			end
-		end)
+		for _, prop in rec.Props do
+			task.delay(rng:NextNumber(0.1, 0.9), function()
+				prop.Part.Anchored = false
+				prop.Part.CanCollide = true
+				prop.Part.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-2, 2), rng:NextNumber(-2, 2), rng:NextNumber(-2, 2))
+			end)
+		end
+		-- Chunks flung out of it.
+		for i = 1, 20 do
+			local size = rng:NextNumber(1.2, 3.6)
+			local chunk = mkPart("Part", {
+				Name = "HoleChunk",
+				Size = Vector3.new(size, size * 0.6, size * 1.3),
+				CFrame = CFrame.new(cx + rng:NextNumber(-R * 0.6, R * 0.6), ORIGIN.Y + 2, cz + rng:NextNumber(-R * 0.6, R * 0.6)),
+				Color = if i % 3 == 0 then WOOD_DARK else WOOD_A,
+				Material = LOW,
+				Anchored = false,
+			}, folder)
+			chunk.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-40, 40), rng:NextNumber(40, 90), rng:NextNumber(-40, 40))
+			chunk.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-8, 8), rng:NextNumber(-8, 8), rng:NextNumber(-8, 8))
+			task.delay(7, function()
+				if chunk.Parent then
+					TweenService:Create(chunk, TweenInfo.new(1.5), { Transparency = 1 }):Play()
+					task.wait(1.6)
+					chunk:Destroy()
+				end
+			end)
+		end
 	end
 	-- The fallen tiles lie on the floor a while, then fade (kept for the repair).
 	task.delay(7, function()
@@ -21275,10 +21311,21 @@ function LobbyBuilder.OpenHole(index: number)
 	end)
 end
 
+function LobbyBuilder.OpenHole(index: number)
+	local def = (Config.AbuseShow :: any).Holes[index]
+	if def then
+		cutDisc(index, def[1], def[2], def[3], TABLE_PART_NAMES, {})
+	end
+end
+
+-- A hole in the ceiling (the giant's exit). It heals with HealRoof (or HealHoles).
+function LobbyBuilder.OpenRoofHole(x: number, z: number, radius: number)
+	cutDisc(100, x, z, radius, ROOF_PART_NAMES, { Roof = true })
+end
+
 -- Everything comes back: the hole closes in from its rim over `seconds`, cracks fade, props return.
-function LobbyBuilder.HealHoles(seconds: number?)
-	local total = seconds or 8
-	for index, rec in holes do
+local function healRec(index: number, rec: HoleRec, total: number)
+	do
 		holes[index] = nil
 		local folder = rec.Pieces[1]
 		for _, crack in rec.Cracks do
@@ -21334,6 +21381,44 @@ function LobbyBuilder.HealHoles(seconds: number?)
 				prop.Part.Anchored = prop.Anchored
 			end
 		end)
+	end
+end
+
+function LobbyBuilder.HealHoles(seconds: number?)
+	for index, rec in holes do
+		healRec(index, rec, seconds or 8)
+	end
+end
+
+function LobbyBuilder.HealRoof(seconds: number?)
+	local rec = holes[100]
+	if rec then
+		healRec(100, rec, seconds or 4)
+	end
+end
+
+-- The invisible walls round the table: open (no collision) for the whole Admin Abuse show, then closed
+-- again; anyone left outside when they close is put back at the spawn.
+function LobbyBuilder.SetBarriers(open: boolean)
+	local model = lobby and lobby.Model
+	if not model then
+		return
+	end
+	for _, d in model:GetChildren() do
+		if d:IsA("BasePart") and d.Name == "Barrier" then
+			d.CanCollide = not open
+		end
+	end
+	if not open then
+		for _, player in Players:GetPlayers() do
+			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if root then
+				local p = root.Position - ORIGIN
+				if math.abs(p.X) &gt; PLAZA_X + FENCE_MARGIN or p.Z &lt; PLAZA_Z0 - FENCE_MARGIN or p.Z &gt; PLAZA_Z1 + FENCE_MARGIN or p.Y &lt; -20 then
+					sendToLobbySpawn(player)
+				end
+			end
+		end
 	end
 end
 
@@ -35384,6 +35469,87 @@ local function clipHolder(parent: Instance, clip: { number }?, px: number, grow:
 	return holder, x0, y0
 end
 
+
+-- Polygons (hearts, arrows): drawn as stacked one-pixel strips (even-odd scanlines), so every point is a
+-- real point and every edge is exactly where the corner list says. The outline is the same polygon
+-- pushed outwards with mitred corners (not a blocky grow of each strip), so tips stay pointed.
+type Pt = { number }
+local function polyOffset(pts: { Pt }, d: number): { Pt }
+	if d &lt;= 0 then
+		return pts
+	end
+	local n = #pts
+	local area = 0
+	for i = 1, n do
+		local a, b = pts[i], pts[i % n + 1]
+		area += a[1] * b[2] - b[1] * a[2]
+	end
+	local sign = if area &gt; 0 then 1 else -1 -- which side is outside
+	local out: { Pt } = {}
+	for i = 1, n do
+		local prev, cur, nxt = pts[(i - 2) % n + 1], pts[i], pts[i % n + 1]
+		local function normal(a: Pt, b: Pt): (number, number)
+			local dx, dy = b[1] - a[1], b[2] - a[2]
+			local len = math.sqrt(dx * dx + dy * dy)
+			if len &lt; 1e-9 then
+				return 0, 0
+			end
+			return sign * dy / len, -sign * dx / len
+		end
+		local n1x, n1y = normal(prev, cur)
+		local n2x, n2y = normal(cur, nxt)
+		local k = d / math.max(0.35, 1 + n1x * n2x + n1y * n2y) -- miter, kept from spiking
+		table.insert(out, { cur[1] + (n1x + n2x) * k, cur[2] + (n1y + n2y) * k })
+	end
+	return out
+end
+
+local function drawPoly(parent: Instance, s: Shape, px: number, grow: number, color: Color3, transparency: number)
+	local pts: { Pt } = {}
+	for _, p in s.pts do
+		table.insert(pts, { p[1] * px, p[2] * px })
+	end
+	pts = polyOffset(pts, grow)
+	local ymin, ymax = math.huge, -math.huge
+	for _, p in pts do
+		ymin = math.min(ymin, p[2])
+		ymax = math.max(ymax, p[2])
+	end
+	local fill = s.fill
+	local gradientFill = grow == 0 and typeof(fill) ~= "Color3"
+	local n = #pts
+	local firstRow, lastRow = math.floor(ymin), math.ceil(ymax) - 1
+	for row = firstRow, lastRow do
+		local yc = row + 0.5
+		local xs: { number } = {}
+		for i = 1, n do
+			local a, b = pts[i], pts[i % n + 1]
+			if (a[2] &lt;= yc and b[2] &gt; yc) or (b[2] &lt;= yc and a[2] &gt; yc) then
+				table.insert(xs, a[1] + (yc - a[2]) / (b[2] - a[2]) * (b[1] - a[1]))
+			end
+		end
+		table.sort(xs)
+		local rowColor = color
+		if gradientFill then
+			local t = math.clamp((yc - ymin) / math.max(1e-6, ymax - ymin), 0, 1)
+			rowColor = (fill[1] :: Color3):Lerp(fill[2] :: Color3, t)
+		end
+		for i = 1, #xs - 1, 2 do
+			local x0, x1 = math.floor(xs[i] + 0.5), math.floor(xs[i + 1] + 0.5)
+			if x1 &gt; x0 then
+				local f = Instance.new("Frame")
+				f.BorderSizePixel = 0
+				f.BackgroundColor3 = rowColor
+				f.BackgroundTransparency = transparency
+				f.Position = UDim2.fromOffset(x0, row)
+				-- opaque strips overlap the next one by a pixel, so no hairline shows between them
+				f.Size = UDim2.fromOffset(x1 - x0, if transparency == 0 then 2 else 1)
+				f.Parent = parent
+			end
+		end
+	end
+end
+
 -- Draws one shape. `grow` &gt; 0 draws the ink outline version (every edge pushed out by `grow` px).
 local function draw(parent: Instance, s: Shape, px: number, grow: number)
 	local fill = if grow &gt; 0 then (s.ink or INK) else s.fill
@@ -35448,6 +35614,8 @@ local function draw(parent: Instance, s: Shape, px: number, grow: number)
 			g.Color = ColorSequence.new(fill[1], fill[2])
 		end
 		g.Parent = f
+	elseif kind == "poly" then
+		drawPoly(holder, s, px, grow, color, transparency)
 	elseif kind == "ring" then
 		-- UIStroke draws outside the circle; the outline is a thicker stroke round a smaller circle.
 		local d = s.d * px - grow * 2
@@ -35858,32 +36026,35 @@ ART.Bag = {
 	{ "rect", x = 0.22, y = 0.64, w = 0.05, h = 0.32, r = 0.5, fill = WHITE, t = 0.55 },
 }
 
--- Trade: two arrows passing each other (green right on top, blue left underneath).
+-- Trade: two arrows passing each other (green right on top, blue left underneath). Each is one
+-- polygon with a real point.
 do
-	local a = 0.2 -- arrowhead half-height
 	local function arrow(y: number, right: boolean, fill: any): { any }
-		local tipX = if right then 0.9 else 0.1
-		local backX = if right then tipX - a else tipX + a
-		local shaftFrom = if right then 0.12 else 0.88
-		local cx = (shaftFrom + backX) / 2
-		local nudge = 0.004 -- the two halves overlap by half a pixel: no seam
-		local half = a / 2
-		local x = if right then backX + half else backX - half
+		local head, half, shaft = 0.22, 0.2, 0.075
+		local tip = if right then 0.9 else 0.1
+		local back = if right then tip - head else tip + head
+		local tail = if right then 0.1 else 0.9
 		return {
-			{ "rect", x = cx, y = y, w = math.abs(backX - shaftFrom) + 0.04, h = 0.15, r = 0.5, fill = fill, o = true },
-			{ "tri", x = x, y = y - half + nudge, s = a, keep = if right then "bl" else "br", fill = fill, o = true },
-			{ "tri", x = x, y = y + half - nudge, s = a, keep = if right then "tl" else "tr", fill = fill, o = true },
+			{ "poly", fill = fill, o = true, pts = {
+				{ tail, y - shaft },
+				{ back, y - shaft },
+				{ back, y - half },
+				{ tip, y },
+				{ back, y + half },
+				{ back, y + shaft },
+				{ tail, y + shaft },
+			} },
 		}
 	end
 	local shapes: { any } = {}
-	for _, s in arrow(0.66, false, rgb(70, 170, 255)) do
+	for _, s in arrow(0.68, false, { rgb(120, 200, 255), rgb(50, 140, 240) }) do
 		table.insert(shapes, s)
 	end
 	table.insert(shapes, "|")
-	for _, s in arrow(0.32, true, rgb(70, 220, 140)) do
+	for _, s in arrow(0.32, true, { rgb(120, 240, 170), rgb(40, 190, 110) }) do
 		table.insert(shapes, s)
 	end
-	table.insert(shapes, { "rect", x = 0.36, y = 0.29, w = 0.36, h = 0.035, r = 0.5, fill = WHITE, t = 0.45 })
+	table.insert(shapes, { "rect", x = 0.34, y = 0.285, w = 0.3, h = 0.03, r = 0.5, fill = WHITE, t = 0.45 })
 	ART.Trade = shapes
 end
 
@@ -35922,15 +36093,27 @@ ART.Gavel = {
 }
 
 -- Free: a heart (two circles and a gradient-cut point).
-ART.Love = {
-	{ "disc", x = 0.31, y = 0.38, d = 0.42, fill = rgb(244, 76, 104), o = true },
-	{ "disc", x = 0.69, y = 0.38, d = 0.42, fill = rgb(244, 76, 104), o = true },
-	{ "tri", x = 0.3, y = 0.66, s = 0.4, keep = "tr", fill = rgb(244, 76, 104), o = true },
-	{ "tri", x = 0.7, y = 0.66, s = 0.4, keep = "tl", fill = rgb(244, 76, 104), o = true },
-	{ "rect", x = 0.5, y = 0.52, w = 0.4, h = 0.28, fill = rgb(244, 76, 104) },
-	{ "disc", x = 0.27, y = 0.32, d = 0.13, fill = WHITE, t = 0.2 },
-	{ "disc", x = 0.36, y = 0.24, d = 0.06, fill = WHITE, t = 0.45 },
-}
+do
+	-- the classic heart curve, point at the bottom, fitted to the canvas
+	local raw: { { number } } = {}
+	local xmin, xmax, ymin, ymax = math.huge, -math.huge, math.huge, -math.huge
+	for i = 0, 71 do
+		local t = i / 72 * math.pi * 2
+		local x = 16 * math.sin(t) ^ 3
+		local y = -(13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t))
+		table.insert(raw, { x, y })
+		xmin, xmax, ymin, ymax = math.min(xmin, x), math.max(xmax, x), math.min(ymin, y), math.max(ymax, y)
+	end
+	local pts: { { number } } = {}
+	for _, p in raw do
+		table.insert(pts, { 0.1 + (p[1] - xmin) / (xmax - xmin) * 0.8, 0.12 + (p[2] - ymin) / (ymax - ymin) * 0.76 })
+	end
+	ART.Love = {
+		{ "poly", pts = pts, fill = { rgb(255, 112, 136), rgb(224, 48, 84) }, o = true },
+		{ "disc", x = 0.27, y = 0.31, d = 0.13, fill = WHITE, t = 0.25 },
+		{ "disc", x = 0.36, y = 0.23, d = 0.06, fill = WHITE, t = 0.5 },
+	}
+end
 
 -- Upgrades: a green book with a big up arrow on the cover.
 do
@@ -38576,7 +38759,7 @@ return LevelNPCs</ProtectedString></Properties></Item>
 <Item class="ModuleScript" referent="RBX0000003C"><Properties><string name="Name">MusicPlayer</string><ProtectedString name="Source">--[[
 	MusicPlayer - background music. The lobby and dishwasher runs each have their own playlist
 	(Config.Music, IDs from StoreIds &gt; Music), played shuffled, one track after another. Each track
-	crossfades into the next (the next one starts CROSSFADE seconds before the end), and there's a
+	crossfades into the next (the next one starts 30 seconds before the end), and there's a
 	short fade when switching between lobby and run. A "Music" button in the left column turns it
 	off / on (remembered for this session). Plays nothing until track IDs are filled in.
 ]]
@@ -38592,8 +38775,9 @@ local ClientState = require(Client:WaitForChild("ClientState"))
 
 local MusicPlayer = {}
 
-local FADE = 0.6
-local CROSSFADE = 4 -- seconds the end of one track overlaps the start of the next
+local FADE = 1.2 -- a plain switch (lobby &lt;-&gt; run)
+local FADE_OUT = 3 -- the old track fades out over this...
+local FADE_IN = 2 -- ...while the next fades in over this
 
 local initialized = false
 local enabled = true
@@ -38618,6 +38802,10 @@ local function listIds(name: string): { number }
 	return (Config.Music :: any)[name] or {}
 end
 
+-- Plays the given playlist, shuffled, until something else is chosen. There is never silence: a new
+-- track is started and loaded first, and only then does the old one fade out (3 s) as the new one
+-- fades in (2 s). Tracks hand over 30 seconds before they end (a long track often ends in a quiet
+-- tail), or 6 s before for short ones.
 local function playList(name: string)
 	local ids = listIds(name)
 	if name == currentList and current then
@@ -38626,17 +38814,18 @@ local function playList(name: string)
 	currentList = name
 	token += 1
 	local myToken = token
-	if current then
-		fadeOut(current)
-		current = nil
-	end
+	local previous: Sound? = current
+	current = nil
 	if not enabled or #ids == 0 then
+		if previous then
+			fadeOut(previous, FADE)
+		end
 		return
 	end
 	task.spawn(function()
 		local order = table.clone(ids)
-		local firstTrack = true
 		local index = 0
+		local failures = 0
 		while myToken == token do
 			index += 1
 			if index &gt; #order then
@@ -38654,32 +38843,49 @@ local function playList(name: string)
 			sound.Parent = SoundService
 			current = sound
 			sound:Play()
-			TweenService:Create(sound, TweenInfo.new(if firstTrack then FADE else CROSSFADE), { Volume = Config.Music.Volume }):Play()
-			firstTrack = false
-			-- Wait for the track to near its end (or something else to take over); a track that
-			-- never loads is skipped after a while.
+			-- wait for it to load before the old one fades out (a track that never loads is skipped)
 			local started = os.clock()
-			local crossfading = false
+			while myToken == token and sound.Parent and not sound.IsLoaded and os.clock() - started &lt; 8 do
+				task.wait(0.1)
+			end
+			if myToken ~= token or not sound.Parent then
+				return -- another playlist took over (it fades this one out)
+			end
+			if not sound.IsLoaded then
+				sound:Destroy()
+				current = previous
+				failures += 1
+				if failures &gt;= #order * 2 then
+					if previous then
+						fadeOut(previous, FADE)
+						current = nil
+					end
+					return
+				end
+				continue
+			end
+			TweenService:Create(sound, TweenInfo.new(FADE_IN), { Volume = Config.Music.Volume }):Play()
+			if previous then
+				fadeOut(previous, FADE_OUT)
+				previous = nil
+			end
+			-- play until it is time to hand over to the next track
 			while myToken == token and sound.Parent do
-				if sound.IsLoaded and not sound.IsPlaying and os.clock() - started &gt; 2 then
-					break
+				if sound.IsLoaded and sound.TimeLength &gt; 0 then
+					local handOver = if sound.TimeLength &gt; 75 then sound.TimeLength - 30 else math.max(1, sound.TimeLength - 6)
+					if sound.TimePosition &gt;= handOver then
+						break
+					end
 				end
-				if sound.IsLoaded and sound.TimeLength &gt; CROSSFADE * 3 and sound.TimePosition &gt;= sound.TimeLength - CROSSFADE then
-					crossfading = true
-					break
+				if not sound.IsPlaying and os.clock() - started &gt; 12 then
+					break -- it stopped by itself
 				end
-				if not sound.IsLoaded and os.clock() - started &gt; 15 then
-					break
-				end
-				task.wait(0.5)
+				task.wait(0.4)
 			end
-			if myToken == token and sound.Parent then
-				if crossfading then
-					fadeOut(sound, CROSSFADE) -- the next track fades in over it
-				else
-					sound:Destroy()
-				end
+			if myToken ~= token then
+				return
 			end
+			previous = sound
 		end
 	end)
 end
