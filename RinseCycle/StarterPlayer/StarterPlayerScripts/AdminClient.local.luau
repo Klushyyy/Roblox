@@ -355,6 +355,7 @@ local mutedChip, mutedLabel = makeChip("Muted", Colors.Bad, 2)
 local controlledChip, controlledLabel = makeChip("Controlled", Colors.Warning, 3)
 controlledLabel.Text = "🎮 Being controlled by staff"
 local flyChip, flyLabel = makeChip("Flying", Colors.Accent, 4)
+local giantChip, giantLabel = makeChip("GiantPerk", Colors.Warning, 5)
 
 -- While frozen or being controlled by staff, this player's own movement keys / thumbstick / jump
 -- do nothing at all (Roblox's PlayerModule controls are switched off), so they can't fight it.
@@ -530,7 +531,7 @@ end
 
 local function refreshFlyChip()
 	flyChip.Visible = flyAllowed
-	flyLabel.Text = if flying then "🕊️ Flying · F / tap to land" else "🕊️ Fly · F / tap to take off"
+	flyLabel.Text = if flying then "🕊️ Flying: ON (tap or F to turn off)" else "🕊️ Flying: OFF (tap or F to turn on)"
 end
 
 local function toggleFly()
@@ -545,6 +546,23 @@ local function toggleFly()
 	refreshFlyChip()
 end
 flyChip.MouseButton1Click:Connect(toggleFly)
+
+-- The giant power-up: a chip that turns it off and on again during the event.
+local giantOn = false
+local AbusePerk = ReplicatedStorage:WaitForChild("AbusePerk", 60) :: RemoteEvent?
+local AbusePerkToggle = ReplicatedStorage:WaitForChild("AbusePerkToggle", 60) :: RemoteEvent?
+if AbusePerk then
+	AbusePerk.OnClientEvent:Connect(function(kind: string?, on: boolean)
+		giantChip.Visible = kind == "giant"
+		giantOn = on == true
+		giantLabel.Text = if giantOn then "🦖 Giant: ON (tap to turn off)" else "🦖 Giant: OFF (tap to turn on)"
+	end)
+end
+giantChip.MouseButton1Click:Connect(function()
+	if AbusePerkToggle then
+		AbusePerkToggle:FireServer()
+	end
+end)
 
 AdminSetFlying.OnClientEvent:Connect(function(enabled: boolean)
 	flyAllowed = enabled == true

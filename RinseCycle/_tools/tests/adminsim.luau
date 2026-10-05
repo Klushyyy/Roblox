@@ -8,7 +8,7 @@ local process = require("@lune/process")
 local serde = require("@lune/serde")
 
 local ROOT = "/home/user/Roblox/RinseCycle"
-local USERNAME = process.args[1] or "EnderBuilda"
+local USERNAME = process.args[1] or "Klushy"
 local USERID = tonumber(process.args[2] or "2297538363")
 local STUDIO = (process.args[3] or "1") == "1"
 
@@ -990,7 +990,7 @@ click(victimRow)
 local FILL = {
 	givecoins = { "500" }, giant = { "8" }, abuse = { "15" }, setbubbles = { "1234" }, setgems = { "77" }, setrebirths = { "2" },
 	warn = { "spamming" }, msg = { "hello there" }, announce = { "Server restart soon" },
-	playerlogs = { "EnderBuilda" }, kick = { "bye" }, ban = { "test ban" },
+	playerlogs = { "Klushy" }, kick = { "bye" }, ban = { "test ban" },
 	globalpoll = { "Best? | Yes | No" }, globalgive = { "100" }, globalpassdrop = { "1" }, globalboost = { "5" },
 }
 local SKIP = { kick = true, ban = true, tempban = true, spectate = true, controlplayer = true, wipelogs = false }
@@ -1133,7 +1133,7 @@ if stop then
 	click(stop)
 	out("stop control -> bar visible " .. tostring(bar.Visible) .. " [" .. sentSince(since) .. "]")
 end
-run("spectate", "EnderBuilda")
+run("spectate", "Klushy")
 run("tempban", "Victim", "3d griefing")
 run("banlist", "", "")
 run("kick", "Victim", "bye")
@@ -1142,17 +1142,17 @@ run("nonsense", "Victim", "")
 
 out("=== SELF STATUS (what a muted / frozen / flying player sees)")
 local statusGui = find(playerGui, "AdminStatus")
-run("mute", "EnderBuilda", "testing")
+run("mute", "Klushy", "testing")
 out("muted chip: " .. tostring(find(statusGui, "Muted").Visible) .. "  chat bar enabled: " .. tostring(chatBar.Enabled))
-run("mute", "EnderBuilda", "")
+run("mute", "Klushy", "")
 out("after unmute chip: " .. tostring(find(statusGui, "Muted").Visible) .. "  chat bar enabled: " .. tostring(chatBar.Enabled))
-run("freeze", "EnderBuilda", "")
+run("freeze", "Klushy", "")
 out("frozen chip: " .. tostring(find(statusGui, "Frozen").Visible))
-run("freeze", "EnderBuilda", "")
+run("freeze", "Klushy", "")
 out("frozen chip after 2nd freeze: " .. tostring(find(statusGui, "Frozen").Visible))
-run("fly", "EnderBuilda", "")
+run("fly", "Klushy", "")
 out("fly chip: " .. tostring(find(statusGui, "Flying").Visible) .. "  LinearVelocity on root: " .. tostring(methods.FindFirstChildOfClass(hrp, "LinearVelocity") ~= nil))
-run("fly", "EnderBuilda", "")
+run("fly", "Klushy", "")
 out("fly chip after 2nd fly: " .. tostring(find(statusGui, "Flying").Visible) .. "  LinearVelocity on root: " .. tostring(methods.FindFirstChildOfClass(hrp, "LinearVelocity") ~= nil))
-run("msg", "EnderBuilda", "hi me")
+run("msg", "Klushy", "hi me")
 out("notice shown: " .. tostring(find(statusGui, "AdminNotice") ~= nil))

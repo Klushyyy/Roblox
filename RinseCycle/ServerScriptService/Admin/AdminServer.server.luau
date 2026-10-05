@@ -74,10 +74,10 @@ end
 -- this empty stand-in keeps the leftover inventory helpers below working.
 local giveableItemsFolder = Instance.new("Folder")
 
--- The one account allowed to use the admin system in a live server: EnderBuilda (display name
+-- The one account allowed to use the admin system in a live server: Klushy (display name
 -- Klushy). Matched by UserId, with the username as a backup in case the id in Config changes.
 local OWNER_USER_ID = Config.Social.CreatorUserId
-local OWNER_USERNAME = "enderbuilda"
+local OWNER_USERNAME = "klushy"
 
 local function isOwnerAccount(player)
 	return player.UserId == OWNER_USER_ID or string.lower(player.Name) == OWNER_USERNAME
@@ -702,6 +702,12 @@ Remote.AbuseOffer.Parent = ReplicatedStorage
 Remote.AbuseOfferReply = Instance.new("RemoteEvent") -- C->S (offer id, accepted)
 Remote.AbuseOfferReply.Name = "AbuseOfferReply"
 Remote.AbuseOfferReply.Parent = ReplicatedStorage
+Remote.AbusePerk = Instance.new("RemoteEvent") -- S->C (kind: "giant" or nil, on): the giant power-up's on/off button
+Remote.AbusePerk.Name = "AbusePerk"
+Remote.AbusePerk.Parent = ReplicatedStorage
+Remote.AbusePerkToggle = Instance.new("RemoteEvent") -- C->S: turn the giant power-up off / on
+Remote.AbusePerkToggle.Name = "AbusePerkToggle"
+Remote.AbusePerkToggle.Parent = ReplicatedStorage
 Remote.AdminSetFlying = Instance.new("RemoteEvent")
 Remote.AdminSetFlying.Name = "AdminSetFlying"
 Remote.AdminSetFlying.Parent = ReplicatedStorage
@@ -4539,6 +4545,11 @@ end
 -- A private lobby (see :privatelobby): the first player in a server who arrives with PrivateOwner set to
 -- their own id owns it; nobody else may stay.
 local privateOwnerId: number? = nil
+if game.PrivateServerOwnerId ~= 0 then
+	-- A Roblox private (VIP) server is locked to its owner as well.
+	privateOwnerId = game.PrivateServerOwnerId
+	ReplicatedStorage:SetAttribute("PrivateLobby", true)
+end
 local function guardPrivate(player)
 	local ok, data = pcall(function()
 		return player:GetJoinData()
@@ -5458,7 +5469,7 @@ do
 		if baseLighting then
 			local goal = baseLighting
 			baseLighting = nil
-			TweenService:Create(Lighting, TweenInfo.new(3), goal):Play()
+			TweenService:Create(Lighting, TweenInfo.new(4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), goal):Play()
 		end
 	end
 	local eyesFor: number? = nil -- how long the next eye-laser burst lasts (set just before it starts)
@@ -6086,10 +6097,12 @@ do
 					end
 					task.wait(0.4)
 				end
-				Lighting.ColorShift_Top = original[1]
+				-- fade back (never a sudden click); if the show is over restoreLighting is fading it already
+				local back: { [string]: any } = { ColorShift_Top = original[1] }
 				if not heat then
-					Lighting.OutdoorAmbient = original[2]
+					back.OutdoorAmbient = original[2]
 				end
+				TweenService:Create(Lighting, TweenInfo.new(2.5, Enum.EasingStyle.Sine), back):Play()
 				discoBusy = false
 			end)
 		end
@@ -6554,14 +6567,14 @@ do
 				TweenService:Create(fireball, TweenInfo.new(2.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(520, 520, 520), Position = target + Vector3.new(0, 150, 0), Transparency = 1 }):Play()
 				Debris:AddItem(fireball, 2.6)
 				Debris:AddItem(flash, 1.5)
-				for i = 0, 7 do
-					task.delay(i * 0.2, function()
-						ringAt(Vector3.new(target.X, 2, target.Z), 500 + i * 380, 1.8, Color3.fromRGB(255, 190, 90))
+				for i = 0, 4 do
+					task.delay(i * 0.3, function()
+						ringAt(Vector3.new(target.X, 2, target.Z), 500 + i * 600, 1.8, Color3.fromRGB(255, 190, 90))
 						Remote.AbuseBoom:FireAllClients(5, target)
 					end)
 				end
 				-- the table breaks open round it (the big hole in the middle, a few smaller ones)
-				for _, c in { { 0, 12, 46 }, { -62, 14, 34 }, { 62, 14, 34 }, { -36, 58, 28 }, { 36, 58, 28 }, { 0, 70, 24 } } do
+				for _, c in { { 0, 12, 46 }, { -62, 14, 32 }, { 62, 14, 32 }, { 0, 72, 26 } } do
 					craterCount += 1
 					local cx = math.clamp(target.X + c[1], -90, 90)
 					local cz = math.clamp(target.Z + c[2], -96, 24)
@@ -6855,7 +6868,7 @@ do
 				end
 			end
 		end
-		LobbyBuilder.HealHoles(14)
+		LobbyBuilder.HealHoles(9)
 	end
 
 	local spawning, spawnFailures, nextSpawnTry = false, 0, 0
@@ -7402,9 +7415,9 @@ do
 				laser.Parent = workspace
 				Debris:AddItem(laser, 2.5)
 				TweenService:Create(laser, TweenInfo.new(2.5), { Transparency = 0.7 }):Play()
-				LobbyBuilder.OpenRoofHole(hx, hz, 128) -- a real round hole in the ceiling
-				for i = 0, 5 do
-					task.delay(i * 0.45, function()
+				LobbyBuilder.OpenRoofHole(hx, hz, 104) -- a real round hole in the ceiling
+				for i = 0, 3 do
+					task.delay(i * 0.6, function()
 						Remote.AbuseBoom:FireAllClients(2.4, Vector3.new(hx, ROOF_Y, hz))
 						harmlessBlast(Vector3.new(hx + math.random(-50, 50), ROOF_Y - 8, hz + math.random(-50, 50)), 20)
 					end)
@@ -7753,8 +7766,19 @@ do
 			pcall(function()
 				setGiantScale(plr, 1)
 			end)
+			Remote.AbusePerk:FireClient(plr, nil, false)
 		end
 	end
+	local giantOff: { [Player]: boolean } = {}
+	Remote.AbusePerkToggle.OnServerEvent:Connect(function(plr: Player)
+		if perks[plr] ~= "giant" or ReplicatedStorage:GetAttribute("AbuseLive") ~= true then
+			return
+		end
+		local off = not giantOff[plr]
+		giantOff[plr] = if off then true else nil
+		setGiantScale(plr, if off then 1 else 4)
+		Remote.AbusePerk:FireClient(plr, "giant", not off)
+	end)
 	Remote.AbuseOfferReply.OnServerEvent:Connect(function(plr: Player, id: any, accepted: any)
 		local offer = pendingOffer[plr]
 		if not offer or offer.Id ~= id then
@@ -7766,7 +7790,9 @@ do
 			if offer.Kind == "fly" then
 				setFlying(plr, true)
 			else
+				giantOff[plr] = nil
 				setGiantScale(plr, 4)
+				Remote.AbusePerk:FireClient(plr, "giant", true)
 			end
 		end
 	end)

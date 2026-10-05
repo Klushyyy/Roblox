@@ -81,3 +81,4 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
 - v2.12.19: bigger nuke that breaks half the table, slow glow/fire fade, pet hunt with Glitch Fox, new ending timeline.
 - v2.12.20: touching the room floor always sends you back to spawn (scen_floor).
 - v2.12.21: pets a bit slower (30/16), nearly stopped while held (1.5).
+- v2.12.22: big holes drop tiles by tween (scen_dishwasher still checks solidity under holes and healing); adminsim shows the fly chip for "Klushy".

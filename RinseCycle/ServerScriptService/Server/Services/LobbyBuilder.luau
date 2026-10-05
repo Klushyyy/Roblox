@@ -2285,7 +2285,8 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 		return
 	end
 	local roof = opts.Roof == true
-	local TILE = if roof then 11 elseif R >= 30 then 9 else TILE -- (big holes: bigger tiles, so a half-table crater is not thousands of parts)
+	local TILE = if roof then 18 elseif R >= 40 then 14 elseif R >= 30 then 11 else TILE -- (big holes: bigger tiles, so a half-table crater is not thousands of parts)
+	local light = roof or R >= 30 -- big holes: tiles drop by tween (anchored) instead of by physics, far cheaper
 	local cx, cz = ORIGIN.X + holeX, ORIGIN.Z + holeZ
 	local S = R + 10
 	local rec: HoleRec = { Hidden = {}, Pieces = {}, Tiles = {}, Props = {}, Cracks = {}, Center = Vector3.new(cx, ORIGIN.Y, cz), Radius = R }
@@ -2373,11 +2374,22 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 					if not invisible then
 						local tile = piece(x, x1, z, z1)
 						local flat = tile.CFrame
-						tile.Anchored = false
-						tile.CanCollide = not roof
 						table.insert(rec.Tiles, { Part = tile, Flat = flat, D = d, Fall = true, Transparency = tile.Transparency })
-						tile.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-8, 8), rng:NextNumber(-4, 6), rng:NextNumber(-8, 8))
-						tile.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-3, 3), rng:NextNumber(-3, 3), rng:NextNumber(-3, 3))
+						if light then
+							tile.CanCollide = false
+							local drop = if roof then rng:NextNumber(40, 90) else rng:NextNumber(30, 60)
+							local goal = flat * CFrame.Angles(rng:NextNumber(-1.2, 1.2), rng:NextNumber(-1.2, 1.2), rng:NextNumber(-1.2, 1.2)) - Vector3.new(0, drop, 0)
+							task.delay(rng:NextNumber(0, 0.5) + (d / R) * 0.25, function()
+								if tile.Parent then
+									TweenService:Create(tile, TweenInfo.new(1.1, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { CFrame = goal, Transparency = 1 }):Play()
+								end
+							end)
+						else
+							tile.Anchored = false
+							tile.CanCollide = not roof
+							tile.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-8, 8), rng:NextNumber(-4, 6), rng:NextNumber(-8, 8))
+							tile.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-3, 3), rng:NextNumber(-3, 3), rng:NextNumber(-3, 3))
+						end
 					end
 				else
 					local tile = piece(x, x1, z, z1)
@@ -2454,7 +2466,7 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 			end)
 		end
 		-- Chunks flung out of it.
-		for i = 1, 20 do
+		for i = 1, (if R >= 30 then 8 else 20) do
 			local size = rng:NextNumber(1.2, 3.6)
 			local chunk = mkPart("Part", {
 				Name = "HoleChunk",

@@ -1790,3 +1790,10 @@ While he charges the dishwasher ball both arms go straight out in front, turned 
 
 ### 6zzj. Floor always sends you back (v2.12.20)
 `LobbyBuilder.SetRescue` is now on from the moment the lobby is built and the show no longer turns it off. Anyone whose root is below the table (y between -30 and -150) anywhere in the room, floor included (the old limit stopped at y=-125, so standing on the floor at -127 never counted), is sent to the lobby spawn, show or not. The open obby area keeps its own checkpoint rules. `scen_floor.luau` checks it.
+
+### 6zzk. Lighter holes, smooth resets, power-up buttons (v2.12.22)
+- Big holes (radius >= 30 and the roof) use larger tiles (roof 18, R>=40 14, R>=30 11) and the tiles fall by tween (anchored, no physics, fading) instead of as loose physics parts; fewer chunks. The nuke makes 4 craters (not 6) and 5 rings; the roof hole is radius 104 with 4 blasts.
+- Resets: holes heal in 9 s (was 14); the room lighting and the rainbow both fade back by tween (4 s / 2.5 s), never a click.
+- Poll/vote text: the Break round asks "What should I do next?"; the line before the game-pass round no longer says "isnt a vote" (the round's own intro does, once).
+- Power-ups: the fly chip reads "Flying: ON/OFF" (tap or F); a new Giant chip (`AbusePerk` S->C, `AbusePerkToggle` C->S) turns the giant power-up off and on during the event.
+- Owner name is "Klushy" (show OwnerName, admin username fallback). A Roblox private (VIP) server is now locked to its owner like :privatelobby (everyone else is kicked).

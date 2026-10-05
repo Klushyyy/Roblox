@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.21"
+Config.Version = "2.12.22"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1139,7 +1139,7 @@ Config.AbuseShow = ({
 	ShowSeconds = 630, -- the whole show, from the first boom to the end (rounds are paused for it)
 	Warnings = { 1800, 900, 300, 60 }, -- banners this many seconds before the start
 	OwnerUserId = 2297538363,
-	OwnerName = "EnderBuilda",
+	OwnerName = "Klushy",
 	GiantScale = 38, -- how tall he is while he warms up
 	HeatScale = 42, -- ...and once the heat is turned up
 	ChasePet = "GlitchFox", -- the limited pets that run about the table for a minute
@@ -1173,7 +1173,7 @@ Config.AbuseShow = ({
 		Break = {
 			Kind = "Poll",
 			Seconds = 25,
-			Question = "What should I break next?",
+			Question = "What should I do next?",
 			Options = {
 				{ Kind = "Effect", Effect = "meteors", Text = "Meteor storm" },
 				{ Kind = "Effect", Effect = "fireworks", Text = "Fireworks finale" },
@@ -1241,7 +1241,7 @@ do
 	at(78, "attack", "barrage")
 	at(86, "say", "that was the easy part.")
 	at(114, "attack", "laser")
-	at(98, "say", "this next one isnt a vote.")
+	at(98, "say", "this next round is not going to be fair.")
 	at(101, "round", "Passes")
 	at(106, "attack", "ufo")
 	at(122, "attack", "shockwave")
