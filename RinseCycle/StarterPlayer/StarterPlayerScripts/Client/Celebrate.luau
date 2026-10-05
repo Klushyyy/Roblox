@@ -22,6 +22,7 @@ local showing = false
 local titleLabel: TextLabel
 local textLabel: TextLabel
 local iconLabel: TextLabel
+local iconArt: Frame? = nil
 
 local showNext: () -> ()
 
@@ -34,7 +35,22 @@ showNext = function()
 	showing = true
 	titleLabel.Text = item.Title
 	textLabel.Text = item.Text
-	iconLabel.Text = item.Icon
+	-- "@Gift" etc. are the game's drawn icons (IconArt); anything else is an emoji.
+	if iconArt then
+		iconArt:Destroy()
+		iconArt = nil
+	end
+	local kind = string.match(item.Icon, "^@(%a+)$")
+	if kind then
+		iconLabel.Text = ""
+		local art = UIKit.Icon(kind, 64)
+		art.AnchorPoint = Vector2.new(0.5, 0.5)
+		art.Position = UDim2.fromScale(0.5, 0.5)
+		art.Parent = iconLabel
+		iconArt = art
+	else
+		iconLabel.Text = item.Icon
+	end
 	UIKit.OpenWindow("Celebrate")
 	UIKit.Confetti()
 end

@@ -100,6 +100,8 @@ export type Profile = {
 	RebirthReady: boolean, -- the last level has been cleared since the last rebirth
 	BoostUntil: number, -- os.time() until which cleaning is x2 (the "stay" boost); 0 = none
 	StayBoostDay: string, -- UTC date ("2026-10-03") the stay boost was last claimed: once a day
+	PetIndex: { [string]: number }, -- every pet id ever owned -> bits (1 normal, 2 Golden, 4 Rainbow)
+	PetIndexPaid: { [string]: boolean }, -- collection sets already paid ("1".."3")
 	PetsResting: boolean, -- the player switched their pets off: they follow but don't clean
 	ReferredBy: number, -- UserId of the friend whose invite brought them in (0 = nobody)
 	AdLuckStacks: number, -- rewarded ads watched for rank luck (each +PerAd), while AdLuckUntil lasts
@@ -182,6 +184,8 @@ local TEMPLATE: Profile = {
 	LikePending = false,
 	BoostUntil = 0,
 	StayBoostDay = "",
+	PetIndex = {},
+	PetIndexPaid = {},
 	PetsResting = false,
 	ReferredBy = 0,
 	AdLuckStacks = 0,
@@ -394,6 +398,18 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.BoostUntil = toCount(p.BoostUntil, 0)
 	p.StayBoostDay = if type(p.StayBoostDay) == "string" then p.StayBoostDay else ""
 	p.PetsResting = p.PetsResting == true
+	local index, paid = {}, {}
+	for id, bits in (if type(p.PetIndex) == "table" then p.PetIndex else {}) do
+		if type(id) == "string" and #id <= 40 and isFinite(bits) then
+			index[id] = math.clamp(math.floor(bits), 0, 7)
+		end
+	end
+	for key, got in (if type(p.PetIndexPaid) == "table" then p.PetIndexPaid else {}) do
+		if type(key) == "string" and got == true then
+			paid[key] = true
+		end
+	end
+	p.PetIndex, p.PetIndexPaid = index, paid
 	p.ReferredBy = toCount(p.ReferredBy, 0)
 	p.AdLuckStacks = toCount(p.AdLuckStacks, 0)
 	p.AdLuckUntil = toCount(p.AdLuckUntil, 0)
@@ -671,6 +687,8 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		BoostUntil = profile.BoostUntil,
 		StayBoostReady = profile.StayBoostDay ~= os.date("!%Y-%m-%d"),
 		PetsResting = profile.PetsResting,
+		PetIndex = table.clone(profile.PetIndex),
+		PetIndexPaid = table.clone(profile.PetIndexPaid),
 		Referrals = profile.Referrals,
 		AdLuckStacks = DataService.AdLuckStacks(profile),
 		AdLuckUntil = profile.AdLuckUntil,
@@ -715,12 +733,33 @@ local function setLeaderstat(player: Player, name: string, amount: number)
 	end
 end
 
+local queueNotice: (Session, string, string) -> ()
+
+-- Remembers every pet species/tier the player holds, and pays the Gems for a finished set once.
+local function updatePetIndex(session: Session, profile: Profile)
+	for _, pet in profile.Pets do
+		if Config.Pets[pet.Id] then
+			local bit = bit32.lshift(1, math.clamp(math.floor(tonumber(pet.Tier) or 1), 1, #Config.PetTiers) - 1)
+			profile.PetIndex[pet.Id] = bit32.bor(profile.PetIndex[pet.Id] or 0, bit)
+		end
+	end
+	for _, set in Config.Collection.Sets do
+		local key = tostring(set.Tier)
+		if not profile.PetIndexPaid[key] and Config.CollectionSetDone(profile.PetIndex, set.Tier) then
+			profile.PetIndexPaid[key] = true
+			profile.Gems += set.Gems
+			queueNotice(session, string.format("Collection complete: every %s pet! +%d Gems and a bigger coin bonus!", set.Name, set.Gems), "Good")
+		end
+	end
+end
+
 local function pushNow(player: Player)
 	local session = sessions[player]
 	local profile = session and session.Profile
 	if not profile or not isHere(player) then
 		return
 	end
+	updatePetIndex(session, profile)
 	player:SetAttribute("Bubbles", profile.Bubbles)
 	setLeaderstat(player, "Bubbles", profile.Bubbles)
 	setLeaderstat(player, "Dishes", profile.Stats.DishesCleaned)
@@ -741,7 +780,7 @@ end
 
 -- Toasts sent the instant a player joins can arrive before their UI exists, so they wait until the
 -- client has asked for its MetaState (or a fallback delay passes).
-local function queueNotice(session: Session, text: string, kind: string)
+queueNotice = function(session: Session, text: string, kind: string)
 	table.insert(session.Notices, { text, kind })
 	task.delay(if session.ClientReady then NOTICE_AFTER_READY else NOTICE_FALLBACK, flushNotices, session)
 end
@@ -1528,25 +1567,13 @@ function DataService.SetClub(player: Player, clubId: string, tag: string, moved:
 	DataService.PushMeta(player)
 end
 
--- Ad luck (rank rolls): active stacks, 0 once AdLuckUntil has passed.
-function DataService.AdLuckStacks(profile: any): number
-	if not profile or (tonumber(profile.AdLuckUntil) or 0) <= os.time() then
-		return 0
-	end
-	return math.clamp(math.floor(tonumber(profile.AdLuckStacks) or 0), 0, Config.RankRoll.AdLuck.MaxAds)
+-- Rewarded-ad luck was removed (friends' luck replaced it); kept as no-ops for old callers.
+function DataService.AdLuckStacks(_profile: any): number
+	return 0
 end
 
--- One rewarded ad watched: +1 stack (up to MaxAds) and the timer starts again.
-function DataService.AddAdLuck(player: Player): boolean
-	local profile = DataService.Get(player)
-	if not profile then
-		return false
-	end
-	local ad = Config.RankRoll.AdLuck
-	profile.AdLuckStacks = math.min(ad.MaxAds, DataService.AdLuckStacks(profile) + 1)
-	profile.AdLuckUntil = os.time() + ad.Minutes * 60
-	DataService.PushMeta(player)
-	return true
+function DataService.AddAdLuck(_player: Player): boolean
+	return false
 end
 
 -- The pets on / off switch: resting pets follow you but don't clean. Saved, so it carries over

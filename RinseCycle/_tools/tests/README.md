@@ -60,6 +60,6 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
 
   - Backyard (v2.4.0): `lune run harness.luau arena2 out.json` then render.py. NOTE: in a dump, world z is the NEGATIVE of arena z (the sink spawn is at world z +100 looking toward -z).
   - `adminsim` now also runs :noclip, :giant, :abuse (the mock has no Model:ScaleTo, so :giant reports no character there).
-  - `scen_abuse`: the Admin Abuse show (lockdown, banners, chat lines, vote with the card closing, pass round, final pet vote) on a fake clock.
+  - `scen_abuse`: the whole scripted Admin Abuse show on a fake clock (lockdown, polls closing, pass round, effect poll, craters, obby open, heat, final pet vote, no repeated lines, the end).
   - `scen_mobile` + `mobaudit.py`: phone-size screens (landscape and portrait), window dumps, and the smallest real text size per window.
   - Level 3 (castle hall, v2.7.0): `lune run harness.luau arena3 out.json` then render.py.

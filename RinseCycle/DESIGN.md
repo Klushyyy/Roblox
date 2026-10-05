@@ -1664,3 +1664,11 @@ Config.AbuseShow and the clock Config.Now. AdminServer's "Admin Abuse show" sect
 - UI fonts: titles Luckiest Guy (a classic simulator-game font), body Source Sans Bold / Semibold (UIKit.Theme.Fonts); every FredokaOne / Gotham use in the world (name tags, boards, lobby signs) swapped too.
 - The Pets (inventory) button is a bold paw print; side-button icons are drawn larger.
 - Trade's button is teal, so Ranks is the only purple one.
+
+## 6zn. Admin Abuse v3, the obby, the pet collection, font fit (v2.10.0)
+- The show is one ordered `Config.AbuseShow.Script` (say / attack / round / crater / obby / heat / leave), nothing random, ~10 minutes: Gifts poll (Bubbles vs Gems), an announced pass drop, a "what should I break" effect poll, the obby window, the heat phase with the final prize poll (limited pet / pass / Bubbles / Gems), then he exits. Prizes scale with players online (`Config.AbuseOption`). A pass already owned pays 100 Gems.
+- Giant: Humanoid kept (clothes/hair render; `ApplyDescription` once in the world) with `EvaluateStateMachine = false`; root locked to the lowest sole; scale 38 -> 46 at the heat; every footfall booms. Effects: beam, meteors, lightning, shockwave, barrage, fireworks, laser sweep, black hole, tornado, UFO, disco, fountains. Table craters (an invisible wall plus anyone nearby is moved out). The exit: ":noclip" over his head, a laser cuts the ceiling, he flies out and it mends.
+- The speech box sits under the announcement banner (never over the poll card); the title fades its text and outline together.
+- Obby (LobbyBuilder `buildObby`): behind the spawn, off the table edge toward the sofa. 5 checkpoints, hops, lava stones, spinners, sliders, vanishing tiles, balance beams, stairs, finish. Prize `Config.Obby` (Gems; `ShowGems` + first finisher's game pass while the show has the obby open, attribute `AbuseObbyOpen`).
+- Pet collection: `profile.PetIndex` remembers every species/tier ever owned; each species +0.6% coins, finishing a tier set pays Gems and a big coin bonus (`Config.Collection`); "Collection" button in the Pets window.
+- Fonts: Luckiest Guy text is drawn at 84% of the asked size (`TITLE_FONT_SCALE`); icon-button captions are smaller; Celebrate shows the drawn icons instead of "@Gift".

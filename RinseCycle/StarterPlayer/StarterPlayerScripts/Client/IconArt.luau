@@ -608,14 +608,22 @@ ART.Calendar = {
 -- HUD buttons (smooth-edged set: no rotated frames anywhere, see the header)
 ----------------------------------------------------------------------------------------------------
 
--- Pets / inventory: a bold paw print (one big pad and four toes).
+-- Pets: a happy puppy face with floppy ears.
 ART.Pup = {
-	{ "disc", x = 0.18, y = 0.44, d = 0.2, fill = rgb(255, 255, 255), o = true },
-	{ "disc", x = 0.38, y = 0.24, d = 0.22, fill = rgb(255, 255, 255), o = true },
-	{ "disc", x = 0.62, y = 0.24, d = 0.22, fill = rgb(255, 255, 255), o = true },
-	{ "disc", x = 0.82, y = 0.44, d = 0.2, fill = rgb(255, 255, 255), o = true },
-	{ "rect", x = 0.5, y = 0.69, w = 0.56, h = 0.42, r = 0.5, fill = rgb(255, 255, 255), o = true },
-	{ "rect", x = 0.5, y = 0.65, w = 0.36, h = 0.1, r = 0.5, fill = rgb(255, 196, 150), t = 0.4 },
+	{ "rect", x = 0.17, y = 0.44, w = 0.22, h = 0.46, r = 0.5, fill = { rgb(176, 112, 70), rgb(132, 78, 46) }, o = true },
+	{ "rect", x = 0.83, y = 0.44, w = 0.22, h = 0.46, r = 0.5, fill = { rgb(176, 112, 70), rgb(132, 78, 46) }, o = true },
+	"|",
+	{ "disc", x = 0.5, y = 0.52, d = 0.7, fill = { rgb(255, 222, 170), rgb(236, 176, 110) }, o = true },
+	{ "rect", x = 0.5, y = 0.7, w = 0.4, h = 0.26, r = 0.5, fill = rgb(255, 240, 214) },
+	{ "disc", x = 0.36, y = 0.48, d = 0.11, fill = rgb(40, 28, 24) },
+	{ "disc", x = 0.64, y = 0.48, d = 0.11, fill = rgb(40, 28, 24) },
+	{ "disc", x = 0.345, y = 0.465, d = 0.04, fill = WHITE },
+	{ "disc", x = 0.625, y = 0.465, d = 0.04, fill = WHITE },
+	{ "rect", x = 0.5, y = 0.62, w = 0.15, h = 0.1, r = 0.5, fill = rgb(50, 32, 28) },
+	{ "rect", x = 0.5, y = 0.79, w = 0.1, h = 0.12, r = 0.5, fill = rgb(255, 110, 130) },
+	{ "disc", x = 0.25, y = 0.64, d = 0.1, fill = rgb(255, 150, 150), t = 0.45 },
+	{ "disc", x = 0.75, y = 0.64, d = 0.1, fill = rgb(255, 150, 150), t = 0.45 },
+	{ "rect", x = 0.42, y = 0.26, w = 0.16, h = 0.05, r = 0.5, fill = WHITE, t = 0.5 },
 }
 
 -- Shop: a shopping bag with a round handle.

@@ -287,6 +287,7 @@ AdminAnnouncement.OnClientEvent:Connect(function(message: string)
 		Text = tostring(message),
 		TextSize = 26,
 		TextWrapped = true,
+		TextScaled = true, -- shrinks to fit: a long message is never cut off
 		Size = UDim2.new(1, -40, 0, 70),
 		Position = UDim2.fromOffset(20, 38),
 		Parent = banner,
@@ -698,15 +699,15 @@ do
 	local _, talkRoot = UIKit.CreateScreen("AbuseTalk", 61)
 	local box = Instance.new("Frame")
 	box.Name = "Box"
-	box.AnchorPoint = Vector2.new(0.5, 1)
-	box.Position = UDim2.new(0.5, 0, 1, -150)
+	box.AnchorPoint = Vector2.new(0.5, 0)
+	box.Position = UDim2.new(0.5, 0, 0.26, 0) -- under the announcement banner, clear of the poll card at the bottom
 	box.Size = UDim2.fromOffset(560, 92)
 	box.BackgroundColor3 = Colors.PanelDark
 	box.Visible = false
 	UIKit.Corner(box, 14)
 	UIKit.Stroke(box, Colors.Coin, 3, 0)
 	UIKit.Label({ Text = abuse.OwnerName, TextSize = 20, TextColor3 = Colors.Coin, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(16, 8), Size = UDim2.new(1, -32, 0, 24), Parent = box })
-	local speech = UIKit.Label({ Text = "", TextSize = 19, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(16, 36), Size = UDim2.new(1, -32, 1, -44), Parent = box })
+	local speech = UIKit.Label({ Text = "", TextSize = 19, TextWrapped = true, TextScaled = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(16, 36), Size = UDim2.new(1, -32, 1, -44), Parent = box })
 	box.Parent = talkRoot
 	local talkToken = 0
 	local function speak(text: string)
@@ -752,7 +753,38 @@ do
 	flash.BackgroundColor3 = Color3.fromRGB(255, 244, 214)
 	flash.BackgroundTransparency = 1
 	flash.Parent = fxRoot
-	local title = UIKit.Label({ Text = "ADMIN ABUSE", TextSize = 64, TextColor3 = Colors.Coin, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.3), Size = UDim2.fromOffset(700, 90), Visible = false, Parent = fxRoot })
+	local title = UIKit.Label({ Text = "ADMIN ABUSE", TextSize = 64, TextColor3 = Colors.Coin, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.42), Size = UDim2.fromOffset(700, 90), Visible = false, Parent = fxRoot })
+	local titleStroke = title:FindFirstChildOfClass("UIStroke")
+	-- The big title: zooms in, holds, then the text AND its outline fade together (an outline left
+	-- on its own looks like hollow letters), and it is hidden for good.
+	local titleToken = 0
+	local function playTitle(text: string, color: Color3)
+		titleToken += 1
+		local mine = titleToken
+		title.Text = text
+		title.TextColor3 = color
+		title.Visible = true
+		title.TextTransparency = 0
+		title.Size = UDim2.fromOffset(1100, 150)
+		if titleStroke then
+			titleStroke.Transparency = 0
+		end
+		TweenService:Create(title, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = UDim2.fromOffset(760, 100) }):Play()
+		task.delay(2.2, function()
+			if titleToken ~= mine then
+				return
+			end
+			TweenService:Create(title, TweenInfo.new(0.8), { TextTransparency = 1 }):Play()
+			if titleStroke then
+				TweenService:Create(titleStroke, TweenInfo.new(0.8), { Transparency = 1 }):Play()
+			end
+			task.delay(0.9, function()
+				if titleToken == mine then
+					title.Visible = false
+				end
+			end)
+		end)
+	end
 	-- Heat: a red vignette that pulses on every big blast, and a title when it starts.
 	local heatFrame = Instance.new("Frame")
 	heatFrame.Size = UDim2.fromScale(2, 2)
@@ -773,27 +805,12 @@ do
 		lastIntro = os.clock()
 		flash.BackgroundTransparency = 0.15
 		TweenService:Create(flash, TweenInfo.new(0.9), { BackgroundTransparency = 1 }):Play()
-		title.Visible = true
-		title.TextTransparency = 0
-		title.Size = UDim2.fromOffset(1100, 150)
-		TweenService:Create(title, TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.fromOffset(700, 90), TextTransparency = 1 }):Play()
-		task.delay(3.1, function()
-			title.Visible = false -- the outline stays when text is only transparent
-		end)
+		playTitle("ADMIN ABUSE", Colors.Coin)
 	end
-
 	ReplicatedStorage:GetAttributeChangedSignal("AbuseHeat"):Connect(function()
 		if ReplicatedStorage:GetAttribute("AbuseHeat") then
 			heatPulse()
-			title.Text = "TURN UP THE HEAT"
-			title.TextColor3 = Colors.Bad
-			title.Visible = true
-			title.TextTransparency = 0
-			title.Size = UDim2.fromOffset(1100, 150)
-			TweenService:Create(title, TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.fromOffset(700, 90), TextTransparency = 1 }):Play()
-			task.delay(3.1, function()
-				title.Visible = false
-			end)
+			playTitle("TURN UP THE HEAT", Colors.Bad)
 		end
 	end)
 	task.spawn(function()

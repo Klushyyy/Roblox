@@ -467,7 +467,7 @@ local function computeStats(levelIndex: number, player: Player, pr: PlayerRun): 
 	local perks = profile and profile.Perks
 	local petBonus = 0
 	if profile then
-		local ok, bonus = safe(Config.PetCoinBonus, profile.Pets, profile.Equipped)
+		local ok, bonus = safe(Config.PetCoinBonus, profile.Pets, profile.Equipped, profile.PetIndex)
 		petBonus = (ok and positive(bonus)) or 0
 	end
 	local rank = profile and profile.Rank or nil

@@ -18,9 +18,13 @@ local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
 local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
+local Remotes = require(Shared:WaitForChild("Remotes"))
 
 local LobbyBuilder = {}
 
@@ -436,7 +440,9 @@ local function buildGround(parent: Instance)
 	local w = 4
 	for _, spec in {
 		{ Vector3.new(fx1 - fx0 + w * 2, h, w), at(0, h / 2, fz0 - w / 2) },
-		{ Vector3.new(fx1 - fx0 + w * 2, h, w), at(0, h / 2, fz1 + w / 2) },
+		-- the south wall has a gate (x -14..14) onto the obby
+		{ Vector3.new(fx1 - 14 + w, h, w), at((14 + fx1 + w) / 2, h / 2, fz1 + w / 2) },
+		{ Vector3.new(-14 - fx0 + w, h, w), at((fx0 - w - 14) / 2, h / 2, fz1 + w / 2) },
 		{ Vector3.new(w, h, fz1 - fz0), at(fx0 - w / 2, h / 2, (fz0 + fz1) / 2) },
 		{ Vector3.new(w, h, fz1 - fz0), at(fx1 + w / 2, h / 2, (fz0 + fz1) / 2) },
 	} do
@@ -1769,6 +1775,330 @@ local function setupLighting()
 end
 
 ----------------------------------------------------------------------------------------------------
+-- The obby: behind the spawn (the opposite side of the carpet from the dishwasher), off the table's
+-- edge and out over the room toward the sofa. Five checkpoints, five stages, a finish on a high
+-- platform. Falling (or touching lava / a spinner) puts you back on your last checkpoint. The
+-- course is anchored parts the server moves (spinners, sliders, vanishing tiles); the prize is
+-- given from the finish pad (see Config.Obby; bigger during the Admin Abuse show).
+----------------------------------------------------------------------------------------------------
+local OBBY_COLORS = {
+	Color3.fromRGB(86, 168, 255),
+	Color3.fromRGB(255, 124, 178),
+	Color3.fromRGB(255, 205, 80),
+	Color3.fromRGB(110, 220, 160),
+	Color3.fromRGB(176, 140, 255),
+}
+local OBBY_CHECKPOINTS = 5
+
+local function buildObby(parent: Instance)
+	local model = mk("Model", { Name = "Obby" }, parent) :: Model
+	local colorIndex = 0
+	local function nextColor(): Color3
+		colorIndex = colorIndex % #OBBY_COLORS + 1
+		return OBBY_COLORS[colorIndex]
+	end
+	-- A chunky platform: a coloured slab with a darker underside (top surface at yTop).
+	local function plat(name: string, cx: number, yTop: number, cz: number, sx: number, sz: number, color: Color3?, extra: { [string]: any }?): BasePart
+		local c = color or nextColor()
+		local top = mkPart("Part", {
+			Name = name,
+			Size = Vector3.new(sx, 2, sz),
+			CFrame = at(cx, yTop - 1, cz),
+			Color = c,
+			Material = LOW,
+			CanTouch = true,
+		}, model)
+		if extra then
+			for k, v in extra do
+				if k ~= "Bare" then
+					(top :: any)[k] = v
+				end
+			end
+		end
+		if not (extra and extra.Bare) then
+			mkPart("Part", { Name = "Underside", Size = Vector3.new(sx - 1, 1.2, sz - 1), CFrame = at(cx, yTop - 2.5, cz), Color = shadeColor(c, 0.55), Material = LOW, CanCollide = false, CanQuery = false, CastShadow = false }, model)
+		end
+		return top
+	end
+	local killParts: { BasePart } = {}
+	local function kill(name: string, size: Vector3, cf: CFrame, color: Color3, material: Enum.Material?): BasePart
+		local part = mkPart("Part", {
+			Name = name,
+			Size = size,
+			CFrame = cf,
+			Color = color,
+			Material = material or Enum.Material.Neon,
+			CanTouch = true,
+			CanCollide = false,
+			CastShadow = false,
+		}, model)
+		CollectionService:AddTag(part, "ObbyKill")
+		table.insert(killParts, part)
+		return part
+	end
+	local checkpointPads: { BasePart } = {}
+	local function checkpoint(index: number, cx: number, yTop: number, cz: number, sx: number?, sz: number?)
+		local pad = plat("Checkpoint" .. index, cx, yTop, cz, sx or 20, sz or 20, Color3.fromRGB(70, 205, 130))
+		pad:SetAttribute("Index", index)
+		CollectionService:AddTag(pad, "ObbyCheckpoint")
+		-- A glowing flag so it reads from far away.
+		mkPart("Part", decor({ Name = "FlagPole", Size = Vector3.new(0.6, 12, 0.6), CFrame = at(cx - (sx or 20) / 2 + 2, yTop + 6, cz - (sz or 20) / 2 + 2), Color = Color3.fromRGB(240, 240, 240), Material = LOW }), model)
+		mkPart("Part", decor({ Name = "Flag", Size = Vector3.new(0.4, 4, 6), CFrame = at(cx - (sx or 20) / 2 + 2, yTop + 10, cz - (sz or 20) / 2 + 5), Color = Color3.fromRGB(255, 255, 255), Material = Enum.Material.Neon }), model)
+		worldSign(pad, "CHECKPOINT " .. index, 22, 4, 14, Color3.fromRGB(150, 255, 190))
+		table.insert(checkpointPads, pad)
+	end
+
+	local Y = 0.2
+
+	-- Start: a wide pad on the table's edge with a gate and a sign.
+	local startPad = plat("Start", 0, Y, 92.2, 28, 24, Color3.fromRGB(255, 255, 255))
+	for _, sx in { -13, 13 } do
+		mkPart("Part", decor({ Name = "GatePost", Size = Vector3.new(2, 22, 2), CFrame = at(sx, Y + 11, 92), Color = Color3.fromRGB(255, 205, 80), Material = LOW }), model)
+	end
+	local beam = mkPart("Part", decor({ Name = "GateBeam", Size = Vector3.new(30, 6, 2), CFrame = at(0, Y + 22, 92), Color = Color3.fromRGB(255, 124, 178), Material = LOW }), model)
+	worldSign(beam, "OBBY", 26, 6, 0, Color3.fromRGB(255, 255, 255))
+	worldSign(startPad, "Reach the top for a prize!", 24, 3, 6, Color3.fromRGB(255, 232, 140))
+
+	-- Stage 1: hops (6 platforms, 6-stud gaps).
+	do
+		local dx = { 0, -7, 0, 7, 0, -6 }
+		local dy = { 0, 0, 1.5, 3, 3, 1.5 }
+		for i = 1, 6 do
+			plat("Hop" .. i, dx[i], Y + dy[i], 113 + (i - 1) * 15, 9, 9)
+		end
+	end
+	checkpoint(1, -2, Y + 1.5, 210)
+
+	-- Stage 2: lava field with stepping stones (touch the lava and you go back).
+	kill("Lava", Vector3.new(60, 1, 84), at(0, Y - 0.2, 258), Color3.fromRGB(255, 96, 40))
+	kill("LavaGlow", Vector3.new(60, 0.4, 84), at(0, Y + 0.3, 258), Color3.fromRGB(255, 160, 60)).Transparency = 0.5
+	do
+		local dx = { 0, -8, 0, 8, 0 }
+		for i = 1, 5 do
+			plat("Stone" .. i, dx[i], Y + 1.5, 226 + (i - 1) * 14, 7, 7)
+		end
+	end
+	checkpoint(2, 0, Y + 1.5, 298)
+
+	-- Stage 3: the spinner deck (jump the bars), running along +X.
+	plat("SpinnerDeck", 66, Y + 1.5, 300, 104, 16, Color3.fromRGB(255, 255, 255))
+	local spinners: { { Part: BasePart, Speed: number, Center: Vector3 } } = {}
+	for i, x in { 38, 66, 94 } do
+		local center = at(x, Y + 1.5 + 2.2, 300).Position
+		local bar = kill("Spinner" .. i, Vector3.new(26, 3, 2.4), CFrame.new(center), if i % 2 == 0 then Color3.fromRGB(255, 70, 90) else Color3.fromRGB(255, 190, 50))
+		mkPart("Part", decor({ Name = "SpinnerHub", Size = Vector3.new(4, 4, 4), CFrame = CFrame.new(center), Color = Color3.fromRGB(60, 64, 78), Material = LOW }), model)
+		table.insert(spinners, { Part = bar, Speed = (if i % 2 == 0 then -1 else 1) * (1.1 + i * 0.35), Center = center })
+	end
+	checkpoint(3, 134, Y + 1.5, 300)
+
+	-- Stage 4: three sliders crossing the way.
+	local sliders: { BasePart } = {}
+	for i, x in { 156, 171, 186 } do
+		local p = plat("Slider" .. i, x, Y + 1.5, 300, 8, 8, nil, { Bare = true })
+		table.insert(sliders, p)
+	end
+	checkpoint(4, 214, Y + 1.5, 300)
+
+	-- Stage 5: vanishing tiles.
+	local tiles: { BasePart } = {}
+	for col = 1, 4 do
+		for row = -1, 1 do
+			local t = plat("Tile", 232 + (col - 1) * 11, Y + 1.5, 300 + row * 11, 8.5, 8.5, Color3.fromRGB(255, 228, 120), { Bare = true })
+			CollectionService:AddTag(t, "ObbyTile")
+			table.insert(tiles, t)
+		end
+	end
+	plat("Landing", 282, Y + 1.5, 300, 12, 12, nil)
+
+	-- Stage 6: balance beams (round the corner and back over the sofa), two gaps in the long one.
+	plat("Beam1", 282, Y + 3, 322, 3, 32, Color3.fromRGB(255, 255, 255))
+	plat("Corner", 282, Y + 3, 345, 10, 10, nil)
+	plat("Beam2a", 252, Y + 3, 345, 40, 3, Color3.fromRGB(255, 255, 255))
+	plat("Beam2b", 202, Y + 3, 345, 30, 3, Color3.fromRGB(255, 255, 255))
+	plat("Beam2c", 164, Y + 3, 345, 24, 3, Color3.fromRGB(255, 255, 255))
+	checkpoint(5, 134, Y + 3, 345)
+
+	-- Stage 7: the climb: stairs of small platforms up to the finish.
+	for i = 1, 8 do
+		plat("Stair" .. i, 134 - i * 12, Y + 3 + i * 3.5, 345 + (if i % 2 == 0 then 3 else -3), 7, 7)
+	end
+	local finish = plat("Finish", 12, Y + 3 + 8 * 3.5 + 3, 345, 24, 24, Color3.fromRGB(255, 205, 60))
+	finish:SetAttribute("Finish", true)
+	CollectionService:AddTag(finish, "ObbyFinish")
+	local finishTop = Y + 3 + 8 * 3.5 + 3
+	for _, dz in { -10, 10 } do
+		mkPart("Part", decor({ Name = "FinishPost", Size = Vector3.new(2, 18, 2), CFrame = at(12, finishTop + 9, 345 + dz), Color = Color3.fromRGB(255, 124, 178), Material = LOW }), model)
+	end
+	local arch = mkPart("Part", decor({ Name = "FinishArch", Size = Vector3.new(2, 4, 22), CFrame = at(12, finishTop + 19, 345), Color = Color3.fromRGB(255, 124, 178), Material = LOW }), model)
+	worldSign(arch, "FINISH", 24, 6, 6, Color3.fromRGB(255, 255, 255))
+	-- The trophy: a gold cup of stacked blocks.
+	mkPart("Part", decor({ Name = "TrophyBase", Size = Vector3.new(6, 2, 6), CFrame = at(12, finishTop + 1, 345), Color = Color3.fromRGB(120, 80, 50), Material = LOW }), model)
+	mkPart("Part", decor({ Name = "TrophyStem", Size = Vector3.new(2, 4, 2), CFrame = at(12, finishTop + 4, 345), Color = Color3.fromRGB(255, 205, 60), Material = Enum.Material.Metal }), model)
+	mkPart("Part", decor({ Name = "TrophyCup", Size = Vector3.new(6, 5, 6), CFrame = at(12, finishTop + 8.5, 345), Color = Color3.fromRGB(255, 205, 60), Material = Enum.Material.Metal }), model)
+
+	local function onTouch(part: BasePart, fn: (BasePart) -> ())
+		pcall(function()
+			part.Touched:Connect(fn)
+		end)
+	end
+
+	-- ----- Runtime (server only) -------------------------------------------------------------
+	local progress: { [number]: number } = {} -- userId -> highest checkpoint reached
+	local spawnAt: { [number]: CFrame } = {}
+	local lastHit: { [number]: number } = {}
+	local lastPrize: { [number]: number } = {}
+	local EVENT_ATTR = "AbuseObbyOpen"
+	local function playerOf(hit: BasePart): Player?
+		local character = hit:FindFirstAncestorOfClass("Model")
+		return if character then Players:GetPlayerFromCharacter(character) else nil
+	end
+	local function sendBack(player: Player)
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if not root then
+			return
+		end
+		local cf = spawnAt[player.UserId] or startPad.CFrame
+		;(character :: Model):PivotTo(cf + Vector3.new(0, 4, 0))
+		root.AssemblyLinearVelocity = Vector3.zero
+	end
+	local function notify(player: Player, text: string, kind: string)
+		pcall(function()
+			Remotes.Event("Notify"):FireClient(player, text, kind)
+		end)
+	end
+
+	for _, pad in checkpointPads do
+		onTouch(pad, function(hit)
+			local player = playerOf(hit)
+			local index = pad:GetAttribute("Index")
+			if player and type(index) == "number" and (progress[player.UserId] or 0) < index then
+				progress[player.UserId] = index
+				spawnAt[player.UserId] = pad.CFrame + Vector3.new(0, 1, 0)
+				notify(player, string.format("Checkpoint %d of %d!", index, OBBY_CHECKPOINTS), "Good")
+			end
+		end)
+	end
+	for _, part in killParts do
+		do
+			onTouch(part, function(hit)
+				local player = playerOf(hit)
+				if player and os.clock() - (lastHit[player.UserId] or 0) > 0.6 then
+					lastHit[player.UserId] = os.clock()
+					sendBack(player)
+				end
+			end)
+		end
+	end
+	onTouch(finish, function(hit)
+		local player = playerOf(hit)
+		if not player or (progress[player.UserId] or 0) < OBBY_CHECKPOINTS then
+			return
+		end
+		progress[player.UserId] = 0
+		spawnAt[player.UserId] = nil
+		local show = ReplicatedStorage:GetAttribute(EVENT_ATTR) == true
+		local last = lastPrize[player.UserId] or -1e9
+		local gems = if show then Config.Obby.ShowGems else Config.Obby.Gems
+		local ok, DataService = pcall(function()
+			return require(script.Parent:WaitForChild("DataService"))
+		end)
+		local GiftService = nil
+		pcall(function()
+			GiftService = require(script.Parent:WaitForChild("GiftService"))
+		end)
+		if ok and (show or os.clock() - last > Config.Obby.Cooldown) then
+			lastPrize[player.UserId] = os.clock()
+			DataService.AddGems(player, gems)
+			if GiftService then
+				(GiftService :: any).Celebrate(player, "You beat the obby!", string.format("You got %d Gems!", gems), "@Gem")
+				-- The first finisher in this server during the show also wins a game pass.
+				if show and not ReplicatedStorage:GetAttribute("AbuseObbyWinner") then
+					ReplicatedStorage:SetAttribute("AbuseObbyWinner", player.Name)
+					local free = {}
+					for _, pass in Config.GamePasses do
+						if not (GiftService :: any).Owns(player, pass.Key) then
+							table.insert(free, pass)
+						end
+					end
+					if #free > 0 then
+						local pass = free[math.random(1, #free)]
+						;(GiftService :: any).GrantPass(player, pass.Key, "First to finish!", "You won " .. pass.Name .. " for finishing the obby first!")
+					end
+				end
+			end
+		else
+			notify(player, "You finished! (Prize again in a few minutes)", "Info")
+		end
+		-- Back to the start: the climb down is long.
+		spawnAt[player.UserId] = nil
+		sendBack(player)
+	end)
+
+	-- Falling off puts you back on your checkpoint (checked a few times a second from the Heartbeat).
+	local function checkFalls()
+		for _, player in Players:GetPlayers() do
+			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if root then
+				local p = root.Position - ORIGIN
+				if p.Y < -35 and p.Y > -125 and math.abs(p.X) < 400 and p.Z > 66 and p.Z < 396 then
+					sendBack(player)
+				end
+			end
+		end
+	end
+	pcall(function()
+		Players.PlayerRemoving:Connect(function(player)
+			progress[player.UserId] = nil
+			spawnAt[player.UserId] = nil
+		end)
+	end)
+
+	-- The moving parts.
+	for i, p in sliders do
+		local from = p.Position + Vector3.new(0, 0, -12)
+		local to = p.Position + Vector3.new(0, 0, 12)
+		p.Position = if i % 2 == 0 then to else from
+		local info = TweenInfo.new(2.6 + i * 0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+		TweenService:Create(p, info, { Position = if i % 2 == 0 then from else to }):Play()
+	end
+	local angle, fallClock = 0, 0
+	local beat: any = RunService.Heartbeat
+	if not beat then
+		return -- (offline tools have no Heartbeat)
+	end
+	beat:Connect(function(dt)
+		angle += dt
+		fallClock += dt
+		if fallClock > 0.3 then
+			fallClock = 0
+			checkFalls()
+		end
+		for _, s in spinners do
+			s.Part.CFrame = CFrame.new(s.Center) * CFrame.Angles(0, angle * s.Speed, 0)
+		end
+	end)
+	for _, t in tiles do
+		local busy = false
+		onTouch(t, function(hit)
+			if busy or not playerOf(hit) then
+				return
+			end
+			busy = true
+			task.delay(0.5, function()
+				TweenService:Create(t, TweenInfo.new(0.3), { Transparency = 1 }):Play()
+				task.wait(0.3)
+				t.CanCollide = false
+				task.wait(3)
+				t.CanCollide = true
+				TweenService:Create(t, TweenInfo.new(0.3), { Transparency = 0 }):Play()
+				busy = false
+			end)
+		end)
+	end
+end
+
+----------------------------------------------------------------------------------------------------
 -- Build() / GetLobby() / GetSpawnCFrame()
 ----------------------------------------------------------------------------------------------------
 
@@ -1819,6 +2149,7 @@ function LobbyBuilder.Build(): Lobby
 	buildTreasureChest(model)
 	buildEventZone(model)
 	buildPathDressing(model)
+	buildObby(model)
 	buildDecorations(model)
 	setupLighting()
 

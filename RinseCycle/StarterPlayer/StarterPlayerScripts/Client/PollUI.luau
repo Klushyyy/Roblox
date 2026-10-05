@@ -14,6 +14,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local Client = script.Parent
+local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 local UIKit = require(Client:WaitForChild("UIKit"))
 
 local PollUI = {}
@@ -54,7 +55,7 @@ local function setupCountdown()
 	task.spawn(function()
 		while true do
 			local current = info
-			local nowT = os.time()
+			local nowT = Config.Now()
 			if current and nowT < current.EndsAt + current.Live then
 				local inset = UIKit.TopInset()
 				local safe = UIKit.SafeInsets()
@@ -283,7 +284,7 @@ function PollUI.Init()
 
 	pollRemote.OnClientEvent:Connect(function(kind, id, text, options, extra)
 		if kind == "Start" and type(id) == "string" and type(options) == "table" then
-			showVoting(id, tostring(text), options, tonumber(extra) or os.time())
+			showVoting(id, tostring(text), options, tonumber(extra) or Config.Now())
 		elseif kind == "Close" and id == currentId then
 			close() -- a show poll: gone the second it ends
 		elseif kind == "End" and id == currentId and phase == "Voting" then
@@ -304,7 +305,7 @@ function PollUI.Init()
 				holder.Visible = not UIKit.IsWindowOpen()
 			end
 			if phase == "Voting" then
-				local left = math.max(0, endsAt - os.time())
+				local left = math.max(0, endsAt - Config.Now())
 				timer.Text = string.format("%d s left", left)
 				tabLabel.Text = string.format("POLL  ^  %ds", left)
 			elseif phase == "Counting" then

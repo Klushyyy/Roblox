@@ -4,6 +4,7 @@ local R = "/home/user/Roblox/RinseCycle/"
 local DS = M[R .. "ServerScriptService/Server/Services/DataService.luau"]
 local Config = M[R .. "ReplicatedStorage/Shared/Config.luau"]
 local me = G.player
+local UIKit = M[R .. "StarterPlayer/StarterPlayerScripts/Client/UIKit.luau"]
 local base, t0 = os.time(), _G.__now
 Config.Now = function() return base + math.floor(_G.__now - t0) end
 pump(1, G.frame)
@@ -19,63 +20,44 @@ if bm then G.getSignal(bm, "OnClientEvent"):Connect(function() booms += 1 end) e
 local function pill() local f = G.find(me.PlayerGui, "Pill") return f and f.Visible, f and G.find(f, "Label") and G.find(f, "Label").Text end
 local function asMe(c, t, x) call("client", function() cmd:FireServer(c, t or "", x or "") end) pump(0.5, G.frame) end
 out("lockdown at the real time (weeks away): " .. tostring((Config.EventLockdown(Config.Now()))))
-local bubbles0 = DS.Get(me).Bubbles
+local bubbles0, gems0 = DS.Get(me).Bubbles, DS.Get(me).Gems
 asMe("abuseshow", "0.25")
 out("feedback: " .. tostring(feedback[#feedback]))
-local locked, why = Config.EventLockdown(Config.Now())
-out("lockdown now: " .. tostring(locked) .. "  " .. why)
-pump(2, G.frame)
-out("countdown pill: " .. tostring(select(2, pill())) .. " visible " .. tostring((pill())))
+out("lockdown now: " .. tostring((Config.EventLockdown(Config.Now()))))
+local function tl(label) -- t = seconds into the show
+	out(string.format("[%s] says=%d booms=%d heat=%s obby=%s", label, #says, booms, tostring(RSt:GetAttribute("AbuseHeat")), tostring(RSt:GetAttribute("AbuseObbyOpen"))))
+end
+call("client", function() UIKit.CloseWindow() end)
+local function pollVisible()
+	call("client", function() UIKit.CloseWindow() end)
+	pump(0.7, G.frame)
+	local card = G.find(me.PlayerGui, "Poll")
+	return card and card.Parent.Parent.Visible
+end
 pump(18, G.frame)
 out("pill when live: " .. tostring(select(2, pill())))
-out("booms: " .. booms)
-out("banners: " .. table.concat(banners, " | "))
-pump(30, G.frame)
-out("lockdown during the show: " .. tostring((Config.EventLockdown(Config.Now()))))
-out("chat lines so far: " .. #says)
-for _, l in says do out("  " .. l) end
-local box = G.find(me.PlayerGui, "Box")
-out("speech box visible: " .. tostring(box and box.Visible))
-local giant = _G.__workspace:FindFirstChild("AbuseGiant")
-out("giant in the lobby: " .. tostring(giant ~= nil))
-pump(3, G.frame)
-local card = G.find(me.PlayerGui, "Poll")
-out("poll card visible: " .. tostring(card and card.Visible))
-local vote = RSt:FindFirstChild("GlobalPollVote")
-local answers = card and G.find(card, "Answers")
-if answers then
-	local btns = {}
-	for _, b in answers:GetChildren() do if b:IsA("TextButton") then table.insert(btns, b) end end
-	table.sort(btns, function(a, b) return a.LayoutOrder < b.LayoutOrder end)
-	out("answers: " .. #btns .. " children: " .. #answers:GetChildren())
-	for _, c in answers:GetChildren() do out("   " .. c.ClassName .. " " .. c.Name) end
-	if btns[1] then G.getSignal(btns[1], "Activated"):Fire() end
-end
-pump(75, G.frame)
-out("bubbles gained from the vote: " .. (DS.Get(me).Bubbles - bubbles0))
-out("chat lines: " .. #says .. "  last: " .. tostring(says[#says]))
-out("poll card after the vote ends (should be gone): " .. tostring(card and card.Parent.Parent.Visible))
-local passes0 = 0
-pump(130, G.frame)
-out("chat lines by the pass round: " .. #says .. "  last: " .. tostring(says[#says]))
-pump(185, G.frame)
-card = G.find(me.PlayerGui, "Poll")
-out("final poll visible: " .. tostring(card and card.Visible) .. "  heat attr: " .. tostring(RSt:GetAttribute("AbuseHeat")))
-answers = card and G.find(card, "Answers")
-if answers then
-	local btns = {}
-	for _, b in answers:GetChildren() do if b:IsA("TextButton") then table.insert(btns, b) end end
-	table.sort(btns, function(a, b) return a.LayoutOrder < b.LayoutOrder end)
-	out("final answers: " .. #btns)
-	if btns[1] then G.getSignal(btns[1], "Activated"):Fire() end
-end
-pump(70, G.frame)
-out("final card gone: " .. tostring(not (card and card.Parent.Parent.Visible)))
+pump(20, G.frame) tl("t~23")
+pump(20, G.frame) out("poll 1 visible: " .. tostring(pollVisible())) tl("t~43")
+pump(45, G.frame) out("poll 1 visible after it ends (should be false): " .. tostring(pollVisible()))
+out("bubbles gained: " .. (DS.Get(me).Bubbles - bubbles0))
+pump(60, G.frame) tl("t~170") out("last says: " .. says[#says-1] .. " / " .. says[#says])
+pump(70, G.frame) tl("t~240")
+local craterParts = 0
+for _, c in _G.__workspace:GetChildren() do if c:IsA("BasePart") and c.Size.Y == 72 then craterParts += 1 end end
+out("crater wall parts: " .. craterParts)
+pump(60, G.frame) tl("t~300 (obby should be open)")
+out("banners: " .. #banners .. "  last: " .. tostring(banners[#banners]))
+pump(45, G.frame) tl("t~345 (heat)") out("final poll visible: " .. tostring(pollVisible()))
+pump(60, G.frame)
 local pets = 0
 for _, p in DS.Get(me).Pets do if p.Id == "AdminAbuse" then pets += 1 end end
-out("limited pets won: " .. pets)
-pump(200, G.frame)
-out("chat lines total: " .. #says .. "  giant alive: " .. tostring(_G.__workspace:FindFirstChild("AbuseGiant") ~= nil) .. "  booms " .. booms)
-pump(60, G.frame)
+out("limited pets won: " .. pets .. "   final poll visible (should be false): " .. tostring(pollVisible()))
+pump(150, G.frame) tl("t~600")
+local seen = {}
+local dupes = 0
+for _, l in says do if seen[l] then dupes += 1 end seen[l] = true end
+out("repeated lines: " .. dupes)
+pump(110, G.frame) tl("t~700 (over)")
+out("lockdown after the show: " .. tostring((Config.EventLockdown(Config.Now()))) .. "   banners: " .. tostring(banners[#banners]))
 asMe("abuseshow", "reset")
 out("after reset lockdown: " .. tostring((Config.EventLockdown(Config.Now()))))

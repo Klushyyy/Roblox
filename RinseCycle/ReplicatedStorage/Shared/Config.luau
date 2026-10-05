@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.9.1"
+Config.Version = "2.10.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -665,7 +665,7 @@ function Config.PetCoinMult(petId: string, tier: number?): number
 	return 1 + (if stats then stats.CoinBonus else 0)
 end
 
-function Config.PetCoinBonus(pets, equipped): number
+function Config.PetCoinBonus(pets, equipped, index: { [string]: number }?): number
 	local byUid = {}
 	for _, pet in pets or {} do
 		byUid[pet.Uid] = pet
@@ -676,6 +676,73 @@ function Config.PetCoinBonus(pets, equipped): number
 		local stats = pet and Config.PetStats(pet.Id, pet.Tier)
 		if stats then
 			total += stats.CoinBonus
+		end
+	end
+	if index then
+		total += Config.CollectionBonus(index)
+	end
+	return total
+end
+
+----------------------------------------------------------------------------------------------------
+-- Pet collection (the Index in the Pets window). Every pet species and tier you have ever owned
+-- is remembered, even after you delete or merge it. PetIndex = { [petId] = bits } with bit 1 =
+-- normal, 2 = Golden, 4 = Rainbow. Each species found adds a little to your coin multiplier, and a
+-- whole tier set (every normal pet, every Golden one...) pays Gems once and adds a big bonus.
+-- Limited pets count for the per-species bonus but not for the sets (you can't get them anytime).
+----------------------------------------------------------------------------------------------------
+Config.Collection = {
+	PerSpecies = 0.006, -- coin bonus per species found (any tier)
+	Sets = {
+		{ Tier = 1, Name = "Normal", Bonus = 0.12, Gems = 300 },
+		{ Tier = 2, Name = "Golden", Bonus = 0.25, Gems = 800 },
+		{ Tier = 3, Name = "Rainbow", Bonus = 0.5, Gems = 2000 },
+	},
+}
+
+-- Every pet that can be collected, rarest last (limited ones separately).
+function Config.CollectionSpecies(includeLimited: boolean?): { string }
+	local list = {}
+	for id, def in Config.Pets do
+		if includeLimited or not def.Event then
+			table.insert(list, id)
+		end
+	end
+	table.sort(list, function(a, b)
+		local ra, rb = Config.Rarities[Config.Pets[a].Rarity].Order, Config.Rarities[Config.Pets[b].Rarity].Order
+		if ra ~= rb then
+			return ra < rb
+		end
+		return Config.Pets[a].Name < Config.Pets[b].Name
+	end)
+	return list
+end
+
+function Config.CollectionHas(index: { [string]: number }?, petId: string, tier: number): boolean
+	local bits = index and tonumber(index[petId]) or 0
+	return bit32.band(bits, bit32.lshift(1, tier - 1)) ~= 0
+end
+
+function Config.CollectionSetDone(index: { [string]: number }?, tier: number): boolean
+	for _, id in Config.CollectionSpecies(false) do
+		if not Config.CollectionHas(index, id, tier) then
+			return false
+		end
+	end
+	return true
+end
+
+-- The coin bonus the collection adds (on top of the equipped pets).
+function Config.CollectionBonus(index: { [string]: number }?): number
+	local total = 0
+	for id in Config.Pets do
+		if index and (tonumber(index[id]) or 0) > 0 then
+			total += Config.Collection.PerSpecies
+		end
+	end
+	for _, set in Config.Collection.Sets do
+		if Config.CollectionSetDone(index, set.Tier) then
+			total += set.Bonus
 		end
 	end
 	return total
@@ -756,6 +823,13 @@ end
 -- Daily rewards: claimed from the 🎁 Daily button. The next one unlocks 24 hours after you claim
 -- (Cooldown). Claim it within Grace after that and the streak moves on; later and it starts again
 -- at day 1, unless you buy "Restore Streak" (Config.DevProducts). Day 7 is the big one, then it loops.
+-- The lobby obby (LobbyBuilder): Gems for reaching the top (more while the Admin Abuse show runs it).
+Config.Obby = {
+	Gems = 15,
+	ShowGems = 150,
+	Cooldown = 600, -- seconds between normal prizes
+}
+
 Config.Daily = {
 	Cooldown = 24 * 60 * 60,
 	Grace = 24 * 60 * 60,
@@ -1054,102 +1128,24 @@ Config.UpcomingEvents = {
 Config.AbuseShow = ({
 	EventKey = "AdminAbuse",
 	PreSeconds = 1800, -- rounds can't start this long before the event
-	ShowSeconds = 900, -- how long the show (and the pause on rounds) lasts
+	ShowSeconds = 640, -- the whole show, from the first boom to the end (rounds are paused for it)
 	Warnings = { 1800, 900, 300, 60 }, -- banners this many seconds before the start
 	OwnerUserId = 2297538363,
 	OwnerName = "EnderBuilda",
-	GiantScale = 30,
-	AttackEvery = 16, -- seconds between his showy attacks (they hurt nobody)
-	HeatAttackEvery = 7, -- ...and once the heat is turned up
-	HeatAt = 400, -- seconds after the start when he "turns up the heat" (until the show ends)
-	ChatterEvery = 12, -- he says something at least this often during the show
-	RemarkEvery = 40, -- and after the show, until the event ends
+	GiantScale = 38, -- how tall he is while he warms up
+	HeatScale = 46, -- ...and once the heat is turned up
+	HeatAt = 330, -- seconds after the start when he "turns up the heat" (until the end)
 	Pet = "AdminAbuse", -- the limited pet from the final round
-	-- Lines at exact times (seconds after the start). Between them he fills the gaps with Chatter.
-	Lines = {
-		{ 6, "hmm. so you all showed up." },
-		{ 18, "ok. im feeling generous today." },
-		{ 29, "poll incoming. bubbles or gems, you decide." },
-		{ 100, "alright, the people have spoken. check your inventory." },
-		{ 118, "dont get comfortable. theres more." },
-		{ 392, "ok. thats enough warming up." },
-		{ 472, "that was the last vote. i am not done though." },
-		{ 600, "we are past the prizes. im just here to cause a scene now." },
-		{ 880, "last stretch. then i have to give you your rounds back." },
-	},
-	Chatter = {
-		"you can keep playing around, i wont stop you",
-		"does anyone actually read the poll or just click the first one",
-		"i built this game at 3am and now im standing on it",
-		"the table is smaller from up here. weird",
-		"somebody wave at me",
-		"dont mind the shaking. thats just me walking",
-		"if you find a bug, pretend you didnt. i have enough",
-		"i can see your pets from here. they are very small",
-		"top tip: wash the dishes. the dishes are the whole game",
-		"i have exactly one rule today: nobody gets bored",
-		"every server is getting this right now. thats a lot of people",
-		"hello to everyone who just joined. you picked a good time",
-		"i promise the floor is fine. ive checked. twice",
-		"if i step on you, thats a feature",
-		"tell your friends. actually dont, i only have so many prizes",
-		"somewhere there is a dev panel with my name on it. today i used it",
-		"how is the weather down there",
-		"your bubbles are looking suspiciously low. i may fix that",
-		"somebody is cleaning right now and missing all of this. respect",
-		"i am legally required to say i am not actually the size of a house",
-		"the mop is mightier than the sword. i made that up",
-		"hang around. things are about to get silly",
-	},
-	HeatChatter = {
-		"its getting hot in here",
-		"every system i own is on fire. in a good way",
-		"this is what admin abuse looks like. take notes",
-		"i am not holding back anymore",
-		"the table is shaking. thats not an earthquake, thats me",
-		"ive got more commands than sense right now",
-		"someone told me not to do this. i did it twice",
-		"max power. no brakes",
-		"watch the sky. i am not responsible for the sky",
-		"if your screen is shaking, you are in the right place",
-		"you wanted a show. you are getting a show",
-		"nothing is balanced anymore and i love it",
-		"i have the keys and no supervision",
-		"the dishes can wait. this cant",
-		"somebody screenshot this, i want proof later",
-		"i can feel the server sweating",
-		"my admin rank has never been used this well",
-		"bigger. louder. why not",
-		"keep your eyes on the table. i am aiming at it. mostly",
-		"i could do this all day. i probably will",
-		"is the floor still there? good. not for long",
-		"still going. still huge. still not sorry",
-	},
-	Remarks = {
-		"still here. still huge.",
-		"someone get me a snack, im the size of a house",
-		"hmm. nothing to see here. keep cleaning",
-		"thanks for hanging out, you lot",
-		"careful where you stand. i cant see you down there",
-		"i will be walking around for a while. dont mind me",
-		"if you missed the prizes, you missed the prizes. next time",
-		"the floor is shaking because i said so",
-		"keep an eye on the table. i might aim at it again",
-		"i could get used to being this tall",
-		"every step is a boom. i didnt plan that, it just happens",
-		"somebody tell the other devs i said hi",
-		"still got a few tricks left. maybe",
-		"top of the leaderboard? i can see you from up here",
-	},
-	-- The three rounds. Everything scales with how many players are online in all servers (n):
+	-- Everything that happens, in order (see the Script at the bottom). Prizes scale with how many
+	-- players are online in every server (n):
 	--   Bubbles/Gems: PerPlayer each (the pool shown is PerPlayer * n)
 	--   Passes/Pet:   Share of the players (rounded up, at least 1) win a random game pass / the limited pet
-	-- Poll rounds are a vote; "Announce" rounds just happen. {n} is the count of winners and {pet} the pet.
+	-- Poll rounds are a vote; "Announce" rounds just happen; "Effect" polls pick what he does next.
+	-- {players} is "3 lucky players", {n} the count, {pet} the pet, {text} the winning option.
 	Rounds = {
-		{
-			At = 40,
+		Gifts = {
 			Kind = "Poll",
-			Seconds = 45,
+			Seconds = 30,
 			Question = "What should I give out?",
 			Options = {
 				{ Kind = "Bubbles", PerPlayer = 400 },
@@ -1157,20 +1153,28 @@ Config.AbuseShow = ({
 			},
 			Chosen = "chat has spoken: {text}. coming right up.",
 		},
-		{
-			At = 235,
+		Passes = {
 			Kind = "Announce",
 			Option = { Kind = "Passes", Share = 0.1 },
 			Intro = "this one isnt a vote. a random game pass is going to {players}. no, you cant pick.",
-			Done = "done. check your screens, winners.",
+			Done = "done. if you won, check your screen. if you didnt, i feel nothing.",
 		},
-		{
-			At = 410,
+		Break = {
 			Kind = "Poll",
-			Heat = true,
-			Seconds = 45,
+			Seconds = 25,
+			Question = "What should I break next?",
+			Options = {
+				{ Kind = "Effect", Effect = "meteors", Text = "Meteor storm" },
+				{ Kind = "Effect", Effect = "fireworks", Text = "Fireworks finale" },
+				{ Kind = "Effect", Effect = "blackhole", Text = "Black hole" },
+				{ Kind = "Effect", Effect = "tornado", Text = "Tornado" },
+			},
+			Chosen = "{text} it is. hold on to something.",
+		},
+		Final = {
+			Kind = "Poll",
+			Seconds = 30,
 			Question = "FINAL ROUND! Pick the prize!",
-			Intro = "final round. turning up the heat. the winner of this vote is the prize.",
 			Options = {
 				{ Kind = "Pet", Share = 0.1 },
 				{ Kind = "Passes", Share = 0.2 },
@@ -1180,7 +1184,129 @@ Config.AbuseShow = ({
 			Chosen = "{text}. lets go.",
 		},
 	},
-} :: any)
+	-- Where the table craters open (x, z on the plaza) and how far people are kept back.
+	Craters = { { -52, 14 }, { 54, -12 } },
+	CraterRadius = 36,
+	ObbyGems = 150,
+}) :: any
+
+-- The show, in order. { seconds after the start, kind, a, b }. Nothing here is random: it runs top to bottom.
+--   say      a = the line (chat + speech box)
+--   attack   a = effect name (beam, meteors, lightning, shockwave, barrage, fireworks, laser, blackhole, tornado, ufo, disco, fountains)
+--   round    a = a key of Rounds
+--   crater   a = which Craters entry opens
+--   obby     a = true / false: the lobby obby opens / closes
+--   heat     the heat goes up (bigger, redder, faster)
+--   leave    the ending: he cuts a hole in the roof and flies out; the show is over a few seconds later
+do
+	local S = {}
+	local function at(t: number, kind: string, a: any?, b: any?)
+		table.insert(S, { t, kind, a, b })
+	end
+	-- Warm up
+	at(6, "say", "hmm. so you all showed up.")
+	at(14, "say", "ok. quick warm up before the real stuff.")
+	at(16, "attack", "shockwave")
+	at(22, "say", "first thing: you decide what i hand out.")
+	at(26, "round", "Gifts")
+	at(31, "attack", "fireworks")
+	at(38, "say", "bubbles or gems. dont overthink it.")
+	at(46, "attack", "meteors")
+	at(52, "say", "the vote closes in a few seconds.")
+	at(58, "attack", "lightning")
+	at(74, "say", "prizes are landing in your inventory right now.")
+	at(78, "attack", "barrage")
+	at(86, "say", "that was the easy part.")
+	at(90, "attack", "laser")
+	at(98, "say", "this next one isnt a vote.")
+	at(101, "round", "Passes")
+	at(106, "attack", "ufo")
+	at(118, "say", "if you didnt get one, dont worry. there is more.")
+	at(122, "attack", "tornado")
+	at(132, "say", "you can feel that, right? thats the floor. it is not happy.")
+	at(136, "attack", "fireworks")
+	at(144, "say", "next vote. you choose how i break things.")
+	at(147, "round", "Break")
+	at(152, "attack", "lightning")
+	at(164, "say", "i have strong feelings about the black hole. just saying.")
+	at(172, "attack", "shockwave")
+	at(190, "say", "good choice. i like where your heads are at.")
+	at(196, "say", "now hold still. im putting a hole in the table.")
+	at(199, "crater", 1)
+	at(206, "say", "that hole is not decorative. dont go near it.")
+	at(210, "attack", "beam")
+	at(216, "say", "ok. the obby is open. end of the table, behind the spawn.")
+	at(217, "obby", true)
+	at(222, "attack", "disco")
+	at(232, "say", "first one to the top gets a game pass. everyone who finishes gets gems.")
+	at(238, "attack", "meteors")
+	at(248, "say", "i built it to be fair. mostly.")
+	at(252, "attack", "tornado")
+	at(262, "say", "the spinners are my favourite part.")
+	at(266, "attack", "fountains")
+	at(276, "say", "fall off and its back to your last checkpoint. no mercy. ok, a little mercy.")
+	at(280, "attack", "ufo")
+	at(290, "say", "keep going. i can see you from up here. you are tiny. be proud.")
+	at(294, "attack", "fireworks")
+	at(304, "say", "the obby stays open for a while. no rush.")
+	at(308, "attack", "lightning")
+	at(318, "say", "right. im done warming up.")
+	at(322, "attack", "shockwave")
+	-- Turn up the heat
+	at(328, "say", "final round. you pick the prize. and im turning up the heat.")
+	at(330, "heat")
+	at(333, "round", "Final")
+	at(336, "attack", "meteors")
+	at(344, "say", "four options. one of them is a limited pet. just saying.")
+	at(350, "attack", "lightning")
+	at(358, "attack", "fireworks")
+	at(352, "say", "ten seconds left on the vote.")
+	at(366, "attack", "blackhole")
+	at(378, "attack", "laser")
+	at(384, "say", "winners incoming. check your screen.")
+	at(388, "attack", "tornado")
+	at(394, "say", "second hole. why not.")
+	at(396, "crater", 2)
+	at(404, "attack", "meteors")
+	at(410, "attack", "ufo")
+	at(416, "say", "nothing is balanced anymore and i love it.")
+	at(420, "attack", "lightning")
+	at(426, "attack", "fountains")
+	at(432, "attack", "barrage")
+	at(438, "say", "if you are still in the obby, keep going.")
+	at(442, "attack", "blackhole")
+	at(450, "attack", "disco")
+	at(456, "attack", "fireworks")
+	at(462, "say", "i have the keys and no supervision.")
+	at(466, "attack", "laser")
+	at(474, "attack", "meteors")
+	at(480, "attack", "tornado")
+	at(486, "say", "somebody screenshot this. i want proof later.")
+	at(490, "attack", "lightning")
+	at(496, "attack", "ufo")
+	at(502, "attack", "blackhole")
+	at(508, "say", "the obby closes soon. last chance.")
+	at(512, "attack", "fireworks")
+	at(518, "attack", "barrage")
+	at(524, "attack", "meteors")
+	at(530, "attack", "laser")
+	at(536, "obby", false)
+	at(536, "say", "obby is closed. thanks for the climb.")
+	at(540, "attack", "tornado")
+	at(546, "attack", "lightning")
+	at(552, "say", "ok. one last big one. all of it. everything.")
+	at(556, "attack", "blackhole")
+	at(560, "attack", "meteors")
+	at(564, "attack", "fireworks")
+	at(568, "attack", "lightning")
+	at(572, "attack", "shockwave")
+	at(578, "attack", "barrage")
+	at(584, "attack", "laser")
+	at(592, "say", "alright. thats enough. i think we are done.")
+	at(598, "say", "time for me to go. watch the ceiling.")
+	at(602, "leave")
+	Config.AbuseShow.Script = S
+end
 
 -- What a prize option looks like with n players online: its button text and, for Passes / Pet, how many win.
 function Config.AbuseOption(option: any, n: number): any
@@ -1195,8 +1321,10 @@ function Config.AbuseOption(option: any, n: number): any
 		end
 		return s
 	end
-	local out = { Kind = option.Kind, PerPlayer = option.PerPlayer or 0, Count = 0, Text = "" }
-	if option.Kind == "Bubbles" or option.Kind == "Gems" then
+	local out = { Kind = option.Kind, PerPlayer = option.PerPlayer or 0, Count = 0, Text = "", Effect = option.Effect }
+	if option.Kind == "Effect" then
+		out.Text = option.Text
+	elseif option.Kind == "Bubbles" or option.Kind == "Gems" then
 		out.Text = string.format("Share %s %s", commas(out.PerPlayer * n), option.Kind)
 	elseif option.Kind == "Passes" then
 		out.Count = math.clamp(math.ceil(n * (option.Share or 0.1)), 1, 25)

@@ -129,6 +129,8 @@ export type MetaState = {
 	BoostUntil: number?, -- os.time() until which cleaning is x2 (the stay boost)
 	StayBoostReady: boolean?, -- today's free stay boost can still be claimed
 	PetsResting: boolean?, -- pets switched off: they follow you but don't clean
+	PetIndex: { [string]: number }?, -- every pet species/tier ever owned (bits 1/2/4)
+	PetIndexPaid: { [string]: boolean }?, -- tier sets whose Gems were paid
 	Referrals: number?, -- friends who joined through your invites (paid out)
 	AdLuckStacks: number?, -- rewarded ads stacked for rank luck (0..MaxAds), while AdLuckUntil lasts
 	AdLuckUntil: number?,

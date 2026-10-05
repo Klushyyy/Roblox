@@ -283,7 +283,7 @@ UIKit.LayoutChanged = Util.Signal.new()
 -- their size; scaled text still fits because it shrinks to its box). Every label made through
 -- UIKit.Label / UIKit.Button registers here with its design size.
 local GAMEPAD_TEXT_BOOST = 1.2
-type TextEntry = { Base: number, Limit: UITextSizeConstraint? }
+type TextEntry = { Base: number, Limit: UITextSizeConstraint?, Scale: number? }
 local textEntries: { [TextLabel]: TextEntry } = setmetatable({}, { __mode = "k" }) :: any
 local textBoost = 1
 
@@ -292,14 +292,16 @@ local textBoost = 1
 -- up to PHONE_MAX_BOOST times its design size (scaled text still shrinks to its box).
 local PHONE_MIN_PX = 10
 local PHONE_MAX_BOOST = 1.45
+local TITLE_FONT_SCALE = 0.84
 local phoneScale = 0 -- the screen scale while on a phone, 0 everywhere else
 
 local function applyTextBoost(label: TextLabel, entry: TextEntry)
+	local base = entry.Base * (entry.Scale or 1)
 	local factor = textBoost
 	if phoneScale > 0 then
-		factor = math.max(factor, math.clamp(PHONE_MIN_PX / (entry.Base * phoneScale), 1, PHONE_MAX_BOOST))
+		factor = math.max(factor, math.clamp(PHONE_MIN_PX / (base * phoneScale), 1, PHONE_MAX_BOOST))
 	end
-	local size = math.clamp(math.floor(entry.Base * factor + 0.5), 1, 100)
+	local size = math.clamp(math.floor(base * factor + 0.5), 1, 100)
 	label.TextSize = size
 	if entry.Limit then
 		entry.Limit.MaxTextSize = size
@@ -307,9 +309,11 @@ local function applyTextBoost(label: TextLabel, entry: TextEntry)
 end
 
 local function registerText(label: TextLabel, base: number, limit: UITextSizeConstraint?)
-	local entry = { Base = base, Limit = limit }
+	-- Luckiest Guy is wider and taller than the size number suggests: a size that fits other fonts
+	-- clips or overlaps with it, so its text is drawn at TITLE_FONT_SCALE of the size asked for.
+	local entry = { Base = base, Limit = limit, Scale = if label.Font == Fonts.Title then TITLE_FONT_SCALE else 1 }
 	textEntries[label] = entry
-	if textBoost ~= 1 or phoneScale > 0 then
+	if textBoost ~= 1 or phoneScale > 0 or entry.Scale ~= 1 then
 		applyTextBoost(label, entry)
 	end
 end
@@ -1148,7 +1152,7 @@ function UIKit.IconButton(props: { [string]: any }?): TextButton
 	local height = if size.Y.Scale == 0 and size.Y.Offset > 0 then size.Y.Offset else 84
 	local lip = if height >= 70 then 5 else 4
 	local radius = UDim.new(0, math.min(UIKit.Theme.CornerLarge, math.floor(height / 2)))
-	local captionSize = math.max(16, math.floor(height * 0.22))
+	local captionSize = math.max(14, math.floor(height * 0.2))
 
 	local button = Instance.new("TextButton")
 	button.Name = "IconButton"
@@ -1206,7 +1210,7 @@ function UIKit.IconButton(props: { [string]: any }?): TextButton
 		caption.Visible = hasCaption
 		local value = tostring(button:GetAttribute("Icon") or "")
 		local kind = string.match(value, "^@(%a+)$")
-		local artSize = 2 * math.floor(height * (if hasCaption then 0.33 else 0.38)) -- even: stays centred
+		local artSize = 2 * math.floor(height * (if hasCaption then 0.3 else 0.36)) -- even: stays centred
 		local key = if kind then kind .. artSize .. tostring(hasCaption) else ""
 		if key ~= artKey then
 			artKey = key
@@ -1218,14 +1222,14 @@ function UIKit.IconButton(props: { [string]: any }?): TextButton
 				local drawn = IconArt.Draw(kind, artSize)
 				drawn.Name = "Art"
 				drawn.AnchorPoint = Vector2.new(0.5, 0.5)
-				drawn.Position = UDim2.fromScale(0.5, if hasCaption then 0.4 else 0.5)
+				drawn.Position = UDim2.fromScale(0.5, if hasCaption then 0.36 else 0.5)
 				IconArt.SetZIndex(drawn, 2)
 				drawn.Parent = parts.Face
 				art = drawn
 			end
 		end
 		icon.Text = if kind then "" else value
-		icon.Position = UDim2.fromScale(0.5, if hasCaption then 0.4 else 0.5)
+		icon.Position = UDim2.fromScale(0.5, if hasCaption then 0.36 else 0.5)
 		icon.Size = UDim2.fromScale(1, if hasCaption then 0.62 else 0.9)
 		icon.TextSize = math.floor(height * (if hasCaption then 0.42 else 0.52))
 	end

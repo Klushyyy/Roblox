@@ -88,6 +88,9 @@ local initialized = false
 local root: Frame
 
 local petsContent: Frame
+local indexPanel: Frame
+local indexButton: TextButton
+local refreshIndex: () -> ()
 local eggsContent: Frame
 
 -- Pets window
@@ -663,9 +666,177 @@ function PetsUI._refreshGrid()
 	end
 	mergeEmpty.Visible = mergeMode and shown == 0
 	local equippedCount = math.min(#meta.Equipped, meta.PetSlots)
-	equippedLabel.Text = string.format("Equipped %d/%d   Coins %s", equippedCount, meta.PetSlots, coinText(1 + Config.PetCoinBonus(meta.Pets, meta.Equipped)))
+	equippedLabel.Text = string.format("Equipped %d/%d   Coins %s", equippedCount, meta.PetSlots, coinText(1 + Config.PetCoinBonus(meta.Pets, meta.Equipped, meta.PetIndex)))
 	countLabel.Text = string.format("%d/%d", #meta.Pets, meta.MaxPets)
 	refreshDetailPanel(meta)
+	if indexPanel and indexPanel.Visible then
+		refreshIndex()
+	end
+end
+
+
+-- The collection (index): every pet species and tier you have ever owned, set progress and the bonuses.
+local TIER_DOT = { Color3.fromRGB(190, 215, 240), Color3.fromRGB(255, 205, 60), Color3.fromRGB(255, 120, 220) }
+local function buildIndexPanel(parent: Frame)
+	indexPanel = Instance.new("Frame")
+	indexPanel.Name = "IndexPanel"
+	indexPanel.BackgroundColor3 = C.PanelDark
+	indexPanel.BackgroundTransparency = 0.1
+	indexPanel.Position = UDim2.new(0, 0, 0, 48)
+	indexPanel.Size = UDim2.new(1, 0, 1, -48)
+	indexPanel.Visible = false
+	indexPanel.ZIndex = 20
+	UIKit.Corner(indexPanel, 12)
+	indexPanel.Parent = parent
+
+	local sets = Instance.new("Frame")
+	sets.Name = "Sets"
+	sets.BackgroundTransparency = 1
+	sets.Size = UDim2.new(1, -16, 0, 74)
+	sets.Position = UDim2.fromOffset(8, 6)
+	sets.ZIndex = 21
+	sets.Parent = indexPanel
+	local setsLayout = Instance.new("UIListLayout")
+	setsLayout.FillDirection = Enum.FillDirection.Horizontal
+	setsLayout.Padding = UDim.new(0, 8)
+	setsLayout.Parent = sets
+
+	local scroll = Instance.new("ScrollingFrame")
+	scroll.Name = "Species"
+	scroll.BackgroundTransparency = 1
+	scroll.BorderSizePixel = 0
+	scroll.Position = UDim2.fromOffset(8, 88)
+	scroll.Size = UDim2.new(1, -16, 1, -96)
+	scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	scroll.ScrollBarThickness = 8
+	scroll.ScrollBarImageColor3 = C.Primary
+	scroll.ZIndex = 21
+	scroll.Parent = indexPanel
+	local grid = Instance.new("UIGridLayout")
+	grid.CellSize = UDim2.fromOffset(122, 128)
+	grid.CellPadding = UDim2.fromOffset(8, 8)
+	grid.SortOrder = Enum.SortOrder.LayoutOrder
+	grid.Parent = scroll
+
+	refreshIndex = function()
+		local meta = ClientState.Meta
+		local index = meta and meta.PetIndex or {}
+		for _, child in sets:GetChildren() do
+			if child:IsA("Frame") then
+				child:Destroy()
+			end
+		end
+		for _, child in scroll:GetChildren() do
+			if child:IsA("Frame") then
+				child:Destroy()
+			end
+		end
+		local species = Config.CollectionSpecies(false)
+		local limited = {}
+		for _, id in Config.CollectionSpecies(true) do
+			if Config.Pets[id].Event then
+				table.insert(limited, id)
+			end
+		end
+		local found = 0
+		for _, id in Config.CollectionSpecies(true) do
+			if (tonumber(index[id]) or 0) > 0 then
+				found += 1
+			end
+		end
+		-- Set cards.
+		for _, set in Config.Collection.Sets do
+			local have = 0
+			for _, id in species do
+				if Config.CollectionHas(index, id, set.Tier) then
+					have += 1
+				end
+			end
+			local done = have >= #species
+			local card = UIKit.Card({ Size = UDim2.new(1 / 3, -6, 1, 0), Color = C.PanelLight, StrokeColor = TIER_DOT[set.Tier], Parent = sets })
+			card.ZIndex = 22
+			UIKit.Label({ Text = string.format("%s set  %d/%d", set.Name, have, #species), TextSize = 18, TextScaled = true, TextColor3 = TIER_DOT[set.Tier], Size = UDim2.new(1, -12, 0, 22), Position = UDim2.fromOffset(6, 4), ZIndex = 23, Parent = card })
+			local barBack = Instance.new("Frame")
+			barBack.BackgroundColor3 = C.PanelDark
+			barBack.Size = UDim2.new(1, -16, 0, 10)
+			barBack.Position = UDim2.fromOffset(8, 30)
+			barBack.ZIndex = 23
+			UIKit.Corner(barBack, 5)
+			barBack.Parent = card
+			local fill = Instance.new("Frame")
+			fill.BackgroundColor3 = if done then C.Good else TIER_DOT[set.Tier]
+			fill.Size = UDim2.fromScale(math.clamp(have / math.max(1, #species), 0, 1), 1)
+			fill.ZIndex = 24
+			UIKit.Corner(fill, 5)
+			fill.Parent = barBack
+			UIKit.Label({
+				Text = if done then string.format("Done! +%d%% coins", math.floor(set.Bonus * 100 + 0.5)) else string.format("Reward: +%d%% coins, %d Gems", math.floor(set.Bonus * 100 + 0.5), set.Gems),
+				TextSize = 14,
+				TextScaled = true,
+				TextColor3 = if done then C.Good else C.TextDim,
+				Size = UDim2.new(1, -12, 0, 22),
+				Position = UDim2.fromOffset(6, 46),
+				ZIndex = 23,
+				Parent = card,
+			})
+		end
+		-- Species cards.
+		local order = 0
+		local function speciesCard(id: string)
+			order += 1
+			local def = Config.Pets[id]
+			local bits = tonumber(index[id]) or 0
+			local card = UIKit.Card({ LayoutOrder = order, Color = C.PanelLight, StrokeColor = if bits > 0 then UIKit.RarityColor(def.Rarity) else C.Disabled, Parent = scroll })
+			card.ZIndex = 22
+			if bits > 0 then
+				local best = if bit32.band(bits, 4) ~= 0 then 3 elseif bit32.band(bits, 2) ~= 0 then 2 else 1
+				local viewport = UIKit.Viewport({
+					Model = PetModels.Build(id, best),
+					Size = UDim2.fromOffset(100, 66),
+					Position = UDim2.new(0.5, 0, 0, 4),
+					AnchorPoint = Vector2.new(0.5, 0),
+					Parent = card,
+				})
+				viewport.ZIndex = 22
+			else
+				UIKit.Label({ Text = "?", TextSize = 44, TextColor3 = C.Disabled, Size = UDim2.new(1, 0, 0, 66), Position = UDim2.fromOffset(0, 4), ZIndex = 23, Parent = card })
+			end
+			UIKit.Label({
+				Text = if bits > 0 then def.Name else "???",
+				TextSize = 15,
+				TextScaled = true,
+				TextColor3 = if bits > 0 then UIKit.RarityColor(def.Rarity) else C.Disabled,
+				Size = UDim2.new(1, -8, 0, 20),
+				Position = UDim2.fromOffset(4, 72),
+				ZIndex = 23,
+				Parent = card,
+			})
+			for t = 1, 3 do
+				local dot = Instance.new("Frame")
+				dot.Size = UDim2.fromOffset(18, 18)
+				dot.Position = UDim2.new(0.5, (t - 2) * 26, 1, -10)
+				dot.AnchorPoint = Vector2.new(0.5, 1)
+				dot.BackgroundColor3 = if Config.CollectionHas(index, id, t) then TIER_DOT[t] else C.PanelDark
+				dot.ZIndex = 23
+				UIKit.Corner(dot, 9)
+				UIKit.Stroke(dot, C.Ink, 2)
+				dot.Parent = card
+			end
+		end
+		for _, id in species do
+			speciesCard(id)
+		end
+		for _, id in limited do
+			speciesCard(id)
+		end
+		indexButton.Text = "Back"
+		local label = indexPanel:FindFirstChild("Found")
+		if not label then
+			label = UIKit.Label({ Name = "Found", Text = "", TextSize = 14, TextColor3 = C.TextDim, AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -14, 1, -2), Size = UDim2.fromOffset(360, 18), TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 25, Parent = indexPanel })
+		end
+		(label :: TextLabel).Text = string.format("%d found  -  each pet found: +%.1f%% coins  -  dots: normal / Golden / Rainbow", found, Config.Collection.PerSpecies * 100)
+	end
 end
 
 local function buildPetsWindow()
@@ -686,24 +857,24 @@ local function buildPetsWindow()
 
 	equippedLabel = UIKit.Label({
 		Text = "Equipped 0/0",
-		Size = UDim2.new(0.45, 0, 1, 0),
+		Size = UDim2.new(0.34, 0, 1, 0),
 		TextSize = 22,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = header,
 	})
 	countLabel = UIKit.Label({
 		Text = "0/0",
-		Size = UDim2.new(0.12, 0, 1, 0),
-		Position = UDim2.new(0.45, 0, 0, 0),
+		Size = UDim2.new(0.1, 0, 1, 0),
+		Position = UDim2.new(0.34, 0, 0, 0),
 		TextSize = 22,
 		TextColor3 = C.TextDim,
 		Parent = header,
 	})
 	mergeButton = UIKit.Button({
 		Text = "Merge",
-		Size = UDim2.fromOffset(140, 40),
+		Size = UDim2.fromOffset(108, 40),
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -190, 0, 0),
+		Position = UDim2.new(1, -150, 0, 0),
 		Color = Color3.fromRGB(170, 110, 255),
 		Parent = header,
 		OnClick = function()
@@ -712,7 +883,7 @@ local function buildPetsWindow()
 	})
 	UIKit.Button({
 		Text = "Equip Best",
-		Size = UDim2.fromOffset(180, 40),
+		Size = UDim2.fromOffset(140, 40),
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, 0, 0, 0),
 		Color = C.Accent,
@@ -727,12 +898,29 @@ local function buildPetsWindow()
 		end,
 	})
 
+	indexButton = UIKit.Button({
+		Text = "Collection",
+		Size = UDim2.fromOffset(136, 40),
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -266, 0, 0),
+		Color = C.Warning,
+		Parent = header,
+		OnClick = function()
+			indexPanel.Visible = not indexPanel.Visible
+			indexButton.Text = if indexPanel.Visible then "Back" else "Collection"
+			if indexPanel.Visible then
+				refreshIndex()
+			end
+		end,
+	})
+
 	local body = Instance.new("Frame")
 	body.Name = "Body"
 	body.BackgroundTransparency = 1
 	body.Position = UDim2.new(0, 0, 0, 48)
 	body.Size = UDim2.new(1, 0, 1, -48)
 	body.Parent = petsContent
+	buildIndexPanel(petsContent)
 
 	gridScroll = Instance.new("ScrollingFrame")
 	gridScroll.Name = "Grid"

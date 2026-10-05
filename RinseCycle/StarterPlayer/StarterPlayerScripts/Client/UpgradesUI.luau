@@ -65,7 +65,7 @@ local function previewStats(run: Types.RunState, upgradeId: string): Types.RunSt
 	local meta = ClientState.Meta
 	local perks = (meta and meta.Perks) or {}
 	local passes = (meta and meta.Passes) or {}
-	local petBonus = if meta then Config.PetCoinBonus(meta.Pets, meta.Equipped) else 0
+	local petBonus = if meta then Config.PetCoinBonus(meta.Pets, meta.Equipped, meta.PetIndex) else 0
 	local nextUpgrades = table.clone(run.Upgrades)
 	;(nextUpgrades :: any)[upgradeId] = ((run.Upgrades :: any)[upgradeId] or 0) + 1
 	return Config.GetRunStats(run.Level, nextUpgrades, run.ToolIndex, perks, passes, petBonus, meta and meta.Rank or nil, meta and meta.Rebirths or 0)
