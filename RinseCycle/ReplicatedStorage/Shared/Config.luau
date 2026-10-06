@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.22"
+Config.Version = "2.12.23"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1136,16 +1136,16 @@ Config.UpcomingEvents = {
 Config.AbuseShow = ({
 	EventKey = "AdminAbuse",
 	PreSeconds = 1800, -- rounds can't start this long before the event
-	ShowSeconds = 630, -- the whole show, from the first boom to the end (rounds are paused for it)
+	ShowSeconds = 555, -- the whole show, from the first boom to the end (rounds are paused for it)
 	Warnings = { 1800, 900, 300, 60 }, -- banners this many seconds before the start
 	OwnerUserId = 2297538363,
 	OwnerName = "Klushy",
 	GiantScale = 38, -- how tall he is while he warms up
 	HeatScale = 42, -- ...and once the heat is turned up
 	ChasePet = "GlitchFox", -- the limited pets that run about the table for a minute
-	NukeAt = 566, -- when the nuke goes off (seconds into the show), just before he leaves
+	NukeAt = 498, -- when the nuke goes off (seconds into the show), just before he leaves
 	ThanksGems = 100, -- everyone gets this at the end, for staying
-	HeatAt = 330, -- seconds after the start when he "turns up the heat" (until the end)
+	HeatAt = 290, -- seconds after the start when he "turns up the heat" (until the end)
 	Pet = "AdminAbuse", -- the limited pet from the final round
 	-- Everything that happens, in order (see the Script at the bottom). Prizes scale with how many
 	-- players are online in every server (n):
@@ -1219,8 +1219,9 @@ Config.AbuseShow = ({
 --   leave    the ending: he cuts a hole in the roof and flies out
 do
 	local S = {}
+	local PACE = 0.88 -- the times below were written for a slower show; everything is run this much quicker
 	local function at(t: number, kind: string, a: any?, b: any?)
-		table.insert(S, { t, kind, a, b })
+		table.insert(S, { t * PACE, kind, a, b })
 	end
 	-- Warm up
 	at(6, "say", "hmm. so you all showed up.")

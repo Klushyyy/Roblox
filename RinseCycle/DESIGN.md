@@ -1797,3 +1797,10 @@ While he charges the dishwasher ball both arms go straight out in front, turned 
 - Poll/vote text: the Break round asks "What should I do next?"; the line before the game-pass round no longer says "isnt a vote" (the round's own intro does, once).
 - Power-ups: the fly chip reads "Flying: ON/OFF" (tap or F); a new Giant chip (`AbusePerk` S->C, `AbusePerkToggle` C->S) turns the giant power-up off and on during the event.
 - Owner name is "Klushy" (show OwnerName, admin username fallback). A Roblox private (VIP) server is now locked to its owner like :privatelobby (everyone else is kicked).
+
+### 6zzl. Obby winner per server, quicker show, no invisible leftovers (v2.12.23)
+- The "finished the obby first" prize and announcement are decided per server (`obbyFirstFor`), no longer claimed globally, and the line is said only in that server.
+- Show runs 12% quicker: `at()` multiplies every Script time by `PACE = 0.88`; `NukeAt` 498, `HeatAt` 290, `ShowSeconds` 555.
+- Max-heat screen shake multiplier 1.7 -> 1.5.
+- Tiles that are mid-fall (tween) carry a `Falling` attribute and are never cut again by a later crater (they used to be re-cut into invisible, solid bits that stayed on the table).
+- `BreakObby` sends anyone still past the south wall back to the spawn before the wall closes (nobody is walled out on the table edge).

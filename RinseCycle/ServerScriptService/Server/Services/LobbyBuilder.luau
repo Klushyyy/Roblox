@@ -2194,6 +2194,13 @@ function LobbyBuilder.BreakObby()
 	table.clear(obbySpawnAt)
 	local wall = southWall
 	if wall then
+		-- anyone still out past the wall (on the table's edge or on the obby) is put back first, never walled out
+		for _, player in Players:GetPlayers() do
+			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if root and root.Position.Z > wall.Position.Z - wall.Size.Z / 2 - 1 then
+				sendToLobbySpawn(player)
+			end
+		end
 		wall.CanCollide = true
 	end
 	for _, d in model:GetDescendants() do
@@ -2324,7 +2331,7 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 	for _, f in Workspace:GetChildren() do
 		if f:IsA("Folder") and pieceFolderRoof[f] == roof then
 			for _, p in f:GetChildren() do
-				if p:IsA("BasePart") and p.Name == "HolePiece" and p.Anchored then
+				if p:IsA("BasePart") and p.Name == "HolePiece" and p.Anchored and not p:GetAttribute("Falling") then
 					local c, e = worldBox(p)
 					if c.X + e.X > cx - S and c.X - e.X < cx + S and c.Z + e.Z > cz - S and c.Z - e.Z < cz + S then
 						table.insert(sources, p)
@@ -2377,6 +2384,7 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 						table.insert(rec.Tiles, { Part = tile, Flat = flat, D = d, Fall = true, Transparency = tile.Transparency })
 						if light then
 							tile.CanCollide = false
+							tile:SetAttribute("Falling", true) -- (a later crater must not cut it up again: the bits would hang there, solid and invisible)
 							local drop = if roof then rng:NextNumber(40, 90) else rng:NextNumber(30, 60)
 							local goal = flat * CFrame.Angles(rng:NextNumber(-1.2, 1.2), rng:NextNumber(-1.2, 1.2), rng:NextNumber(-1.2, 1.2)) - Vector3.new(0, drop, 0)
 							task.delay(rng:NextNumber(0, 0.5) + (d / R) * 0.25, function()

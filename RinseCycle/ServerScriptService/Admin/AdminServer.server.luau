@@ -7887,7 +7887,8 @@ do
 		LobbyBuilder.RestoreProps()
 		clearFx()
 	end
-	-- The first player to finish the obby (in any server) wins a game pass, announced to everyone.
+	-- The first player to finish the obby in each server wins a game pass, announced to that server.
+	local obbyFirstFor: number? = nil
 	ReplicatedStorage:GetAttributeChangedSignal("AbuseObbyFinish"):Connect(function()
 		local info = tostring(ReplicatedStorage:GetAttribute("AbuseObbyFinish") or "")
 		local name = string.match(info, "^(.-):")
@@ -7900,10 +7901,11 @@ do
 			-- wins a game pass, announced once in the speech box (no banner on top of everything).
 			local plr = Players:FindFirstChild(name)
 			local gems = Config.Obby.ShowGems
-			local first = claim("obbyfirst:" .. tostring(e.Starts))
+			local first = obbyFirstFor ~= e.Starts -- the first finisher IN THIS SERVER (each server has its own winner)
+			obbyFirstFor = e.Starts
 			if not (plr and plr:IsA("Player")) then
 				if first then
-					publish({ Kind = "AbuseSay", Text = name .. " finished the obby first and wins a game pass. well done." })
+					say(name .. " finished the obby first and wins a game pass. well done.")
 				end
 				return
 			end
@@ -7923,7 +7925,7 @@ do
 					DataService.AddGems(plr, 100)
 					celebrate(plr, "First to finish!", string.format("You finished first! %d Gems, plus 100 more because you own every pass.", gems), "@Gem")
 				end
-				publish({ Kind = "AbuseSay", Text = name .. " finished the obby first and wins a game pass. well done." })
+				say(name .. " finished the obby first and wins a game pass. well done.")
 			else
 				celebrate(plr, "You beat the obby!", string.format("You got %d Gems!", gems), "@Gem")
 			end

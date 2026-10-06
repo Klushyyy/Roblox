@@ -1040,7 +1040,7 @@ do
 				local camera = workspace.CurrentCamera
 				local distance = if camera and typeof(pos) == "Vector3" then (camera.CFrame.Position - pos).Magnitude else 300
 				local near = math.clamp(1.15 - distance / 1100, 0.2, 1)
-				local heatMult = if ReplicatedStorage:GetAttribute("AbuseHeat") then 1.7 else 1
+				local heatMult = if ReplicatedStorage:GetAttribute("AbuseHeat") then 1.5 else 1
 				shakeAmp = math.max(shakeAmp, strength * 1.1 * near * heatMult)
 				if heatMult > 1 and strength >= 1.5 then
 					heatPulse()

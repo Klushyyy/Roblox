@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.22"
+Config.Version = "2.12.23"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1140,16 +1140,16 @@ Config.UpcomingEvents = {
 Config.AbuseShow = ({
 	EventKey = "AdminAbuse",
 	PreSeconds = 1800, -- rounds can't start this long before the event
-	ShowSeconds = 630, -- the whole show, from the first boom to the end (rounds are paused for it)
+	ShowSeconds = 555, -- the whole show, from the first boom to the end (rounds are paused for it)
 	Warnings = { 1800, 900, 300, 60 }, -- banners this many seconds before the start
 	OwnerUserId = 2297538363,
 	OwnerName = "Klushy",
 	GiantScale = 38, -- how tall he is while he warms up
 	HeatScale = 42, -- ...and once the heat is turned up
 	ChasePet = "GlitchFox", -- the limited pets that run about the table for a minute
-	NukeAt = 566, -- when the nuke goes off (seconds into the show), just before he leaves
+	NukeAt = 498, -- when the nuke goes off (seconds into the show), just before he leaves
 	ThanksGems = 100, -- everyone gets this at the end, for staying
-	HeatAt = 330, -- seconds after the start when he "turns up the heat" (until the end)
+	HeatAt = 290, -- seconds after the start when he "turns up the heat" (until the end)
 	Pet = "AdminAbuse", -- the limited pet from the final round
 	-- Everything that happens, in order (see the Script at the bottom). Prizes scale with how many
 	-- players are online in every server (n):
@@ -1223,8 +1223,9 @@ Config.AbuseShow = ({
 --   leave    the ending: he cuts a hole in the roof and flies out
 do
 	local S = {}
+	local PACE = 0.88 -- the times below were written for a slower show; everything is run this much quicker
 	local function at(t: number, kind: string, a: any?, b: any?)
-		table.insert(S, { t, kind, a, b })
+		table.insert(S, { t * PACE, kind, a, b })
 	end
 	-- Warm up
 	at(6, "say", "hmm. so you all showed up.")
@@ -11554,7 +11555,8 @@ do
 		LobbyBuilder.RestoreProps()
 		clearFx()
 	end
-	-- The first player to finish the obby (in any server) wins a game pass, announced to everyone.
+	-- The first player to finish the obby in each server wins a game pass, announced to that server.
+	local obbyFirstFor: number? = nil
 	ReplicatedStorage:GetAttributeChangedSignal("AbuseObbyFinish"):Connect(function()
 		local info = tostring(ReplicatedStorage:GetAttribute("AbuseObbyFinish") or "")
 		local name = string.match(info, "^(.-):")
@@ -11567,10 +11569,11 @@ do
 			-- wins a game pass, announced once in the speech box (no banner on top of everything).
 			local plr = Players:FindFirstChild(name)
 			local gems = Config.Obby.ShowGems
-			local first = claim("obbyfirst:" .. tostring(e.Starts))
+			local first = obbyFirstFor ~= e.Starts -- the first finisher IN THIS SERVER (each server has its own winner)
+			obbyFirstFor = e.Starts
 			if not (plr and plr:IsA("Player")) then
 				if first then
-					publish({ Kind = "AbuseSay", Text = name .. " finished the obby first and wins a game pass. well done." })
+					say(name .. " finished the obby first and wins a game pass. well done.")
 				end
 				return
 			end
@@ -11590,7 +11593,7 @@ do
 					DataService.AddGems(plr, 100)
 					celebrate(plr, "First to finish!", string.format("You finished first! %d Gems, plus 100 more because you own every pass.", gems), "@Gem")
 				end
-				publish({ Kind = "AbuseSay", Text = name .. " finished the obby first and wins a game pass. well done." })
+				say(name .. " finished the obby first and wins a game pass. well done.")
 			else
 				celebrate(plr, "You beat the obby!", string.format("You got %d Gems!", gems), "@Gem")
 			end
@@ -22680,6 +22683,13 @@ function LobbyBuilder.BreakObby()
 	table.clear(obbySpawnAt)
 	local wall = southWall
 	if wall then
+		-- anyone still out past the wall (on the table's edge or on the obby) is put back first, never walled out
+		for _, player in Players:GetPlayers() do
+			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if root and root.Position.Z &gt; wall.Position.Z - wall.Size.Z / 2 - 1 then
+				sendToLobbySpawn(player)
+			end
+		end
 		wall.CanCollide = true
 	end
 	for _, d in model:GetDescendants() do
@@ -22810,7 +22820,7 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 	for _, f in Workspace:GetChildren() do
 		if f:IsA("Folder") and pieceFolderRoof[f] == roof then
 			for _, p in f:GetChildren() do
-				if p:IsA("BasePart") and p.Name == "HolePiece" and p.Anchored then
+				if p:IsA("BasePart") and p.Name == "HolePiece" and p.Anchored and not p:GetAttribute("Falling") then
 					local c, e = worldBox(p)
 					if c.X + e.X &gt; cx - S and c.X - e.X &lt; cx + S and c.Z + e.Z &gt; cz - S and c.Z - e.Z &lt; cz + S then
 						table.insert(sources, p)
@@ -22863,6 +22873,7 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 						table.insert(rec.Tiles, { Part = tile, Flat = flat, D = d, Fall = true, Transparency = tile.Transparency })
 						if light then
 							tile.CanCollide = false
+							tile:SetAttribute("Falling", true) -- (a later crater must not cut it up again: the bits would hang there, solid and invisible)
 							local drop = if roof then rng:NextNumber(40, 90) else rng:NextNumber(30, 60)
 							local goal = flat * CFrame.Angles(rng:NextNumber(-1.2, 1.2), rng:NextNumber(-1.2, 1.2), rng:NextNumber(-1.2, 1.2)) - Vector3.new(0, drop, 0)
 							task.delay(rng:NextNumber(0, 0.5) + (d / R) * 0.25, function()
@@ -52678,7 +52689,7 @@ do
 				local camera = workspace.CurrentCamera
 				local distance = if camera and typeof(pos) == "Vector3" then (camera.CFrame.Position - pos).Magnitude else 300
 				local near = math.clamp(1.15 - distance / 1100, 0.2, 1)
-				local heatMult = if ReplicatedStorage:GetAttribute("AbuseHeat") then 1.7 else 1
+				local heatMult = if ReplicatedStorage:GetAttribute("AbuseHeat") then 1.5 else 1
 				shakeAmp = math.max(shakeAmp, strength * 1.1 * near * heatMult)
 				if heatMult &gt; 1 and strength &gt;= 1.5 then
 					heatPulse()
