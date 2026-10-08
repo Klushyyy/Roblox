@@ -1804,3 +1804,8 @@ While he charges the dishwasher ball both arms go straight out in front, turned 
 - Max-heat screen shake multiplier 1.7 -> 1.5.
 - Tiles that are mid-fall (tween) carry a `Falling` attribute and are never cut again by a later crater (they used to be re-cut into invisible, solid bits that stayed on the table).
 - `BreakObby` sends anyone still past the south wall back to the spawn before the wall closes (nobody is walled out on the table edge).
+
+### 6zzm. No hotkeys in the show, everyone picks a power-up, clear votes (v2.12.24)
+- While `AbuseLive` is true the HUD window hotkeys (P/G/R/C/T/Q/Tab/Y...), the Chest event E (it teleported you to the chest) and the Next Event zone pop-up are all off.
+- Power-ups: at t=254 (`attack perkpick`) EVERYONE in the server gets a card to pick ONE of Fly / Giant / Speed (or No thanks) within 40 s; not a vote. `AbuseOffer` (S->C id, seconds, text), `AbuseOfferReply` (C->S id, choice). Late joiners get the card while it is open; the perk is re-applied after a respawn. Fly keeps its Flying chip; Giant and Speed use the `AbusePerk` chip (ON/OFF, `AbusePerkToggle`). Speed sets WalkSpeed 30. All removed at the end of the show / on leave.
+- Votes: poll titles read "EVERYONE VOTES - MOST VOTES WINS" (`Hint` on `PollStart`, 6th arg of `GlobalPoll Start`); option texts say exactly what the winner gives ("400 Bubbles for EVERYONE", "The limited pet for 3 lucky players"); the show's lines say that most votes wins and the winner goes to everyone.

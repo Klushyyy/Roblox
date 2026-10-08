@@ -602,6 +602,9 @@ function ChestUI.Init()
 		if input.KeyCode ~= Enum.KeyCode.E or processed or UserInputService:GetFocusedTextBox() then
 			return
 		end
+		if ReplicatedStorage:GetAttribute("AbuseLive") == true then
+			return -- (during the Admin Abuse show E must not teleport anyone away)
+		end
 		if ClientState.Run ~= nil or promptsShown > 0 or revealing or UIKit.IsWindowOpen() then
 			return
 		end

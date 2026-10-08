@@ -1411,6 +1411,9 @@ function HUD.Init()
 		if UserInputService:GetFocusedTextBox() ~= nil then
 			return
 		end
+		if ReplicatedStorage:GetAttribute("AbuseLive") == true then
+			return -- (every window hotkey is off while the Admin Abuse show runs)
+		end
 		local key = input.KeyCode
 		local inRun = ClientState.Run ~= nil
 		-- Roblox's player list marks Tab as processed, so Tab (and gamepad Y) skip that check.

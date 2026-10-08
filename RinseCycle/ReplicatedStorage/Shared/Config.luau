@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.23"
+Config.Version = "2.12.24"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1157,12 +1157,12 @@ Config.AbuseShow = ({
 		Gifts = {
 			Kind = "Poll",
 			Seconds = 30,
-			Question = "What should I give out?",
+			Question = "VOTE: what does EVERYONE get?",
 			Options = {
 				{ Kind = "Bubbles", PerPlayer = 400 },
 				{ Kind = "Gems", PerPlayer = 40 },
 			},
-			Chosen = "chat has spoken: {text}. coming right up.",
+			Chosen = "the vote is in. most votes: {text}. coming right up.",
 		},
 		Passes = {
 			Kind = "Announce",
@@ -1173,26 +1173,26 @@ Config.AbuseShow = ({
 		Break = {
 			Kind = "Poll",
 			Seconds = 25,
-			Question = "What should I do next?",
+			Question = "VOTE: what should I do next?",
 			Options = {
 				{ Kind = "Effect", Effect = "meteors", Text = "Meteor storm" },
 				{ Kind = "Effect", Effect = "fireworks", Text = "Fireworks finale" },
 				{ Kind = "Effect", Effect = "blackhole", Text = "Black hole" },
 				{ Kind = "Effect", Effect = "tornado", Text = "Tornado" },
 			},
-			Chosen = "{text} it is. hold on to something.",
+			Chosen = "the vote is in. most votes: {text}. hold on to something.",
 		},
 		Final = {
 			Kind = "Poll",
 			Seconds = 30,
-			Question = "FINAL ROUND! Pick the prize!",
+			Question = "FINAL VOTE: the prize everyone fights for",
 			Options = {
 				{ Kind = "Pet", Share = 0.1 },
 				{ Kind = "Passes", Share = 0.2 },
 				{ Kind = "Bubbles", PerPlayer = 1500 },
 				{ Kind = "Gems", PerPlayer = 150 },
 			},
-			Chosen = "{text}. lets go.",
+			Chosen = "the vote is in. most votes: {text}. lets go.",
 		},
 	},
 	-- Holes in the table: { x, z, radius } on the plaza. The first is where the Fastest Clean board and the
@@ -1227,16 +1227,16 @@ do
 	at(6, "say", "hmm. so you all showed up.")
 	at(14, "say", "ok. quick warm up before the real stuff.")
 	at(16, "attack", "shockwave")
-	at(22, "say", "first thing: you decide what i hand out.")
+	at(22, "say", "first thing: a vote. everyone votes. the option with the most votes wins, and then everyone gets it.")
 	at(26, "round", "Gifts")
 	at(31, "attack", "beam")
-	at(38, "say", "bubbles or gems. dont overthink it.")
+	at(38, "say", "bubbles or gems, for everyone. if your pick loses, thats democracy.")
 	at(41, "say", "see that machine? i never liked it.")
 	at(44, "attack", "dishwasher")
 	at(58, "say", "my legs hurt. im sitting down. and then im going to have a look at that table.")
 	at(60, "attack", "chairshow")
 	at(62, "attack", "fountains")
-	at(52, "say", "the vote closes in a few seconds.")
+	at(52, "say", "the vote closes in a few seconds. most votes wins.")
 	at(68, "attack", "lightning")
 	at(74, "say", "prizes are landing in your inventory right now.")
 	at(78, "attack", "barrage")
@@ -1249,7 +1249,7 @@ do
 	at(126, "say", "you can feel that, right? thats the floor. it is not happy.")
 	at(134, "say", "the world needs some colour. one second.")
 	at(138, "attack", "disco")
-	at(144, "say", "next vote. you choose how i break things.")
+	at(144, "say", "next vote. most votes wins, and i do whatever it says.")
 	at(147, "round", "Break")
 	at(152, "attack", "lightning")
 	at(164, "say", "choose carefully. i have to live with it too.")
@@ -1267,9 +1267,8 @@ do
 	at(240, "attack", "winner")
 	at(246, "say", "bombs. a red circle on the table is where one lands. get out of it, or fall in.")
 	at(248, "attack", "bombs")
-	at(251, "say", "in every lobby, one person is about to be offered the chance to fly. someone else gets something else harmless. you can say no.")
-	at(254, "attack", "flyoffer")
-	at(257, "attack", "giantoffer")
+	at(251, "say", "everyone gets to pick ONE power-up for the rest of the event. fly, giant or speed. not a vote, you just get what you choose.")
+	at(254, "attack", "perkpick")
 	at(258, "say", "i built it to be fair. mostly.")
 	at(268, "attack", "fountains")
 	at(272, "say", "the spinners are my favourite part.")
@@ -1282,14 +1281,14 @@ do
 	at(318, "say", "right. im done warming up.")
 	at(322, "attack", "shockwave")
 	-- Turn up the heat
-	at(328, "say", "final round. you pick the prize. and im turning up the heat.")
+	at(328, "say", "final vote. most votes wins, and everyone gets the winner. and im turning up the heat.")
 	at(330, "heat")
 	at(333, "round", "Final")
 	at(336, "attack", "meteors")
-	at(344, "say", "four options. one of them is a limited pet. just saying.")
+	at(344, "say", "four options. one of them is a limited pet for a few lucky players. just saying.")
 	at(350, "attack", "lightning")
 	at(358, "attack", "fireworks")
-	at(352, "say", "ten seconds left on the vote.")
+	at(352, "say", "ten seconds left on the vote. if your pick isnt winning, tell your friends.")
 	at(366, "attack", "blackhole")
 	at(378, "attack", "laser")
 	at(384, "say", "winners incoming. check your screen.")
@@ -1357,13 +1356,13 @@ function Config.AbuseOption(option: any, n: number): any
 	if option.Kind == "Effect" then
 		out.Text = option.Text
 	elseif option.Kind == "Bubbles" or option.Kind == "Gems" then
-		out.Text = string.format("Share %s %s", commas(out.PerPlayer * n), option.Kind)
+		out.Text = string.format("%s %s for EVERYONE", commas(out.PerPlayer), option.Kind)
 	elseif option.Kind == "Passes" then
 		out.Count = math.clamp(math.ceil(n * (option.Share or 0.1)), 1, 25)
-		out.Text = "Chance at a random pass"
+		out.Text = string.format("A random game pass for %d lucky player%s", out.Count, if out.Count == 1 then "" else "s")
 	else
 		out.Count = math.clamp(math.ceil(n * (option.Share or 0.1)), 1, 15)
-		out.Text = "Chance at the limited pet"
+		out.Text = string.format("The limited pet for %d lucky player%s", out.Count, if out.Count == 1 then "" else "s")
 	end
 	return out
 end

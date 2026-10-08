@@ -547,21 +547,25 @@ local function toggleFly()
 end
 flyChip.MouseButton1Click:Connect(toggleFly)
 
--- The giant power-up: a chip that turns it off and on again during the event.
-local giantOn = false
-local AbusePerk = ReplicatedStorage:WaitForChild("AbusePerk", 60) :: RemoteEvent?
-local AbusePerkToggle = ReplicatedStorage:WaitForChild("AbusePerkToggle", 60) :: RemoteEvent?
-if AbusePerk then
-	AbusePerk.OnClientEvent:Connect(function(kind: string?, on: boolean)
-		giantChip.Visible = kind == "giant"
-		giantOn = on == true
-		giantLabel.Text = if giantOn then "🦖 Giant: ON (tap to turn off)" else "🦖 Giant: OFF (tap to turn on)"
-	end)
-end
-giantChip.MouseButton1Click:Connect(function()
-	if AbusePerkToggle then
-		AbusePerkToggle:FireServer()
+-- The giant and speed power-ups: a chip that turns the power-up off and on again during the event.
+local PERK_NAMES = { giant = "🦖 Giant", speed = "⚡ Speed" }
+task.spawn(function()
+	local AbusePerk = ReplicatedStorage:WaitForChild("AbusePerk", 60) :: RemoteEvent?
+	local AbusePerkToggle = ReplicatedStorage:WaitForChild("AbusePerkToggle", 60) :: RemoteEvent?
+	if AbusePerk then
+		AbusePerk.OnClientEvent:Connect(function(kind: string?, on: boolean)
+			local name = if kind then PERK_NAMES[kind] else nil
+			giantChip.Visible = name ~= nil
+			if name then
+				giantLabel.Text = if on == true then name .. ": ON (tap to turn off)" else name .. ": OFF (tap to turn on)"
+			end
+		end)
 	end
+	giantChip.MouseButton1Click:Connect(function()
+		if AbusePerkToggle then
+			AbusePerkToggle:FireServer()
+		end
+	end)
 end)
 
 AdminSetFlying.OnClientEvent:Connect(function(enabled: boolean)
@@ -921,7 +925,7 @@ do
 		local card = Instance.new("Frame")
 		card.AnchorPoint = Vector2.new(0.5, 1)
 		card.Position = UDim2.new(0.5, 0, 1, -150)
-		card.Size = UDim2.fromOffset(440, 150)
+		card.Size = UDim2.fromOffset(500, 230)
 		card.BackgroundColor3 = Color3.fromRGB(14, 36, 72)
 		card.Parent = gui
 		do
@@ -936,50 +940,69 @@ do
 		local text = Instance.new("TextLabel")
 		text.BackgroundTransparency = 1
 		text.Position = UDim2.fromOffset(16, 10)
-		text.Size = UDim2.new(1, -32, 0, 70)
+		text.Size = UDim2.new(1, -32, 0, 50)
 		text.Font = Enum.Font.GothamBold
 		text.TextScaled = true
 		text.TextWrapped = true
 		text.TextColor3 = Color3.new(1, 1, 1)
-		text.Text = "Want to be able to fly for the rest of the event?"
+		text.Text = "Pick ONE power-up for the rest of the event."
 		text.Parent = card
 		local timerLabel = Instance.new("TextLabel")
 		timerLabel.BackgroundTransparency = 1
-		timerLabel.Position = UDim2.fromOffset(16, 80)
+		timerLabel.Position = UDim2.fromOffset(16, 166)
 		timerLabel.Size = UDim2.new(1, -32, 0, 18)
 		timerLabel.Font = Enum.Font.GothamMedium
 		timerLabel.TextSize = 14
 		timerLabel.TextColor3 = Color3.fromRGB(170, 190, 220)
 		timerLabel.Parent = card
 		local currentId, ends = 0, 0
-		local function answer(accepted: boolean)
+		local function answer(choice: string?)
 			if currentId ~= 0 then
-				reply:FireServer(currentId, accepted)
+				reply:FireServer(currentId, choice)
 			end
 			currentId = 0
 			gui.Enabled = false
 		end
-		local function button(label: string, color: Color3, x: number, accepted: boolean)
+		local function button(label: string, sub: string, color: Color3, x: number, choice: string)
 			local b = Instance.new("TextButton")
-			b.AnchorPoint = Vector2.new(0.5, 1)
-			b.Position = UDim2.new(x, 0, 1, -12)
-			b.Size = UDim2.new(0.42, 0, 0, 38)
+			b.AnchorPoint = Vector2.new(0.5, 0)
+			b.Position = UDim2.new(x, 0, 0, 70)
+			b.Size = UDim2.new(0.3, 0, 0, 84)
 			b.BackgroundColor3 = color
 			b.Font = Enum.Font.GothamBold
-			b.TextSize = 18
+			b.TextSize = 20
 			b.TextColor3 = Color3.new(1, 1, 1)
-			b.Text = label
+			b.Text = label .. "\n" .. sub
 			b.AutoButtonColor = true
 			local c = Instance.new("UICorner")
 			c.CornerRadius = UDim.new(0, 10)
 			c.Parent = b
 			b.Activated:Connect(function()
-				answer(accepted)
+				answer(choice)
 			end)
 			b.Parent = card
 		end
-		button("Accept", Color3.fromRGB(46, 190, 120), 0.27, true)
-		button("Decline", Color3.fromRGB(200, 70, 70), 0.73, false)
+		button("🕊️ Fly", "float anywhere", Color3.fromRGB(46, 150, 220), 0.19, "fly")
+		button("🦖 Giant", "4x bigger", Color3.fromRGB(200, 120, 40), 0.5, "giant")
+		button("⚡ Speed", "run much faster", Color3.fromRGB(150, 90, 220), 0.81, "speed")
+		do
+			local none = Instance.new("TextButton")
+			none.AnchorPoint = Vector2.new(0.5, 1)
+			none.Position = UDim2.new(0.5, 0, 1, -10)
+			none.Size = UDim2.new(0.4, 0, 0, 28)
+			none.BackgroundColor3 = Color3.fromRGB(70, 80, 100)
+			none.Font = Enum.Font.GothamBold
+			none.TextSize = 15
+			none.TextColor3 = Color3.new(1, 1, 1)
+			none.Text = "No thanks"
+			local c = Instance.new("UICorner")
+			c.CornerRadius = UDim.new(0, 8)
+			c.Parent = none
+			none.Activated:Connect(function()
+				answer(nil)
+			end)
+			none.Parent = card
+		end
 		offer.OnClientEvent:Connect(function(id: any, seconds: any, message: any)
 			if type(id) ~= "number" or type(seconds) ~= "number" then
 				return
@@ -998,7 +1021,7 @@ do
 			task.spawn(function()
 				while gui.Enabled and currentId == id do
 					local left = math.max(0, math.ceil(ends - os.clock()))
-					timerLabel.Text = string.format("%d seconds left to decide", left)
+					timerLabel.Text = string.format("%d seconds left to pick (switch it on/off any time)", left)
 					if left <= 0 then
 						currentId = 0
 						gui.Enabled = false

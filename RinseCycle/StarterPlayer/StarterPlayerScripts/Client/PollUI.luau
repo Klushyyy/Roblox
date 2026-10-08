@@ -131,7 +131,7 @@ function PollUI.Init()
 		Parent = slider,
 	})
 	UIKit.Stroke(card, Colors.Primary, 3, 0)
-	local title = UIKit.Label({ Text = "POLL", TextSize = 16, TextColor3 = Colors.Primary, Position = UDim2.fromOffset(14, 6), Size = UDim2.fromOffset(200, 20), TextXAlignment = Enum.TextXAlignment.Left, Parent = card })
+	local title = UIKit.Label({ Text = "POLL", TextSize = 16, TextScaled = true, TextColor3 = Colors.Primary, Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -230, 0, 20), TextXAlignment = Enum.TextXAlignment.Left, Parent = card })
 	local timer = UIKit.Label({ Text = "", TextSize = 16, TextColor3 = Colors.TextDim, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -52, 0, 6), Size = UDim2.fromOffset(150, 20), TextXAlignment = Enum.TextXAlignment.Right, Parent = card })
 	local question = UIKit.Label({ Text = "", TextSize = 20, TextWrapped = true, TextScaled = true, Position = UDim2.fromOffset(14, 30), Size = UDim2.new(1, -28, 0, 44), Parent = card })
 	local row = Instance.new("Frame")
@@ -184,11 +184,11 @@ function PollUI.Init()
 		table.clear(buttons)
 	end
 
-	local function showVoting(id: string, text: string, options: { string }, closesAt: number)
+	local function showVoting(id: string, text: string, options: { string }, closesAt: number, hint: string?)
 		currentId = id
 		endsAt = closesAt
 		phase = "Voting"
-		title.Text = "POLL"
+		title.Text = hint or "POLL"
 		title.TextColor3 = Colors.Primary
 		question.Text = text
 		hideButton.Visible = true
@@ -283,9 +283,9 @@ function PollUI.Init()
 		end
 	end)
 
-	pollRemote.OnClientEvent:Connect(function(kind, id, text, options, extra)
+	pollRemote.OnClientEvent:Connect(function(kind, id, text, options, extra, hint)
 		if kind == "Start" and type(id) == "string" and type(options) == "table" then
-			showVoting(id, tostring(text), options, tonumber(extra) or Config.Now())
+			showVoting(id, tostring(text), options, tonumber(extra) or Config.Now(), if type(hint) == "string" then hint else nil)
 		elseif kind == "Close" and id == currentId then
 			close() -- a show poll: gone the second it ends
 		elseif kind == "End" and id == currentId and phase == "Voting" then

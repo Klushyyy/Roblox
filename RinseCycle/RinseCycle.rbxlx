@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.23"
+Config.Version = "2.12.24"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1161,12 +1161,12 @@ Config.AbuseShow = ({
 		Gifts = {
 			Kind = "Poll",
 			Seconds = 30,
-			Question = "What should I give out?",
+			Question = "VOTE: what does EVERYONE get?",
 			Options = {
 				{ Kind = "Bubbles", PerPlayer = 400 },
 				{ Kind = "Gems", PerPlayer = 40 },
 			},
-			Chosen = "chat has spoken: {text}. coming right up.",
+			Chosen = "the vote is in. most votes: {text}. coming right up.",
 		},
 		Passes = {
 			Kind = "Announce",
@@ -1177,26 +1177,26 @@ Config.AbuseShow = ({
 		Break = {
 			Kind = "Poll",
 			Seconds = 25,
-			Question = "What should I do next?",
+			Question = "VOTE: what should I do next?",
 			Options = {
 				{ Kind = "Effect", Effect = "meteors", Text = "Meteor storm" },
 				{ Kind = "Effect", Effect = "fireworks", Text = "Fireworks finale" },
 				{ Kind = "Effect", Effect = "blackhole", Text = "Black hole" },
 				{ Kind = "Effect", Effect = "tornado", Text = "Tornado" },
 			},
-			Chosen = "{text} it is. hold on to something.",
+			Chosen = "the vote is in. most votes: {text}. hold on to something.",
 		},
 		Final = {
 			Kind = "Poll",
 			Seconds = 30,
-			Question = "FINAL ROUND! Pick the prize!",
+			Question = "FINAL VOTE: the prize everyone fights for",
 			Options = {
 				{ Kind = "Pet", Share = 0.1 },
 				{ Kind = "Passes", Share = 0.2 },
 				{ Kind = "Bubbles", PerPlayer = 1500 },
 				{ Kind = "Gems", PerPlayer = 150 },
 			},
-			Chosen = "{text}. lets go.",
+			Chosen = "the vote is in. most votes: {text}. lets go.",
 		},
 	},
 	-- Holes in the table: { x, z, radius } on the plaza. The first is where the Fastest Clean board and the
@@ -1231,16 +1231,16 @@ do
 	at(6, "say", "hmm. so you all showed up.")
 	at(14, "say", "ok. quick warm up before the real stuff.")
 	at(16, "attack", "shockwave")
-	at(22, "say", "first thing: you decide what i hand out.")
+	at(22, "say", "first thing: a vote. everyone votes. the option with the most votes wins, and then everyone gets it.")
 	at(26, "round", "Gifts")
 	at(31, "attack", "beam")
-	at(38, "say", "bubbles or gems. dont overthink it.")
+	at(38, "say", "bubbles or gems, for everyone. if your pick loses, thats democracy.")
 	at(41, "say", "see that machine? i never liked it.")
 	at(44, "attack", "dishwasher")
 	at(58, "say", "my legs hurt. im sitting down. and then im going to have a look at that table.")
 	at(60, "attack", "chairshow")
 	at(62, "attack", "fountains")
-	at(52, "say", "the vote closes in a few seconds.")
+	at(52, "say", "the vote closes in a few seconds. most votes wins.")
 	at(68, "attack", "lightning")
 	at(74, "say", "prizes are landing in your inventory right now.")
 	at(78, "attack", "barrage")
@@ -1253,7 +1253,7 @@ do
 	at(126, "say", "you can feel that, right? thats the floor. it is not happy.")
 	at(134, "say", "the world needs some colour. one second.")
 	at(138, "attack", "disco")
-	at(144, "say", "next vote. you choose how i break things.")
+	at(144, "say", "next vote. most votes wins, and i do whatever it says.")
 	at(147, "round", "Break")
 	at(152, "attack", "lightning")
 	at(164, "say", "choose carefully. i have to live with it too.")
@@ -1271,9 +1271,8 @@ do
 	at(240, "attack", "winner")
 	at(246, "say", "bombs. a red circle on the table is where one lands. get out of it, or fall in.")
 	at(248, "attack", "bombs")
-	at(251, "say", "in every lobby, one person is about to be offered the chance to fly. someone else gets something else harmless. you can say no.")
-	at(254, "attack", "flyoffer")
-	at(257, "attack", "giantoffer")
+	at(251, "say", "everyone gets to pick ONE power-up for the rest of the event. fly, giant or speed. not a vote, you just get what you choose.")
+	at(254, "attack", "perkpick")
 	at(258, "say", "i built it to be fair. mostly.")
 	at(268, "attack", "fountains")
 	at(272, "say", "the spinners are my favourite part.")
@@ -1286,14 +1285,14 @@ do
 	at(318, "say", "right. im done warming up.")
 	at(322, "attack", "shockwave")
 	-- Turn up the heat
-	at(328, "say", "final round. you pick the prize. and im turning up the heat.")
+	at(328, "say", "final vote. most votes wins, and everyone gets the winner. and im turning up the heat.")
 	at(330, "heat")
 	at(333, "round", "Final")
 	at(336, "attack", "meteors")
-	at(344, "say", "four options. one of them is a limited pet. just saying.")
+	at(344, "say", "four options. one of them is a limited pet for a few lucky players. just saying.")
 	at(350, "attack", "lightning")
 	at(358, "attack", "fireworks")
-	at(352, "say", "ten seconds left on the vote.")
+	at(352, "say", "ten seconds left on the vote. if your pick isnt winning, tell your friends.")
 	at(366, "attack", "blackhole")
 	at(378, "attack", "laser")
 	at(384, "say", "winners incoming. check your screen.")
@@ -1361,13 +1360,13 @@ function Config.AbuseOption(option: any, n: number): any
 	if option.Kind == "Effect" then
 		out.Text = option.Text
 	elseif option.Kind == "Bubbles" or option.Kind == "Gems" then
-		out.Text = string.format("Share %s %s", commas(out.PerPlayer * n), option.Kind)
+		out.Text = string.format("%s %s for EVERYONE", commas(out.PerPlayer), option.Kind)
 	elseif option.Kind == "Passes" then
 		out.Count = math.clamp(math.ceil(n * (option.Share or 0.1)), 1, 25)
-		out.Text = "Chance at a random pass"
+		out.Text = string.format("A random game pass for %d lucky player%s", out.Count, if out.Count == 1 then "" else "s")
 	else
 		out.Count = math.clamp(math.ceil(n * (option.Share or 0.1)), 1, 15)
-		out.Text = "Chance at the limited pet"
+		out.Text = string.format("The limited pet for %d lucky player%s", out.Count, if out.Count == 1 then "" else "s")
 	end
 	return out
 end
@@ -4367,7 +4366,7 @@ Remote.AbuseBoom.Parent = ReplicatedStorage
 Remote.AbuseOffer = Instance.new("RemoteEvent") -- S-&gt;C (offer id, seconds): "do you want to fly?" (seconds 0 closes it)
 Remote.AbuseOffer.Name = "AbuseOffer"
 Remote.AbuseOffer.Parent = ReplicatedStorage
-Remote.AbuseOfferReply = Instance.new("RemoteEvent") -- C-&gt;S (offer id, accepted)
+Remote.AbuseOfferReply = Instance.new("RemoteEvent") -- C-&gt;S (pick id, "fly" / "giant" / "speed", or nothing for No thanks)
 Remote.AbuseOfferReply.Name = "AbuseOfferReply"
 Remote.AbuseOfferReply.Parent = ReplicatedStorage
 Remote.AbusePerk = Instance.new("RemoteEvent") -- S-&gt;C (kind: "giant" or nil, on): the giant power-up's on/off button
@@ -8556,13 +8555,13 @@ do
 	local collecting = {} -- on the admin's server: [id] = { Counts, Question, Options, Admin }
 
 	local function sendPoll(plr, poll)
-		Remote.GlobalPoll:FireClient(plr, "Start", poll.Id, poll.Question, poll.Options, poll.EndsAt)
+		Remote.GlobalPoll:FireClient(plr, "Start", poll.Id, poll.Question, poll.Options, poll.EndsAt, poll.Hint)
 	end
 	handlers.PollStart = function(d)
 		if type(d.Id) ~= "string" or type(d.Options) ~= "table" or polls[d.Id] then
 			return
 		end
-		local poll = { Id = d.Id, Question = tostring(d.Question), Options = d.Options, EndsAt = tonumber(d.EndsAt) or Config.Now(), Origin = d.Origin, Votes = {}, Silent = d.Silent == true }
+		local poll = { Id = d.Id, Question = tostring(d.Question), Options = d.Options, EndsAt = tonumber(d.EndsAt) or Config.Now(), Origin = d.Origin, Votes = {}, Silent = d.Silent == true, Hint = if type(d.Hint) == "string" then string.sub(d.Hint, 1, 60) else nil }
 		polls[d.Id] = poll
 		for _, plr in ipairs(Players:GetPlayers()) do
 			sendPoll(plr, poll)
@@ -9032,7 +9031,7 @@ do
 	local function applyOutcome(option: any)
 		if option.Kind == "Bubbles" or option.Kind == "Gems" then
 			publish({ Kind = "GiveAll", Currency = option.Kind, Amount = option.PerPlayer })
-			publish({ Kind = "Banner", Text = string.format("Admin Abuse: everyone gets %s %s!", Format.Commas(option.PerPlayer), option.Kind) })
+			publish({ Kind = "Banner", Text = string.format("Admin Abuse: the vote picked it, so everyone gets %s %s!", Format.Commas(option.PerPlayer), option.Kind) })
 		elseif option.Kind == "Passes" then
 			Commands.globalpassdrop(STUB, tostring(option.Count) .. " random")
 		elseif option.Kind == "Pet" then
@@ -9077,7 +9076,7 @@ do
 			counts[i] = 0
 		end
 		collecting[id] = { Counts = counts, Question = round.Question, Options = options }
-		publish({ Kind = "PollStart", Id = id, Silent = true, Question = round.Question, Options = options, EndsAt = Config.Now() + round.Seconds, Origin = game.JobId })
+		publish({ Kind = "PollStart", Id = id, Silent = true, Hint = "EVERYONE VOTES - MOST VOTES WINS", Question = round.Question, Options = options, EndsAt = Config.Now() + round.Seconds, Origin = game.JobId })
 		task.delay(round.Seconds + 7, function()
 			local c = collecting[id]
 			collecting[id] = nil
@@ -11411,81 +11410,125 @@ do
 		end
 	end
 
-	----------------------------------------------------------------- the offers
-	-- Two random players in each server are offered something harmless and fun for the rest of the show: one
-	-- can fly, another becomes giant (30 seconds to accept or decline). Both are taken away when the show is put
-	-- away, when the player leaves (nothing is saved: coming back means normal), and flying is no advantage in
-	-- the obby (it ignores checkpoints and the finish while flying).
+	----------------------------------------------------------------- the power-ups
+	-- Near the end of the warm-up EVERYONE in the server picks ONE temporary power-up for the rest of the show:
+	-- fly, giant or speed (not a vote: each player simply gets the one they choose; "No thanks" is allowed). Each
+	-- has an on/off button on screen (flying: the Flying chip, the others: the AbusePerk chip). They are all taken
+	-- away when the show is put away or the player leaves (nothing is saved: coming back means normal), and flying
+	-- is no advantage in the obby (it ignores checkpoints and the finish while flying).
+	local PERK_SET = { fly = true, giant = true, speed = true }
+	local PERK_GIANT_SCALE = 4
+	local PERK_SPEED = 30
+	local PICK_SECONDS = 40
 	local offerId = 0
-	local pendingOffer: { [Player]: { Id: number, Kind: string } } = {}
-	local perks: { [Player]: string } = {} -- accepted: "fly" or "giant"
-	local OFFER_TEXT = {
-		fly = "Do you want to be able to fly for the rest of the event?",
-		giant = "Do you want to be giant for the rest of the event?",
-	}
-	local function takePerk(plr: Player)
+	local pendingOffer: { [Player]: number } = {}
+	local perks: { [Player]: string } = {} -- chosen: "fly", "giant" or "speed"
+	local perkOff: { [Player]: boolean } = {} -- switched off with its button (giant / speed)
+	local baseSpeed: { [Player]: number } = {}
+	local pickOpenUntil = 0
+	local pickId = 0
+	local function humanoidOf(plr: Player): Humanoid?
+		return plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+	end
+	-- Puts the player's perk on (or off) their current character.
+	local function setPerkOn(plr: Player, on: boolean)
 		local kind = perks[plr]
-		perks[plr] = nil
 		if kind == "fly" then
-			pcall(function()
-				setFlying(plr, false)
-			end)
+			pcall(setFlying, plr, on)
 		elseif kind == "giant" then
-			pcall(function()
-				setGiantScale(plr, 1)
-			end)
-			Remote.AbusePerk:FireClient(plr, nil, false)
+			pcall(setGiantScale, plr, if on then PERK_GIANT_SCALE else 1)
+		elseif kind == "speed" then
+			local hum = humanoidOf(plr)
+			if hum then
+				if on then
+					baseSpeed[plr] = baseSpeed[plr] or hum.WalkSpeed
+					hum.WalkSpeed = PERK_SPEED
+				else
+					hum.WalkSpeed = baseSpeed[plr] or 16
+				end
+			end
+		end
+		if kind == "giant" or kind == "speed" then
+			Remote.AbusePerk:FireClient(plr, kind, on)
 		end
 	end
-	local giantOff: { [Player]: boolean } = {}
+	local function takePerk(plr: Player)
+		if not perks[plr] then
+			return
+		end
+		setPerkOn(plr, false)
+		Remote.AbusePerk:FireClient(plr, nil, false)
+		perks[plr], perkOff[plr], baseSpeed[plr] = nil, nil, nil
+	end
 	Remote.AbusePerkToggle.OnServerEvent:Connect(function(plr: Player)
-		if perks[plr] ~= "giant" or ReplicatedStorage:GetAttribute("AbuseLive") ~= true then
+		local kind = perks[plr]
+		if (kind ~= "giant" and kind ~= "speed") or ReplicatedStorage:GetAttribute("AbuseLive") ~= true then
 			return
 		end
-		local off = not giantOff[plr]
-		giantOff[plr] = if off then true else nil
-		setGiantScale(plr, if off then 1 else 4)
-		Remote.AbusePerk:FireClient(plr, "giant", not off)
+		local off = not perkOff[plr]
+		perkOff[plr] = if off then true else nil
+		setPerkOn(plr, not off)
 	end)
-	Remote.AbuseOfferReply.OnServerEvent:Connect(function(plr: Player, id: any, accepted: any)
-		local offer = pendingOffer[plr]
-		if not offer or offer.Id ~= id then
+	Remote.AbuseOfferReply.OnServerEvent:Connect(function(plr: Player, id: any, choice: any)
+		if not pendingOffer[plr] or pendingOffer[plr] ~= id then
 			return
 		end
 		pendingOffer[plr] = nil
-		if accepted == true and plr.Parent == Players and ReplicatedStorage:GetAttribute("AbuseLive") == true then
-			perks[plr] = offer.Kind
-			if offer.Kind == "fly" then
-				setFlying(plr, true)
-			else
-				giantOff[plr] = nil
-				setGiantScale(plr, 4)
-				Remote.AbusePerk:FireClient(plr, "giant", true)
+		if type(choice) == "string" and PERK_SET[choice] and plr.Parent == Players and ReplicatedStorage:GetAttribute("AbuseLive") == true then
+			if perks[plr] then
+				takePerk(plr)
 			end
+			perks[plr] = choice
+			perkOff[plr] = nil
+			setPerkOn(plr, true)
 		end
 	end)
+	-- A respawn gives the character back to normal: put the chosen power-up on again.
+	local function watchPerks(plr: Player)
+		plr.CharacterAdded:Connect(function()
+			task.wait(1)
+			if perks[plr] and not perkOff[plr] and ReplicatedStorage:GetAttribute("AbuseLive") == true then
+				setPerkOn(plr, true)
+			end
+		end)
+	end
+	local function sendPick(plr: Player, id: number, seconds: number)
+		if plr:GetAttribute("AdminInvis") == true then
+			return
+		end
+		pendingOffer[plr] = id
+		Remote.AbuseOffer:FireClient(plr, id, seconds, "Pick ONE power-up for the rest of the event. It is yours, not a vote.")
+	end
+	Players.PlayerAdded:Connect(function(plr)
+		watchPerks(plr)
+		-- someone who joins while the pick is open gets the card too
+		if os.clock() &lt; pickOpenUntil and ReplicatedStorage:GetAttribute("AbuseLive") == true then
+			task.delay(4, function()
+				if plr.Parent == Players and os.clock() &lt; pickOpenUntil then
+					sendPick(plr, pickId, math.max(5, math.floor(pickOpenUntil - os.clock())))
+				end
+			end)
+		end
+	end)
+	for _, plr in Players:GetPlayers() do
+		watchPerks(plr)
+	end
 	Players.PlayerRemoving:Connect(function(plr)
-		perks[plr] = nil
-		pendingOffer[plr] = nil
+		perks[plr], perkOff[plr], baseSpeed[plr], pendingOffer[plr] = nil, nil, nil, nil
 	end)
-	local function offerTo(kind: string)
-		local pool = {}
-		for _, plr in Players:GetPlayers() do
-			if plr.Character and not perks[plr] and not pendingOffer[plr] and plr:GetAttribute("AdminInvis") ~= true then
-				table.insert(pool, plr)
-			end
-		end
-		if #pool == 0 then
-			return
-		end
-		local chosen = pool[math.random(1, #pool)]
+	-- Everyone in this server gets the pick card.
+	local function offerAll()
 		offerId += 1
-		local myId = offerId
-		pendingOffer[chosen] = { Id = myId, Kind = kind }
-		Remote.AbuseOffer:FireClient(chosen, myId, 30, OFFER_TEXT[kind])
-		task.delay(31, function()
-			if pendingOffer[chosen] and pendingOffer[chosen].Id == myId then
-				pendingOffer[chosen] = nil
+		pickId = offerId
+		pickOpenUntil = os.clock() + PICK_SECONDS
+		for _, plr in Players:GetPlayers() do
+			sendPick(plr, pickId, PICK_SECONDS)
+		end
+		task.delay(PICK_SECONDS + 1, function()
+			for plr, id in pendingOffer do
+				if id == pickId then
+					pendingOffer[plr] = nil
+				end
 			end
 		end)
 	end
@@ -11493,7 +11536,8 @@ do
 		for plr in perks do
 			takePerk(plr)
 		end
-		perks, pendingOffer = {}, {}
+		pendingOffer = {}
+		pickOpenUntil = 0
 		Remote.AbuseOffer:FireAllClients(0, 0)
 	end
 
@@ -11669,10 +11713,8 @@ do
 						if kind == "say" then
 							say(step[3])
 						elseif kind == "attack" then
-							if step[3] == "flyoffer" then
-								offerTo("fly")
-							elseif step[3] == "giantoffer" then
-								offerTo("giant")
+							if step[3] == "perkpick" then
+								offerAll()
 							else
 								playEffect(step[3])
 							end
@@ -32123,6 +32165,9 @@ function ChestUI.Init()
 		if input.KeyCode ~= Enum.KeyCode.E or processed or UserInputService:GetFocusedTextBox() then
 			return
 		end
+		if ReplicatedStorage:GetAttribute("AbuseLive") == true then
+			return -- (during the Admin Abuse show E must not teleport anyone away)
+		end
 		if ClientState.Run ~= nil or promptsShown &gt; 0 or revealing or UIKit.IsWindowOpen() then
 			return
 		end
@@ -35749,6 +35794,10 @@ function EventZone.Init()
 					end
 				end
 			end
+			if ReplicatedStorage:GetAttribute("AbuseLive") == true then
+				isInside = false -- (no pop-ups while the Admin Abuse show runs)
+				card.Visible = false
+			end
 			if isInside and not wasInside then
 				show(event)
 			elseif isInside and card.Visible then
@@ -37285,6 +37334,9 @@ function HUD.Init()
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
 		if UserInputService:GetFocusedTextBox() ~= nil then
 			return
+		end
+		if ReplicatedStorage:GetAttribute("AbuseLive") == true then
+			return -- (every window hotkey is off while the Admin Abuse show runs)
 		end
 		local key = input.KeyCode
 		local inRun = ClientState.Run ~= nil
@@ -44117,7 +44169,7 @@ function PollUI.Init()
 		Parent = slider,
 	})
 	UIKit.Stroke(card, Colors.Primary, 3, 0)
-	local title = UIKit.Label({ Text = "POLL", TextSize = 16, TextColor3 = Colors.Primary, Position = UDim2.fromOffset(14, 6), Size = UDim2.fromOffset(200, 20), TextXAlignment = Enum.TextXAlignment.Left, Parent = card })
+	local title = UIKit.Label({ Text = "POLL", TextSize = 16, TextScaled = true, TextColor3 = Colors.Primary, Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -230, 0, 20), TextXAlignment = Enum.TextXAlignment.Left, Parent = card })
 	local timer = UIKit.Label({ Text = "", TextSize = 16, TextColor3 = Colors.TextDim, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -52, 0, 6), Size = UDim2.fromOffset(150, 20), TextXAlignment = Enum.TextXAlignment.Right, Parent = card })
 	local question = UIKit.Label({ Text = "", TextSize = 20, TextWrapped = true, TextScaled = true, Position = UDim2.fromOffset(14, 30), Size = UDim2.new(1, -28, 0, 44), Parent = card })
 	local row = Instance.new("Frame")
@@ -44170,11 +44222,11 @@ function PollUI.Init()
 		table.clear(buttons)
 	end
 
-	local function showVoting(id: string, text: string, options: { string }, closesAt: number)
+	local function showVoting(id: string, text: string, options: { string }, closesAt: number, hint: string?)
 		currentId = id
 		endsAt = closesAt
 		phase = "Voting"
-		title.Text = "POLL"
+		title.Text = hint or "POLL"
 		title.TextColor3 = Colors.Primary
 		question.Text = text
 		hideButton.Visible = true
@@ -44269,9 +44321,9 @@ function PollUI.Init()
 		end
 	end)
 
-	pollRemote.OnClientEvent:Connect(function(kind, id, text, options, extra)
+	pollRemote.OnClientEvent:Connect(function(kind, id, text, options, extra, hint)
 		if kind == "Start" and type(id) == "string" and type(options) == "table" then
-			showVoting(id, tostring(text), options, tonumber(extra) or Config.Now())
+			showVoting(id, tostring(text), options, tonumber(extra) or Config.Now(), if type(hint) == "string" then hint else nil)
 		elseif kind == "Close" and id == currentId then
 			close() -- a show poll: gone the second it ends
 		elseif kind == "End" and id == currentId and phase == "Voting" then
@@ -52196,21 +52248,25 @@ local function toggleFly()
 end
 flyChip.MouseButton1Click:Connect(toggleFly)
 
--- The giant power-up: a chip that turns it off and on again during the event.
-local giantOn = false
-local AbusePerk = ReplicatedStorage:WaitForChild("AbusePerk", 60) :: RemoteEvent?
-local AbusePerkToggle = ReplicatedStorage:WaitForChild("AbusePerkToggle", 60) :: RemoteEvent?
-if AbusePerk then
-	AbusePerk.OnClientEvent:Connect(function(kind: string?, on: boolean)
-		giantChip.Visible = kind == "giant"
-		giantOn = on == true
-		giantLabel.Text = if giantOn then "🦖 Giant: ON (tap to turn off)" else "🦖 Giant: OFF (tap to turn on)"
-	end)
-end
-giantChip.MouseButton1Click:Connect(function()
-	if AbusePerkToggle then
-		AbusePerkToggle:FireServer()
+-- The giant and speed power-ups: a chip that turns the power-up off and on again during the event.
+local PERK_NAMES = { giant = "🦖 Giant", speed = "⚡ Speed" }
+task.spawn(function()
+	local AbusePerk = ReplicatedStorage:WaitForChild("AbusePerk", 60) :: RemoteEvent?
+	local AbusePerkToggle = ReplicatedStorage:WaitForChild("AbusePerkToggle", 60) :: RemoteEvent?
+	if AbusePerk then
+		AbusePerk.OnClientEvent:Connect(function(kind: string?, on: boolean)
+			local name = if kind then PERK_NAMES[kind] else nil
+			giantChip.Visible = name ~= nil
+			if name then
+				giantLabel.Text = if on == true then name .. ": ON (tap to turn off)" else name .. ": OFF (tap to turn on)"
+			end
+		end)
 	end
+	giantChip.MouseButton1Click:Connect(function()
+		if AbusePerkToggle then
+			AbusePerkToggle:FireServer()
+		end
+	end)
 end)
 
 AdminSetFlying.OnClientEvent:Connect(function(enabled: boolean)
@@ -52570,7 +52626,7 @@ do
 		local card = Instance.new("Frame")
 		card.AnchorPoint = Vector2.new(0.5, 1)
 		card.Position = UDim2.new(0.5, 0, 1, -150)
-		card.Size = UDim2.fromOffset(440, 150)
+		card.Size = UDim2.fromOffset(500, 230)
 		card.BackgroundColor3 = Color3.fromRGB(14, 36, 72)
 		card.Parent = gui
 		do
@@ -52585,50 +52641,69 @@ do
 		local text = Instance.new("TextLabel")
 		text.BackgroundTransparency = 1
 		text.Position = UDim2.fromOffset(16, 10)
-		text.Size = UDim2.new(1, -32, 0, 70)
+		text.Size = UDim2.new(1, -32, 0, 50)
 		text.Font = Enum.Font.GothamBold
 		text.TextScaled = true
 		text.TextWrapped = true
 		text.TextColor3 = Color3.new(1, 1, 1)
-		text.Text = "Want to be able to fly for the rest of the event?"
+		text.Text = "Pick ONE power-up for the rest of the event."
 		text.Parent = card
 		local timerLabel = Instance.new("TextLabel")
 		timerLabel.BackgroundTransparency = 1
-		timerLabel.Position = UDim2.fromOffset(16, 80)
+		timerLabel.Position = UDim2.fromOffset(16, 166)
 		timerLabel.Size = UDim2.new(1, -32, 0, 18)
 		timerLabel.Font = Enum.Font.GothamMedium
 		timerLabel.TextSize = 14
 		timerLabel.TextColor3 = Color3.fromRGB(170, 190, 220)
 		timerLabel.Parent = card
 		local currentId, ends = 0, 0
-		local function answer(accepted: boolean)
+		local function answer(choice: string?)
 			if currentId ~= 0 then
-				reply:FireServer(currentId, accepted)
+				reply:FireServer(currentId, choice)
 			end
 			currentId = 0
 			gui.Enabled = false
 		end
-		local function button(label: string, color: Color3, x: number, accepted: boolean)
+		local function button(label: string, sub: string, color: Color3, x: number, choice: string)
 			local b = Instance.new("TextButton")
-			b.AnchorPoint = Vector2.new(0.5, 1)
-			b.Position = UDim2.new(x, 0, 1, -12)
-			b.Size = UDim2.new(0.42, 0, 0, 38)
+			b.AnchorPoint = Vector2.new(0.5, 0)
+			b.Position = UDim2.new(x, 0, 0, 70)
+			b.Size = UDim2.new(0.3, 0, 0, 84)
 			b.BackgroundColor3 = color
 			b.Font = Enum.Font.GothamBold
-			b.TextSize = 18
+			b.TextSize = 20
 			b.TextColor3 = Color3.new(1, 1, 1)
-			b.Text = label
+			b.Text = label .. "\n" .. sub
 			b.AutoButtonColor = true
 			local c = Instance.new("UICorner")
 			c.CornerRadius = UDim.new(0, 10)
 			c.Parent = b
 			b.Activated:Connect(function()
-				answer(accepted)
+				answer(choice)
 			end)
 			b.Parent = card
 		end
-		button("Accept", Color3.fromRGB(46, 190, 120), 0.27, true)
-		button("Decline", Color3.fromRGB(200, 70, 70), 0.73, false)
+		button("🕊️ Fly", "float anywhere", Color3.fromRGB(46, 150, 220), 0.19, "fly")
+		button("🦖 Giant", "4x bigger", Color3.fromRGB(200, 120, 40), 0.5, "giant")
+		button("⚡ Speed", "run much faster", Color3.fromRGB(150, 90, 220), 0.81, "speed")
+		do
+			local none = Instance.new("TextButton")
+			none.AnchorPoint = Vector2.new(0.5, 1)
+			none.Position = UDim2.new(0.5, 0, 1, -10)
+			none.Size = UDim2.new(0.4, 0, 0, 28)
+			none.BackgroundColor3 = Color3.fromRGB(70, 80, 100)
+			none.Font = Enum.Font.GothamBold
+			none.TextSize = 15
+			none.TextColor3 = Color3.new(1, 1, 1)
+			none.Text = "No thanks"
+			local c = Instance.new("UICorner")
+			c.CornerRadius = UDim.new(0, 8)
+			c.Parent = none
+			none.Activated:Connect(function()
+				answer(nil)
+			end)
+			none.Parent = card
+		end
 		offer.OnClientEvent:Connect(function(id: any, seconds: any, message: any)
 			if type(id) ~= "number" or type(seconds) ~= "number" then
 				return
@@ -52647,7 +52722,7 @@ do
 			task.spawn(function()
 				while gui.Enabled and currentId == id do
 					local left = math.max(0, math.ceil(ends - os.clock()))
-					timerLabel.Text = string.format("%d seconds left to decide", left)
+					timerLabel.Text = string.format("%d seconds left to pick (switch it on/off any time)", left)
 					if left &lt;= 0 then
 						currentId = 0
 						gui.Enabled = false

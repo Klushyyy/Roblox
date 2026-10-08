@@ -699,7 +699,7 @@ Remote.AbuseBoom.Parent = ReplicatedStorage
 Remote.AbuseOffer = Instance.new("RemoteEvent") -- S->C (offer id, seconds): "do you want to fly?" (seconds 0 closes it)
 Remote.AbuseOffer.Name = "AbuseOffer"
 Remote.AbuseOffer.Parent = ReplicatedStorage
-Remote.AbuseOfferReply = Instance.new("RemoteEvent") -- C->S (offer id, accepted)
+Remote.AbuseOfferReply = Instance.new("RemoteEvent") -- C->S (pick id, "fly" / "giant" / "speed", or nothing for No thanks)
 Remote.AbuseOfferReply.Name = "AbuseOfferReply"
 Remote.AbuseOfferReply.Parent = ReplicatedStorage
 Remote.AbusePerk = Instance.new("RemoteEvent") -- S->C (kind: "giant" or nil, on): the giant power-up's on/off button
@@ -4888,13 +4888,13 @@ do
 	local collecting = {} -- on the admin's server: [id] = { Counts, Question, Options, Admin }
 
 	local function sendPoll(plr, poll)
-		Remote.GlobalPoll:FireClient(plr, "Start", poll.Id, poll.Question, poll.Options, poll.EndsAt)
+		Remote.GlobalPoll:FireClient(plr, "Start", poll.Id, poll.Question, poll.Options, poll.EndsAt, poll.Hint)
 	end
 	handlers.PollStart = function(d)
 		if type(d.Id) ~= "string" or type(d.Options) ~= "table" or polls[d.Id] then
 			return
 		end
-		local poll = { Id = d.Id, Question = tostring(d.Question), Options = d.Options, EndsAt = tonumber(d.EndsAt) or Config.Now(), Origin = d.Origin, Votes = {}, Silent = d.Silent == true }
+		local poll = { Id = d.Id, Question = tostring(d.Question), Options = d.Options, EndsAt = tonumber(d.EndsAt) or Config.Now(), Origin = d.Origin, Votes = {}, Silent = d.Silent == true, Hint = if type(d.Hint) == "string" then string.sub(d.Hint, 1, 60) else nil }
 		polls[d.Id] = poll
 		for _, plr in ipairs(Players:GetPlayers()) do
 			sendPoll(plr, poll)
@@ -5364,7 +5364,7 @@ do
 	local function applyOutcome(option: any)
 		if option.Kind == "Bubbles" or option.Kind == "Gems" then
 			publish({ Kind = "GiveAll", Currency = option.Kind, Amount = option.PerPlayer })
-			publish({ Kind = "Banner", Text = string.format("Admin Abuse: everyone gets %s %s!", Format.Commas(option.PerPlayer), option.Kind) })
+			publish({ Kind = "Banner", Text = string.format("Admin Abuse: the vote picked it, so everyone gets %s %s!", Format.Commas(option.PerPlayer), option.Kind) })
 		elseif option.Kind == "Passes" then
 			Commands.globalpassdrop(STUB, tostring(option.Count) .. " random")
 		elseif option.Kind == "Pet" then
@@ -5409,7 +5409,7 @@ do
 			counts[i] = 0
 		end
 		collecting[id] = { Counts = counts, Question = round.Question, Options = options }
-		publish({ Kind = "PollStart", Id = id, Silent = true, Question = round.Question, Options = options, EndsAt = Config.Now() + round.Seconds, Origin = game.JobId })
+		publish({ Kind = "PollStart", Id = id, Silent = true, Hint = "EVERYONE VOTES - MOST VOTES WINS", Question = round.Question, Options = options, EndsAt = Config.Now() + round.Seconds, Origin = game.JobId })
 		task.delay(round.Seconds + 7, function()
 			local c = collecting[id]
 			collecting[id] = nil
@@ -7743,81 +7743,125 @@ do
 		end
 	end
 
-	----------------------------------------------------------------- the offers
-	-- Two random players in each server are offered something harmless and fun for the rest of the show: one
-	-- can fly, another becomes giant (30 seconds to accept or decline). Both are taken away when the show is put
-	-- away, when the player leaves (nothing is saved: coming back means normal), and flying is no advantage in
-	-- the obby (it ignores checkpoints and the finish while flying).
+	----------------------------------------------------------------- the power-ups
+	-- Near the end of the warm-up EVERYONE in the server picks ONE temporary power-up for the rest of the show:
+	-- fly, giant or speed (not a vote: each player simply gets the one they choose; "No thanks" is allowed). Each
+	-- has an on/off button on screen (flying: the Flying chip, the others: the AbusePerk chip). They are all taken
+	-- away when the show is put away or the player leaves (nothing is saved: coming back means normal), and flying
+	-- is no advantage in the obby (it ignores checkpoints and the finish while flying).
+	local PERK_SET = { fly = true, giant = true, speed = true }
+	local PERK_GIANT_SCALE = 4
+	local PERK_SPEED = 30
+	local PICK_SECONDS = 40
 	local offerId = 0
-	local pendingOffer: { [Player]: { Id: number, Kind: string } } = {}
-	local perks: { [Player]: string } = {} -- accepted: "fly" or "giant"
-	local OFFER_TEXT = {
-		fly = "Do you want to be able to fly for the rest of the event?",
-		giant = "Do you want to be giant for the rest of the event?",
-	}
-	local function takePerk(plr: Player)
+	local pendingOffer: { [Player]: number } = {}
+	local perks: { [Player]: string } = {} -- chosen: "fly", "giant" or "speed"
+	local perkOff: { [Player]: boolean } = {} -- switched off with its button (giant / speed)
+	local baseSpeed: { [Player]: number } = {}
+	local pickOpenUntil = 0
+	local pickId = 0
+	local function humanoidOf(plr: Player): Humanoid?
+		return plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+	end
+	-- Puts the player's perk on (or off) their current character.
+	local function setPerkOn(plr: Player, on: boolean)
 		local kind = perks[plr]
-		perks[plr] = nil
 		if kind == "fly" then
-			pcall(function()
-				setFlying(plr, false)
-			end)
+			pcall(setFlying, plr, on)
 		elseif kind == "giant" then
-			pcall(function()
-				setGiantScale(plr, 1)
-			end)
-			Remote.AbusePerk:FireClient(plr, nil, false)
+			pcall(setGiantScale, plr, if on then PERK_GIANT_SCALE else 1)
+		elseif kind == "speed" then
+			local hum = humanoidOf(plr)
+			if hum then
+				if on then
+					baseSpeed[plr] = baseSpeed[plr] or hum.WalkSpeed
+					hum.WalkSpeed = PERK_SPEED
+				else
+					hum.WalkSpeed = baseSpeed[plr] or 16
+				end
+			end
+		end
+		if kind == "giant" or kind == "speed" then
+			Remote.AbusePerk:FireClient(plr, kind, on)
 		end
 	end
-	local giantOff: { [Player]: boolean } = {}
+	local function takePerk(plr: Player)
+		if not perks[plr] then
+			return
+		end
+		setPerkOn(plr, false)
+		Remote.AbusePerk:FireClient(plr, nil, false)
+		perks[plr], perkOff[plr], baseSpeed[plr] = nil, nil, nil
+	end
 	Remote.AbusePerkToggle.OnServerEvent:Connect(function(plr: Player)
-		if perks[plr] ~= "giant" or ReplicatedStorage:GetAttribute("AbuseLive") ~= true then
+		local kind = perks[plr]
+		if (kind ~= "giant" and kind ~= "speed") or ReplicatedStorage:GetAttribute("AbuseLive") ~= true then
 			return
 		end
-		local off = not giantOff[plr]
-		giantOff[plr] = if off then true else nil
-		setGiantScale(plr, if off then 1 else 4)
-		Remote.AbusePerk:FireClient(plr, "giant", not off)
+		local off = not perkOff[plr]
+		perkOff[plr] = if off then true else nil
+		setPerkOn(plr, not off)
 	end)
-	Remote.AbuseOfferReply.OnServerEvent:Connect(function(plr: Player, id: any, accepted: any)
-		local offer = pendingOffer[plr]
-		if not offer or offer.Id ~= id then
+	Remote.AbuseOfferReply.OnServerEvent:Connect(function(plr: Player, id: any, choice: any)
+		if not pendingOffer[plr] or pendingOffer[plr] ~= id then
 			return
 		end
 		pendingOffer[plr] = nil
-		if accepted == true and plr.Parent == Players and ReplicatedStorage:GetAttribute("AbuseLive") == true then
-			perks[plr] = offer.Kind
-			if offer.Kind == "fly" then
-				setFlying(plr, true)
-			else
-				giantOff[plr] = nil
-				setGiantScale(plr, 4)
-				Remote.AbusePerk:FireClient(plr, "giant", true)
+		if type(choice) == "string" and PERK_SET[choice] and plr.Parent == Players and ReplicatedStorage:GetAttribute("AbuseLive") == true then
+			if perks[plr] then
+				takePerk(plr)
 			end
+			perks[plr] = choice
+			perkOff[plr] = nil
+			setPerkOn(plr, true)
 		end
 	end)
+	-- A respawn gives the character back to normal: put the chosen power-up on again.
+	local function watchPerks(plr: Player)
+		plr.CharacterAdded:Connect(function()
+			task.wait(1)
+			if perks[plr] and not perkOff[plr] and ReplicatedStorage:GetAttribute("AbuseLive") == true then
+				setPerkOn(plr, true)
+			end
+		end)
+	end
+	local function sendPick(plr: Player, id: number, seconds: number)
+		if plr:GetAttribute("AdminInvis") == true then
+			return
+		end
+		pendingOffer[plr] = id
+		Remote.AbuseOffer:FireClient(plr, id, seconds, "Pick ONE power-up for the rest of the event. It is yours, not a vote.")
+	end
+	Players.PlayerAdded:Connect(function(plr)
+		watchPerks(plr)
+		-- someone who joins while the pick is open gets the card too
+		if os.clock() < pickOpenUntil and ReplicatedStorage:GetAttribute("AbuseLive") == true then
+			task.delay(4, function()
+				if plr.Parent == Players and os.clock() < pickOpenUntil then
+					sendPick(plr, pickId, math.max(5, math.floor(pickOpenUntil - os.clock())))
+				end
+			end)
+		end
+	end)
+	for _, plr in Players:GetPlayers() do
+		watchPerks(plr)
+	end
 	Players.PlayerRemoving:Connect(function(plr)
-		perks[plr] = nil
-		pendingOffer[plr] = nil
+		perks[plr], perkOff[plr], baseSpeed[plr], pendingOffer[plr] = nil, nil, nil, nil
 	end)
-	local function offerTo(kind: string)
-		local pool = {}
-		for _, plr in Players:GetPlayers() do
-			if plr.Character and not perks[plr] and not pendingOffer[plr] and plr:GetAttribute("AdminInvis") ~= true then
-				table.insert(pool, plr)
-			end
-		end
-		if #pool == 0 then
-			return
-		end
-		local chosen = pool[math.random(1, #pool)]
+	-- Everyone in this server gets the pick card.
+	local function offerAll()
 		offerId += 1
-		local myId = offerId
-		pendingOffer[chosen] = { Id = myId, Kind = kind }
-		Remote.AbuseOffer:FireClient(chosen, myId, 30, OFFER_TEXT[kind])
-		task.delay(31, function()
-			if pendingOffer[chosen] and pendingOffer[chosen].Id == myId then
-				pendingOffer[chosen] = nil
+		pickId = offerId
+		pickOpenUntil = os.clock() + PICK_SECONDS
+		for _, plr in Players:GetPlayers() do
+			sendPick(plr, pickId, PICK_SECONDS)
+		end
+		task.delay(PICK_SECONDS + 1, function()
+			for plr, id in pendingOffer do
+				if id == pickId then
+					pendingOffer[plr] = nil
+				end
 			end
 		end)
 	end
@@ -7825,7 +7869,8 @@ do
 		for plr in perks do
 			takePerk(plr)
 		end
-		perks, pendingOffer = {}, {}
+		pendingOffer = {}
+		pickOpenUntil = 0
 		Remote.AbuseOffer:FireAllClients(0, 0)
 	end
 
@@ -8001,10 +8046,8 @@ do
 						if kind == "say" then
 							say(step[3])
 						elseif kind == "attack" then
-							if step[3] == "flyoffer" then
-								offerTo("fly")
-							elseif step[3] == "giantoffer" then
-								offerTo("giant")
+							if step[3] == "perkpick" then
+								offerAll()
 							else
 								playEffect(step[3])
 							end

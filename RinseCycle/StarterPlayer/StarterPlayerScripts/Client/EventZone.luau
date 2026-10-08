@@ -198,6 +198,10 @@ function EventZone.Init()
 					end
 				end
 			end
+			if ReplicatedStorage:GetAttribute("AbuseLive") == true then
+				isInside = false -- (no pop-ups while the Admin Abuse show runs)
+				card.Visible = false
+			end
 			if isInside and not wasInside then
 				show(event)
 			elseif isInside and card.Visible then
