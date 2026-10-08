@@ -930,6 +930,95 @@ do
 	if ReplicatedStorage:GetAttribute("AbuseLive") == true then
 		setLiveUi(true)
 	end
+
+	-- The opening shot: as the show starts everyone's camera swings to the giant where he appears, stays on him for a
+	-- couple of seconds, follows him as he starts to walk for a few more, then swings back to their own character, so
+	-- everyone knows what is happening. (Only for people who are there at the start, and never over another camera.)
+	local cinemaBusy = false
+	local function openingShot()
+		local camera = workspace.CurrentCamera
+		if cinemaBusy or not camera or camera.CameraType == Enum.CameraType.Scriptable then
+			return
+		end
+		cinemaBusy = true
+		local giant: Model? = nil
+		for _ = 1, 60 do
+			if ReplicatedStorage:GetAttribute("AbuseLive") ~= true then
+				break
+			end
+			local g = workspace:FindFirstChild("AbuseGiant")
+			if g and g:IsA("Model") and g:FindFirstChild("HumanoidRootPart") then
+				giant = g
+				break
+			end
+			task.wait(0.2)
+		end
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if not giant or not root or not humanoid or camera.CameraType == Enum.CameraType.Scriptable then
+			cinemaBusy = false
+			return
+		end
+		local startCF = camera.CFrame
+		local offset = startCF.Position - root.Position
+		if offset.Magnitude < 6 or offset.Magnitude > 60 then
+			offset = Vector3.new(0, 12, 26) -- (first person, or very far: the usual spot behind them)
+		end
+		local height = math.max(80, giant:GetExtentsSize().Y)
+		local PAN, HOLD, FOLLOW, BACK = 1.6, 2.4, 3.6, 1.4
+		local t0 = os.clock()
+		local backFrom: CFrame? = nil
+		local function smooth(x: number): number
+			x = math.clamp(x, 0, 1)
+			return x * x * (3 - 2 * x)
+		end
+		local function finish()
+			pcall(function()
+				RunService:UnbindFromRenderStep("AbuseOpeningShot")
+			end)
+			camera.CameraType = Enum.CameraType.Custom
+			camera.CameraSubject = humanoid
+			cinemaBusy = false
+		end
+		camera.CameraType = Enum.CameraType.Scriptable
+		RunService:BindToRenderStep("AbuseOpeningShot", Enum.RenderPriority.Camera.Value, function()
+			local gRoot = giant and giant:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if not gRoot or not gRoot.Parent or not root.Parent or ReplicatedStorage:GetAttribute("AbuseLive") ~= true then
+				finish()
+				return
+			end
+			local e = os.clock() - t0
+			local focus = gRoot.Position + Vector3.new(0, height * 0.12, 0)
+			-- in front of him, at the side the viewer is on, slowly drifting round him while he walks
+			local flat = Vector3.new(startCF.Position.X - focus.X, 0, startCF.Position.Z - focus.Z)
+			local dir = if flat.Magnitude > 1 then flat.Unit else Vector3.new(0, 0, 1)
+			local drift = math.max(0, e - PAN) * 0.14
+			dir = CFrame.Angles(0, drift, 0):VectorToWorldSpace(dir)
+			local pos = focus + dir * (height * 1.3) + Vector3.new(0, height * 0.06, 0)
+			pos = Vector3.new(math.clamp(pos.X, -390, 390), pos.Y, math.clamp(pos.Z, -530, 370))
+			local shot = CFrame.lookAt(pos, focus)
+			if e < PAN then
+				camera.CFrame = startCF:Lerp(shot, smooth(e / PAN))
+			elseif e < PAN + HOLD + FOLLOW then
+				camera.CFrame = shot
+				backFrom = shot
+			elseif e < PAN + HOLD + FOLLOW + BACK then
+				local home = CFrame.lookAt(root.Position + offset, root.Position)
+				camera.CFrame = (backFrom or shot):Lerp(home, smooth((e - PAN - HOLD - FOLLOW) / BACK))
+			else
+				finish()
+			end
+		end)
+	end
+	ReplicatedStorage:GetAttributeChangedSignal("AbuseLive"):Connect(function()
+		if ReplicatedStorage:GetAttribute("AbuseLive") == true then
+			local starts = tonumber(ReplicatedStorage:GetAttribute("AbuseStarts"))
+			if starts and Config.Now() - starts <= 12 then
+				task.spawn(openingShot)
+			end
+		end
+	end)
 	-- The power-up pick: everyone gets a card (same look as the vote card) with 3 power-ups and "No thanks".
 	task.spawn(function()
 		local offer = ReplicatedStorage:WaitForChild("AbuseOffer", 120) :: RemoteEvent?

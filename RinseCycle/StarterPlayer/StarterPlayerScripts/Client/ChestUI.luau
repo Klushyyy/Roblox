@@ -21,6 +21,7 @@ local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TextService = game:GetService("TextService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
@@ -126,47 +127,89 @@ local function chestPivot(): CFrame?
 end
 
 -- The odds board and the free sign above the chest (built here, so each player sees their own).
+-- Drawn on a fixed 520-px-wide canvas with ONE text size for every row (the biggest that lets the longest name
+-- fit), then the whole canvas is scaled to the board's size on screen: every row looks the same, and nothing is
+-- squeezed or cut off.
+local BOARD_W = 520
 local function buildBoard(model: Model): boolean
 	local box = model.PrimaryPart
 	if not box or freeSign ~= nil then
 		return false
 	end
+	local count = #Config.ChestEvent.Rewards
+	local ROW_H, HEAD_H, PAD = 40, 58, 14
+	local boardH = HEAD_H + 8 + count * ROW_H + PAD * 2
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "OddsBoard"
 	gui.Adornee = box
-	gui.Size = UDim2.fromScale(10, 9)
+	gui.Size = UDim2.fromScale(10, 10 * boardH / BOARD_W)
 	gui.StudsOffsetWorldSpace = Vector3.new(0, 11, 0) -- well above the lid, under the title sign
 	gui.MaxDistance = 70
 	gui.LightInfluence = 0
 	gui.ResetOnSpawn = false
-	local list = Instance.new("Frame")
-	list.BackgroundColor3 = Colors.PanelDark
-	list.BackgroundTransparency = 0.15
-	list.Size = UDim2.fromScale(1, 0.84)
-	list.Position = UDim2.fromScale(0, 0.16)
-	UIKit.Corner(list, 14)
-	list.Parent = gui
-	local layout = Instance.new("UIListLayout")
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Padding = UDim.new(0.01, 0)
-	layout.Parent = list
-	local pad = Instance.new("UIPadding")
-	pad.PaddingTop = UDim.new(0.03, 0)
-	pad.PaddingLeft = UDim.new(0.04, 0)
-	pad.PaddingRight = UDim.new(0.04, 0)
-	pad.Parent = list
-	local count = #Config.ChestEvent.Rewards
-	for i, r in Config.ChestEvent.Rewards do
-		local row = Instance.new("Frame")
-		row.BackgroundTransparency = 1
-		row.Size = UDim2.fromScale(1, 0.94 / count - 0.01)
-		row.LayoutOrder = i
-		row.Parent = list
-		local name = UIKit.Label({ Text = Config.ChestRewardName(r), TextScaled = true, TextColor3 = rewardColor(r), TextXAlignment = Enum.TextXAlignment.Left, Size = UDim2.fromScale(0.74, 1), Parent = row })
-		local _ = name
-		UIKit.Label({ Text = pctText(r.Chance), TextScaled = true, TextXAlignment = Enum.TextXAlignment.Right, Position = UDim2.fromScale(0.74, 0), Size = UDim2.fromScale(0.26, 1), Parent = row })
+	local canvas = Instance.new("Frame")
+	canvas.BackgroundTransparency = 1
+	canvas.Size = UDim2.fromOffset(BOARD_W, boardH)
+	canvas.Parent = gui
+	local uiScale = Instance.new("UIScale")
+	uiScale.Parent = canvas
+
+	local font = UIKit.Theme.Fonts.Title
+	local NAME_W, PCT_W = BOARD_W - PAD * 2 - 110, 110
+	-- one size for all: the largest (up to 26) at which the longest name still fits its column
+	local size = 26
+	for _, r in Config.ChestEvent.Rewards do
+		local text = Config.ChestRewardName(r)
+		while size > 12 and TextService:GetTextSize(text, size, font, Vector2.new(1000, 100)).X > NAME_W do
+			size -= 1
+		end
 	end
-	freeSign = UIKit.Label({ Name = "FreeSign", Text = "1 FREE CHEST!", TextScaled = true, TextColor3 = Colors.Good, Size = UDim2.fromScale(1, 0.14), Parent = gui })
+	local function text(parent: Instance, props: { [string]: any }): TextLabel
+		local label = Instance.new("TextLabel")
+		label.BackgroundTransparency = 1
+		label.Font = font
+		label.TextSize = size
+		label.TextColor3 = Colors.Text
+		label.TextWrapped = false
+		for k, v in props do
+			(label :: any)[k] = v
+		end
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Colors.Stroke
+		stroke.Thickness = 2
+		stroke.Parent = label
+		label.Parent = parent
+		return label
+	end
+
+	freeSign = text(canvas, { Name = "FreeSign", Text = "1 FREE CHEST!", TextSize = 38, TextColor3 = Colors.Good, Size = UDim2.fromOffset(BOARD_W, HEAD_H) })
+	local panel = Instance.new("Frame")
+	panel.BackgroundColor3 = Colors.PanelDark
+	panel.BackgroundTransparency = 0.1
+	panel.Position = UDim2.fromOffset(0, HEAD_H + 8)
+	panel.Size = UDim2.fromOffset(BOARD_W, boardH - HEAD_H - 8)
+	UIKit.Corner(panel, 16)
+	UIKit.Stroke(panel, Colors.Primary, 3, 0)
+	panel.Parent = canvas
+	for i, r in Config.ChestEvent.Rewards do
+		local y = PAD + (i - 1) * ROW_H
+		text(panel, { Text = Config.ChestRewardName(r), TextColor3 = rewardColor(r), TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(PAD, y), Size = UDim2.fromOffset(NAME_W, ROW_H) })
+		text(panel, { Text = pctText(r.Chance), TextXAlignment = Enum.TextXAlignment.Right, Position = UDim2.fromOffset(BOARD_W - PAD - PCT_W, y), Size = UDim2.fromOffset(PCT_W, ROW_H) })
+	end
+	-- the canvas follows the size the board has on screen
+	local conn: RBXScriptConnection? = nil
+	conn = RunService.RenderStepped:Connect(function()
+		if not gui.Parent then
+			if conn then
+				conn:Disconnect()
+			end
+			return
+		end
+		local w = gui.AbsoluteSize.X
+		if w > 1 then
+			uiScale.Scale = w / BOARD_W
+		end
+	end)
 	gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 	return true
 end
