@@ -142,9 +142,9 @@ local function buildBoard(model: Model): boolean
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "OddsBoard"
 	gui.Adornee = box
-	gui.Size = UDim2.fromScale(10, 10 * boardH / BOARD_W)
-	gui.StudsOffsetWorldSpace = Vector3.new(0, 11, 0) -- well above the lid, under the title sign
-	gui.MaxDistance = 70
+	gui.Size = UDim2.fromScale(20, 20 * boardH / BOARD_W) -- big: it has to be readable from across the lobby
+	gui.StudsOffsetWorldSpace = Vector3.new(0, 19, 0) -- well above the lid, under the title sign
+	gui.MaxDistance = 260
 	gui.LightInfluence = 0
 	gui.ResetOnSpawn = false
 	local canvas = Instance.new("Frame")
@@ -188,10 +188,10 @@ local function buildBoard(model: Model): boolean
 		return label
 	end
 
-	freeSign = text(canvas, { Name = "FreeSign", Text = "1 FREE CHEST!", TextSize = 38, TextColor3 = Colors.Good, Size = UDim2.fromOffset(BOARD_W, HEAD_H) })
+	freeSign = text(canvas, { Name = "FreeSign", Text = "1 FREE CHEST!", TextSize = 44, TextColor3 = Colors.Good, Size = UDim2.fromOffset(BOARD_W, HEAD_H) })
 	local panel = Instance.new("Frame")
 	panel.BackgroundColor3 = Colors.PanelDark
-	panel.BackgroundTransparency = 0.1
+	panel.BackgroundTransparency = 0
 	panel.Position = UDim2.fromOffset(0, HEAD_H + 8)
 	panel.Size = UDim2.fromOffset(BOARD_W, boardH - HEAD_H - 8)
 	UIKit.Corner(panel, 16)
@@ -645,7 +645,7 @@ function ChestUI.Init()
 	ProximityPromptService.PromptHidden:Connect(function()
 		promptsShown = math.max(0, promptsShown - 1)
 	end)
-	-- E: open one at the chest; anywhere else in the lobby, go to it. (Leaves E alone while
+	-- E: open one at the chest. (Leaves E alone while
 	-- another prompt is up or you're typing.)
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if input.KeyCode ~= Enum.KeyCode.E or processed or UserInputService:GetFocusedTextBox() then
@@ -660,10 +660,10 @@ function ChestUI.Init()
 		if not Config.ChestEventLive() then
 			return
 		end
+		-- (E only opens a chest when you are standing at it; it no longer carries you across the lobby, that happened
+		-- by accident whenever E was pressed to interact with something else. The Event button still takes you there.)
 		if near then
 			ChestUI.Open(1)
-		else
-			ChestUI.GoToChest()
 		end
 	end)
 

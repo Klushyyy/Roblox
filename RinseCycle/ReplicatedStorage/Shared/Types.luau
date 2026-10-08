@@ -138,6 +138,8 @@ export type MetaState = {
 	ChestFreeLeft: number?, -- free Treasure Chests left in the current event
 	ChestsOpened: number?,
 	ClubId: string?, -- "" = not in a club
+	ClubNotice: string?, -- a message to show once ("You were kicked from ..."); the client answers with MetaRequest "ClubNoticeSeen"
+	ClubFreeAt: number?, -- os.time() they can join / make a club again after leaving one (nil = now)
 	LevelsBeaten: number?, -- highest level ever cleared (club requirements)
 	Stats: {
 		Runs: number,

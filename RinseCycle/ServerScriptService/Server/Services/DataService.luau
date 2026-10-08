@@ -112,7 +112,9 @@ export type Profile = {
 	ChestsOpened: number, -- every chest ever opened (free and bought)
 	ClubId: string, -- the club they're in ("" = none); ClubService keeps the club's own record
 	ClubTag: string, -- that club's tag, for the name tag (refreshed from the club on join)
-	ClubMovedAt: number, -- os.time() they last joined / left a club (Config.Clubs.JoinCooldown)
+	ClubMovedAt: number, -- os.time() they last LEFT a club (they can join / make another after Config.Clubs.LeaveCooldown)
+	ClubBans: { [string]: number }, -- club id -> os.time() they were KICKED from it (they can rejoin it after Config.Clubs.KickBan)
+	ClubNotice: string, -- a message waiting for them ("You were kicked from ..."); the client shows it once, then it's cleared
 	ClubPrizeSeason: string, -- the club contest month (YYYYMM) whose prize they've been paid
 	BadgesGot: { [string]: boolean }, -- Config.Badges keys already awarded (BadgeAwards)
 	DailyNotifyAt: number, -- os.time() the "daily reward ready" notification is queued for (0 = none)
@@ -198,6 +200,8 @@ local TEMPLATE: Profile = {
 	ClubId = "",
 	ClubTag = "",
 	ClubMovedAt = 0,
+	ClubBans = {},
+	ClubNotice = "",
 	ClubPrizeSeason = "",
 	BadgesGot = {},
 	DailyNotifyAt = 0,
@@ -421,6 +425,17 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.ClubId = if type(p.ClubId) == "string" and #p.ClubId <= 40 then p.ClubId else ""
 	p.ClubTag = if type(p.ClubTag) == "string" and #p.ClubTag <= 20 then p.ClubTag else ""
 	p.ClubMovedAt = toCount(p.ClubMovedAt, 0)
+	local bans: { [string]: number } = {}
+	local banCount = 0
+	for id, at in (if type(p.ClubBans) == "table" then p.ClubBans else {}) do
+		-- (only the ones still running; a few at most)
+		if type(id) == "string" and #id <= 40 and type(at) == "number" and at + Config.Clubs.KickBan > os.time() and banCount < 20 then
+			bans[id] = at
+			banCount += 1
+		end
+	end
+	p.ClubBans = bans
+	p.ClubNotice = if type(p.ClubNotice) == "string" and #p.ClubNotice <= 160 then p.ClubNotice else ""
 	p.ClubPrizeSeason = if type(p.ClubPrizeSeason) == "string" and #p.ClubPrizeSeason <= 8 then p.ClubPrizeSeason else ""
 	local badges = {}
 	for key, got in (if type(p.BadgesGot) == "table" then p.BadgesGot else {}) do
@@ -700,6 +715,8 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		ChestFreeLeft = DataService.FreeChestsLeft(profile),
 		ChestsOpened = profile.ChestsOpened,
 		ClubId = profile.ClubId,
+		ClubNotice = if profile.ClubNotice ~= "" then profile.ClubNotice else nil,
+		ClubFreeAt = if profile.ClubMovedAt + Config.Clubs.LeaveCooldown > os.time() then profile.ClubMovedAt + Config.Clubs.LeaveCooldown else nil,
 		LevelsBeaten = DataService.LevelsBeaten(profile),
 		Stats = {
 			Runs = stats.Runs,
@@ -1572,6 +1589,42 @@ function DataService.SetClub(player: Player, clubId: string, tag: string, moved:
 	DataService.PushMeta(player)
 end
 
+-- Kicked from a club: the player can't rejoin that club for Config.Clubs.KickBan seconds from `at`.
+function DataService.SetClubBan(player: Player, clubId: string, at: number)
+	local session = sessions[player]
+	local profile = session and session.Profile
+	if not profile or clubId == "" then
+		return
+	end
+	profile.ClubBans[clubId] = at
+	session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
+end
+
+-- A message the client shows once the next time it can ("" clears it).
+function DataService.SetClubNotice(player: Player, text: string)
+	local session = sessions[player]
+	local profile = session and session.Profile
+	if not profile then
+		return
+	end
+	profile.ClubNotice = string.sub(text, 1, 160)
+	session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
+	DataService.PushMeta(player)
+end
+
+-- A staff test tool: no wait after leaving a club, no kick bans, no pending notice.
+function DataService.ResetClubCooldowns(player: Player): boolean
+	local profile = DataService.Get(player)
+	if not profile then
+		return false
+	end
+	profile.ClubMovedAt = 0
+	profile.ClubBans = {}
+	profile.ClubNotice = ""
+	DataService.PushMeta(player)
+	return true
+end
+
 -- Rewarded-ad luck was removed (friends' luck replaced it); kept as no-ops for old callers.
 function DataService.AdLuckStacks(_profile: any): number
 	return 0
@@ -1583,19 +1636,45 @@ end
 
 -- The pets on / off switch: resting pets follow you but don't clean. Saved, so it carries over
 -- between the lobby and the dishwashers.
--- The first-run tutorial was finished (or skipped).
-function DataService.SetTutorialDone(player: Player): boolean
+-- Back to a brand-new player's first run (a staff test tool): tutorial not done, no runs, level 1 cutscene unseen.
+function DataService.ResetFirstRun(player: Player): boolean
 	local profile = DataService.Get(player)
 	if not profile then
 		return false
 	end
+	profile.TutorialDone = false
+	profile.Stats.Runs = 0
+	profile.Episodes = {}
+	DataService.PushMeta(player)
+	return true
+end
+
+-- The first-run tutorial was finished (`completed`) or skipped. Returns (ok, rewarded): finishing pays
+-- Config.Tutorial.Reward once (and only to someone who really cleaned a few dishes); skipping pays nothing.
+function DataService.SetTutorialDone(player: Player, completed: boolean?): (boolean, boolean)
+	local profile = DataService.Get(player)
+	if not profile then
+		return false, false
+	end
+	local first = profile.TutorialDone ~= true
 	profile.TutorialDone = true
+	local rewarded = false
+	if first and completed == true and (profile.Stats.DishesCleaned or 0) >= 3 then
+		local reward = Config.Tutorial.Reward
+		if (reward.Bubbles or 0) > 0 then
+			DataService.AddBubbles(player, reward.Bubbles :: number, "Tutorial")
+		end
+		if (reward.Gems or 0) > 0 then
+			DataService.AddGems(player, reward.Gems :: number)
+		end
+		rewarded = true
+	end
 	local session = sessions[player]
 	if session then
 		session.NextAutosave = math.min(session.NextAutosave, os.clock() + 5)
 	end
 	DataService.PushMeta(player)
-	return true
+	return true, rewarded
 end
 
 function DataService.SetPetsResting(player: Player, resting: boolean): boolean

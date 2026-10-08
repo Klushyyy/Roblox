@@ -1818,6 +1818,7 @@ local obbyBeat: RBXScriptConnection? = nil
 local obbyProgress: { [number]: number } = {} -- userId -> highest checkpoint reached
 local obbySpawnAt: { [number]: CFrame } = {}
 local obbyLastPrize: { [number]: number } = {}
+local obbyShowDone: { [number]: boolean } = {} -- who has already won the event's prize (the show's obby: once each)
 
 local function playerOfPart(hit: BasePart): Player?
 	local character = hit:FindFirstAncestorOfClass("Model")
@@ -1846,6 +1847,11 @@ local function sendToLobbySpawn(player: Player)
 	local pos = Vector3.new(ORIGIN.X + SPAWN.X + math.cos(angle) * 6, ORIGIN.Y + 4, ORIGIN.Z + SPAWN.Z + math.sin(angle) * 6)
 	;(character :: Model):PivotTo(CFrame.lookAt(pos, pos + Vector3.new(0, 0, -10)))
 	root.AssemblyLinearVelocity = Vector3.zero
+end
+
+-- Sends a player to the lobby spawn (the show uses it: the UFO drops whoever it carried to the top there).
+function LobbyBuilder.SendToSpawn(player: Player)
+	sendToLobbySpawn(player)
 end
 
 local function sendToCheckpoint(player: Player)
@@ -1947,12 +1953,12 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 	end
 	checkpoint(1, -2, Y + 1.5, 210)
 
-	-- Stage 2: stepping stones over the drop (a fall puts you back).
-	do
-		local dx = { 0, -8, 0, 8, 0 }
-		for i = 1, 5 do
-			plat("Stone" .. i, dx[i], Y + 1.5, 226 + (i - 1) * 14, 7, 7)
-		end
+	-- Stage 2 (different from the plain hops of stage 1): platforms that slide from side to side as you cross them
+	-- (they carry you), each a different beat.
+	local sliders: { { Part: BasePart, Base: Vector3, Phase: number, Speed: number, Axis: Vector3? } } = {}
+	for i = 1, 5 do
+		local p = plat("SideSlider" .. i, 0, Y + 1.5, 226 + (i - 1) * 14, 8, 8, nil, { Bare = true })
+		table.insert(sliders, { Part = p, Base = p.Position, Phase = i * 1.3, Speed = 0.8 + (i % 3) * 0.18, Axis = Vector3.xAxis })
 	end
 	checkpoint(2, 0, Y + 1.5, 298)
 
@@ -1968,7 +1974,6 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 	checkpoint(3, 134, Y + 1.5, 300)
 
 	-- Stage 4: three sliders crossing the way (they carry you).
-	local sliders: { { Part: BasePart, Base: Vector3, Phase: number, Speed: number } } = {}
 	for i, x in { 156, 171, 186 } do
 		local p = plat("Slider" .. i, x, Y + 1.5, 300, 8, 8, nil, { Bare = true })
 		table.insert(sliders, { Part = p, Base = p.Position, Phase = i * 1.7, Speed = 0.9 + i * 0.12 })
@@ -2021,7 +2026,15 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 		if not root then
 			return false
 		end
-		return root:FindFirstChildWhichIsA("LinearVelocity") ~= nil or root:FindFirstChildWhichIsA("BodyVelocity") ~= nil or root:FindFirstChildWhichIsA("BodyPosition") ~= nil
+		-- (the flight itself is made on the player's own screen, which the server cannot see: the client reports it as the
+		-- "Flying" attribute, and for a few seconds after landing it still counts, so nobody can fly to a checkpoint or
+		-- to the finish and just drop onto it)
+		local offAt = player:GetAttribute("FlyOffAt")
+		return player:GetAttribute("Flying") == true
+			or (type(offAt) == "number" and os.clock() - offAt < 8)
+			or root:FindFirstChildWhichIsA("LinearVelocity") ~= nil
+			or root:FindFirstChildWhichIsA("BodyVelocity") ~= nil
+			or root:FindFirstChildWhichIsA("BodyPosition") ~= nil
 	end
 	for _, pad in checkpointPads do
 		onTouch(pad, function(hit)
@@ -2052,6 +2065,17 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 		obbyProgress[player.UserId] = 0
 		obbySpawnAt[player.UserId] = nil
 		local show = ReplicatedStorage:GetAttribute("AbuseObbyOpen") == true
+		if show then
+			-- the event's prize can be won once: after that it is just a run
+			if obbyShowDone[player.UserId] then
+				notifyPlayer(player, "You've already completed the obby for this event, so there's no second prize.", "Info")
+				task.delay(0.8, function()
+					sendToLobbySpawn(player)
+				end)
+				return
+			end
+			obbyShowDone[player.UserId] = true
+		end
 		local last = obbyLastPrize[player.UserId] or -1e9
 		local gems = if show then Config.Obby.ShowGems else Config.Obby.Gems
 		if show or os.clock() - last > Config.Obby.Cooldown then
@@ -2122,8 +2146,9 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 				-- player's own physics and rubber-bands).
 				local p = s.Part
 				local phase = clock * s.Speed + s.Phase
-				p.Position = s.Base + Vector3.new(0, 0, 13 * math.sin(phase))
-				p.AssemblyLinearVelocity = Vector3.new(0, 0, 13 * s.Speed * math.cos(phase))
+				local axis = s.Axis or Vector3.zAxis
+				p.Position = s.Base + axis * (13 * math.sin(phase))
+				p.AssemblyLinearVelocity = axis * (13 * s.Speed * math.cos(phase))
 			end
 			if fallClock > 0.3 then
 				fallClock = 0
@@ -2155,6 +2180,7 @@ function LobbyBuilder.OpenObby()
 	if obbyModel or not lobby then
 		return
 	end
+	table.clear(obbyShowDone)
 	local built = constructObby(lobby.Model)
 	obbyModel = built.Model
 	local n = #built.Parts
@@ -2301,7 +2327,7 @@ local function switchOffUiOn(part: BasePart, store: { Instance })
 		end
 	end
 end
-local function cutDisc(index: number, holeX: number, holeZ: number, R: number, names: { [string]: boolean }, opts: { Roof: boolean?, Launch: Vector3? })
+local function cutDisc(index: number, holeX: number, holeZ: number, R: number, names: { [string]: boolean }, opts: { Roof: boolean?, Launch: Vector3?, Blast: boolean? })
 	local model = lobby and lobby.Model
 	if not model or holes[index] then
 		return
@@ -2318,8 +2344,9 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 	local folder = mk("Folder", { Name = "HolePieces" .. index }, Workspace) :: Folder
 	table.insert(rec.Pieces, folder)
 
-	-- Anyone close to it is moved clear first.
-	for _, player in Players:GetPlayers() do
+	local blast = opts.Blast == true -- an explosion: every tile is blown up and out at the same instant
+	-- Anyone close to it is moved clear first (not for a blast: the blast itself throws them out).
+	for _, player in if blast then {} else Players:GetPlayers() do
 		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if root then
 			local offset = Vector3.new(root.Position.X - cx, 0, root.Position.Z - cz)
@@ -2403,12 +2430,20 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 							-- and are taken away once they have fallen out of sight.
 							tile.CanCollide = false
 							tile:SetAttribute("Falling", true)
-							if rng:NextNumber() < 0.4 then
-								task.delay(rng:NextNumber(0, 0.25) + (d / R) * 0.35, function()
+							if rng:NextNumber() < (if blast then 0.55 else 0.4) then
+								task.delay(if blast then 0 else rng:NextNumber(0, 0.25) + (d / R) * 0.35, function()
 									if tile.Parent then
 										tile.Anchored = false
-										tile.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-10, 10), rng:NextNumber(-6, 4), rng:NextNumber(-10, 10))
-										tile.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-4, 4), rng:NextNumber(-4, 4), rng:NextNumber(-4, 4))
+										if blast then
+											-- blown up and outward from the middle, all together
+											local out = Vector3.new(tile.Position.X - cx, 0, tile.Position.Z - cz)
+											local dir = if out.Magnitude > 0.5 then out.Unit else Vector3.new(rng:NextNumber(-1, 1), 0, rng:NextNumber(-1, 1)).Unit
+											tile.AssemblyLinearVelocity = dir * rng:NextNumber(35, 95) * (0.5 + d / R * 0.8) + Vector3.new(0, rng:NextNumber(50, 130), 0)
+											tile.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-9, 9), rng:NextNumber(-9, 9), rng:NextNumber(-9, 9))
+										else
+											tile.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-10, 10), rng:NextNumber(-6, 4), rng:NextNumber(-10, 10))
+											tile.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-4, 4), rng:NextNumber(-4, 4), rng:NextNumber(-4, 4))
+										end
 										pcall(function()
 											tile:SetNetworkOwner(nil)
 										end)
@@ -2451,7 +2486,7 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 		else
 			p:Destroy() -- (a piece of an earlier hole: replaced by the smaller pieces cut from it)
 		end
-		if light then
+		if light and not blast then
 			task.wait() -- (a big hole is cut a layer per frame, not all in one server hitch)
 		end
 	end
@@ -2554,8 +2589,8 @@ function LobbyBuilder.OpenHole(index: number, launch: Vector3?)
 end
 
 -- A bomb crater: a real hole through the whole table (index 10 and up), mended by HealHoles.
-function LobbyBuilder.OpenCrater(index: number, x: number, z: number, radius: number)
-	cutDisc(index, x, z, radius, TABLE_PART_NAMES, {})
+function LobbyBuilder.OpenCrater(index: number, x: number, z: number, radius: number, blast: boolean?)
+	cutDisc(index, x, z, radius, TABLE_PART_NAMES, { Blast = blast == true })
 end
 
 -- A hole in the ceiling (the giant's exit). It heals with HealRoof (or HealHoles).
@@ -3037,6 +3072,20 @@ end
 
 -- The invisible walls round the table: open (no collision) for the whole Admin Abuse show, then closed
 -- again; anyone left outside when they close is put back at the spawn.
+-- Anyone outside the plaza (or under it) is put back at the spawn.
+local function sweepStrays()
+	for _, player in Players:GetPlayers() do
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if root then
+			local p = root.Position - ORIGIN
+			local inObbyBox = p.X > OBBY_BOX.X0 and p.X < OBBY_BOX.X1 and p.Z > OBBY_BOX.Z0 and p.Z < OBBY_BOX.Z1
+			if not (inObbyBox and obbyOpen) and (math.abs(p.X) > PLAZA_X + FENCE_MARGIN or p.Z < PLAZA_Z0 - FENCE_MARGIN or p.Z > PLAZA_Z1 + FENCE_MARGIN or p.Y < -20) then
+				sendToLobbySpawn(player)
+			end
+		end
+	end
+end
+
 function LobbyBuilder.SetBarriers(open: boolean)
 	local model = lobby and lobby.Model
 	if not model then
@@ -3048,16 +3097,78 @@ function LobbyBuilder.SetBarriers(open: boolean)
 		end
 	end
 	if not open then
-		for _, player in Players:GetPlayers() do
-			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
-			if root then
-				local p = root.Position - ORIGIN
-				if math.abs(p.X) > PLAZA_X + FENCE_MARGIN or p.Z < PLAZA_Z0 - FENCE_MARGIN or p.Z > PLAZA_Z1 + FENCE_MARGIN or p.Y < -20 then
-					sendToLobbySpawn(player)
-				end
+		sweepStrays()
+	end
+end
+
+----------------------------------------------------------------------------------------------------
+-- The lobby exactly as it was before a show. Snapshot() takes a picture when the show goes live (every part's place and
+-- state, and which prompts and signs were on); HardReset() runs after the last effect and puts back whatever the
+-- effects left behind: a prop that stayed loose, a part still see-through or not solid, a piece of the table or the
+-- dishwasher not quite where it was, a prompt still off. (The usual repairs do the work with fades; this is the net under
+-- them.)
+----------------------------------------------------------------------------------------------------
+type PartState = { Parent: Instance?, CF: CFrame, Anchored: boolean, CanCollide: boolean, CanQuery: boolean, CanTouch: boolean, Transparency: number }
+local snapshot: { [BasePart]: PartState }? = nil
+local snapshotOn: { Instance } = {}
+
+function LobbyBuilder.Snapshot()
+	local model = lobby and lobby.Model
+	if not model or snapshot then
+		return
+	end
+	local parts: { [BasePart]: PartState } = {}
+	local on: { Instance } = {}
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") then
+			parts[d] = { Parent = d.Parent, CF = d.CFrame, Anchored = d.Anchored, CanCollide = d.CanCollide, CanQuery = d.CanQuery, CanTouch = d.CanTouch, Transparency = d.Transparency }
+		elseif (d:IsA("ProximityPrompt") or d:IsA("SurfaceGui") or d:IsA("BillboardGui")) and (d :: any).Enabled then
+			table.insert(on, d)
+		end
+	end
+	snapshot, snapshotOn = parts, on
+end
+
+-- Returns how many parts it had to put back.
+function LobbyBuilder.HardReset(): number
+	local parts = snapshot
+	if not parts then
+		return 0
+	end
+	snapshot = nil -- (the next show takes a new picture)
+	local fixed = 0
+	for part, st in parts do
+		local parentOk = part.Parent == st.Parent
+		if not parentOk then
+			pcall(function()
+				part.Parent = st.Parent
+			end)
+		end
+		if part.Parent == st.Parent then -- (a part that was destroyed can't come back)
+			local cf = part.CFrame
+			local moved = (cf.Position - st.CF.Position).Magnitude > 0.2 or cf.LookVector:Dot(st.CF.LookVector) < 0.9995 or cf.UpVector:Dot(st.CF.UpVector) < 0.9995
+			if not parentOk or moved or part.Anchored ~= st.Anchored or part.CanCollide ~= st.CanCollide or part.CanQuery ~= st.CanQuery or part.CanTouch ~= st.CanTouch or math.abs(part.Transparency - st.Transparency) > 0.02 then
+				fixed += 1
+				part.Anchored = true
+				part.AssemblyLinearVelocity = Vector3.zero
+				part.AssemblyAngularVelocity = Vector3.zero
+				part.CFrame = st.CF
+				part.CanCollide = st.CanCollide
+				part.CanQuery = st.CanQuery
+				part.CanTouch = st.CanTouch
+				part.Transparency = st.Transparency
+				part.Anchored = st.Anchored
 			end
 		end
 	end
+	for _, inst in snapshotOn do
+		if inst.Parent then
+			(inst :: any).Enabled = true
+		end
+	end
+	snapshotOn = {}
+	sweepStrays()
+	return fixed
 end
 
 -- While the show runs: anyone who ends up below the table (fell off an edge, into a hole...) is put

@@ -109,8 +109,16 @@ local speedFill: Frame
 local detailCoin: TextLabel
 local equipButton: TextButton
 local deleteConfirmFrame: Frame
+local deleteButton: TextButton
 local selectedUid: string? = nil
 local deleteToken = 0
+
+-- The "Delete this pet forever?" question takes the Delete button's place at the bottom of the panel (it used to sit
+-- below the button, which put it outside the panel on phones).
+local function setDeleteConfirm(on: boolean)
+	deleteConfirmFrame.Visible = on
+	deleteButton.Visible = not on
+end
 
 -- Merge mode: pick MergeCount pets of one rarity; they become one pet of the next rarity.
 local MERGE_COUNT = Config.PetRules.MergeCount or 3
@@ -435,7 +443,7 @@ local function refreshDetailPanel(meta: Types.MetaState?)
 
 	detailEmpty.Visible = false
 	detailFilled.Visible = true
-	deleteConfirmFrame.Visible = false
+	setDeleteConfirm(false)
 
 	UIKit.SetViewportModel(detailViewport, PetModels.Build(entry.Id, entry.Tier), true)
 	detailName.Text = entry.Def.Name
@@ -517,7 +525,7 @@ local function selectPet(uid: string?)
 		return
 	end
 	selectedUid = uid
-	deleteConfirmFrame.Visible = false
+	setDeleteConfirm(false)
 	refreshDetailPanel(ClientState.Meta)
 	-- The grid highlights the selection: cheapest is a full rebuild, and this list is at most
 	-- Config.PetRules.MaxInventory (60) cards, so it's not worth a more surgical update.
@@ -618,17 +626,17 @@ end
 local function armDeleteConfirm()
 	deleteToken += 1
 	local token = deleteToken
-	deleteConfirmFrame.Visible = true
-	task.delay(4, function()
+	setDeleteConfirm(true)
+	task.delay(8, function()
 		if deleteToken == token then
-			deleteConfirmFrame.Visible = false
+			setDeleteConfirm(false)
 		end
 	end)
 end
 
 local function doDelete()
 	deleteToken += 1
-	deleteConfirmFrame.Visible = false
+	setDeleteConfirm(false)
 	local uid = selectedUid
 	if not uid then
 		return
@@ -1163,7 +1171,7 @@ local function buildPetsWindow()
 		Parent = detailFilled,
 		OnClick = doEquipToggle,
 	})
-	local _deleteButton = UIKit.Button({
+	deleteButton = UIKit.Button({
 		Text = "Delete",
 		Size = UDim2.new(1, -24, 0, 40),
 		Position = UDim2.new(0.5, 0, 0, 352),
@@ -1176,22 +1184,22 @@ local function buildPetsWindow()
 	deleteConfirmFrame = Instance.new("Frame")
 	deleteConfirmFrame.Name = "DeleteConfirm"
 	deleteConfirmFrame.BackgroundTransparency = 1
-	deleteConfirmFrame.Size = UDim2.new(1, -24, 0, 70)
-	deleteConfirmFrame.Position = UDim2.new(0.5, 0, 0, 400)
-	deleteConfirmFrame.AnchorPoint = Vector2.new(0.5, 0)
-	deleteConfirmFrame.Visible = false
+	deleteConfirmFrame.Size = UDim2.new(1, -24, 0, 68)
+	deleteConfirmFrame.Position = UDim2.new(0.5, 0, 1, -8)
+	deleteConfirmFrame.AnchorPoint = Vector2.new(0.5, 1)
+	setDeleteConfirm(false)
 	deleteConfirmFrame.Parent = detailFilled
 	UIKit.Label({
 		Text = "Delete this pet forever?",
-		Size = UDim2.new(1, 0, 0, 20),
+		Size = UDim2.new(1, 0, 0, 18),
 		TextSize = 15,
 		TextColor3 = C.Bad,
 		Parent = deleteConfirmFrame,
 	})
 	UIKit.Button({
 		Text = "Yes, delete",
-		Size = UDim2.new(0.48, -4, 0, 38),
-		Position = UDim2.new(0, 0, 0, 26),
+		Size = UDim2.new(0.5, -4, 0, 44),
+		Position = UDim2.new(0, 0, 0, 22),
 		Color = C.Bad,
 		TextSize = 16,
 		Parent = deleteConfirmFrame,
@@ -1199,14 +1207,14 @@ local function buildPetsWindow()
 	})
 	UIKit.Button({
 		Text = "Cancel",
-		Size = UDim2.new(0.48, -4, 0, 38),
-		Position = UDim2.new(0.52, 4, 0, 26),
+		Size = UDim2.new(0.5, -4, 0, 44),
+		Position = UDim2.new(0.5, 4, 0, 22),
 		Color = C.Disabled,
 		TextSize = 16,
 		Parent = deleteConfirmFrame,
 		OnClick = function()
 			deleteToken += 1
-			deleteConfirmFrame.Visible = false
+			setDeleteConfirm(false)
 		end,
 	})
 

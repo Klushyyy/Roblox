@@ -124,7 +124,7 @@ function DailyNotify.TestNow(player: Player): string
 		return "This place isn't published (no experience ID), so Roblox can't send it."
 	end
 	local _, detail = send(player.UserId, 1)
-	return detail
+	return tostring(detail or "No answer from Roblox.")
 end
 
 local function poll()

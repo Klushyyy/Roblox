@@ -9,6 +9,12 @@
 	  * Roles: Owner, Co-Leader (the owner promotes members; co-leaders can kick members) and
 	    Member. The owner can kick anyone. Leaving as owner hands the club to a co-leader (else the
 	    longest member); the last one out closes it.
+	  * Waiting times: after LEAVING a club (or closing yours) you can't join or make another one for
+	    Config.Clubs.LeaveCooldown (24 h). After being KICKED you can't rejoin that same club for
+	    Config.Clubs.KickBan (24 h) but other clubs are fine, and kicking someone takes the Bubbles they
+	    donated this month off the club's points. A kicked player is told "You were kicked from <club>" the
+	    next time they can be: right away if they're in any server, else when they next log in (the club
+	    record remembers its kicks in `Kicked`, the player's profile keeps ClubBans and the message ClubNotice).
 	  * The owner can rename the club and change the prefix, each once every RenameDays days (each
 	    has its own timer; a brand new club can change straight away).
 	  * Points: members DONATE Bubbles to their club (Donate button). Every donated Bubble is a point
@@ -486,10 +492,93 @@ local function clubOf(player: Player): (string?, any?)
 	return id, club
 end
 
+-- "24 hours", "3h 20m", "12 min", "40 sec".
+local function waitText(seconds: number): string
+	seconds = math.ceil(seconds)
+	if seconds >= 3600 then
+		local hours, minutes = seconds // 3600, math.ceil((seconds % 3600) / 60)
+		if minutes >= 60 then
+			hours, minutes = hours + 1, 0
+		end
+		if minutes == 0 then
+			return if hours == 1 then "1 hour" else string.format("%d hours", hours)
+		end
+		return string.format("%dh %dm", hours, minutes)
+	elseif seconds >= 60 then
+		return string.format("%d min", math.ceil(seconds / 60))
+	end
+	return string.format("%d sec", math.max(1, seconds))
+end
+
+-- Seconds left before they can join or make a club after leaving one.
 local function cooldownLeft(player: Player): number
 	local profile = DataService.Get(player)
 	local at = profile and profile.ClubMovedAt or 0
-	return math.max(0, at + Config.Clubs.JoinCooldown - os.time())
+	return math.max(0, at + Config.Clubs.LeaveCooldown - os.time())
+end
+
+-- Seconds left on their ban from this one club (kicked from it).
+local function banLeft(profile: any, clubId: string): number
+	local at = profile.ClubBans and profile.ClubBans[clubId]
+	if type(at) ~= "number" then
+		return 0
+	end
+	return math.max(0, at + Config.Clubs.KickBan - os.time())
+end
+
+local KICKED_KEEP = 30 * 86400 -- a club remembers a kick this long (to tell a player who's been away)
+local KICKED_MAX = 40
+
+-- Writes a kick into the club record (inside its update).
+local function recordKick(club: any, uid: string, name: string, at: number)
+	local list = if type(club.Kicked) == "table" then club.Kicked else {}
+	local oldestKey, oldestAt, count = nil, math.huge, 0
+	for key, entry in list do
+		local entryAt = tonumber(entry.At) or 0
+		if entryAt + KICKED_KEEP < at then
+			list[key] = nil
+		else
+			count += 1
+			if entryAt < oldestAt then
+				oldestKey, oldestAt = key, entryAt
+			end
+		end
+	end
+	if count >= KICKED_MAX and oldestKey then
+		list[oldestKey] = nil
+	end
+	list[uid] = { At = at, Name = name }
+	club.Kicked = list
+end
+
+local function kickedText(clubName: string, at: number): string
+	local left = at + Config.Clubs.KickBan - os.time()
+	if left > 0 then
+		return string.format("You were kicked from %s. You can't rejoin it for %s, but you can join other clubs.", clubName, waitText(left))
+	end
+	return string.format("You were kicked from %s.", clubName)
+end
+
+-- They were kicked from `clubId`: out of the club, banned from it for a while, and told (the client shows
+-- the message once; if they're logged out it waits for them in their profile).
+local function applyKick(target: Player, clubId: string, clubName: string, at: number)
+	local profile = DataService.Get(target)
+	if not profile or profile.ClubId ~= clubId then
+		return -- (already handled)
+	end
+	setMembership(target, nil, false)
+	DataService.SetClubBan(target, clubId, at)
+	DataService.SetClubNotice(target, kickedText(clubName, at))
+end
+
+-- Their club's record no longer lists them: a kick (the club remembers it) or some other way (quietly).
+local function noLongerMember(player: Player, clubId: string, club: any)
+	local entry = type(club) == "table" and type(club.Kicked) == "table" and club.Kicked[tostring(player.UserId)]
+	if entry then
+		applyKick(player, clubId, tostring(club.Name), tonumber(entry.At) or os.time())
+	else
+		setMembership(player, nil, false)
+	end
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -547,7 +636,11 @@ local function join(player: Player, id: string, byCode: boolean)
 	end
 	local wait = cooldownLeft(player)
 	if wait > 0 then
-		return fail(string.format("You can join a club in %d seconds.", wait))
+		return fail(string.format("You left a club recently. You can join another one in %s.", waitText(wait)))
+	end
+	local banned = banLeft(profile, id)
+	if banned > 0 then
+		return fail(string.format("You were kicked from this club. You can rejoin it in %s (other clubs are fine).", waitText(banned)))
 	end
 	local reason: string? = nil
 	local ok, club = update("club_" .. id, function(old)
@@ -569,6 +662,9 @@ local function join(player: Player, id: string, byCode: boolean)
 			return nil
 		end
 		old.Members[tostring(player.UserId)] = { Name = player.DisplayName, Role = "Member", Joined = os.time(), Points = 0 }
+		if type(old.Kicked) == "table" then
+			old.Kicked[tostring(player.UserId)] = nil -- (their ban is over: they may come back)
+		end
 		return old
 	end)
 	if not ok then
@@ -577,7 +673,7 @@ local function join(player: Player, id: string, byCode: boolean)
 	if not club then
 		return fail(reason or "Couldn't join that club.")
 	end
-	setMembership(player, club, true)
+	setMembership(player, club, false)
 	pushToMembers(club)
 	return { Ok = true, Club = view(club, player.UserId), Message = "Welcome to " .. club.Name .. "!" }
 end
@@ -592,6 +688,10 @@ local function create(player: Player, value: any)
 	end
 	if profile.ClubId ~= "" then
 		return fail("Leave your club first.")
+	end
+	local createWait = cooldownLeft(player)
+	if createWait > 0 then
+		return fail(string.format("You left a club recently. You can make or join a club in %s.", waitText(createWait)))
 	end
 	local rules = Config.Clubs
 	local name, tag = cleanName(value.Name), cleanTag(value.Tag)
@@ -666,7 +766,7 @@ local function create(player: Player, value: any)
 	dirPut(club)
 	setPoints(id, 0)
 	topAt = -math.huge
-	setMembership(player, club, true)
+	setMembership(player, club, false)
 	return { Ok = true, Club = view(club, player.UserId), Message = name .. " is open!" }
 end
 
@@ -722,7 +822,8 @@ local function leave(player: Player)
 		pushToMembers(club)
 	end
 	setMembership(player, nil, true)
-	return { Ok = true, Message = if emptied then "Your club was closed." else "You left the club." }
+	local waitNote = " You can join another club in " .. waitText(Config.Clubs.LeaveCooldown) .. "."
+	return { Ok = true, Message = (if emptied then "Your club was closed." else "You left the club.") .. waitNote }
 end
 
 -- An edit by a club leader. `allowed(me)` says if this member may do it; `edit(club)` returns an
@@ -771,6 +872,8 @@ local function kick(player: Player, userId: any)
 	if type(userId) ~= "number" or userId == player.UserId then
 		return fail("Pick a member to kick.")
 	end
+	local at = os.time()
+	local removedPoints = 0
 	local result = leaderEdit(player, isLeader, function(club)
 		local target = club.Members[tostring(userId)]
 		if not target then
@@ -781,16 +884,27 @@ local function kick(player: Player, userId: any)
 		if target.Role == "Owner" or (me.Role == "CoLeader" and target.Role ~= "Member") then
 			return "You can't kick them."
 		end
+		-- The Bubbles they donated this month leave with them.
+		removedPoints = 0
+		if club.Season == currentSeason() then
+			removedPoints = math.max(0, math.min(math.floor(tonumber(target.Points) or 0), math.floor(tonumber(club.Points) or 0)))
+			club.Points = (tonumber(club.Points) or 0) - removedPoints
+		end
+		recordKick(club, tostring(userId), tostring(target.Name), at)
 		club.Members[tostring(userId)] = nil
 		return nil
 	end)
 	if result.Ok then
+		local clubId, clubName = result.Club.Id, result.Club.Name
+		if removedPoints > 0 then
+			setPoints(clubId, result.Club.Points)
+			topAt = -math.huge
+		end
 		local target = Players:GetPlayerByUserId(userId)
 		if target then
-			setMembership(target, nil, false)
-			Remotes.Event("Notify"):FireClient(target, "You were removed from your club.", "Info")
+			applyKick(target, clubId, clubName, at)
 		else
-			publish({ Kind = "Kicked", UserId = userId, ClubId = result.Club.Id })
+			publish({ Kind = "Kicked", UserId = userId, ClubId = clubId, ClubName = clubName, At = at })
 		end
 	end
 	return result
@@ -1107,7 +1221,7 @@ local function onRequest(player: Player, action: any, value: any): any
 					setMembership(player, nil, false)
 				end
 			elseif club and not club.Members[tostring(player.UserId)] then
-				setMembership(player, nil, false)
+				noLongerMember(player, id :: string, club)
 				club = nil
 			end
 			return { Ok = true, Club = if club and club.Members[tostring(player.UserId)] then view(club, player.UserId) else nil }
@@ -1305,8 +1419,10 @@ local function checkOnJoin(player: Player)
 	if profile.ClubId ~= "" then
 		local okGet, club = get("club_" .. profile.ClubId)
 		if okGet then
-			if type(club) ~= "table" or not club.Members[tostring(player.UserId)] then
+			if type(club) ~= "table" then
 				setMembership(player, nil, false)
+			elseif not club.Members[tostring(player.UserId)] then
+				noLongerMember(player, profile.ClubId, club) -- (kicked while they were away: they're told now)
 			else
 				if club.Tag ~= profile.ClubTag then
 					DataService.SetClub(player, club.Id, club.Tag, false)
@@ -1328,8 +1444,7 @@ function ClubService.OnMessage(data: any)
 		local target = Players:GetPlayerByUserId(tonumber(data.UserId) or 0)
 		local profile = target and DataService.Get(target)
 		if target and profile and profile.ClubId == data.ClubId then
-			setMembership(target, nil, false)
-			Remotes.Event("Notify"):FireClient(target, "You were removed from your club.", "Info")
+			applyKick(target, data.ClubId, tostring(data.ClubName or "your club"), tonumber(data.At) or os.time())
 		end
 	elseif data.Kind == "Chat" and type(data.Msg) == "table" then
 		for _, plr in Players:GetPlayers() do

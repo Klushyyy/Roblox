@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.14.0"
+Config.Version = "2.15.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1168,7 +1168,6 @@ Config.AbuseShow = ({
 			Kind = "Announce",
 			Option = { Kind = "Passes", Share = 0.1 },
 			Intro = "this one isnt a vote. a random game pass is going to {players}. no, you cant pick.",
-			Done = "done. winners, check your screen. everyone else, dont worry. there is more.",
 		},
 		Break = {
 			Kind = "Poll",
@@ -1185,20 +1184,17 @@ Config.AbuseShow = ({
 		Rain = {
 			Kind = "Announce",
 			Option = { Kind = "Gems", PerPlayer = 25 },
-			Intro = "25 gems for everyone. no vote.",
-			Done = "check your gems.",
+			Intro = "gem rain. 25 gems for everyone. no vote.",
 		},
 		Passes2 = {
 			Kind = "Announce",
 			Option = { Kind = "Passes", Share = 0.1 },
 			Intro = "{players} are about to win a random game pass.",
-			Done = "winners, check your screen.",
 		},
 		PetGift = {
 			Kind = "Announce",
 			Option = { Kind = "Pet", Share = 0.1 },
 			Intro = "{players} are about to win the limited pet.",
-			Done = "congratulations to whoever that was.",
 		},
 		Final = {
 			Kind = "Poll",
@@ -1225,109 +1221,91 @@ Config.AbuseShow = ({
 }) :: any
 
 -- The show, in order. { seconds after the start, kind, a, b }. Nothing here is random: it runs top to bottom.
---   say      a = the line (chat + speech box)
---   attack   a = effect name (beam, meteors, lightning, shockwave, barrage, fireworks, laser, blackhole, tornado, ufo, disco, fountains)
---            or "winner" = whichever effect the chat voted for
+--   say      a = the line (chat + speech box); {HOLD} becomes "Hold E on" / "Hold X on" / "Hold the button next to"
+--   count    a = the number to count down from, b = the start of the line: ONE speech box, "b 5... 4... 3... 2... 1..."
+--   attack   a = effect name (beam, meteors, lightning, shockwave, barrage, fireworks, laser, blackhole, tornado, ufo, disco,
+--            fountains, eyes, fireballs, dishwasher, bombs, chairshow, tablebreak, petchase, nuke, parksouth, perkpick)
+--            or "winner" = the effect the chat voted for, or "rest" = the next of the four vote effects that has not played
+--            yet. Meteors / fireworks / black hole / tornado each happen ONCE per show; big events never overlap (a new one
+--            waits for the one before it, small ones during a big one are dropped), so nothing is scheduled inside a big
+--            event's time (STAGE in AdminServer: ufo 26 s, black hole 12, tornado 14, meteors 9, fireworks 10, bombs 12...).
 --   round    a = a key of Rounds
 --   hole     a = which Holes entry opens in the table
 --   heal     the holes close again and everything is put back
---   obby     a = true / false: he builds the obby (it opens a few seconds later) / smashes it
---   heat     the heat goes up (bigger, redder, darker, faster)
+--   obby     a = true / false: he builds the obby (it opens 10 seconds later) / smashes it
 --   thanks   everyone online gets ThanksGems for staying
+--   restore  the finale: light, heat, rainbow, table and dishwasher fade back to normal over 10 seconds
 --   leave    the ending: he cuts a hole in the roof and flies out
+-- (the heat goes up by the clock: HeatAt, with the "final vote" line)
 do
 	local S = {}
-	local PACE = 0.88 -- the times below were written for a slower show; everything is run this much quicker
 	local function at(t: number, kind: string, a: any?, b: any?)
-		table.insert(S, { t * PACE, kind, a, b })
+		table.insert(S, { t, kind, a, b })
 	end
 	-- Warm up
-	at(6, "say", "hmm. so you all showed up.")
-	at(14, "say", "ok. quick warm up before the real stuff.")
-	at(16, "attack", "shockwave")
-	at(22, "say", "first thing: a vote. everyone votes. the option with the most votes wins, and then everyone gets it.")
-	at(26, "round", "Gifts")
-	at(31, "attack", "beam")
-	at(44, "attack", "dishwasher")
-	at(60, "attack", "chairshow")
-	at(62, "attack", "fountains")
-	at(78, "attack", "barrage")
-	at(98, "say", "this next round is not going to be fair.")
-	at(101, "round", "Passes")
-	at(106, "attack", "ufo")
-	at(114, "attack", "laser")
-	at(122, "attack", "shockwave")
-	at(134, "say", "the world needs some colour. one second.")
-	at(138, "attack", "disco")
-	at(144, "say", "next vote. most votes wins, and i do whatever it says.")
-	at(147, "round", "Break")
-	at(152, "attack", "lightning")
-	at(172, "attack", "laser")
-	-- (the winning effect plays by itself when the vote is counted, around 182)
-	at(196, "say", "right. the table. lets see how much it can take.")
-	at(199, "hole", 2)
-	at(217, "say", "now. im going to build something. give me a second.")
-	at(218, "obby", true)
-	at(230, "say", "an obby. behind the spawn, at the end of the table.")
-	at(236, "say", "everyone who finishes it gets gems. the first one to the top gets a game pass.")
-	at(240, "attack", "winner")
-	at(246, "say", "bombs. a red circle on the table is where one lands. get out of it, or fall in.")
-	at(248, "attack", "bombs")
-	at(251, "say", "everyone gets to pick ONE power-up for the rest of the event. fly, size or speed. not a vote, you just get what you choose.")
-	at(254, "attack", "perkpick")
-	at(268, "attack", "fountains")
-	at(276, "attack", "ufo")
-	at(290, "attack", "winner")
-	at(296, "say", "gem rain. everyone, right now.")
-	at(297, "round", "Rain")
-	at(304, "attack", "disco")
-	at(318, "say", "right. im done warming up.")
-	at(322, "attack", "shockwave")
+	at(5, "say", "hmm. so you all showed up.")
+	at(11, "say", "ok. quick warm up before the real stuff.")
+	at(13, "attack", "shockwave")
+	at(18, "say", "first thing: a vote. everyone votes. the option with the most votes wins, and then everyone gets it.")
+	at(21, "round", "Gifts")
+	at(27, "attack", "beam")
+	at(37, "attack", "dishwasher")
+	at(56, "attack", "chairshow") -- (he sits on the chair and breaks the board, the soap shop, the eggs and the pet stand: about 40 s)
+	at(74, "say", "this next round is not going to be fair.")
+	at(77, "round", "Passes")
+	at(94, "attack", "ufo")
+	at(122, "say", "the world needs some colour. one second.")
+	at(125, "attack", "disco")
+	at(132, "say", "next vote. most votes wins, and i do whatever it says.")
+	at(135, "round", "Break") -- (the winning effect plays by itself when the vote is counted, around 165)
+	at(142, "attack", "lightning")
+	-- The obby opens early (before the power-ups, so nobody can just fly over it)
+	at(152, "say", "now. im going to build something. give me a second.")
+	at(154, "obby", true)
+	at(164, "say", "an obby. behind the spawn, at the end of the table.")
+	at(170, "say", "everyone who finishes it gets gems. the first one to the top gets a game pass.")
+	-- The table gives way: the meteors and the hole happen together, right after the line
+	at(178, "say", "right. the table. lets see how much it can take.")
+	at(179, "attack", "tablebreak")
+	at(180, "hole", 2)
+	at(190, "say", "bombs. a red circle on the table is where one lands. get out of it, or fall in.")
+	at(192, "attack", "bombs")
+	at(206, "attack", "rest")
+	at(216, "say", "everyone gets to pick ONE power-up for the rest of the event. fly, size or speed. not a vote, you just get what you choose.")
+	at(222, "attack", "perkpick")
+	at(236, "attack", "fountains")
+	at(246, "attack", "ufo")
+	at(276, "round", "Rain")
 	-- Turn up the heat
-	at(328, "say", "final vote. most votes wins, and everyone gets the winner. and im turning up the heat.")
-	at(330, "heat")
-	at(333, "round", "Final")
-	at(336, "attack", "meteors")
-	at(344, "say", "four options. one of them is a limited pet for a few lucky players. just saying.")
-	at(358, "attack", "fireworks")
-	at(372, "attack", "blackhole")
-	at(386, "attack", "laser")
-	at(392, "say", "another game pass is going to a few of you.")
-	at(393, "round", "Passes2")
-	at(398, "attack", "tornado")
-	at(412, "say", "again. why not.")
-	at(414, "hole", 2)
-	at(418, "attack", "meteors")
-	at(424, "attack", "ufo")
-	at(430, "say", "somebody is getting a limited pet. right now.")
-	at(431, "round", "PetGift")
-	at(438, "attack", "barrage")
-	at(442, "attack", "blackhole")
-	at(448, "say", "all right. five seconds till the obby comes down.")
-	at(450, "say", "5")
-	at(451, "say", "4")
-	at(452, "say", "3")
-	at(453, "say", "2")
-	at(454, "say", "1")
-	at(455, "obby", false)
-	at(455, "say", "boom.")
-	at(459, "say", "ok. this bit is boring. lets make it more interesting.")
-	at(463, "say", "im letting some limited pets loose on the table. they run from you. hold E on one to catch it. you have one minute.")
-	at(467, "attack", "petchase")
-	at(486, "attack", "ufo")
-	at(506, "attack", "laser")
-	at(543, "say", "that spot looks empty. i am redecorating.")
-	at(545, "attack", "nuke") -- (it lands about 15 s before it goes off at NukeAt)
-	at(548, "attack", "tornado")
-	at(561, "say", "one more thing is about to go off. stand back.")
-	at(572, "attack", "fireworks")
-	at(582, "attack", "parksouth")
-	at(592, "say", "alright. thats everything i had.")
-	at(596, "say", "now everyone watch this.")
-	at(599, "leave")
-	at(611, "thanks")
-	at(614, "restore")
-	at(626, "say", "the event is done. thank you for coming.")
+	at(284, "say", "final vote. most votes wins, and everyone gets the winner. and im turning up the heat.")
+	at(287, "round", "Final")
+	at(292, "attack", "rest")
+	at(300, "say", "four options. one of them is a limited pet for a few lucky players. just saying.")
+	at(310, "attack", "laser")
+	at(322, "attack", "shockwave")
+	at(330, "say", "another game pass is going to a few of you.")
+	at(331, "round", "Passes2")
+	at(338, "attack", "rest")
+	at(354, "attack", "barrage")
+	at(360, "say", "somebody is getting a limited pet. right now.")
+	at(361, "round", "PetGift")
+	at(368, "attack", "fireballs")
+	at(380, "attack", "eyes")
+	at(390, "count", 5, "all right. the obby comes down in ")
+	at(395, "obby", false)
+	at(401, "say", "ok. this bit is boring. lets make it more interesting.")
+	at(405, "say", "im letting some limited pets loose on the table. they run from you. {HOLD} one to catch it. you have one minute.")
+	at(409, "attack", "petchase") -- (60 s, or until every pet is caught)
+	at(474, "say", "this spot looks empty... how about a nuke.")
+	at(479, "attack", "nuke") -- (it lands about 15 s before it goes off at NukeAt)
+	at(488, "say", "stand back.")
+	at(512, "attack", "parksouth")
+	at(520, "say", "alright. thats everything i had.")
+	at(524, "say", "now everyone watch this.")
+	at(527, "leave")
+	at(538, "thanks")
+	at(540, "restore")
+	at(551, "say", "the event is done. thank you for coming.")
 	Config.AbuseShow.Script = S
 end
 
@@ -1396,6 +1374,11 @@ end
 ----------------------------------------------------------------------------------------------------
 -- CLUBS (the Clubs button). Make one for Gems, name it (and a short tag shown by members' names),
 -- public (anyone who meets the requirements joins) or private (join with the club code).
+-- The first-run tutorial (Tutorial.luau): finishing it pays this once; skipping it pays nothing.
+Config.Tutorial = {
+	Reward = { Bubbles = 300, Gems = 15 } :: { Bubbles: number?, Gems: number? },
+}
+
 Config.Clubs = {
 	CreateCost = 500, -- Gems
 	MaxMembers = 25,
@@ -1404,7 +1387,8 @@ Config.Clubs = {
 	MaxRebirthReq = 50,
 	MaxLevelReq = 3, -- "must have beaten level N" (0 = anyone)
 	CodeLength = 6,
-	JoinCooldown = 60, -- seconds between joining / leaving clubs
+	LeaveCooldown = 24 * 3600, -- after LEAVING a club (or closing yours) you can't join or make another for this long
+	KickBan = 24 * 3600, -- after being KICKED you can't rejoin that same club for this long (other clubs are fine)
 	-- Monthly contest: members donate Bubbles; on the 1st of each month (00:00 UTC) every club's
 	-- points start again from zero and the top 3 clubs' members are paid. #1 also gets a limited pet
 	-- that no egg or chest has.

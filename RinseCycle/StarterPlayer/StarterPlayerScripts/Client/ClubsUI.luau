@@ -121,6 +121,21 @@ local function meetsReq(club: any): boolean
 	return (tonumber(meta.LevelsBeaten) or 0) >= (club.ReqLevel or 0) and (tonumber(meta.Rebirths) or 0) >= (club.ReqRebirths or 0)
 end
 
+-- "23h 10m", "12 min": a wait that can be hours long.
+local function waitText(seconds: number): string
+	seconds = math.ceil(seconds)
+	if seconds >= 3600 then
+		local hours, minutes = seconds // 3600, math.ceil((seconds % 3600) / 60)
+		if minutes >= 60 then
+			hours, minutes = hours + 1, 0
+		end
+		return if minutes == 0 then string.format("%dh", hours) else string.format("%dh %dm", hours, minutes)
+	elseif seconds >= 60 then
+		return string.format("%d min", math.ceil(seconds / 60))
+	end
+	return string.format("%d sec", math.max(1, seconds))
+end
+
 local function daysText(seconds: number): string
 	local days = math.ceil(seconds / 86400)
 	return if days <= 1 then "1 day" else days .. " days"
@@ -237,8 +252,14 @@ end
 
 -- "Are you sure?" with a message, a yes button (colour) and Cancel.
 local function confirm(title: string, message: string, yesText: string, yesColor: Color3, onYes: () -> ())
-	local card = dialog(title, 230)
-	UIKit.Label({ Text = message, TextSize = 17, TextWrapped = true, TextColor3 = Colors.Text, Position = UDim2.fromOffset(20, 48), Size = UDim2.new(1, -40, 0, 100), Parent = card })
+	-- Tall enough for the whole message (about 40 characters a line at this size), never cut off.
+	local lines = 0
+	for part in string.gmatch(message .. "\n", "(.-)\n") do
+		lines += math.max(1, math.ceil(#part / 38))
+	end
+	local textH = math.max(100, lines * 23 + 8)
+	local card = dialog(title, textH + 130)
+	UIKit.Label({ Text = message, TextSize = 17, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, TextColor3 = Colors.Text, Position = UDim2.fromOffset(20, 48), Size = UDim2.new(1, -40, 0, textH), Parent = card })
 	UIKit.Button({
 		Text = yesText,
 		Color = yesColor,
@@ -580,11 +601,16 @@ local function renderCreate(page: Frame)
 	end, 1, { Position = UDim2.new(0.5, 6, 0, 132), Size = UDim2.new(0.5, -22, 0, 44) })
 	local getLevel = cycler(create, levelValues(), levelText, 1, { Position = UDim2.fromOffset(16, 186), Size = UDim2.new(0.5, -22, 0, 44) })
 	local getRebirths = cycler(create, REBIRTH_STEPS, rebirthText, 1, { Position = UDim2.new(0.5, 6, 0, 186), Size = UDim2.new(0.5, -22, 0, 44) })
+	-- (a recent leaver is told how long is left, here and when they try to join)
+	local metaNow = ClientState.Meta :: any
+	local freeIn = if metaNow and type(metaNow.ClubFreeAt) == "number" then metaNow.ClubFreeAt - os.time() else 0
 	UIKit.Label({
-		Text = string.format("Up to %d members. Donate Bubbles to earn club points: the top 3 clubs win prizes every month!", rules.MaxMembers),
+		Text = if freeIn > 0
+			then string.format("You left a club recently: you can make or join one again in %s.", waitText(freeIn))
+			else string.format("Up to %d members. Donate Bubbles to earn club points: the top 3 clubs win prizes every month!", rules.MaxMembers),
 		TextSize = 14,
 		TextWrapped = true,
-		TextColor3 = Colors.TextDim,
+		TextColor3 = if freeIn > 0 then Colors.Warning else Colors.TextDim,
 		Position = UDim2.fromOffset(16, 236),
 		Size = UDim2.new(1, -32, 0, 40),
 		Parent = create,
@@ -763,9 +789,17 @@ local function memberOptions(m: any)
 			Text = "Kick from club",
 			Color = Colors.Bad,
 			Run = function()
-				confirm("Kick " .. m.Name .. "?", string.format("%s will be removed from %s.", m.Name, club.Name), "KICK", Colors.Bad, function()
+				local donated = math.floor(tonumber(m.Points) or 0)
+				local message = string.format("%s will be removed from %s and can't rejoin it for %d hours (other clubs are fine).", m.Name, club.Name, Config.Clubs.KickBan // 3600)
+				if donated > 0 then
+					message ..= string.format("\n\nWarning: your club will LOSE the %s Bubbles they donated this month.", UIKit.Commas(donated))
+				else
+					message ..= "\n\nThey haven't donated anything this month, so your club's points won't change."
+				end
+				confirm("Kick " .. m.Name .. "?", message, "KICK", Colors.Bad, function()
 					task.spawn(function()
-						applyResult(request("Kick", m.UserId, "Removing them"), m.Name .. " was removed.")
+						local lost = if donated > 0 then string.format(" Your club lost the %s Bubbles they donated.", UIKit.Commas(donated)) else ""
+						applyResult(request("Kick", m.UserId, "Removing them"), m.Name .. " was kicked." .. lost)
 					end)
 				end)
 			end,
@@ -949,9 +983,9 @@ local function renderMyClub(page: Frame, club: any)
 		OnClick = function()
 			local title = if closing then "Close your club?" else "Leave the club?"
 			local message = if closing
-				then string.format("%s will be deleted for good, and the %d Gems you spent on it won't come back.", club.Name, Config.Clubs.CreateCost)
-				elseif isOwner then "You're the owner: the club goes to a Co-Leader (or the longest member)."
-				else string.format("You'll leave %s. You can join another club after a minute.", club.Name)
+				then string.format("%s will be deleted for good, and the %d Gems you spent on it won't come back. You won't be able to join or make another club for %d hours.", club.Name, Config.Clubs.CreateCost, Config.Clubs.LeaveCooldown // 3600)
+				elseif isOwner then string.format("You're the owner: the club goes to a Co-Leader (or the longest member). You won't be able to join or make another club for %d hours.", Config.Clubs.LeaveCooldown // 3600)
+				else string.format("You'll leave %s. You won't be able to join or make another club for %d hours.", club.Name, Config.Clubs.LeaveCooldown // 3600)
 			confirm(title, message, if closing then "CLOSE CLUB" else "LEAVE", Colors.Bad, function()
 				task.spawn(function()
 					local result = request("Leave", nil, if closing then "Closing your club" else "Leaving the club")
@@ -1511,8 +1545,24 @@ function ClubsUI.Init()
 		end,
 	})
 	-- Know your club before you open the window (so it never has to show the Create page first).
+	-- A message waiting from the server ("You were kicked from ..."): shown once, whether it happened while they were in
+	-- this server, in another one, or logged out.
+	local noticeShown = ""
+	local function showNotice()
+		local meta = ClientState.Meta :: any
+		local text = meta and meta.ClubNotice
+		if type(text) == "string" and text ~= "" and text ~= noticeShown then
+			noticeShown = text
+			UIKit.PlaySound("Error")
+			UIKit.Toast(text, "Bad")
+			task.spawn(function()
+				ClientState.MetaRequest("ClubNoticeSeen")
+			end)
+		end
+	end
 	ClientState.Changed:Connect(function(kind)
 		if kind == "Meta" then
+			showNotice()
 			if inClubPerMeta() and not myClub then
 				fetchMine()
 			elseif not inClubPerMeta() and myClub and not busy then
@@ -1520,6 +1570,7 @@ function ClubsUI.Init()
 			end
 		end
 	end)
+	showNotice()
 	if inClubPerMeta() then
 		fetchMine()
 	end

@@ -245,7 +245,7 @@ function HUD.Init()
 	end)
 	-- The Treasure Chest event (only while it runs), with a "FREE" tag while a free chest waits.
 	-- It (and E) takes you to the chest in the lobby, where the opening happens.
-	local eventButton = sideButton("@Chest", "Event", Colors.Coin, "E", "", function()
+	local eventButton = sideButton("@Chest", "Event", Colors.Coin, "", "", function()
 		(require(script.Parent:WaitForChild("ChestUI")) :: any).GoToChest()
 	end)
 	local freeTag = Instance.new("Frame")
@@ -1267,6 +1267,7 @@ function HUD.Init()
 
 		-- The Shop is always there (Robux items work in a run too); Ranks only in the lobby.
 		shopButton.Visible = true
+		petsButton.Visible = true -- (always there, in the lobby and in a run; only the first-run tutorial hides it for a while)
 		upgradesButton.Visible = inRun
 		leaveButton.Visible = inRun
 		ranksButton.Visible = not inRun

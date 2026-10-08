@@ -57,10 +57,10 @@ local RACK_HALF_X = 54
 local BOTTOM_RACK_Z = { -36, 60 }
 local TOP_RACK_Z = { -40, 60 }
 
--- Bottom rack: three rows of plates facing the door, spaced so a character fits between them.
-local PLATE_ROW_X = { -34, 0, 34 }
--- (8 studs between plates, was 7: a little more room to scrub each one, especially on a phone)
-local PLATE_Z = { -32, -24, -16, -8, 0, 8, 16, 24, 32 }
+-- Bottom rack: four columns by seven rows of plate slots facing the door, with a good gap between them (room to scrub
+-- each plate, even on a phone). There are more slots than plates in the first levels, so some stay empty.
+local PLATE_ROW_X = { -45, -15, 15, 45 }
+local PLATE_Z = { -33, -22, -11, 0, 11, 22, 33 }
 local PAN_SLOTS = { { x = -43, z = 47 }, { x = 43, z = 47 } }
 local POT_SLOTS = { { x = -22, z = 47 }, { x = 22, z = 47 } }
 local BASKET_CENTER = Vector3.new(0, 0, 47)
@@ -1948,13 +1948,19 @@ local function grid(xs: { number }, zs: { number }, y: number): { Slot }
 	return slots
 end
 
--- Front-to-back, filling every row a little before moving back, so small loads still look spread out.
+-- The plate slots in the order they are filled: scattered over the whole rack (not front to back), so a small load of
+-- plates is spread out among empty slots instead of crowding the front. (Trays and boards fill from the other end.)
 local function plateSlots(): { Slot }
-	local slots = {}
+	local all = {}
 	for _, z in PLATE_Z do
 		for _, x in PLATE_ROW_X do
-			table.insert(slots, { x = x, y = BOTTOM_RACK_Y, z = z })
+			table.insert(all, { x = x, y = BOTTOM_RACK_Y, z = z })
 		end
+	end
+	local slots = {}
+	local n = #all
+	for k = 0, n - 1 do
+		table.insert(slots, all[(k * 11) % n + 1]) -- (11 and 28 share no factor: every slot is used once)
 	end
 	return slots
 end
@@ -1977,7 +1983,7 @@ local function basketSlots(offset: number): { Slot }
 	return slots
 end
 
--- Trays share the plate rows, filling from the back (Plate + Tray must fit the 27 plate slots).
+-- Trays share the plate rows, filling from the back (Plate + Tray must fit the 28 plate slots).
 local function traySlots(): { Slot }
 	local all = plateSlots()
 	local slots = {}

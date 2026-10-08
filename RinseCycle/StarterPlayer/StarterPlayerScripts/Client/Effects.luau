@@ -160,6 +160,10 @@ local function onCleaned(data: Types.FXCleaned)
 	comboCount = math.min(comboCount + 1, 12)
 	lastCleanedAt = now
 	UIKit.PlaySound("Pop", 0.95 + comboCount * 0.03)
+	-- a little watery squeak under every third pop: the scrubbing sounds "squeaky clean"
+	if comboCount % 3 == 0 then
+		UIKit.PlaySound("Splash", 1.7 + comboCount * 0.04)
+	end
 
 	if data.By == LocalPlayer.UserId then
 		billboardNumber(data.Position, "+" .. UIKit.Short(data.Units), UIKit.Theme.Colors.Primary)
@@ -179,7 +183,18 @@ local function onDishDone(data: Types.FXDishDone)
 	burst(data.Position, UIKit.Theme.Colors.Good, "rbxasset://textures/particles/sparkles_main.dds", 34, 0.9)
 	burst(data.Position, Color3.fromRGB(255, 255, 255), "rbxasset://textures/particles/sparkles_main.dds", 14, 0.5)
 	popBubbles(data.Position, 8, 2.4)
-	UIKit.PlaySound("Sparkle", 0.9 + dishStreak * 0.07)
+	-- the "ta-da": a rising little chime (the same sparkle at three notes of a major chord, a beat apart), higher
+	-- with every dish in a row, then a coin "ding" and a soft pop underneath
+	local base = 0.85 + dishStreak * 0.05
+	for i, ratio in { 1, 1.26, 1.5, 2 } do
+		task.delay((i - 1) * 0.07, function()
+			UIKit.PlaySound("Sparkle", base * ratio)
+		end)
+	end
+	task.delay(0.28, function()
+		UIKit.PlaySound("Coins", 1.1 + dishStreak * 0.03)
+	end)
+	UIKit.PlaySound("Pop", 0.7)
 	local ring = Instance.new("Part")
 	ring.Shape = Enum.PartType.Cylinder
 	ring.Material = Enum.Material.Neon

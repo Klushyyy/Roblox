@@ -467,7 +467,21 @@ local function moveVector(): Vector3
 	return mv
 end
 
+-- The server only learns that someone is flying from us (the flight is made on this screen): the obby uses it.
+local flyStateRemote: RemoteEvent? = nil
+task.spawn(function()
+	flyStateRemote = ReplicatedStorage:WaitForChild("AbuseFlyState", 60) :: RemoteEvent?
+end)
+local function reportFlying(on: boolean)
+	if flyStateRemote then
+		flyStateRemote:FireServer(on)
+	end
+end
+
 local function stopFlying()
+	if flying then
+		reportFlying(false)
+	end
 	flying = false
 	if flyConn then
 		flyConn:Disconnect()
@@ -493,6 +507,7 @@ local function startFlying()
 		return
 	end
 	flying = true
+	reportFlying(true)
 	local attachment = Instance.new("Attachment")
 	attachment.Name = "AdminFly"
 	attachment.Parent = root
@@ -768,9 +783,20 @@ do
 	local speech = UIKit.Label({ Text = "", TextSize = 19, TextWrapped = true, TextScaled = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(16, 36), Size = UDim2.new(1, -32, 1, -44), Parent = box })
 	box.Parent = talkRoot
 	local talkToken = 0
-	local function speak(text: string)
+	local function speak(text: string, append: boolean?)
 		talkToken += 1
 		local mine = talkToken
+		if append and box.Visible then
+			-- (a countdown: "the obby comes down in 5..." then " 4..." " 3...": ONE box that keeps growing, never a new one)
+			speech.Text ..= text
+			speech.MaxVisibleGraphemes = -1
+			task.delay(2.6, function()
+				if talkToken == mine then
+					box.Visible = false
+				end
+			end)
+			return
+		end
 		speech.Text = text
 		speech.MaxVisibleGraphemes = 0
 		box.Visible = true
@@ -787,6 +813,12 @@ do
 				box.Visible = false
 			end
 		end)
+	end
+	-- {HOLD} in a line becomes what this player presses to hold a prompt: E on a keyboard, X on a gamepad, the button that pops
+	-- up next to the thing on a phone.
+	local function platformText(text: string): string
+		local how = if UIKit.IsGamepad() then "Hold X on" elseif UIKit.IsTouch() then "Hold the button next to" else "Hold E on"
+		return (string.gsub(text, "{HOLD}", how))
 	end
 
 	-- Screen shake (after the camera script, so it never accumulates) and the opening flash + title.
@@ -945,43 +977,31 @@ do
 		setLiveUi(true)
 	end
 
-	-- The opening shot: as the show starts everyone's camera swings to the giant where he appears, stays on him for a
-	-- couple of seconds, follows him as he starts to walk for a few more, then swings back to their own character, so
-	-- everyone knows what is happening. (Only for people who are there at the start, and never over another camera.)
+	-- The opening shot: the instant the show starts everyone's camera turns, on the spot, to where he is about to appear (the
+	-- south end of the room, while the booms shake it), then tracks him as he appears and starts to walk, then turns back to
+	-- their own character. The camera never changes place (only turns), so it can't pass through chairs or the table, and it
+	-- doesn't wait for him: before he appears it is already looking at the spot. (Only for people who are there at the
+	-- start, and never over another camera.)
 	local cinemaBusy = false
 	local function openingShot()
 		local camera = workspace.CurrentCamera
 		if cinemaBusy or not camera or camera.CameraType == Enum.CameraType.Scriptable then
 			return
 		end
-		cinemaBusy = true
-		local giant: Model? = nil
-		for _ = 1, 60 do
-			if ReplicatedStorage:GetAttribute("AbuseLive") ~= true then
-				break
-			end
-			local g = workspace:FindFirstChild("AbuseGiant")
-			if g and g:IsA("Model") and g:FindFirstChild("HumanoidRootPart") then
-				giant = g
-				break
-			end
-			task.wait(0.2)
-		end
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if not giant or not root or not humanoid or camera.CameraType == Enum.CameraType.Scriptable then
-			cinemaBusy = false
+		if not root or not humanoid then
 			return
 		end
+		cinemaBusy = true
 		local startCF = camera.CFrame
-		local offset = startCF.Position - root.Position
-		if offset.Magnitude < 6 or offset.Magnitude > 60 then
-			offset = Vector3.new(0, 12, 26) -- (first person, or very far: the usual spot behind them)
-		end
-		local height = math.max(80, giant:GetExtentsSize().Y)
-		local PAN, HOLD, FOLLOW, BACK = 1.6, 2.4, 3.6, 1.4
+		local startRoot = root.Position
+		local PAN, HOLD, BACK = 1.0, 9.0, 1.4 -- seconds: turn to the spot, watch him, turn back
+		local ARRIVAL = Vector3.new(0, -130 + 100, 282) -- where he appears (the south end of the room), at about chest height
 		local t0 = os.clock()
+		local last = t0
+		local focus = ARRIVAL -- what the camera looks at now (it eases toward him)
 		local backFrom: CFrame? = nil
 		local function smooth(x: number): number
 			x = math.clamp(x, 0, 1)
@@ -997,31 +1017,41 @@ do
 		end
 		camera.CameraType = Enum.CameraType.Scriptable
 		RunService:BindToRenderStep("AbuseOpeningShot", Enum.RenderPriority.Camera.Value, function()
-			local gRoot = giant and giant:FindFirstChild("HumanoidRootPart") :: BasePart?
-			if not gRoot or not gRoot.Parent or not root.Parent or ReplicatedStorage:GetAttribute("AbuseLive") ~= true then
+			if not root.Parent or ReplicatedStorage:GetAttribute("AbuseLive") ~= true then
 				finish()
 				return
 			end
-			local e = os.clock() - t0
-			local focus = gRoot.Position + Vector3.new(0, height * 0.12, 0)
-			-- in front of him, at the side the viewer is on, slowly drifting round him while he walks
-			local flat = Vector3.new(startCF.Position.X - focus.X, 0, startCF.Position.Z - focus.Z)
-			local dir = if flat.Magnitude > 1 then flat.Unit else Vector3.new(0, 0, 1)
-			local drift = math.max(0, e - PAN) * 0.14
-			dir = CFrame.Angles(0, drift, 0):VectorToWorldSpace(dir)
-			local pos = focus + dir * (height * 1.3) + Vector3.new(0, height * 0.06, 0)
-			pos = Vector3.new(math.clamp(pos.X, -390, 390), pos.Y, math.clamp(pos.Z, -530, 370))
-			local shot = CFrame.lookAt(pos, focus)
+			local now = os.clock()
+			local dt = now - last
+			last = now
+			local e = now - t0
+			-- the player's own camera, following them if they walk
+			local home = startCF + (root.Position - startRoot)
+			local g = workspace:FindFirstChild("AbuseGiant")
+			local gRoot = g and g:FindFirstChild("HumanoidRootPart") :: BasePart?
+			-- (before he appears he is parked far above the room)
+			local present = gRoot ~= nil and gRoot.Position.Y < 1500
+			local height = if present and g then math.max(80, (g :: Model):GetExtentsSize().Y) else 200
+			local wanted = if present and gRoot then gRoot.Position + Vector3.new(0, height * 0.3, 0) else ARRIVAL
+			focus = focus:Lerp(wanted, 1 - math.exp(-dt * 4))
+			local shot = CFrame.lookAt(home.Position, focus)
 			if e < PAN then
-				camera.CFrame = startCF:Lerp(shot, smooth(e / PAN))
-			elseif e < PAN + HOLD + FOLLOW then
+				camera.CFrame = home:Lerp(shot, smooth(e / PAN))
+			elseif e < PAN + HOLD and (present or e < PAN + 6) then
 				camera.CFrame = shot
 				backFrom = shot
-			elseif e < PAN + HOLD + FOLLOW + BACK then
-				local home = CFrame.lookAt(root.Position + offset, root.Position)
-				camera.CFrame = (backFrom or shot):Lerp(home, smooth((e - PAN - HOLD - FOLLOW) / BACK))
 			else
-				finish()
+				if not backFrom then
+					backFrom = shot
+					t0 = now - (PAN + HOLD) -- (he never showed up: just turn back)
+					e = PAN + HOLD
+				end
+				local a = (e - PAN - HOLD) / BACK
+				if a >= 1 then
+					finish()
+					return
+				end
+				camera.CFrame = (backFrom :: CFrame):Lerp(home, smooth(a))
 			end
 		end)
 	end
@@ -1149,13 +1179,14 @@ do
 	task.spawn(function()
 		local say = ReplicatedStorage:WaitForChild("AbuseSay", 120)
 		if say then
-			say.OnClientEvent:Connect(function(name: any, text: any)
+			say.OnClientEvent:Connect(function(name: any, text: any, append: any)
 				if type(name) ~= "string" or type(text) ~= "string" then
 					return
 				end
-				speak(text)
+				text = platformText(text)
+				speak(text, append == true)
 				pcall(function()
-					if string.match(text, "^%d$") then
+					if append == true then
 						return -- (the 5, 4, 3, 2, 1 only go in the speech box, not into chat)
 					end
 					local channel = TextChatService:FindFirstChild("TextChannels") and TextChatService.TextChannels:FindFirstChild("RBXGeneral")
@@ -1381,6 +1412,8 @@ local COMMANDS: { Command } = ({
 		end
 		return list
 	end } } },
+	{ Name = "resetfirstrun", Icon = "🆕", Label = "Reset my first run", Desc = "Puts your account back to a brand-new player's: the tutorial is not done, your run count is 0 and the level 1 cutscene is unseen, so the next run you start shows the tutorial and the cutscene again. Your Bubbles, pets and everything else stay.", Group = "Studio", Target = "none", Inputs = {} },
+	{ Name = "clubreset", Icon = "🏷", Label = "Reset my club waiting times", Desc = "Clears the 24 hour wait after leaving a club and any 24 hour kick bans on your account (and a waiting \"you were kicked\" message), so you can test joining, leaving and being kicked straight away.", Group = "Studio", Target = "none", Inputs = {} },
 	{ Name = "abusedebug", Icon = "🐞", Label = "Giant debug readout", Desc = "Toggles a floating readout above the Admin Abuse giant (state, height, floor, feet) and prints it to the Output once a second. Use it to see where he sinks or stops.", Group = "Studio", Target = "none", Inputs = {} },
 	{ Name = "abuseshow", Icon = "🎆", Label = "Global Admin Abuse event test", Desc = "Starts the whole Admin Abuse show in EVERY server (what everyone would see): rounds pause, a giant, chat lines, votes and prizes. Pick when it starts, or put the real time back.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		return {

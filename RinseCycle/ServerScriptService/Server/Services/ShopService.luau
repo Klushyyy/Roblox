@@ -382,16 +382,28 @@ local function setPetsResting(player: Player, value: any): Types.RequestResult
 	return { Ok = true }
 end
 
--- The first-run tutorial was finished or skipped (never shown again).
-local function tutorialDone(player: Player, _value: any): Types.RequestResult
-	if not DataService.SetTutorialDone(player) then
+-- The first-run tutorial was finished (value true: the reward is paid once) or skipped (never shown again).
+local function tutorialDone(player: Player, value: any): Types.RequestResult
+	local ok, rewarded = DataService.SetTutorialDone(player, value == true)
+	if not ok then
 		return fail("Your data is still loading.")
 	end
+	if rewarded then
+		local GiftService = require(script.Parent:WaitForChild("GiftService")) :: any
+		GiftService.Celebrate(player, "Tutorial complete!", Config.RewardText(Config.Tutorial.Reward), "Gem")
+	end
+	return { Ok = true, Message = if rewarded then Config.RewardText(Config.Tutorial.Reward) else nil }
+end
+
+-- The client has shown the pending club message ("You were kicked from ...").
+local function clubNoticeSeen(player: Player, _value: any): Types.RequestResult
+	DataService.SetClubNotice(player, "")
 	return { Ok = true }
 end
 
 local HANDLERS: { [string]: (Player, any) -> Types.RequestResult } = {
 	TutorialDone = tutorialDone,
+	ClubNoticeSeen = clubNoticeSeen,
 	ClaimDaily = claimDaily,
 	ClaimStayBoost = claimStayBoost,
 	SetPetsResting = setPetsResting,

@@ -84,3 +84,8 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
 - v2.12.22: big holes drop tiles by tween (scen_dishwasher still checks solidity under holes and healing); adminsim shows the fly chip for "Klushy".
 - v2.12.24: power-up pick card for everyone (fly/giant/speed), poll hint line, hotkeys off during the show (no new scenario needed; scen_abuse still passes).
 - v2.13.0: show update (power-up pick card, results card, finale fade, new black hole/tornado/meteors/fireworks); effects need the giant, which the offline sim cannot build, so they are only syntax/type checked here.
+- v2.14.0: first-run tutorial, UFO, grabs, nuke countdown (tested with scen_abuse, scen_hud; effects still need the giant, which the offline sim cannot build).
+- v2.15.0: clubs waits / kick bans / "you were kicked" notice (`scen_clubs`), tutorial rework with Skip question and reward (`scen_tutorial`), pet delete question and tutorial card as phone-size dumps (`scen_uishots`, render with guirender.py), show script rewrite (scen_abuse still passes), lobby Snapshot/HardReset.
+  - `scen_clubs`: needs the second sim player (G.victim); covers leaving (24 h wait for any club), being kicked (ban on that club only, donated points removed, notice in the profile), a player who was away (found out on "Mine"), the ban running out and `DataService.ResetClubCooldowns`.
+  - `scen_tutorial`: the card, the camera turn (CameraType goes Scriptable and back), Skip asks first, Keep going / Skip it, no reward for skipping, the reward once for finishing, the Pets button back afterwards.
+  - `scen_uishots`: dumps for guirender.py (the renderer does not wrap long text, so check boxes, not line breaks).
