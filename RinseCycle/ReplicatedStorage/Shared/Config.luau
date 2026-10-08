@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.15.0"
+Config.Version = "2.16.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -190,8 +190,10 @@ Config.Levels = {
 		ParTime = 1260,
 		Bubbles = 250,
 		GoldenChance = 0.025,
-		Dishes = { Plate = 8, Tray = 5, Bowl = 8, Cup = 7, Glass = 4, Fork = 4, Knife = 3, Spoon = 3, Pan = 2, Pot = 0, Board = 8, Cutter = 4, Goblet = 0 },
-		Spots = { Plate = 5, Tray = 8, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 13, Pot = 15, Board = 8, Cutter = 2, Goblet = 3 },
+		-- (a few fewer plates / trays / boards / bowls than before, each a bit dirtier: the same amount of scrubbing, but the
+		-- racks aren't packed, so every dish has room round it like in level 1)
+		Dishes = { Plate = 7, Tray = 4, Bowl = 7, Cup = 7, Glass = 4, Fork = 4, Knife = 3, Spoon = 3, Pan = 2, Pot = 0, Board = 6, Cutter = 4, Goblet = 0 },
+		Spots = { Plate = 6, Tray = 10, Bowl = 6, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 13, Pot = 15, Board = 10, Cutter = 2, Goblet = 3 },
 		Grime = {
 			{ Type = "TomatoSauce", Weight = 32 },
 			{ Type = "MeltedCheese", Weight = 26 },
@@ -224,8 +226,8 @@ Config.Levels = {
 		ParTime = 1860,
 		Bubbles = 700,
 		GoldenChance = 0.035,
-		Dishes = { Plate = 14, Tray = 10, Bowl = 10, Cup = 6, Glass = 0, Fork = 6, Knife = 6, Spoon = 5, Pan = 2, Pot = 2, Board = 0, Cutter = 0, Goblet = 10 },
-		Spots = { Plate = 5, Tray = 9, Bowl = 5, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16, Board = 8, Cutter = 2, Goblet = 3 },
+		Dishes = { Plate = 12, Tray = 8, Bowl = 8, Cup = 6, Glass = 0, Fork = 6, Knife = 6, Spoon = 5, Pan = 2, Pot = 2, Board = 0, Cutter = 0, Goblet = 10 },
+		Spots = { Plate = 6, Tray = 11, Bowl = 6, Cup = 4, Glass = 3, Fork = 2, Knife = 2, Spoon = 2, Pan = 14, Pot = 16, Board = 8, Cutter = 2, Goblet = 3 },
 		Grime = {
 			{ Type = "TruffleGunk", Weight = 30 },
 			{ Type = "CaviarSmear", Weight = 25 },
@@ -755,7 +757,7 @@ end
 	  upgrades   : { HandSize = n, ScrubPower = n, TankSize = n, Sneakers = n }
 	  toolIndex  : index into Config.Tools
 	  perks      : { HeadStart = n, CoinSoap = n, DeepTank = n, ... } (from the profile)
-	  passes     : { DoubleCoins = bool, MegaTank = bool, ... }
+	  passes     : { DoubleCoins = bool, MegaTank = bool, ... } (Premium = true for Roblox Premium members)
 	  petCoinBonus : Config.PetCoinBonus(...)
 ]]
 function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, perks, passes, petCoinBonus: number?, rankId: string?, rebirths: number?)
@@ -786,6 +788,9 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 	end
 	if passes.VIP then
 		coinMult *= 1.25
+	end
+	if passes.Premium then
+		coinMult *= 1 + Config.Premium.CoinBonus
 	end
 	coinMult *= 1 + (fx.Coins or 0)
 	coinMult *= Config.RebirthCoinMult(rebirths)
@@ -1127,6 +1132,17 @@ Config.UpcomingEvents = {
 		Ends = 1792234800, -- an hour later
 		RobloxEventId = "", -- set from StoreIds > EventIds > AdminAbuse
 	},
+	-- The next one, once Admin Abuse is over (its date isn't set yet: Soon = true shows COMING SOON instead of a countdown).
+	-- Its Roblox event is StoreIds > EventIds > Chapter4 (the RSVP page the Next Event ring and the Chapter 4 card open).
+	{
+		Key = "Chapter4",
+		Name = "Chapter 4",
+		Desc = "The next chapter of Rinse Cycle: new story, new dishwashers and more! Turn on notifications so you never miss it.",
+		Starts = 4102444800, -- (1 Jan 2100: a placeholder; set the real time and remove Soon when it is announced)
+		Ends = 4102448400,
+		Soon = true,
+		RobloxEventId = "", -- set from StoreIds > EventIds > Chapter4
+	},
 }
 
 -- The Admin Abuse show (AdminServer runs it in every server from the event's Starts time). Before it,
@@ -1143,7 +1159,6 @@ Config.AbuseShow = ({
 	GiantScale = 38, -- how tall he is while he warms up
 	HeatScale = 42, -- ...and once the heat is turned up
 	ChasePet = "GlitchFox", -- the limited pets that run about the table for a minute
-	NukeAt = 498, -- when the nuke goes off (seconds into the show), just before he leaves
 	ThanksGems = 100, -- everyone gets this at the end, for staying
 	HeatAt = 290, -- seconds after the start when he "turns up the heat" (until the end)
 	Pet = "AdminAbuse", -- the limited pet from the final round
@@ -1210,8 +1225,8 @@ Config.AbuseShow = ({
 		},
 	},
 	-- Holes in the table: { x, z, radius } on the plaza. The first is where the Fastest Clean board and the
-	-- shakers stand, the second where the coffee cup and the soap bars are.
-	Holes = { { -84, -78, 24 }, { 86, 56, 22 } },
+	-- shakers stand (back left), the second where the coffee cup and the soap bars are (front right).
+	Holes = { { -68, -74, 24 }, { 86, 56, 22 } },
 	-- Show music (Roblox audio IDs; the first that loads is used, they play shuffled). Swap them for
 	-- any tracks you like. Warm plays while he warms up, Heat from the heat to the end.
 	Music = {
@@ -1242,6 +1257,9 @@ do
 	local function at(t: number, kind: string, a: any?, b: any?)
 		table.insert(S, { t, kind, a, b })
 	end
+	-- (A line stays up until the next one comes, 15 s at most, so there is a line roughly every 15-20 s all show. The lines
+	-- the giant says himself as he does things (the dishwasher, the chair, the whacks, the nuke) and the poll results
+	-- ("the results are in...") fill in between these.)
 	-- Warm up
 	at(5, "say", "hmm. so you all showed up.")
 	at(11, "say", "ok. quick warm up before the real stuff.")
@@ -1249,16 +1267,20 @@ do
 	at(18, "say", "first thing: a vote. everyone votes. the option with the most votes wins, and then everyone gets it.")
 	at(21, "round", "Gifts")
 	at(27, "attack", "beam")
+	at(30, "say", "go on, vote. i can wait. i have all night.")
 	at(37, "attack", "dishwasher")
 	at(56, "attack", "chairshow") -- (he sits on the chair and breaks the board, the soap shop, the eggs and the pet stand: about 40 s)
 	at(74, "say", "this next round is not going to be fair.")
 	at(77, "round", "Passes")
+	at(90, "say", "yes, those are real game passes. no, you cant pick.")
 	at(94, "attack", "ufo")
+	at(106, "say", "dont stare at the ship. it stares back.")
 	at(122, "say", "the world needs some colour. one second.")
 	at(125, "attack", "disco")
 	at(132, "say", "next vote. most votes wins, and i do whatever it says.")
 	at(135, "round", "Break") -- (the winning effect plays by itself when the vote is counted, around 165)
 	at(142, "attack", "lightning")
+	at(146, "say", "meteors, a black hole, a tornado or fireworks. you chose. dont complain.")
 	-- The obby opens early (before the power-ups, so nobody can just fly over it)
 	at(152, "say", "now. im going to build something. give me a second.")
 	at(154, "obby", true)
@@ -1268,13 +1290,16 @@ do
 	at(178, "say", "right. the table. lets see how much it can take.")
 	at(179, "attack", "tablebreak")
 	at(180, "hole", 2)
-	at(190, "say", "bombs. a red circle on the table is where one lands. get out of it, or fall in.")
+	at(190, "say", "bombs are falling from the sky. watch out.")
 	at(192, "attack", "bombs")
+	at(203, "say", "dodge. dont think about it. dodge.")
 	at(206, "attack", "rest")
 	at(216, "say", "everyone gets to pick ONE power-up for the rest of the event. fly, size or speed. not a vote, you just get what you choose.")
 	at(222, "attack", "perkpick")
 	at(236, "attack", "fountains")
+	at(240, "say", "your power-up stays until the end. fly does not work in the obby, by the way.")
 	at(246, "attack", "ufo")
+	at(260, "say", "the ship takes whoever it likes. try not to be liked.")
 	at(276, "round", "Rain")
 	-- Turn up the heat
 	at(284, "say", "final vote. most votes wins, and everyone gets the winner. and im turning up the heat.")
@@ -1283,29 +1308,30 @@ do
 	at(300, "say", "four options. one of them is a limited pet for a few lucky players. just saying.")
 	at(310, "attack", "laser")
 	at(322, "attack", "shockwave")
-	at(330, "say", "another game pass is going to a few of you.")
 	at(331, "round", "Passes2")
 	at(338, "attack", "rest")
+	at(346, "say", "that was random too. i dont make the rules. well, i do.")
 	at(354, "attack", "barrage")
-	at(360, "say", "somebody is getting a limited pet. right now.")
 	at(361, "round", "PetGift")
 	at(368, "attack", "fireballs")
+	at(374, "say", "not long now. hold on to whatever you love.")
 	at(380, "attack", "eyes")
 	at(390, "count", 5, "all right. the obby comes down in ")
 	at(395, "obby", false)
 	at(401, "say", "ok. this bit is boring. lets make it more interesting.")
 	at(405, "say", "im letting some limited pets loose on the table. they run from you. {HOLD} one to catch it. you have one minute.")
-	at(409, "attack", "petchase") -- (60 s, or until every pet is caught)
-	at(474, "say", "this spot looks empty... how about a nuke.")
-	at(479, "attack", "nuke") -- (it lands about 15 s before it goes off at NukeAt)
-	at(488, "say", "stand back.")
+	at(409, "attack", "petchase") -- (60 s, or until every pet is caught: the show jumps ahead and the lines inside the hunt are dropped)
+	at(428, "say", "keep running. they are faster than they look.")
+	at(449, "say", "twenty seconds left. i am not joking.")
+	at(472, "attack", "nuke") -- (he says "this spot looks empty... how about a nuke." as he picks it up; it goes off 10.8 s after it lands)
+	at(508, "say", "that was loud.")
 	at(512, "attack", "parksouth")
 	at(520, "say", "alright. thats everything i had.")
 	at(524, "say", "now everyone watch this.")
 	at(527, "leave")
 	at(538, "thanks")
 	at(540, "restore")
-	at(551, "say", "the event is done. thank you for coming.")
+	at(551, "say", "thanks for coming along. stay tuned for chapter four.")
 	Config.AbuseShow.Script = S
 end
 
@@ -1378,6 +1404,235 @@ end
 Config.Tutorial = {
 	Reward = { Bubbles = 300, Gems = 15 } :: { Bubbles: number?, Gems: number? },
 }
+
+-- Roblox Premium members get a small thank-you (MarketService reads player.MembershipType; no Robux
+-- product is needed): more Bubbles from every run, and one small gift a day. Roblox also pays you
+-- Premium engagement money by itself for the time Premium members spend in the game.
+Config.Premium = {
+	CoinBonus = 0.10, -- +10% Bubbles in runs (stacks with everything else)
+	DailyReward = { Bubbles = 150, Gems = 3 } :: { Bubbles: number?, Gems: number? }, -- once per UTC day, on join
+	Chip = "Premium +10%", -- the little badge under the HUD
+}
+
+----------------------------------------------------------------------------------------------------
+-- ANALYTICS (Analytics.luau on the server, Telemetry.luau on the client). Every key below is a
+-- "moment" the game records: how many players hit it today (u:), how many times (n:), and how many
+-- of each day's brand-new players ever reached it (f:). Funnels are ordered lists of those moments;
+-- the same funnels are sent to Roblox's own Analytics > Funnels page (published games only). The
+-- admin command :analytics shows the in-game version. See ANALYTICS.md for the set-up steps.
+----------------------------------------------------------------------------------------------------
+Config.Analytics = {
+	Enabled = true,
+	StoreName = "RinseCycle_Analytics", -- the DataStore holding the daily and per-sign-up-day tallies
+	FlushSeconds = 120, -- how often each server adds its counts to that DataStore
+	VisitGap = 30 * 60, -- gone this long = their next join is a new "visit" (session)
+	ReportDays = 7, -- days the :analytics reports look back by default
+	-- Roblox allows 120 + 20 x players events a minute for the whole game; this stays well under.
+	RobloxPerMinute = 40,
+	RobloxPerPlayer = 6,
+	LostAfter = { 60, 180 }, -- seconds in the lobby with no pad entered = "lobby.lost1" / "lobby.lost3"
+	PerfAfter = 75, -- seconds after the screen loads that the frame rate is measured (over 10 seconds)
+	PerfLow = 25, -- under this many frames a second = "perf.low"
+	PerfMid = 45, -- under this = "perf.mid", otherwise "perf.high"
+	ShowMinutes = { 1, 3, 5, 10, 15, 20, 30 }, -- "still here N minutes into Admin Abuse"
+	MaxDetails = 60, -- most different details one family (ui.open.X, meta.X ...) may record
+	LengthBuckets = {
+		{ 60, "under 1 min" },
+		{ 180, "1-3 min" },
+		{ 600, "3-10 min" },
+		{ 1800, "10-30 min" },
+		{ math.huge, "30+ min" },
+	},
+	-- Moments the client may report (everything else a client sends is thrown away).
+	ClientEvents = {
+		"client.ready", "client.move", "perf.low", "perf.mid", "perf.high",
+		"tut.start", "tut.s2", "tut.s3", "tut.s4", "tut.book", "tut.s5", "tut.done", "tut.skipask", "tut.skip",
+		"event.sign", "event.rsvp", "stay.offer", "invite.open",
+	},
+	ClientFamilies = { "ui.open", "buy.prompt", "tut.tour" },
+	-- { key, what it means }. Exact keys; the server also records the families further down.
+	Events = {
+		{ "join", "Loaded into a server" },
+		{ "visit", "Started a visit (30+ minutes since last seen)" },
+		{ "visit.new", "First visit ever" },
+		{ "visit.back", "Came back for another visit" },
+		{ "client.ready", "Screen finished loading" },
+		{ "client.move", "Moved or pressed a control" },
+		{ "perf.low", "Frame rate under 25" },
+		{ "perf.mid", "Frame rate 25 to 45" },
+		{ "perf.high", "Frame rate 45 or more" },
+		{ "dev.Phone", "Playing on a phone" },
+		{ "dev.Tablet", "Playing on a tablet" },
+		{ "dev.Desktop", "Playing on a computer" },
+		{ "dev.Console", "Playing on a console / controller" },
+		{ "err.server", "Server script error" },
+		{ "err.client", "Client script error" },
+		{ "premium.here", "Is a Roblox Premium member" },
+		{ "premium.daily", "Got the Premium daily gift" },
+		{ "daily.ready", "Daily reward was waiting when they joined" },
+		{ "lobby.lost1", "Still in the lobby after 1 minute, no pad entered" },
+		{ "lobby.lost3", "Still in the lobby after 3 minutes, no pad entered" },
+		{ "pad.enter", "Walked into a party pad" },
+		{ "pad.create", "Pressed Create on a pad" },
+		{ "pad.join", "Joined someone else's party" },
+		{ "pad.leave", "Left a pad before it launched" },
+		{ "pad.timeout", "Stood in a pad without pressing Create" },
+		{ "obby.finish", "Finished the lobby obby" },
+		{ "fun.duck", "Found a lobby duck" },
+		{ "fun.bubble", "Popped a lobby bubble" },
+		{ "run.launch", "Party launched (teleport started)" },
+		{ "run.fail", "Run could not start (teleport failed)" },
+		{ "run.arrive", "Arrived in a dishwasher" },
+		{ "run.loaded", "Intro finished, clock started" },
+		{ "run.first", "Cleaned the first spot" },
+		{ "run.dish1", "Finished the first dish" },
+		{ "run.sell", "Sold a tank at the drain" },
+		{ "run.p25", "Run was 25% clean" },
+		{ "run.p50", "Run was 50% clean" },
+		{ "run.p75", "Run was 75% clean" },
+		{ "run.clear", "Cleared the dishwasher" },
+		{ "run.leave", "Left a run with the Leave button" },
+		{ "run.home", "Went back to the lobby after the results" },
+		{ "run.drop", "Closed the game in the middle of a run" },
+		{ "run.n2", "Started their 2nd run ever" },
+		{ "run.n5", "Started their 5th run ever" },
+		{ "run.n10", "Started their 10th run ever" },
+		{ "tut.start", "Tutorial 1: shown (scrub a dish)" },
+		{ "tut.s2", "Tutorial 2: keep scrubbing" },
+		{ "tut.s3", "Tutorial 3: go to the drain" },
+		{ "tut.s4", "Tutorial 4: open the Upgrade Book" },
+		{ "tut.book", "Opened the Upgrade Book in the tutorial" },
+		{ "tut.s5", "Tutorial 5: buy Power" },
+		{ "tut.done", "Finished the tutorial (bought Power)" },
+		{ "tut.skipask", "Pressed Skip on the tutorial" },
+		{ "tut.skip", "Confirmed skipping the tutorial" },
+		{ "event.sign", "Walked into the Next Event zone" },
+		{ "event.rsvp", "Saw or pressed the RSVP prompt for the event" },
+		{ "stay.offer", "Saw the stay-and-get-a-boost offer" },
+		{ "invite.open", "Opened the invite-a-friend prompt" },
+		{ "show.join", "Joined while Admin Abuse was live" },
+		{ "show.end", "Still here when Admin Abuse ended" },
+		{ "show.vote", "Voted in a show poll" },
+		{ "show.prize", "Won a show prize" },
+		{ "show.obby", "Finished the obby during the show" },
+	},
+	-- Families: "<prefix>.<anything>" (the detail is recorded as well as the prefix itself).
+	Families = {
+		{ "ui.open", "Opened a window" },
+		{ "meta", "Menu action that worked (Hatch, BuyPerk, ClaimDaily ...)" },
+		{ "metafail", "Menu action that was refused (not enough money ...)" },
+		{ "run.up", "Bought an upgrade in a run" },
+		{ "run.tool", "Bought or equipped a tool in a run" },
+		{ "tut.tour", "Tutorial tour page shown" },
+		{ "buy.prompt", "Opened a Robux purchase prompt" },
+		{ "buy.ok", "Finished a Robux purchase" },
+		{ "buy.cancel", "Closed a purchase prompt without buying" },
+		{ "padact", "Party pad button pressed" },
+		{ "club", "Clubs action" },
+		{ "trade", "Trading action" },
+		{ "chest", "Treasure chest action" },
+		{ "gift", "Gifting action" },
+	},
+	-- Funnels: ordered moments. Step numbers sent to Roblox are the positions here (max 100).
+	-- "Onboarding" is Roblox's once-per-player funnel; the others can repeat (a new attempt each time
+	-- their first step happens again) and are tracked per attempt.
+	Funnels = {
+		{
+			Name = "Onboarding",
+			Onboarding = true,
+			Steps = {
+				{ "join", "Joined the game" },
+				{ "client.ready", "Screen finished loading" },
+				{ "client.move", "Moved or pressed a control" },
+				{ "pad.enter", "Walked into a party pad" },
+				{ "run.launch", "Party launched" },
+				{ "run.arrive", "Arrived in the dishwasher" },
+				{ "run.loaded", "Intro finished, clock started" },
+				{ "run.first", "Cleaned the first spot" },
+				{ "run.sell", "Sold a tank at the drain" },
+				{ "tut.book", "Opened the Upgrade Book" },
+				{ "tut.done", "Finished the tutorial" },
+				{ "run.clear.1", "Cleared dishwasher 1" },
+				{ "run.home", "Back in the lobby after a run" },
+				{ "run.n2", "Started a 2nd run" },
+				{ "visit.back", "Came back for another visit" },
+			},
+		},
+		{
+			Name = "Run",
+			Steps = {
+				{ "pad.enter", "Walked into a pad" },
+				{ "pad.create", "Pressed Create" },
+				{ "run.launch", "Party launched" },
+				{ "run.arrive", "Arrived in the dishwasher" },
+				{ "run.loaded", "Intro finished" },
+				{ "run.first", "First spot cleaned" },
+				{ "run.sell", "Sold a tank" },
+				{ "run.p25", "25% clean" },
+				{ "run.p50", "50% clean" },
+				{ "run.p75", "75% clean" },
+				{ "run.clear", "Cleared" },
+				{ "run.home", "Back in the lobby" },
+			},
+		},
+		{
+			Name = "Tutorial",
+			Steps = {
+				{ "tut.start", "1 Scrub a dish" },
+				{ "tut.s2", "2 Keep scrubbing" },
+				{ "tut.s3", "3 Go to the drain" },
+				{ "tut.s4", "4 Open the Upgrade Book" },
+				{ "tut.book", "Book opened" },
+				{ "tut.s5", "5 Buy Power" },
+				{ "tut.done", "Finished" },
+			},
+		},
+		{
+			Name = "Purchase",
+			Steps = {
+				{ "buy.prompt", "Opened a purchase prompt" },
+				{ "buy.ok", "Bought it" },
+			},
+		},
+		{
+			Name = "Daily",
+			Steps = {
+				{ "daily.ready", "Reward was waiting" },
+				{ "ui.open.Daily", "Opened the Daily window" },
+				{ "meta.ClaimDaily", "Claimed it" },
+			},
+		},
+		{
+			Name = "Pets",
+			Steps = {
+				{ "ui.open.Eggs", "Opened the egg shop" },
+				{ "meta.Hatch", "Hatched an egg" },
+				{ "meta.Equip", "Equipped a pet" },
+			},
+		},
+		{
+			Name = "Event",
+			Steps = {
+				{ "event.sign", "Walked into the Next Event zone" },
+				{ "event.rsvp", "Pressed RSVP" },
+				{ "show.join", "Joined while the show was live" },
+				{ "show.m.5", "Still here 5 minutes in" },
+				{ "show.m.10", "Still here 10 minutes in" },
+				{ "show.m.20", "Still here 20 minutes in" },
+				{ "show.end", "Still here at the end" },
+			},
+		},
+	},
+}
+-- (one "cleared level N" moment per dishwasher, and one "still here N minutes in" per show minute)
+for i = 1, #Config.Levels do
+	table.insert(Config.Analytics.Events, { "run.arrive." .. i, string.format("Arrived in dishwasher %d", i) })
+	table.insert(Config.Analytics.Events, { "run.clear." .. i, string.format("Cleared dishwasher %d", i) })
+	table.insert(Config.Analytics.Events, { "lvl.unlock." .. i, string.format("Unlocked dishwasher %d", i) })
+end
+for _, minutes in Config.Analytics.ShowMinutes do
+	table.insert(Config.Analytics.Events, { "show.m." .. minutes, string.format("Still here %d min into Admin Abuse", minutes) })
+end
 
 Config.Clubs = {
 	CreateCost = 500, -- Gems

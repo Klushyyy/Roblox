@@ -51,6 +51,7 @@ local firstLabel: TextLabel
 local firstPrice: TextLabel
 local firstButton: TextButton
 local freeSign: TextLabel? = nil
+local OPEN_KEY = Enum.KeyCode.V -- opens one chest while you stand in the chest's ring
 local reveal: Frame
 local revealGrid: Frame
 local revealTitle: TextLabel
@@ -142,8 +143,12 @@ local function buildBoard(model: Model): boolean
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "OddsBoard"
 	gui.Adornee = box
-	gui.Size = UDim2.fromScale(20, 20 * boardH / BOARD_W) -- big: it has to be readable from across the lobby
-	gui.StudsOffsetWorldSpace = Vector3.new(0, 19, 0) -- well above the lid, under the title sign
+	local boardW = 18 -- studs: big enough to read from across the lobby, not so big that it towers over the chest
+	local boardStudsH = boardW * boardH / BOARD_W
+	gui.Size = UDim2.fromScale(boardW, boardStudsH)
+	-- Its bottom edge sits just above the title sign (a real sign on two posts, built by LobbyBuilder, whose top is
+	-- ~13 studs over the chest's middle): two floating boards drawn through each other were what flickered here.
+	gui.StudsOffsetWorldSpace = Vector3.new(0, 13.6 + boardStudsH / 2, 0)
 	gui.MaxDistance = 260
 	gui.LightInfluence = 0
 	gui.ResetOnSpawn = false
@@ -449,6 +454,7 @@ function ChestUI.Open(count: number)
 		if pack.Count == count then
 			local id = Config.EventProducts[pack.Key]
 			if type(id) == "number" and id > 0 then
+				ClientState.Track("buy.prompt", pack.Key)
 				pcall(function()
 					MarketplaceService:PromptProductPurchase(LocalPlayer, id)
 				end)
@@ -580,7 +586,7 @@ function ChestUI.Init()
 	row.Parent = panel
 	local packs = Config.ChestEvent.Packs
 	firstButton, firstLabel, firstPrice = openBox(panel, packs[1], "plain", 1)
-	-- The E hint on the first box.
+	-- The key hint on the first box.
 	local hint = Instance.new("Frame")
 	hint.Name = "KeyHint"
 	hint.Position = UDim2.fromOffset(-8, -8)
@@ -589,7 +595,7 @@ function ChestUI.Init()
 	hint.ZIndex = 5
 	UIKit.Corner(hint, 8)
 	UIKit.Stroke(hint, Colors.Ink, 2)
-	UIKit.Label({ Text = "E", TextSize = 16, Size = UDim2.fromScale(1, 1), ZIndex = 6, Parent = hint })
+	UIKit.Label({ Text = OPEN_KEY.Name, TextSize = 16, Size = UDim2.fromScale(1, 1), ZIndex = 6, Parent = hint })
 	hint.Parent = firstButton
 	openBox(panel, packs[2], "decoy", 2)
 	openBox(panel, packs[3], "best", 3)
@@ -645,14 +651,13 @@ function ChestUI.Init()
 	ProximityPromptService.PromptHidden:Connect(function()
 		promptsShown = math.max(0, promptsShown - 1)
 	end)
-	-- E: open one at the chest. (Leaves E alone while
-	-- another prompt is up or you're typing.)
+	-- V: open one at the chest (E is for the lobby's prompts; it used to be the chest's key too, which got in the way).
 	UserInputService.InputBegan:Connect(function(input, processed)
-		if input.KeyCode ~= Enum.KeyCode.E or processed or UserInputService:GetFocusedTextBox() then
+		if input.KeyCode ~= OPEN_KEY or processed or UserInputService:GetFocusedTextBox() then
 			return
 		end
 		if ReplicatedStorage:GetAttribute("AbuseLive") == true then
-			return -- (during the Admin Abuse show E must not teleport anyone away)
+			return -- (during the Admin Abuse show the chest keys are off)
 		end
 		if ClientState.Run ~= nil or promptsShown > 0 or revealing or UIKit.IsWindowOpen() then
 			return

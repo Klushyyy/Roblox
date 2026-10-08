@@ -137,6 +137,7 @@ local function giveUp(player: Player, p: Pending)
 	setFrozen(player, false)
 	DataService.CancelHandoff(player)
 	if p.Kind == "Run" then
+		DataService.Track(player, "run.fail")
 		notify(player, "Couldn't reach the dishwasher. Please try again!", "Bad")
 	else
 		notify(player, "Couldn't get back to the lobby. Please rejoin the game.", "Bad")
@@ -239,7 +240,15 @@ function RunServers.Launch(players: { Player }, level: number, onFail: ((Player)
 			table.insert(going, p)
 		end
 	end
-	local data: { [string]: any } = { Mode = "Run", Level = level, Party = userIds, AdminInvis = RunServers.InvisList(players) }
+	-- (each player's funnel attempt carries over, so the run server goes on logging the same one)
+	local fids: { [string]: string } = {}
+	for _, p in going do
+		local id = DataService.AttemptId(p, "Run")
+		if id then
+			fids[tostring(p.UserId)] = id
+		end
+	end
+	local data: { [string]: any } = { Mode = "Run", Level = level, Party = userIds, AdminInvis = RunServers.InvisList(players), Fids = fids }
 	local ok, result = pcall(function()
 		local options = Instance.new("TeleportOptions")
 		options.ShouldReserveServer = true
@@ -516,6 +525,12 @@ function RunServers.Start()
 		task.spawn(onArrive, p)
 	end
 	Players.PlayerAdded:Connect(onArrive)
+end
+
+-- Which level this run server is hosting (nil in a lobby, or before its party has arrived): the admin's server list shows it.
+function RunServers.GetLevel(): number?
+	local p = plan :: any
+	return if p then p.Level else nil
 end
 
 return RunServers

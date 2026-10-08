@@ -271,6 +271,7 @@ local function toolCard(parent: Instance, index: number, run: Types.RunState): F
 	local owned = run.OwnedTools ~= nil and run.OwnedTools[index] == true
 	local inHand = index == run.ToolIndex
 	local card = tile(parent, UDim2.fromOffset(120, 140), UDim2.new(), if owned then Color3.fromRGB(225, 250, 230) else Color3.fromRGB(255, 252, 240))
+	card.Name = "Tool" .. index -- (the tutorial lights them up by name)
 	card.LayoutOrder = index
 	if inHand then
 		UIKit.Stroke(card, Colors.Good, 3)

@@ -540,6 +540,10 @@ local function joinParty(party: Party, player: Player)
 	player:SetAttribute("InParty", true)
 	hookMember(player)
 	teleport(player, slotCFrame(pad, slot))
+	DataService.Track(player, "pad.enter")
+	if party.Host ~= player then
+		DataService.Track(player, "pad.join")
+	end
 
 	markDirty(party)
 	refreshPad(pad, true)
@@ -722,6 +726,7 @@ local function launch(party: Party)
 
 	for _, member in roster do
 		launching[member] = true
+		DataService.Track(member, "run.launch", { Level = party.Level, Party = #roster })
 	end
 	markDirty(party)
 	refreshPad(pad)
@@ -868,6 +873,7 @@ local function tick()
 			if not party.Dead and party.Status == "Waiting" and now >= party.EndsAt then
 				launch(party)
 			elseif not party.Dead and party.Status == "Picking" and now >= party.EndsAt then
+				DataService.Track(party.Host, "pad.timeout")
 				removeMember(party.Host, "Exit", "Party cancelled: you didn't pick a level in time.")
 			end
 		end
@@ -913,12 +919,14 @@ local function onPartyAction(player: Player, action: any, value: any)
 	if not party or party.Dead then
 		return
 	end
+	DataService.Track(player, "padact." .. action)
 
 	if action == "Leave" then
 		if inLockWindow(party) then
 			notify(player, "Too late to leave, the dishwasher is starting!", "Bad")
 			return
 		end
+		DataService.Track(player, "pad.leave")
 		removeMember(player, "Exit")
 		return
 	end
@@ -963,6 +971,7 @@ local function onPartyAction(player: Player, action: any, value: any)
 		party.Privacy = privacy
 		party.Status = "Waiting"
 		party.EndsAt = Util.Now() + countdownFor(max)
+		DataService.Track(player, "pad.create", { Level = level, Max = max })
 		markDirty(party)
 		refreshPad(party.Pad, true)
 		playPadSound(party.Pad, "Pop")

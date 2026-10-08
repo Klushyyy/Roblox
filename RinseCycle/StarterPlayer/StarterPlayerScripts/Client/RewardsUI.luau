@@ -425,6 +425,7 @@ function RewardsUI.Invite()
 			UIKit.Toast("Invites aren't available on this account.", "Info")
 			return
 		end
+		ClientState.Track("invite.open")
 		local ok = pcall(function()
 			local options = Instance.new("ExperienceInviteOptions")
 			options.PromptMessage = "Come clean dishes with me in Rinse Cycle!"

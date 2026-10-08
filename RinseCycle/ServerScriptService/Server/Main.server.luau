@@ -111,6 +111,7 @@ local EventService = need("EventService")
 local ClubService = need("ClubService")
 local BadgeAwards = need("BadgeAwards")
 local DailyNotify = need("DailyNotify")
+local Analytics = need("Analytics")
 
 local function step(name: string, fn: () -> ())
 	local started = os.clock()
@@ -138,6 +139,10 @@ step("Remotes", Remotes.Setup)
 step("Characters", Characters.Setup)
 step("DataService.Init", DataService.Init)
 step("MarketService.Init", MarketService.Init)
+-- (right after DataService, so it sees every profile that loads)
+if type((Analytics :: any).Init) == "function" then
+	step("Analytics.Init", (Analytics :: any).Init)
+end
 step("LobbyBuilder.Build", function()
 	LobbyBuilder.Build()
 end)
@@ -163,6 +168,7 @@ local services = {
 	{ "ClubService", ClubService },
 	{ "BadgeAwards", BadgeAwards },
 	{ "DailyNotify", DailyNotify },
+	{ "Analytics", Analytics },
 }
 
 for _, entry in services do

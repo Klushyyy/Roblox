@@ -100,6 +100,7 @@ export type Profile = {
 	RebirthReady: boolean, -- the last level has been cleared since the last rebirth
 	BoostUntil: number, -- os.time() until which cleaning is x2 (the "stay" boost); 0 = none
 	StayBoostDay: string, -- UTC date ("2026-10-03") the stay boost was last claimed: once a day
+	PremiumDay: string, -- UTC date the Roblox Premium daily gift was last paid (once a day)
 	TutorialDone: boolean, -- the first-run tutorial has been finished or skipped (anyone with a run behind them counts as done)
 	PetIndex: { [string]: number }, -- every pet id ever owned -> bits (1 normal, 2 Golden, 4 Rainbow)
 	PetIndexPaid: { [string]: boolean }, -- collection sets already paid ("1".."3")
@@ -127,6 +128,17 @@ export type Profile = {
 		BubblesEarned: number,
 	},
 	Receipts: { string }, -- recent developer-product PurchaseIds, newest last
+	An: { -- Analytics.luau's bookkeeping (nothing here changes how the game plays)
+		First: number, -- the day number (os.time() // 86400) they first played; 0 = not seen yet, -1 = played before analytics existed
+		Last: number, -- os.time() they were last seen
+		Visits: number, -- visits so far (a visit = joins less than Config.Analytics.VisitGap apart)
+		VisitStart: number, -- os.time() the current visit began
+		Mask: number, -- bit N set = they played N days after First (N = 1..30), for retention
+		Runs: number, -- dishwashers they have arrived in
+		DayNum: number, -- the day Day belongs to
+		Day: { [string]: boolean }, -- moments already counted today (unique-per-day counts)
+		Seen: { [string]: number }, -- moments ever reached -> the day first reached
+	},
 }
 
 -- A Bubbles or stat change that arrived before the profile finished loading (replayed on load).
@@ -187,6 +199,7 @@ local TEMPLATE: Profile = {
 	LikePending = false,
 	BoostUntil = 0,
 	StayBoostDay = "",
+	PremiumDay = "",
 	TutorialDone = false,
 	PetIndex = {},
 	PetIndexPaid = {},
@@ -208,6 +221,7 @@ local TEMPLATE: Profile = {
 	Referrals = 0,
 	Stats = { Runs = 0, DishesCleaned = 0, GrimeCleaned = 0, EggsHatched = 0, BubblesEarned = 0 },
 	Receipts = {},
+	An = { First = 0, Last = 0, Visits = 0, VisitStart = 0, Mask = 0, Runs = 0, DayNum = 0, Day = {}, Seen = {} },
 }
 for _, perk in Config.Perks do
 	TEMPLATE.Perks[perk.Id] = 0
@@ -237,6 +251,18 @@ local notifyRemote: RemoteEvent
 
 DataService.ProfileLoaded = Util.Signal.new() -- (player, profile), for loaded, temporary and offline profiles
 DataService.PassesChanged = Util.Signal.new() -- (player), after a pass (or pass-limited Equipped) changes
+-- (player, currency "Bubbles" | "Gems", amount (+ earned / - spent), balance after, reason), for Analytics.
+DataService.EconomyChanged = Util.Signal.new()
+
+-- Analytics hooks. Analytics.luau replaces these when it starts; until then (or if that script is
+-- missing) they do nothing, so any service can call them without caring.
+--   Track(player, "run.arrive", { Level = 1 }) records a moment (keys: Config.Analytics)
+--   SetContext(player, "Run L1") says where the player is now (shown when they leave)
+DataService.Track = function(_player: Player, _key: string, _fields: { [string]: any }?) end
+DataService.SetContext = function(_player: Player, _context: string) end
+DataService.AttemptId = function(_player: Player, _funnel: string): string?
+	return nil
+end
 
 ----------------------------------------------------------------------------------------------------
 -- Small helpers
@@ -321,7 +347,9 @@ local function getStore(): DataStore?
 end
 
 local function newProfile(): Profile
-	return Util.DeepCopy(TEMPLATE)
+	local profile = Util.DeepCopy(TEMPLATE)
+	profile.An.First = os.time() // 86400 -- brand new: Analytics counts them in today's sign-up group
+	return profile
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -403,6 +431,7 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	p.Rebirths = toCount(p.Rebirths, 0)
 	p.BoostUntil = toCount(p.BoostUntil, 0)
 	p.StayBoostDay = if type(p.StayBoostDay) == "string" then p.StayBoostDay else ""
+	p.PremiumDay = if type(p.PremiumDay) == "string" and #p.PremiumDay <= 12 then p.PremiumDay else ""
 	p.PetsResting = p.PetsResting == true
 	local index, paid = {}, {}
 	for id, bits in (if type(p.PetIndex) == "table" then p.PetIndex else {}) do
@@ -593,6 +622,32 @@ local function sanitizeProfile(profile: Profile, player: Player)
 		table.remove(receipts, 1)
 	end
 	p.Receipts = receipts
+
+	-- Analytics bookkeeping: repaired, never trusted (and kept small).
+	local an: any = if type(p.An) == "table" then p.An else {}
+	an.First = if isFinite(an.First) then math.floor(an.First) else 0
+	an.Last = toCount(an.Last, 0)
+	an.Visits = toCount(an.Visits, 0)
+	an.VisitStart = toCount(an.VisitStart, 0)
+	an.Mask = math.clamp(toCount(an.Mask, 0), 0, 2 ^ 31 - 1)
+	an.Runs = toCount(an.Runs, 0)
+	an.DayNum = toCount(an.DayNum, 0)
+	local dayMarks, seenDays, kept = {}, {}, 0
+	for key, mark in (if type(an.Day) == "table" then an.Day else {}) do
+		if type(key) == "string" and #key <= 48 and mark == true and kept < 160 then
+			dayMarks[key] = true
+			kept += 1
+		end
+	end
+	kept = 0
+	for key, day in (if type(an.Seen) == "table" then an.Seen else {}) do
+		if type(key) == "string" and #key <= 48 and isFinite(day) and kept < 220 then
+			seenDays[key] = math.floor(day)
+			kept += 1
+		end
+	end
+	an.Day, an.Seen = dayMarks, seenDays
+	p.An = an
 end
 
 -- Copy of the profile that is safe to store: no runtime-only keys ("Lock", anything starting with
@@ -636,6 +691,15 @@ local function applyBubbles(profile: Profile, amount: number)
 	end
 end
 
+-- Tells Analytics about a currency change (never lets a listener's mistake touch the save).
+local function economy(player: Player, currency: string, amount: number, balance: number, reason: string?)
+	if amount ~= 0 then
+		pcall(function()
+			DataService.EconomyChanged:Fire(player, currency, amount, balance, reason or "Other")
+		end)
+	end
+end
+
 local function applyStat(profile: Profile, statName: string, amount: number)
 	local stats = profile.Stats :: any
 	stats[statName] = math.max(0, (stats[statName] or 0) + amount)
@@ -662,6 +726,7 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 	for _, pass in Config.GamePasses do
 		passCopy[pass.Key] = passes[pass.Key] == true
 	end
+	passCopy.Premium = passes.Premium == true -- Roblox Premium (not a game pass; MarketService sets it)
 	local perks = {}
 	for _, perk in Config.Perks do
 		perks[perk.Id] = profile.Perks[perk.Id] or 0
@@ -978,7 +1043,7 @@ local function loadFromStore(session: Session): (string, any)
 						status = "Locked"
 						return nil
 					end
-					local data = if old ~= nil then old else Util.DeepCopy(TEMPLATE) :: any
+					local data = if old ~= nil then old else newProfile() :: any
 					data.Lock = { JobId = game.JobId, Time = os.time() }
 					status, record = "Ok", data
 					return data, userIds
@@ -1326,6 +1391,7 @@ function DataService.AddBubbles(player: Player, amount: number, reason: string?)
 		return true
 	end
 	applyBubbles(profile, rounded)
+	economy(player, "Bubbles", rounded, profile.Bubbles, reason)
 	DataService.PushMeta(player)
 	return true
 end
@@ -1359,7 +1425,7 @@ function DataService.FindDuck(player: Player, duckId: string): (boolean, number)
 end
 
 -- Takes Bubbles if the player has enough. Returns true when paid.
-function DataService.SpendBubbles(player: Player, amount: number): boolean
+function DataService.SpendBubbles(player: Player, amount: number, reason: string?): boolean
 	local profile = DataService.Get(player)
 	if not profile or not isFinite(amount) or amount < 0 then
 		return false
@@ -1369,22 +1435,25 @@ function DataService.SpendBubbles(player: Player, amount: number): boolean
 		return false
 	end
 	profile.Bubbles -= cost
+	economy(player, "Bubbles", -cost, profile.Bubbles, reason)
 	DataService.PushMeta(player)
 	return true
 end
 
 -- Gems (premium currency). Returns true when applied.
-function DataService.AddGems(player: Player, amount: number): boolean
+function DataService.AddGems(player: Player, amount: number, reason: string?): boolean
 	local profile = DataService.Get(player)
 	if not profile or not isFinite(amount) or amount <= 0 then
 		return false
 	end
-	profile.Gems += math.floor(amount + 0.5)
+	local rounded = math.floor(amount + 0.5)
+	profile.Gems += rounded
+	economy(player, "Gems", rounded, profile.Gems, reason)
 	DataService.PushMeta(player)
 	return true
 end
 
-function DataService.SpendGems(player: Player, amount: number): boolean
+function DataService.SpendGems(player: Player, amount: number, reason: string?): boolean
 	local profile = DataService.Get(player)
 	if not profile or not isFinite(amount) or amount < 0 then
 		return false
@@ -1394,6 +1463,7 @@ function DataService.SpendGems(player: Player, amount: number): boolean
 		return false
 	end
 	profile.Gems -= cost
+	economy(player, "Gems", -cost, profile.Gems, reason)
 	DataService.PushMeta(player)
 	return true
 end
@@ -1414,8 +1484,10 @@ function DataService.ClaimDaily(player: Player): (number?, string?)
 	profile.DailyStreak = streak
 	if reward.Kind == "Gems" then
 		profile.Gems += reward.Amount
+		economy(player, "Gems", reward.Amount, profile.Gems, "Daily")
 	else
 		applyBubbles(profile, reward.Amount)
+		economy(player, "Bubbles", reward.Amount, profile.Bubbles, "Daily")
 	end
 	local session = sessions[player]
 	if session then
@@ -1450,6 +1522,35 @@ function DataService.ClaimStayBoost(player: Player): (boolean, string)
 	return true, "x2 Cleaning for 15 minutes! Enjoy!"
 end
 
+-- The Roblox Premium daily gift (Config.Premium.DailyReward): once per UTC day, only while the player
+-- is a Premium member. Returns the reward text when it was just paid, nil otherwise.
+function DataService.ClaimPremiumDaily(player: Player): string?
+	local profile = DataService.Get(player)
+	local passes = passesOf[player]
+	if not profile or not passes or passes.Premium ~= true then
+		return nil
+	end
+	local today = os.date("!%Y-%m-%d")
+	if profile.PremiumDay == today then
+		return nil
+	end
+	profile.PremiumDay = today
+	local reward = Config.Premium.DailyReward
+	if (reward.Bubbles or 0) > 0 then
+		DataService.AddBubbles(player, reward.Bubbles :: number, "Premium")
+	end
+	if (reward.Gems or 0) > 0 then
+		DataService.AddGems(player, reward.Gems :: number, "Premium")
+	end
+	-- Saved within seconds, so rejoining can't collect it twice.
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + 2)
+	end
+	DataService.PushMeta(player)
+	return Config.RewardText(reward)
+end
+
 -- Adds `seconds` of x2 cleaning (the stay boost) on top of whatever's left. Admin events use this.
 function DataService.AddBoost(player: Player, seconds: number): boolean
 	local profile = DataService.Get(player)
@@ -1477,6 +1578,8 @@ function DataService.ClaimReferred(player: Player, inviterId: number): boolean
 	local reward = Config.Social.ReferredReward
 	profile.Gems += reward.Gems or 0
 	applyBubbles(profile, reward.Bubbles or 0)
+	economy(player, "Gems", reward.Gems or 0, profile.Gems, "Referred")
+	economy(player, "Bubbles", reward.Bubbles or 0, profile.Bubbles, "Referred")
 	local session = sessions[player]
 	if session then
 		session.NextAutosave = math.min(session.NextAutosave, os.clock() + 2)
@@ -1500,6 +1603,8 @@ function DataService.AddReferrals(player: Player, count: number): number
 	local reward = Config.Social.ReferralReward
 	profile.Gems += (reward.Gems or 0) * paid
 	applyBubbles(profile, (reward.Bubbles or 0) * paid)
+	economy(player, "Gems", (reward.Gems or 0) * paid, profile.Gems, "Referral")
+	economy(player, "Bubbles", (reward.Bubbles or 0) * paid, profile.Bubbles, "Referral")
 	local session = sessions[player]
 	if session then
 		session.NextAutosave = math.min(session.NextAutosave, os.clock() + 2)
@@ -1665,7 +1770,7 @@ function DataService.SetTutorialDone(player: Player, completed: boolean?): (bool
 			DataService.AddBubbles(player, reward.Bubbles :: number, "Tutorial")
 		end
 		if (reward.Gems or 0) > 0 then
-			DataService.AddGems(player, reward.Gems :: number)
+			DataService.AddGems(player, reward.Gems :: number, "Tutorial")
 		end
 		rewarded = true
 	end
@@ -1720,9 +1825,11 @@ function DataService.RedeemCode(player: Player, text: string): (boolean, string)
 	table.insert(profile.RedeemedCodes, code)
 	if def.Gems then
 		profile.Gems += def.Gems
+		economy(player, "Gems", def.Gems, profile.Gems, "Code")
 	end
 	if def.Bubbles then
 		applyBubbles(profile, def.Bubbles)
+		economy(player, "Bubbles", def.Bubbles, profile.Bubbles, "Code")
 	end
 	local session = sessions[player]
 	if session then
@@ -1777,6 +1884,8 @@ function DataService.GrantSocialReward(player: Player, kind: string): boolean
 	end
 	profile.Gems += reward.Gems or 0
 	applyBubbles(profile, reward.Bubbles or 0)
+	economy(player, "Gems", reward.Gems or 0, profile.Gems, kind)
+	economy(player, "Bubbles", reward.Bubbles or 0, profile.Bubbles, kind)
 	local session = sessions[player]
 	if session then
 		session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)
@@ -1795,6 +1904,8 @@ function DataService.GrantGroupReward(player: Player): boolean
 	local reward = Config.Social.GroupReward
 	profile.Gems += reward.Gems or 0
 	applyBubbles(profile, reward.Bubbles or 0)
+	economy(player, "Gems", reward.Gems or 0, profile.Gems, "Group")
+	economy(player, "Bubbles", reward.Bubbles or 0, profile.Bubbles, "Group")
 	local session = sessions[player]
 	if session then
 		session.NextAutosave = math.min(session.NextAutosave, os.clock() + SAVE_SOON_DELAY)

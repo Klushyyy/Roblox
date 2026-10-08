@@ -144,7 +144,7 @@ local function buyPerk(player: Player, value: any): Types.RequestResult
 	if profile.Bubbles < cost then
 		return fail("You need " .. Format.Short(cost - profile.Bubbles) .. " more Bubbles")
 	end
-	if not DataService.SpendBubbles(player, cost) then
+	if not DataService.SpendBubbles(player, cost, "Perk:" .. perk.Id) then
 		return fail("Not enough Bubbles!")
 	end
 	profile.Perks[perk.Id] = level + 1
@@ -243,7 +243,7 @@ local function rollRank(player: Player, _value: any): Types.RequestResult
 	if profile.Gems < cost then
 		return fail(string.format("You need %d Gems to roll!", cost))
 	end
-	if not DataService.SpendGems(player, cost) then
+	if not DataService.SpendGems(player, cost, "RankRoll") then
 		return fail(ERR_GENERIC)
 	end
 	local passes = DataService.GetPasses(player)
@@ -401,6 +401,9 @@ local function clubNoticeSeen(player: Player, _value: any): Types.RequestResult
 	return { Ok = true }
 end
 
+-- Menu requests that are bookkeeping rather than something the player chose.
+local UNTRACKED: { [string]: boolean } = { ClubNoticeSeen = true, SawEpisode = true }
+
 local HANDLERS: { [string]: (Player, any) -> Types.RequestResult } = {
 	TutorialDone = tutorialDone,
 	ClubNoticeSeen = clubNoticeSeen,
@@ -471,7 +474,12 @@ local function onMetaRequest(player: Player, action: any, value: any): Types.Req
 		warn(string.format("[ShopService] %s failed for %s: %s", action, player.Name, tostring(result)))
 		return fail(ERR_GENERIC)
 	end
-	return normalize(result)
+	local answer = normalize(result)
+	if not UNTRACKED[action] then
+		-- (what the menus are used for, and which buttons get refused: Analytics)
+		DataService.Track(player, (if answer.Ok then "meta." else "metafail.") .. action)
+	end
+	return answer
 end
 
 ----------------------------------------------------------------------------------------------------

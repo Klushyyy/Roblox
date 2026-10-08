@@ -85,6 +85,8 @@ type PlayerRun = {
 	LastScrubAt: number, -- os.clock() of the last accepted Scrub packet
 	LastFullFX: number, -- os.clock() of the last "TankFull" FX (throttled)
 	Results: Types.RunResults?,
+	DishesDone: number, -- dishes this player finished (Analytics)
+	Sold: boolean, -- sold a tank at least once (Analytics)
 }
 
 type Run = {
@@ -100,6 +102,7 @@ type Run = {
 	ClockAt: number?, -- when the run clock started: the first player done with (or skipping) the cutscene
 	Phase: "Playing" | "Complete",
 	Ended: boolean,
+	Marks: { [number]: boolean }, -- 25 / 50 / 75 % clean already reported (Analytics)
 	Total: number,
 	Cleaned: number,
 	Remaining: number,
@@ -449,6 +452,9 @@ local function startClock(run: Run)
 		return
 	end
 	run.ClockAt = Util.Now()
+	for member in run.Players do
+		DataService.Track(member, "run.loaded", { Level = run.Level })
+	end
 	pushAll(run)
 end
 
@@ -515,6 +521,13 @@ sell = function(run: Run, player: Player, pr: PlayerRun)
 	local coins = math.floor(units * pr.Stats.CoinMult)
 	pr.Tank = 0
 	pr.Coins += coins
+	if not pr.Sold then
+		pr.Sold = true
+		DataService.Track(player, "run.sell", { Level = run.Level })
+	end
+	pcall(function()
+		DataService.EconomyChanged:Fire(player, "Coins", coins, pr.Coins, "Sell")
+	end)
 
 	local fx: Types.FXSold = { Coins = coins, Units = units, By = player.UserId }
 	fireOne(player, "Sold", fx)
@@ -560,10 +573,13 @@ local function retireGrime(run: Run, part: BasePart, entry: GrimeEntry, cleaner:
 			pr.Tank += gained
 		end
 		pr.GrimeCleaned += 1
+		if pr.GrimeCleaned == 1 then
+			DataService.Track(rewardPlayer, "run.first", { Level = run.Level })
+		end
 
 		local gems = if entry.Golden then Config.Gems.GoldenDrop elseif rng:NextNumber() < Config.Gems.DropChance then 1 else 0
 		if gems > 0 then
-			safe(DataService.AddGems, rewardPlayer, gems)
+			safe(DataService.AddGems, rewardPlayer, gems, "GemDrop")
 			notify(rewardPlayer, string.format("You found %d Gem%s!", gems, if gems == 1 then "" else "s"), "Good")
 		end
 
@@ -602,6 +618,10 @@ local function retireGrime(run: Run, part: BasePart, entry: GrimeEntry, cleaner:
 			end
 			local bonus = 0
 			if rewardPlayer and pr then
+				pr.DishesDone += 1
+				if pr.DishesDone == 1 then
+					DataService.Track(rewardPlayer, "run.dish1", { Level = run.Level })
+				end
 				bonus = math.floor(dish.Units * R.DishBonusShare * pr.Stats.CoinMult)
 				pr.Coins += bonus
 				for member in run.Players do
@@ -619,6 +639,17 @@ local function retireGrime(run: Run, part: BasePart, entry: GrimeEntry, cleaner:
 	end
 
 	run.Arena.Model:SetAttribute("Cleaned", run.Cleaned)
+	-- How far along the wash is: 25 / 50 / 75 % are reported once each (and where a leaver was is remembered).
+	local percent = run.Cleaned / math.max(1, run.Total) * 100
+	for _, mark in { 25, 50, 75 } do
+		if percent >= mark and not run.Marks[mark] then
+			run.Marks[mark] = true
+			for member in run.Players do
+				DataService.Track(member, "run.p" .. mark, { Level = run.Level })
+				DataService.SetContext(member, string.format("Run L%d %d-%d%%", run.Level, mark, mark + 25))
+			end
+		end
+	end
 	pushAll(run)
 
 	-- The tank just filled: Auto Drain sells it on the spot, everyone else gets the "go sell" cue.
@@ -794,7 +825,13 @@ local function rewardRun(run: Run, members: { Player }, seconds: number, returnA
 			bubbles = math.floor(bubbles)
 
 			safe(DataService.AddBubbles, p, bubbles, "RunClear")
-			safe(DataService.AddGems, p, Config.Gems.PerClear * run.Level)
+			safe(DataService.AddGems, p, Config.Gems.PerClear * run.Level, "RunClear")
+			DataService.SetContext(p, string.format("Results L%d", run.Level))
+			DataService.Track(p, "run.clear", { Level = run.Level, Seconds = math.floor(seconds), Party = n })
+			DataService.Track(p, "run.clear." .. run.Level)
+			if ok and type(unlocked) == "number" then
+				DataService.Track(p, "lvl.unlock." .. unlocked)
+			end
 			safe(DataService.AddStat, p, "GrimeCleaned", pr.GrimeCleaned)
 			safe(DataService.PushMeta, p)
 
@@ -982,6 +1019,8 @@ local function joinRun(run: Run, player: Player, index: number)
 		LastScrubAt = 0,
 		LastFullFX = 0,
 		Results = nil,
+		DishesDone = 0,
+		Sold = false,
 	}
 	pr.OwnedTools, pr.ToolUpgrades = newToolState()
 	grantPassTools(player, pr)
@@ -995,6 +1034,9 @@ local function joinRun(run: Run, player: Player, index: number)
 	Characters.SetWalkSpeed(player, pr.Stats.WalkSpeed)
 	player:SetAttribute("InRun", true)
 	player:SetAttribute("RunArena", run.ArenaName)
+	DataService.SetContext(player, string.format("Run L%d 0-25%%", run.Level))
+	DataService.Track(player, "run.arrive", { Level = run.Level, Party = #run.Order })
+	DataService.Track(player, "run.arrive." .. run.Level)
 
 	local spawns = run.Arena.Spawns
 	task.spawn(teleportInto, run, player, spawns[((index - 1) % #spawns) + 1])
@@ -1105,6 +1147,7 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 		StartedAt = Util.Now(),
 		Phase = "Playing",
 		Ended = false,
+		Marks = {},
 		Total = 0,
 		Cleaned = 0,
 		Remaining = 0,
@@ -1197,6 +1240,16 @@ function RoundService.RemoveFromRun(player: Player, reason: string?)
 	local run = runOf[player]
 	if not run then
 		return
+	end
+	if reason == "Leave" then
+		DataService.Track(player, "run.leave", { Level = run.Level })
+	elseif reason == "ReturnToLobby" or reason == "Complete" then
+		DataService.Track(player, "run.home", { Level = run.Level })
+	elseif reason == LEFT_GAME and run.Phase == "Playing" then
+		DataService.Track(player, "run.drop", { Level = run.Level })
+	end
+	if reason ~= LEFT_GAME then
+		DataService.SetContext(player, "Lobby")
 	end
 	runOf[player] = nil
 	pushInfo[player] = nil -- cancels any coalesced push still waiting
@@ -1559,6 +1612,10 @@ local function handleRunRequest(player: Player, action: any, value: any): Types.
 		upgrades[def.Id] = current + 1
 		recomputeStats(run, player, pr)
 		queuePush(player)
+		DataService.Track(player, "run.up." .. def.Id, { Level = run.Level, To = current + 1 })
+		pcall(function()
+			DataService.EconomyChanged:Fire(player, "Coins", -cost, pr.Coins, "Upgrade:" .. def.Id)
+		end)
 		return OK
 	elseif action == "BuyTool" then
 		if run.Phase ~= "Playing" then
@@ -1583,6 +1640,10 @@ local function handleRunRequest(player: Player, action: any, value: any): Types.
 		recomputeStats(run, player, pr)
 		attachHeldTool(player, value)
 		queuePush(player)
+		DataService.Track(player, "run.tool.buy" .. value, { Level = run.Level })
+		pcall(function()
+			DataService.EconomyChanged:Fire(player, "Coins", -cost, pr.Coins, "Tool:" .. value)
+		end)
 		return OK
 	elseif action == "EquipTool" then
 		if type(value) ~= "number" or value % 1 ~= 0 or not pr.OwnedTools[value] then
@@ -1593,6 +1654,7 @@ local function handleRunRequest(player: Player, action: any, value: any): Types.
 			recomputeStats(run, player, pr)
 			attachHeldTool(player, value)
 			queuePush(player)
+			DataService.Track(player, "run.tool.equip" .. value)
 		end
 		return OK
 	elseif action == "Leave" then

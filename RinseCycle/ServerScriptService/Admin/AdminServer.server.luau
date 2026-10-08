@@ -116,7 +116,7 @@ local ALL_COMMANDS = {
 	"viewpets", "givepet",
 	"fly", "noclip", "giant",
 	"leaderboards", "globalannounce", "joinserver", "bringserver", "serverlist",
-	"globalpoll",
+	"globalpoll", "analytics",
 }
 
 -- =====================================================================
@@ -290,6 +290,7 @@ end
 
 -- Every server of the game, for the admin's "All servers" list (filled in at the bottom).
 local ServerList = {}
+local AnalyticsReport = {}
 local GlobalEvents = { Commands = {} } -- the panel's Global tab (filled in near the bottom)
 
 local function getPlayerTier(player)
@@ -3602,7 +3603,7 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 
 		-- The recipient gets told, with the game's usual celebration toast - only on the way IN.
 		if giving then
-			celebrate(target, "You got a gift!", "You've been gifted " .. pass.Name .. " by an admin!", pass.Icon)
+			celebrate(target, "Gift pass!", "Congrats! An admin gave you the " .. pass.Name .. " game pass as a gift.", pass.Icon)
 		end
 
 		sendFeedback(admin, (giving and "Gave " or "Removed ") .. pass.Name
@@ -3712,8 +3713,17 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 
 	-- :serverlist - every player in every server of the game, with Join / Bring on each.
 	if commandName == "serverlist" then
-		task.spawn(ServerList.Send, admin)
+		task.spawn(ServerList.Send, admin, 1)
 		sendFeedback(admin, "Loading every server...", false)
+		return
+	end
+
+	-- :analytics [report] [days] - where players get stuck and leave (Analytics.luau; see ANALYTICS.md).
+	if commandName == "analytics" then
+		local index, days = extraText:match("^%s*(%d*)%s*(%d*)")
+		task.spawn(AnalyticsReport.Send, admin, tonumber(index) or 1, tonumber(days))
+		sendFeedback(admin, "Loading the analytics report...", false)
+		logCommand(admin, "analytics", nil, extraText, admin.Name .. " opened the analytics report")
 		return
 	end
 
@@ -4684,18 +4694,43 @@ Remote.AdminServerAction = Instance.new("RemoteEvent")
 Remote.AdminServerAction.Name = "AdminServerAction"
 Remote.AdminServerAction.Parent = ReplicatedStorage
 
+-- :analytics - the report pages (Analytics.BuildReport) shown in the same list window as the servers.
+Remote.AdminReport = Instance.new("RemoteEvent")
+Remote.AdminReport.Name = "AdminReport"
+Remote.AdminReport.Parent = ReplicatedStorage
+
+function AnalyticsReport.Send(admin, index: number?, days: number?)
+	local module = GameServices:FindFirstChild("Analytics")
+	local ok, Analytics = false, nil
+	if module and module:IsA("ModuleScript") then
+		ok, Analytics = pcall(require, module)
+	end
+	if not ok or type(Analytics) ~= "table" or type(Analytics.BuildReport) ~= "function" then
+		sendFeedback(admin, "Analytics isn't installed (Server > Services > Analytics is missing)", true)
+		return
+	end
+	local built, title, rows, shown, count = pcall(Analytics.BuildReport, index, days)
+	if not built then
+		sendFeedback(admin, "The analytics report failed: " .. tostring(title), true)
+		return
+	end
+	Remote.AdminReport:FireClient(admin, title, rows, shown, count, days or Config.Analytics.ReportDays)
+end
+
 ServerList.TTL = 90
 ServerList.Map = nil
 pcall(function()
 	ServerList.Map = game:GetService("MemoryStoreService"):GetSortedMap("RinseCycle_ServerList")
 end)
 
+ServerList.Started = os.time() -- (when this server began: servers are numbered oldest first, Lobby 1, Lobby 2...)
+
 function ServerList.Snapshot()
 	local list = {}
 	for _, plr in ipairs(Players:GetPlayers()) do
 		table.insert(list, { UserId = plr.UserId, Name = plr.Name, Display = plr.DisplayName, Hidden = plr:GetAttribute("AdminInvis") == true })
 	end
-	return { Players = list, Run = RunServers.IsRunServer, Updated = os.time() }
+	return { Players = list, Run = RunServers.IsRunServer, Level = RunServers.GetLevel and RunServers.GetLevel() or nil, Started = ServerList.Started, Updated = os.time() }
 end
 
 function ServerList.Publish()
@@ -4720,43 +4755,106 @@ function ServerList.Read()
 		pcall(function()
 			for _, item in ipairs(map:GetRangeAsync(Enum.SortDirection.Ascending, 200)) do
 				if type(item.value) == "table" and item.key ~= game.JobId then
-					table.insert(servers, { JobId = item.key, Run = item.value.Run == true, Players = item.value.Players or {} })
+					table.insert(servers, { JobId = item.key, Run = item.value.Run == true, Level = tonumber(item.value.Level), Started = tonumber(item.value.Started) or 0, Players = item.value.Players or {} })
 				end
 			end
 		end)
 	end
 	local here = ServerList.Snapshot()
-	table.insert(servers, 1, { JobId = game.JobId, Run = here.Run, Players = here.Players, Here = true })
+	table.insert(servers, 1, { JobId = game.JobId, Run = here.Run, Level = here.Level, Started = here.Started, Players = here.Players, Here = true })
 	return servers
 end
 
-function ServerList.Send(admin)
-	local rows = {}
-	local busiest, busiestCount = nil, 0
-	for i, server in ipairs(ServerList.Read()) do
-		local names, follow = {}, nil
+-- The filters the server list cycles through (the arrows in the panel).
+ServerList.Filters = { "all", "lobby", "game", "level1", "level2", "level3" }
+local function levelLabel(level: number): string
+	local def = Config.Levels[level]
+	return string.format("Level %d - %s (Chapter %d)", level, if def then tostring(def.Name) else "?", level)
+end
+local function filterLabel(filter: string): string
+	if filter == "lobby" then
+		return "Lobby servers"
+	elseif filter == "game" then
+		return "Game servers (all levels)"
+	elseif string.sub(filter, 1, 5) == "level" then
+		return levelLabel(tonumber(string.sub(filter, 6)) or 1) .. " games"
+	end
+	return "All servers"
+end
+local function upText(seconds: number): string
+	seconds = math.max(0, seconds)
+	if seconds >= 3600 then
+		return string.format("%dh %02dm", seconds // 3600, (seconds % 3600) // 60)
+	end
+	return string.format("%d min", seconds // 60)
+end
+
+function ServerList.Send(admin, filterIndex: number?)
+	local index = ((math.floor(tonumber(filterIndex) or 1) - 1) % #ServerList.Filters) + 1
+	local filter = ServerList.Filters[index]
+	local servers = ServerList.Read()
+	-- numbered oldest first: Lobby 1, Lobby 2...; game servers numbered within their level
+	table.sort(servers, function(a, b)
+		if a.Started ~= b.Started then
+			return a.Started < b.Started
+		end
+		return a.JobId < b.JobId
+	end)
+	local lobbyNumber, gameNumber = 0, { 0, 0, 0, 0, 0, 0 }
+	local lobbies, games, people = 0, 0, 0
+	local entries = {}
+	for _, server in ipairs(servers) do
+		local names, follow, hidden = {}, nil, 0
 		for _, p in ipairs(server.Players) do
-			if p.UserId ~= admin.UserId and not p.Hidden then
+			if p.Hidden then
+				hidden += 1
+			elseif p.UserId ~= admin.UserId then
 				table.insert(names, tostring(p.Name))
 				follow = follow or p.UserId
 			end
 		end
-		local count = #names
-		if not server.Here and not server.Run and count > busiestCount then
-			busiest, busiestCount = server.JobId, count
+		local count = #server.Players
+		if count == 0 then
+			continue
 		end
-		-- One row (and one Join) per server; your own server isn't listed.
-		if not server.Here and count > 0 then
-			local shown = table.concat(names, ", ", 1, math.min(#names, 6)) .. (if #names > 6 then ", +" .. (#names - 6) .. " more" else "")
+		people += count
+		local category, label
+		if server.Run then
+			games += 1
+			local level = server.Level or 0
+			gameNumber[level + 1] = (gameNumber[level + 1] or 0) + 1
+			category = if level >= 1 then "level" .. level else "game"
+			label = (if level >= 1 then levelLabel(level) else "Game server") .. " - game #" .. gameNumber[level + 1]
+		else
+			lobbies += 1
+			lobbyNumber += 1
+			category = "lobby"
+			label = "Lobby " .. lobbyNumber
+		end
+		table.insert(entries, { Category = category, Server = server, Names = names, Follow = follow, Count = count, Label = label })
+	end
+	local rows = {}
+	for _, entry in ipairs(entries) do
+		local show = filter == "all" or filter == entry.Category or (filter == "game" and string.sub(entry.Category, 1, 5) == "level") or (filter == "game" and entry.Category == "game")
+		if show then
+			local names = entry.Names
+			local shown = if #names == 0 then "(only you / hidden staff)" else table.concat(names, ", ", 1, math.min(#names, 8)) .. (if #names > 8 then ", +" .. (#names - 8) .. " more" else "")
 			table.insert(rows, {
-				Id = follow,
-				JobId = server.JobId,
-				Line1 = (if server.Run then "Run" else "Lobby") .. " server " .. i .. " - " .. count .. " player" .. (if count == 1 then "" else "s"),
+				Id = entry.Follow,
+				JobId = entry.Server.JobId,
+				Line1 = string.format("%s%s  -  %d player%s  -  up %s", entry.Label, if entry.Server.Here then " (you are here)" else "", entry.Count, if entry.Count == 1 then "" else "s", upText(os.time() - (entry.Server.Started or os.time()))),
 				Line2 = shown,
 			})
 		end
 	end
-	Remote.AdminServerList:FireClient(admin, "Every server (" .. #rows .. ")", rows, busiest)
+	local busiest, busiestCount = nil, 0
+	for _, entry in ipairs(entries) do
+		if not entry.Server.Here and entry.Category == "lobby" and entry.Count > busiestCount then
+			busiest, busiestCount = entry.Server.JobId, entry.Count
+		end
+	end
+	local title = string.format("%s (%d)   |   %d lobbies, %d game servers, %d players", filterLabel(filter), #rows, lobbies, games, people)
+	Remote.AdminServerList:FireClient(admin, title, rows, busiest, index, #ServerList.Filters)
 end
 
 -- Teleports the admin into a server, invisible (they arrive hidden: nobody sees them join).
@@ -4784,6 +4882,21 @@ end
 Remote.AdminServerAction.OnServerEvent:Connect(function(admin, action, jobId, userId)
 	local tier = getPlayerTier(admin)
 	if type(jobId) ~= "string" or jobId == "" then
+		return
+	end
+	if action == "List" then
+		-- (the arrows on the server list: the next / previous filter)
+		if tierHasCommand(tier, "serverlist") then
+			task.spawn(ServerList.Send, admin, tonumber(jobId))
+		end
+		return
+	end
+	if action == "Report" then
+		-- (the arrows on an analytics report: "<report number>:<days>")
+		if tierHasCommand(tier, "analytics") then
+			local index, days = string.match(jobId, "^(%d+):(%d+)$")
+			task.spawn(AnalyticsReport.Send, admin, tonumber(index) or 1, tonumber(days))
+		end
 		return
 	end
 	if action == "Join" and tierHasCommand(tier, "joinserver") then
@@ -4965,6 +5078,9 @@ do
 		local poll = type(id) == "string" and polls[id]
 		if poll and type(index) == "number" and index == math.floor(index) and index >= 1 and index <= #poll.Options and Config.Now() <= poll.EndsAt then
 			poll.Votes[plr.UserId] = index -- you can change your mind until it ends
+			if ReplicatedStorage:GetAttribute("AbuseLive") == true then
+				DataService.Track(plr, "show.vote")
+			end
 		end
 	end)
 
@@ -5029,9 +5145,9 @@ do
 		for _, plr in ipairs(Players:GetPlayers()) do
 			local given = false
 			if currency == "Bubbles" then
-				given = DataService.AddBubbles(plr, amount, "admin event")
+				given = DataService.AddBubbles(plr, amount, "AdminGive")
 			elseif currency == "Gems" then
-				given = DataService.AddGems(plr, amount)
+				given = DataService.AddGems(plr, amount, "AdminGive")
 			else
 				given = RoundService.AddCoins(plr, amount)
 			end
@@ -5074,10 +5190,10 @@ do
 				end
 				if pass then
 					setGamepassGrant(plr, pass, true, false)
-					celebrate(plr, "You won a game pass!", "Lucky draw: you got " .. pass.Name .. "!", pass.Icon)
+					celebrate(plr, "Pass drop winner!", "Congrats! You won the " .. pass.Name .. " game pass from the pass drop.", pass.Icon)
 				else
-					DataService.AddGems(plr, 100)
-					celebrate(plr, "You won!", "You already own that pass, so here are 100 Gems instead!", "@Gift")
+					DataService.AddGems(plr, 100, "PassDrop")
+					celebrate(plr, "Pass drop winner!", "Congrats! You won a game pass from the pass drop, but you already own it, so here are 100 Gems instead.", "@Gift")
 				end
 			end
 		end
@@ -5199,15 +5315,15 @@ do
 			sendFeedback(admin, "Usage: :globalcountdown <time 1m-14d, like 24h> [event name]", true)
 			return
 		end
-		local name = string.match(rest or "", "^%s*(.-)%s*$")
-		if not name or name == "" then
-			name = "Admin Abuse"
-		end
-		local okFilter, filtered = pcall(function()
-			return TextService:FilterStringAsync(name, admin.UserId):GetNonChatStringForBroadcastAsync()
-		end)
-		if okFilter and type(filtered) == "string" then
-			name = filtered
+		-- (no name typed = a plain countdown timer with no name on it: it no longer says "Admin Abuse")
+		local name = string.match(rest or "", "^%s*(.-)%s*$") or ""
+		if name ~= "" then
+			local okFilter, filtered = pcall(function()
+				return TextService:FilterStringAsync(name, admin.UserId):GetNonChatStringForBroadcastAsync()
+			end)
+			if okFilter and type(filtered) == "string" then
+				name = filtered
+			end
 		end
 		name = string.sub(name, 1, 40)
 		local data = { Kind = "CountdownSet", Name = name, EndsAt = os.time() + math.floor(seconds), LiveMinutes = LIVE_MINUTES }
@@ -5217,8 +5333,9 @@ do
 			end)
 		end
 		local ok = publish(data)
-		sendFeedback(admin, string.format("Countdown for %s set (%s)%s", name, Format.Time and Format.Time(seconds) or tostring(math.floor(seconds / 60)) .. " min", if ok then " in every server" else " (this server only)"), false)
-		logCommand(admin, "globalcountdown", nil, name, string.format("%s started a countdown for %s (%d min)", admin.Name, name, math.floor(seconds / 60)))
+		local shownName = if name == "" then "a plain timer" else name
+		sendFeedback(admin, string.format("Countdown for %s set (%s)%s", shownName, Format.Time and Format.Time(seconds) or tostring(math.floor(seconds / 60)) .. " min", if ok then " in every server" else " (this server only)"), false)
+		logCommand(admin, "globalcountdown", nil, name, string.format("%s started a countdown for %s (%d min)", admin.Name, shownName, math.floor(seconds / 60)))
 	end
 	Commands.cancelcountdown = function(admin, _text)
 		if countdownMap then
@@ -5366,10 +5483,11 @@ do
 		for _, id in ipairs(d.W) do
 			local plr = Players:GetPlayerByUserId(tonumber(id) or 0)
 			if plr and def then
+				DataService.Track(plr, "show.prize")
 				if PetService.GivePet(plr, Show.Pet) then
 					celebrate(plr, "You won a limited pet!", "Admin Abuse: you got the limited " .. def.Name .. "!", "@Gift")
 				else
-					DataService.AddGems(plr, 150)
+					DataService.AddGems(plr, 150, "ShowPrize")
 					celebrate(plr, "You won!", "Your pet bag is full, so here are 150 Gems instead of the " .. def.Name .. "!", "@Gift")
 				end
 			end
@@ -5391,6 +5509,9 @@ do
 	local stageBusyUntil = 0
 	local nukeQuietUntil = 0 -- while the nuke counts down and goes off nothing else happens
 	local timeSkip = 0 -- seconds the show has jumped ahead (the pet hunt ended early)
+	local showEnded: { [string]: boolean } = {} -- shows (by start time) that have been put away: they do not run again
+	-- Jumps the show ahead `seconds` (and drops the script steps in the seconds it skips, so none of them fires late).
+	local skipScript: (number) -> () = function() end
 
 	-- Gives the prize (an option from Config.AbuseOption) to everyone / the winners, in every server.
 	local function applyOutcome(option: any)
@@ -5601,6 +5722,7 @@ do
 		end
 		-- someone who is flying is caught too: their flight is switched off (they can press F again afterwards)
 		Remote.AbuseGrab:FireClient(plr, true)
+		plr:SetAttribute("AbuseGrabbed", true) -- (the obby must not mistake the mover for the player flying)
 		local att = Instance.new("Attachment")
 		att.Parent = root
 		local mover = Instance.new("LinearVelocity")
@@ -5615,6 +5737,7 @@ do
 	local function releasePlayer(g: any, velocity: Vector3?)
 		pcall(function()
 			Remote.AbuseGrab:FireClient(g.Plr, false)
+			g.Plr:SetAttribute("AbuseGrabbed", nil)
 			g.Mover:Destroy()
 			g.Att:Destroy()
 			if velocity and g.Root.Parent then
@@ -5846,13 +5969,16 @@ do
 				end)
 			end
 		end
-		-- "right. the table. lets see how much it can take": a quick barrage of big fiery rocks on the right-hand side of the
-		-- table, where the next hole opens (the script opens the hole a moment after this starts).
+		-- "right. the table. lets see how much it can take": a quick barrage of big fiery rocks over the whole table (a third of them
+		-- round the spot where the hole opens a moment later).
 		fx.tablebreak = function()
 			local hole = Show.Holes[2] or { 86, 56, 22 }
-			for i = 1, 14 do
-				task.delay(i * 0.16, function()
-					local target = Vector3.new(math.clamp(hole[1] + math.random(-38, 30), -88, 88), 0.2, math.clamp(hole[2] + math.random(-40, 30), -92, 58))
+			for i = 1, 18 do
+				task.delay(i * 0.14, function()
+					-- (two in three land anywhere on the table, the rest round the spot where the hole opens)
+					local target = if i % 3 == 0
+						then Vector3.new(math.clamp(hole[1] + math.random(-34, 26), -88, 88), 0.2, math.clamp(hole[2] + math.random(-36, 26), -92, 58))
+						else plazaSpot()
 					local rock = neonPart(Vector3.new(26, 26, 26), Color3.fromRGB(255, 130, 45), Enum.PartType.Ball)
 					rock.Position = target + Vector3.new(math.random(-120, 120), 280, math.random(-120, 120))
 					rock.Parent = workspace
@@ -6890,13 +7016,11 @@ do
 				return
 			end
 			nukeActive = true
-			local e = abuseEvent()
-			local boomAt = if e then e.Starts + (Show.NukeAt or 596) - timeSkip else Config.Now() + 30
-			local nowT = Config.Now()
-			if boomAt - nowT < 10 or boomAt - nowT > 150 then
-				boomAt = nowT + 30 -- (a test, or it is late)
-			end
-			nukeQuietUntil = os.clock() + math.max(0, boomAt - Config.Now()) + 12 -- nothing else happens until it has gone off
+			-- It goes off COUNT seconds after it lands: the display starts at 10 and stays on it a little longer (the first
+			-- digit used to be 9 because he started late), then 9, 8, ... 1.
+			local COUNT = 10.8
+			nukeQuietUntil = os.clock() + 3.6 + COUNT + 12 -- nothing else happens until it has gone off
+			say("this spot looks empty... how about a nuke.")
 			local unit = if giantHead then giantHead.Size.Y else 45
 			local scale = unit / 1.2
 			local parts: { BasePart } = {}
@@ -7024,15 +7148,16 @@ do
 				glow.Range = 60
 				glow.Parent = body
 				local lastShown = -1
+				local boomClock = os.clock() + COUNT
 				while true do
 					if not body.Parent then
 						cleanup() -- (the show was put away early: it never goes off)
 						return
 					end
-					local left = math.ceil(boomAt - Config.Now())
+					local left = math.ceil(boomClock - os.clock())
 					if left ~= lastShown then
 						lastShown = left
-						label.Text = tostring(math.max(0, left))
+						label.Text = tostring(math.clamp(left, 0, 10))
 						glow.Brightness = if left <= 10 then 6 else 2
 						if left <= 10 and left > 0 then
 							Remote.AbuseBoom:FireAllClients(0.8, target)
@@ -7214,10 +7339,11 @@ do
 							end
 							removePet(rec)
 							local given = PetService.GivePet(plr, petId)
+							DataService.Track(plr, "show.prize")
 							if given then
 								celebrate(plr, "You caught it!", "You got the limited " .. def.Name .. "!", "@Gift")
 							else
-								DataService.AddGems(plr, 150)
+								DataService.AddGems(plr, 150, "ShowPrize")
 								celebrate(plr, "You caught it!", "Your pet bag is full, so here are 150 Gems instead of the " .. def.Name .. "!", "@Gift")
 							end
 							say(plr.Name .. " caught one!")
@@ -7308,7 +7434,7 @@ do
 					local left = endsAt - Config.Now()
 					finish()
 					if left > 3 then
-						timeSkip += left
+						skipScript(left)
 						say("all the pets got caught. well done.")
 					end
 				end
@@ -7613,6 +7739,8 @@ do
 		makeAnim("cheer", { { 0, Rz(100), Rz(-100) }, { 0.3, Rz(86), Rz(-86) }, { 0.6, Rz(100), Rz(-100) } }, true)
 		makeAnim("wave", { { 0, Rz(98) }, { 0.25, Rz(118) }, { 0.5, Rz(98) } }, true)
 		makeAnim("flex", { { 0, Rz(90), Rz(-90) }, { 0.5, Rz(90), Rz(-90) } }, true)
+		-- the right hand straight up (a touch out to the side, clear of his head): the leaving beam comes out of it
+		makeAnim("up", { { 0, Rz(172) }, { 0.5, Rz(172) } }, true)
 		-- both arms out in front, turned in so the hands meet (he holds the glowing ball / the nuke there)
 		makeAnim("charge", { { 0, Ry(14) * Rx(86), Ry(-14) * Rx(86) }, { 0.5, Ry(14) * Rx(86), Ry(-14) * Rx(86) } }, true)
 		-- one-shots
@@ -7752,6 +7880,11 @@ do
 			leanNow, shiftNow = 0, Vector3.zero
 			say("my legs hurt. im sitting down. and then im going to have a look at that table.")
 			moveT0, moveFromPos, moveFromY = os.clock(), pos, rootY
+			-- the chair slides out of his way while he walks in, and back under him as he lowers
+			LobbyBuilder.SlideGiantChair(150, 0.5)
+			task.delay(MOVE_TIME * 0.95, function()
+				LobbyBuilder.SlideGiantChair(0, 0.3)
+			end)
 			if walkTrack then
 				walkTrack:Stop(0.4)
 			end
@@ -7767,6 +7900,11 @@ do
 			end
 			state = "standleap"
 			moveT0, moveFromPos, moveFromY = os.clock(), pos, rootY
+			-- the chair slides out from under him as he gets up, and comes back once he is past it
+			LobbyBuilder.SlideGiantChair(150, 0.4)
+			task.delay(MOVE_TIME * 0.7, function()
+				LobbyBuilder.SlideGiantChair(0, 0.5)
+			end)
 			if sitTrack then
 				sitTrack:Stop(0.7)
 			end
@@ -7865,7 +8003,7 @@ do
 					end
 					-- ONE hit for each thing, one after the other: the Fastest Clean board (right fist), then the soap
 					-- shop, every egg and the pet stand (the fist on their side), each broken by its own hit
-					local board = Vector3.new(-80, 0, -74)
+					local board = LobbyBuilder.Layout.TimesBoard
 					local list = { { Name = "Fastest Clean board", Pos = board, Radius = 22 } }
 					for _, t in LobbyBuilder.GetSmashTargets() do
 						table.insert(list, t)
@@ -7980,20 +8118,28 @@ do
 				if giant ~= model then
 					return
 				end
-				setGesture("cheer")
-				local from = if head then head.Position else pos + Vector3.new(0, 100, 0)
-				local target = Vector3.new(hx, ROOF_Y, hz)
+				-- his right hand goes straight up, and the beam comes out of the hand (it used to come out of his face)
+				setGesture("up")
+				task.wait(0.9)
+				if giant ~= model then
+					return
+				end
+				local handPart = model:FindFirstChild("RightHand") :: BasePart?
+				local from = if handPart then handPart.Position + Vector3.new(0, scaleNow * 0.7, 0) else pos + Vector3.new(60, 200, 0)
+				local target = Vector3.new(from.X, ROOF_Y, from.Z)
 				local len = (target - from).Magnitude
 				local laser = neonPart(Vector3.new(10, 10, len), Color3.fromRGB(255, 70, 60))
-				laser.CFrame = CFrame.lookAt(from, target) * CFrame.new(0, 0, -len / 2)
+				laser.CFrame = CFrame.lookAt(from, target, Vector3.xAxis) * CFrame.new(0, 0, -len / 2)
 				laser.Parent = workspace
 				Debris:AddItem(laser, 2.5)
 				TweenService:Create(laser, TweenInfo.new(2.5), { Transparency = 0.7 }):Play()
-				LobbyBuilder.OpenRoofHole(hx, hz, 104) -- a real round hole in the ceiling
+				-- the hole in the ceiling is round and centred between the beam and him, so he fits through it
+				local holeX, holeZ = (hx + from.X) / 2, (hz + from.Z) / 2
+				LobbyBuilder.OpenRoofHole(holeX, holeZ, 104)
 				for i = 0, 3 do
 					task.delay(i * 0.6, function()
-						Remote.AbuseBoom:FireAllClients(2.4, Vector3.new(hx, ROOF_Y, hz))
-						harmlessBlast(Vector3.new(hx + math.random(-50, 50), ROOF_Y - 8, hz + math.random(-50, 50)), 20)
+						Remote.AbuseBoom:FireAllClients(2.4, Vector3.new(holeX, ROOF_Y, holeZ))
+						harmlessBlast(Vector3.new(holeX + math.random(-50, 50), ROOF_Y - 8, holeZ + math.random(-50, 50)), 20)
 					end)
 				end
 				task.delay(3, function()
@@ -8057,6 +8203,23 @@ do
 			return x * x * (3 - 2 * x)
 		end
 
+		-- He is built early (the build takes a few seconds) and parked out of sight; he waits here until the show goes live, so he
+		-- appears with the opening flash instead of a moment after it.
+		local gateStart = os.clock()
+		while ReplicatedStorage:GetAttribute("AbuseLive") ~= true and giant == model do
+			local e = abuseEvent()
+			if (not e or Config.Now() < e.Starts - 45) and os.clock() - gateStart > 3 then
+				-- (the event moved or was cancelled: never leave him waiting)
+				giant = nil
+				giantHead = nil
+				model:Destroy()
+				return
+			end
+			task.wait(0.05)
+		end
+		if giant ~= model then
+			return
+		end
 		-- The arrival: a flash and a blast where he stands, and only then is he there.
 		local arrival = Vector3.new(pos.X, ROOM_FLOOR + 110, pos.Z)
 		local flash = neonPart(Vector3.new(30, 30, 30), Color3.new(1, 1, 1), Enum.PartType.Ball)
@@ -8511,6 +8674,19 @@ do
 		fired[key] = true
 		return true
 	end
+	skipScript = function(seconds: number)
+		local e = abuseEvent()
+		if e then
+			local tag = tostring(e.Starts)
+			local from = Config.Now() - e.Starts + timeSkip
+			for i, step in ipairs(Show.Script) do
+				if step[1] >= from and step[1] < from + seconds then
+					fired["s" .. i .. tag] = true
+				end
+			end
+		end
+		timeSkip += seconds
+	end
 	local obbyOpen = false
 	local function setObby(open: boolean)
 		if open ~= obbyOpen then
@@ -8605,7 +8781,7 @@ do
 					setGamepassGrant(plr, pass, true, false)
 					celebrate(plr, "First to finish!", string.format("You won %s and %d Gems for finishing the obby first!", pass.Name, gems), pass.Icon)
 				else
-					DataService.AddGems(plr, 100)
+					DataService.AddGems(plr, 100, "ShowPrize")
 					celebrate(plr, "First to finish!", string.format("You finished first! %d Gems, plus 100 more because you own every pass.", gems), "@Gem")
 				end
 				say(name .. " finished the obby first and wins a game pass. well done.")
@@ -8623,6 +8799,9 @@ do
 			end
 			local t = Config.Now() - e.Starts + timeSkip -- negative before the start (timeSkip: the pet hunt ended early)
 			local tag = tostring(e.Starts)
+			if showEnded[tag] then
+				continue -- (this show has been put away: it never starts again, even though the clock, minus the skipped seconds, says it still could)
+			end
 			if t >= 0 and t < Show.ShowSeconds then
 				local wasHeat = heat
 				heat = t >= Show.HeatAt and not fadingOut
@@ -8714,13 +8893,15 @@ do
 						elseif kind == "thanks" then
 							-- everyone online gets something for staying (this server's players; every server runs this)
 							for _, plr in ipairs(Players:GetPlayers()) do
-								if DataService.AddGems(plr, Show.ThanksGems) then
+								if DataService.AddGems(plr, Show.ThanksGems, "ShowThanks") then
 									celebrate(plr, "Thanks for coming!", string.format("Everyone who stayed got %d Gems. See you in Chapter 4!", Show.ThanksGems), "@Gem")
 								end
 							end
 						elseif kind == "obby" then
 							if step[3] then
 								LobbyBuilder.OpenObby()
+								-- every client turns its camera to the obby while it builds itself (AdminClient buildShot)
+								ReplicatedStorage:SetAttribute("AbuseObbyBuild", (tonumber(ReplicatedStorage:GetAttribute("AbuseObbyBuild")) or 0) + 1)
 								task.delay(10, function()
 									setObby(true)
 								end)
@@ -8739,14 +8920,26 @@ do
 						end
 					end
 				end
+			elseif t < 0 and t > -30 then
+				-- The 30 seconds before the start: he is built now (hidden) so that he is there the moment the show begins.
+				if not RunServers.IsRunServer and not leaving then
+					task.spawn(spawnGiant)
+				end
 			elseif t >= Show.ShowSeconds then
 				-- The show is over: everything is put away, and rounds can start again.
 				if once("end" .. tag) then
+					showEnded[tag] = true
 					local wasLocal = localShow
 					resetShow()
 					localShow = false
-					if wasLocal and realStarts then
-						-- a local test is over: this server goes back to the real event time
+					local isTest = realStarts ~= nil and e.Starts ~= realStarts
+					if not isTest or RunService:IsStudio() then
+						-- The real show is over (or a test in Studio, to see it): the Next Event sign moves on to the next event
+						-- (Chapter 4) in this session. Nothing is saved: a restart is back to the real schedule.
+						handlers.AbuseSchedule({ Starts = e.Starts, Ends = math.min(e.Ends, Config.Now()) })
+					elseif wasLocal and realStarts then
+						-- a test in the real game is over: this server goes back to the real event time (the real event has
+						-- not happened, so the sign keeps counting down to it)
 						handlers.AbuseSchedule({ Starts = realStarts, Ends = realEnds })
 					end
 				end

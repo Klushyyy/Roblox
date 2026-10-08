@@ -8,11 +8,14 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
+local Util = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Util"))
 
 local Client = script.Parent
 local UIKit = require(Client:WaitForChild("UIKit"))
 
 local Celebrate = {}
+-- Fired each time the popup is closed (Awesome!): the tutorial waits for it before the HUD comes back.
+Celebrate.Dismissed = Util.Signal.new()
 
 local Colors = UIKit.Theme.Colors
 
@@ -186,6 +189,7 @@ function Celebrate.Init()
 	UIKit.RegisterWindow("Celebrate", {
 		Open = function() end,
 		Close = function()
+			Celebrate.Dismissed:Fire()
 			task.delay(0.3, showNext)
 		end,
 	})
@@ -199,6 +203,7 @@ function Celebrate.Init()
 	holder.BackgroundTransparency = 1
 	holder.Visible = false
 	holder.Parent = root
+	UIKit.PhoneBoost(holder)
 	local card = UIKit.Card({ Name = "Prize", Size = UDim2.new(1, -8, 1, -6), Position = UDim2.fromOffset(4, 3), Color = Colors.PanelDark, Parent = holder })
 	UIKit.Stroke(card, Colors.Primary, 3, 0)
 	prizeIconHolder = Instance.new("Frame")

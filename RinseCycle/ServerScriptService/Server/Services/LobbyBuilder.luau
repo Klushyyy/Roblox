@@ -66,14 +66,32 @@ local SPAWN = Vector3.new(0, 0, 36)
 
 local PAD_COUNT = Config.Party.PadCount
 local PAD_RADIUS = 9
-local PAD_X = 60
-local PAD_Z = { -34, -6, 22 }
+-- The party pads are the first thing a new player sees: two columns of three right in front of the spawn,
+-- either side of the walkway to the dishwasher (the middle stays clear, so nobody starts a party by accident).
+local PAD_X = 38
+local PAD_Z = { -46, -20, 6 }
 local PAD_WALL_HEIGHT = 8
 
 local HATCHERY_Z = -76 -- front face of the dishwasher building (it faces +Z, toward the spawn)
-local EGG_Z = -66
-local SHOP_X = -40
-local PETSTAND_X = 40
+
+-- Everything else lives in the two wings beside the pads (x about +-76), in the same order down both sides.
+-- (plaza coordinates; LobbyFun, the Admin Abuse show and the duck spots read them from LobbyBuilder.Layout)
+local WING_X = 76
+local Layout = {
+	TimesBoard = Vector3.new(-62, 0, -66), -- Fastest Clean, beside the dishwasher
+	DishesBoard = Vector3.new(62, 0, -66), -- Top Players
+	BoardsFace = Vector3.new(0, 0, 18), -- the boards turn toward the walkway in front of the pads
+	Shop = Vector3.new(-WING_X, 0, -40), -- Soap Shop (left wing)
+	PetStand = Vector3.new(-WING_X, 0, -14),
+	Fountain = Vector3.new(-WING_X, 0, 10), -- Rebirth Fountain
+	Event = Vector3.new(WING_X, 0, 2), -- Next Event ring (right wing)
+	Chest = Vector3.new(WING_X, 0, 22), -- Treasure Chest
+	EggFirst = Vector3.new(WING_X, 0, -48), -- the egg pedestals run down the right wing
+	EggStep = 14,
+}
+function Layout.Egg(i: number): Vector3
+	return Vector3.new(Layout.EggFirst.X, 0, Layout.EggFirst.Z + (i - 1) * Layout.EggStep)
+end
 
 -- Colors
 local WOOD_A = Color3.fromRGB(196, 146, 98) -- table-top planks
@@ -101,6 +119,8 @@ local NAVY = Color3.fromRGB(18, 55, 100)
 -- Build bookkeeping: yield every ~200 parts so the server never hitches.
 ----------------------------------------------------------------------------------------------------
 local lobby: Lobby? = nil
+local giantChairParts: { BasePart } = {} -- the chair at the end of the table (the giant sits on it)
+local giantChairHome: { [BasePart]: CFrame } = {}
 local dishwasherFolder: Folder? = nil -- every part of the big dishwasher building (so the show can smash it)
 local southWall: BasePart? = nil -- the table's south edge wall (opened while the obby stands)
 local partsBuilt = 0
@@ -541,29 +561,31 @@ local function buildRoom(parent: Instance)
 	wallZ(ROOM_X, 3)
 
 	-- Giant chairs around the table: seat below the table top, tall back rising above it.
-	local function chair(cx: number, cz: number, faceX: number, faceZ: number)
+	local function chair(cx: number, cz: number, faceX: number, faceZ: number): { BasePart }
+		local made: { BasePart } = {}
 		-- (faceX, faceZ): unit direction from the chair toward the table.
 		local seatY = -48
 		local half = 38
-		mkPart("Part", { Name = "ChairSeat", Size = Vector3.new(half * 2, 8, half * 2), CFrame = at(cx, seatY, cz), Color = WOOD_A, Material = LOW }, parent)
-		mkPart("Part", { Name = "ChairCushion", Size = Vector3.new(half * 2 - 10, 3, half * 2 - 10), CFrame = at(cx, seatY + 5.5, cz), Color = CLOTH_RED, Material = LOW }, parent)
+		table.insert(made, mkPart("Part", { Name = "ChairSeat", Size = Vector3.new(half * 2, 8, half * 2), CFrame = at(cx, seatY, cz), Color = WOOD_A, Material = LOW }, parent))
+		table.insert(made, mkPart("Part", { Name = "ChairCushion", Size = Vector3.new(half * 2 - 10, 3, half * 2 - 10), CFrame = at(cx, seatY + 5.5, cz), Color = CLOTH_RED, Material = LOW }, parent))
 		local bx, bz = cx - faceX * (half - 4), cz - faceZ * (half - 4)
 		local sx = if faceX ~= 0 then 8 else half * 2
 		local sz = if faceZ ~= 0 then 8 else half * 2
-		mkPart("Part", { Name = "ChairBack", Size = Vector3.new(sx, 110, sz), CFrame = at(bx, seatY + 59, bz), Color = WOOD_A, Material = LOW }, parent)
+		table.insert(made, mkPart("Part", { Name = "ChairBack", Size = Vector3.new(sx, 110, sz), CFrame = at(bx, seatY + 59, bz), Color = WOOD_A, Material = LOW }, parent))
 		-- The rail overhangs the back a little (side-by-side chairs stay well apart now).
-		mkPart("Part", { Name = "ChairTopRail", Size = Vector3.new(if faceX ~= 0 then sx + 4 else sx + 2, 10, if faceZ ~= 0 then sz + 4 else sz + 2), CFrame = at(bx, seatY + 116, bz), Color = WOOD_DARK, Material = LOW }, parent)
+		table.insert(made, mkPart("Part", { Name = "ChairTopRail", Size = Vector3.new(if faceX ~= 0 then sx + 4 else sx + 2, 10, if faceZ ~= 0 then sz + 4 else sz + 2), CFrame = at(bx, seatY + 116, bz), Color = WOOD_DARK, Material = LOW }, parent))
 		for _, dx in { -half + 5, half - 5 } do
 			for _, dz in { -half + 5, half - 5 } do
-				mkPart("Part", { Name = "ChairLeg", Size = Vector3.new(7, seatY - 4 - fy, 7), CFrame = at(cx + dx, (fy + seatY - 4) / 2, cz + dz), Color = WOOD_DARK, Material = LOW }, parent)
+				table.insert(made, mkPart("Part", { Name = "ChairLeg", Size = Vector3.new(7, seatY - 4 - fy, 7), CFrame = at(cx + dx, (fy + seatY - 4) / 2, cz + dz), Color = WOOD_DARK, Material = LOW }, parent))
 			end
 		end
+		return made
 	end
 	for _, cz in { -68, 28 } do
 		chair(tx0 - 52, cz, 1, 0)
 		chair(tx1 + 52, cz, -1, 0)
 	end
-	chair(0, tz0 - 52, 0, 1)
+	giantChairParts = chair(0, tz0 - 52, 0, 1) -- (the one at the end of the table: the giant sits on it, see LobbyBuilder.SlideGiantChair)
 
 	-- Sideboard against the back wall with a stack of plates and a vase.
 	box("Sideboard", -150, 150, fy, fy + 90, ROOM_Z0 + 4, ROOM_Z0 + 60, WOOD_DARK)
@@ -921,6 +943,43 @@ local function buildPad(parent: Instance, id: number): PadInfo
 	}
 end
 
+
+----------------------------------------------------------------------------------------------------
+-- The sign over the walkway in front of the pads, so a new player knows where to go.
+----------------------------------------------------------------------------------------------------
+local function buildPadGantry(parent: Instance)
+	-- An arch over the walkway between the two columns of pads (a banner for the whole walkway: it frames the way to
+	-- the dishwasher and, high up, never blocks the view from the spawn).
+	local z, half = -20, 25
+	local steel = Color3.fromRGB(230, 234, 240)
+	for _, side in { -1, 1 } do
+		mkPart("Part", { Name = "GantryPost", Shape = Enum.PartType.Cylinder, Size = Vector3.new(29, 1.6, 1.6), CFrame = upright(side * half, 14.7, z), Color = steel, Material = Enum.Material.Metal }, parent)
+		mkPart("Part", decor({ Name = "GantryFoot", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.8, 4.2, 4.2), CFrame = upright(side * half, FLOOR_Y + 0.4, z), Color = Color3.fromRGB(150, 156, 166), Material = Enum.Material.Metal }), parent)
+	end
+	mkPart("Part", { Name = "GantryBeam", Size = Vector3.new(half * 2 + 3.4, 1.6, 1.6), CFrame = at(0, 28.9, z), Color = steel, Material = Enum.Material.Metal }, parent)
+	-- Two short hangers hold the board up under the beam.
+	for _, side in { -1, 1 } do
+		mkPart("Part", decor({ Name = "GantryHanger", Size = Vector3.new(0.5, 1.8, 0.5), CFrame = at(side * 19, 27.2, z), Color = steel, Material = Enum.Material.Metal }), parent)
+	end
+	local board = mkPart("Part", decor({ Name = "GantrySign", Size = Vector3.new(44, 8, 0.8), CFrame = at(0, 22.4, z), Color = Color3.fromRGB(36, 112, 196), Material = Enum.Material.SmoothPlastic }), parent)
+	mkPart("Part", decor({ Name = "GantrySignTrim", Size = Vector3.new(45.6, 9.6, 0.5), CFrame = at(0, 22.4, z - 0.2), Color = Color3.fromRGB(255, 226, 120), Material = Enum.Material.SmoothPlastic }), parent)
+	-- (the +Z face is the one that looks at the spawn)
+	local gui = mk("SurfaceGui", { Name = "Sign", Face = Enum.NormalId.Back, CanvasSize = Vector2.new(1100, 200), LightInfluence = 0, MaxDistance = 5000 }, board)
+	local function line(name: string, y: number, h: number, text: string, color: Color3, x: number?, w: number?): TextLabel
+		local label = mk("TextLabel", { Name = name, Position = UDim2.fromScale(x or 0.04, y), Size = UDim2.fromScale(w or 0.92, h), BackgroundTransparency = 1, Text = text, Font = Enum.Font.LuckiestGuy, TextScaled = true, TextWrapped = false, TextColor3 = color }, gui) :: TextLabel
+		mk("UIStroke", { Thickness = 3, Color = Color3.fromRGB(10, 36, 78) }, label)
+		return label
+	end
+	line("Title", 0.04, 0.62, "PARTY PADS", Color3.new(1, 1, 1), 0.14, 0.72)
+	line("Arrow1", 0.08, 0.54, "<<", Color3.fromRGB(255, 226, 120), 0.03, 0.1)
+	line("Arrow2", 0.08, 0.54, ">>", Color3.fromRGB(255, 226, 120), 0.87, 0.1)
+	line("Sub", 0.68, 0.26, "Step on a glowing pad to start playing!", Color3.fromRGB(205, 235, 255), 0.1, 0.8)
+	for _, side in { -1, 1 } do
+		local glow = mkPart("Part", decor({ Name = "GantryLamp", Shape = Enum.PartType.Ball, Size = Vector3.new(1.6, 1.6, 1.6), CFrame = at(side * 21, 30.2, z), Color = Color3.fromRGB(255, 226, 120), Material = Enum.Material.Neon, CastShadow = false }), parent)
+		mk("PointLight", { Range = 14, Brightness = 0.8, Color = glow.Color }, glow)
+	end
+end
+
 ----------------------------------------------------------------------------------------------------
 -- The giant dishwasher building at the back (the game's "barn"), with the title on its control panel.
 ----------------------------------------------------------------------------------------------------
@@ -1009,7 +1068,7 @@ local function buildDishwasherBuilding(lobbyParent: Instance)
 	-- Roof sign.
 	local roofSign = mkPart("Part", { Name = "RoofSign", Size = Vector3.new(44, 9, 1), CFrame = at(0, h + 8.5, HATCHERY_Z - 4) * CFrame.Angles(0, math.pi, 0), Color = Color3.fromRGB(255, 120, 180), Material = Enum.Material.SmoothPlastic }, parent)
 	local signGui = mk("SurfaceGui", { Face = Enum.NormalId.Front, CanvasSize = Vector2.new(880, 180), LightInfluence = 0 }, roofSign)
-	local signText = mk("TextLabel", { Size = UDim2.fromScale(0.94, 0.86), Position = UDim2.fromScale(0.03, 0.07), BackgroundTransparency = 1, Text = "PETS & EGGS", Font = Enum.Font.LuckiestGuy, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, signGui)
+	local signText = mk("TextLabel", { Size = UDim2.fromScale(0.94, 0.86), Position = UDim2.fromScale(0.03, 0.07), BackgroundTransparency = 1, Text = "STEP ON A PAD TO PLAY", Font = Enum.Font.LuckiestGuy, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, signGui)
 	mk("UIStroke", { Thickness = 5, Color = Color3.fromRGB(140, 40, 90) }, signText)
 	for _, x in { -18, 18 } do
 		mkPart("Part", { Name = "SignPost", Size = Vector3.new(0.8, 3, 0.8), CFrame = at(x, h + 3.5, HATCHERY_Z - 4), Color = Color3.fromRGB(200, 205, 212), Material = LOW }, parent)
@@ -1032,7 +1091,7 @@ end
 -- Soap Shop stall (perks): striped awning, counter, a giant pump bottle, and the prompt.
 ----------------------------------------------------------------------------------------------------
 local function buildSoapShop(parent: Instance)
-	local x, z = SHOP_X, EGG_Z
+	local x, z = Layout.Shop.X, Layout.Shop.Z
 	local counter = mkPart("Part", { Name = "Counter", Size = Vector3.new(16, 4, 6), CFrame = at(x, 2, z), Color = Color3.fromRGB(165, 112, 70), Material = Enum.Material.Wood }, parent)
 	mkPart("Part", ({ Name = "CounterTop", Size = Vector3.new(17, 0.6, 7), CFrame = at(x, 4.3, z), Color = Color3.fromRGB(120, 78, 48), Material = Enum.Material.Wood }), parent)
 	for _, dx in { -7.5, 7.5 } do
@@ -1086,14 +1145,14 @@ local function buildEggHatchery(parent: Instance)
 	end)
 
 	local eggs = Config.Eggs
-	local n = #eggs
 	for i, egg in eggs do
-		local ex = (i - (n + 1) / 2) * 20
+		local spot = Layout.Egg(i)
+		local ex, ez = spot.X, spot.Z
 		local pedestal = mkPart("Part", {
 			Name = "EggPedestal" .. i,
 			Shape = Enum.PartType.Cylinder,
 			Size = Vector3.new(3, 9, 9),
-			CFrame = upright(ex, 1.5, EGG_Z),
+			CFrame = upright(ex, 1.5, ez),
 			Color = Color3.fromRGB(255, 255, 255),
 			Material = Enum.Material.SmoothPlastic,
 		}, parent)
@@ -1101,7 +1160,7 @@ local function buildEggHatchery(parent: Instance)
 			Name = "EggPedestalRing",
 			Shape = Enum.PartType.Cylinder,
 			Size = Vector3.new(0.6, 9.6, 9.6),
-			CFrame = upright(ex, 3, EGG_Z),
+			CFrame = upright(ex, 3, ez),
 			Color = egg.Color,
 			Material = Enum.Material.Neon,
 		}), parent)
@@ -1119,10 +1178,10 @@ local function buildEggHatchery(parent: Instance)
 			model:ScaleTo(2)
 		end)
 		pcall(function()
-			model:PivotTo(at(ex, 8.5, EGG_Z))
+			model:PivotTo(at(ex, 8.5, ez))
 		end)
 		-- The egg model is decor; one invisible capsule-ish block keeps players from walking into it.
-		mkPart("Part", { Name = "EggCollider", Size = Vector3.new(5, 7.5, 5), CFrame = at(ex, 8, EGG_Z), Transparency = 1, CastShadow = false, CanQuery = false }, parent)
+		mkPart("Part", { Name = "EggCollider", Size = Vector3.new(5, 7.5, 5), CFrame = at(ex, 8, ez), Transparency = 1, CastShadow = false, CanQuery = false }, parent)
 		for _, d in model:GetDescendants() do
 			if d:IsA("BasePart") then
 				d.Anchored = true
@@ -1169,7 +1228,7 @@ local function buildRoofLadder(parent: Instance)
 end
 
 local function buildPetStand(parent: Instance)
-	local x, z = PETSTAND_X, EGG_Z
+	local x, z = Layout.PetStand.X, Layout.PetStand.Z
 	local base = mkPart("Part", { Name = "PetStand", Shape = Enum.PartType.Cylinder, Size = Vector3.new(3, 12, 12), CFrame = upright(x, 1.5, z), Color = Color3.fromRGB(255, 205, 230), Material = Enum.Material.SmoothPlastic }, parent)
 	-- A little doghouse.
 	mkPart("Part", { Name = "Doghouse", Size = Vector3.new(7, 6, 6), CFrame = at(x, 6, z - 1), Color = Color3.fromRGB(240, 120, 150), Material = Enum.Material.WoodPlanks }, parent)
@@ -1480,8 +1539,8 @@ local function cutlery(parent: Instance, x: number, z: number, kind: string)
 end
 
 local function buildDecorations(parent: Instance)
-	shaker(parent, -91, -94, Color3.fromRGB(250, 250, 250), Color3.fromRGB(60, 60, 60))
-	shaker(parent, -83, -96, Color3.fromRGB(70, 70, 76), Color3.fromRGB(220, 220, 220))
+	shaker(parent, -80, -90, Color3.fromRGB(250, 250, 250), Color3.fromRGB(60, 60, 60))
+	shaker(parent, -72, -93, Color3.fromRGB(70, 70, 76), Color3.fromRGB(220, 220, 220))
 	flowerVase(parent, -90, 58)
 	coffeeCup(parent, 90, 58)
 	cutlery(parent, -PLAZA_X - TABLE_MARGIN / 2 - 1, -20, "Fork")
@@ -1518,7 +1577,7 @@ end
 -- Rebirth Fountain: a low-poly stone fountain with glowing water and a spinning gold star; bubbles
 -- stream up from its spout (tag "BubbleSpout", client). Opens the Rebirth window.
 local function buildRebirthFountain(parent: Instance)
-	local x, z = -34, 14
+	local x, z = Layout.Fountain.X, Layout.Fountain.Z
 	local stone = Color3.fromRGB(236, 232, 224)
 	local water = Color3.fromRGB(120, 200, 255)
 	hex(parent, "FountainBasin", x, FLOOR_Y, z, 13, 2.2, stone)
@@ -1599,7 +1658,7 @@ local function buildTreasureChest(parent: Instance)
 	if not Config.ChestEventLive() then
 		return
 	end
-	local x, z = 34, 12
+	local x, z = Layout.Chest.X, Layout.Chest.Z
 	local wood = Color3.fromRGB(150, 90, 48)
 	local gold = Color3.fromRGB(255, 200, 60)
 	local stone = Color3.fromRGB(226, 214, 190)
@@ -1659,12 +1718,63 @@ local function buildTreasureChest(parent: Instance)
 		local gx, gz = x + math.cos(a) * 5.65, z + math.sin(a) * 5.65
 		mkPart("Part", decor({ Name = "Gem", Size = Vector3.new(0.9, 1.2, 0.9), CFrame = CFrame.new(gx, FLOOR_Y + 1.35 + 0.6 + k * 0.01, gz) * CFrame.Angles(math.rad(20), a, math.rad(25)), Color = c, Material = Enum.Material.Neon, CastShadow = false }), parent)
 	end
-	-- Two lantern posts either side of the steps.
+	-- The title: a real sign (a wooden board hung between two gold posts, each with a lantern on top) instead of a floating label.
+	-- A floating label (BillboardGui) here overlapped the odds board that the client floats above the chest, so the two flickered
+	-- through each other as you walked about; a sign is part of the world, depth-sorted like everything else, and its text is a
+	-- SurfaceGui drawn at a fixed pixel density, so it keeps its shape at any distance. The odds board (ChestUI) floats above it.
+	local SIGN_W, SIGN_H, SIGN_Y, POST_H = 12.4, 3, 12.4, 15.2 -- (above the floor; the lid tops out at about 9.5)
+	local function ofBase(dx: number, dz: number): Vector3
+		return (base * CFrame.new(dx, 0, dz)).Position
+	end
 	for _, side in { -1, 1 } do
-		local pxp = x + side * 9.2
-		mkPart("Part", { Name = "LanternPost", Shape = Enum.PartType.Cylinder, Size = Vector3.new(6.5, 0.7, 0.7), CFrame = upright(pxp, FLOOR_Y + 3.6, z - 3), Color = Color3.fromRGB(80, 60, 50), Material = Enum.Material.Metal }, parent)
-		local bulb = mkPart("Part", decor({ Name = "Lantern", Shape = Enum.PartType.Ball, Size = Vector3.new(1.6, 1.6, 1.6), CFrame = at(pxp, FLOOR_Y + 7.3, z - 3), Color = Color3.fromRGB(255, 190, 90), Material = Enum.Material.Neon, Transparency = 0.1 }), parent)
-		mk("PointLight", { Range = 16, Brightness = 0.9, Color = Color3.fromRGB(255, 200, 120) }, bulb)
+		local at3 = ofBase(side * (SIGN_W / 2 + 0.7), 0)
+		mkPart("Part", { Name = "SignPost", Shape = Enum.PartType.Cylinder, Size = Vector3.new(POST_H, 0.9, 0.9), CFrame = CFrame.new(at3.X, ORIGIN.Y + FLOOR_Y + POST_H / 2, at3.Z) * CFrame.Angles(0, 0, math.rad(90)), Color = gold, Material = Enum.Material.Metal }, parent)
+		mkPart("Part", { Name = "SignPostFoot", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.6, 2.4, 2.4), CFrame = CFrame.new(at3.X, ORIGIN.Y + FLOOR_Y + 0.3, at3.Z) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.fromRGB(110, 80, 50), Material = Enum.Material.Metal }, parent)
+		local bulb = mkPart("Part", decor({ Name = "Lantern", Shape = Enum.PartType.Ball, Size = Vector3.new(1.6, 1.6, 1.6), CFrame = CFrame.new(at3.X, ORIGIN.Y + FLOOR_Y + POST_H + 0.6, at3.Z), Color = Color3.fromRGB(255, 190, 90), Material = Enum.Material.Neon, Transparency = 0.1 }), parent)
+		mk("PointLight", { Range = 18, Brightness = 0.9, Color = Color3.fromRGB(255, 200, 120) }, bulb)
+	end
+	local signCenter = ofBase(0, 0)
+	local signCF = CFrame.new(signCenter.X, ORIGIN.Y + FLOOR_Y + SIGN_Y, signCenter.Z) * (base - base.Position)
+	local board = mkPart("Part", { Name = "ChestSign", Size = Vector3.new(SIGN_W, SIGN_H, 0.6), CFrame = signCF, Color = Color3.fromRGB(96, 58, 30), Material = Enum.Material.Wood }, parent)
+	-- the gold rim round the board (thin bars proud of the wood, so nothing shares a plane)
+	for _, bar in {
+		{ SIGN_W + 0.5, 0.35, 0, SIGN_H / 2 + 0.05 },
+		{ SIGN_W + 0.5, 0.35, 0, -SIGN_H / 2 - 0.05 },
+		{ 0.35, SIGN_H + 0.5, SIGN_W / 2 + 0.05, 0 },
+		{ 0.35, SIGN_H + 0.5, -SIGN_W / 2 - 0.05, 0 },
+	} do
+		mkPart("Part", decor({ Name = "SignRim", Size = Vector3.new(bar[1], bar[2], 0.8), CFrame = signCF * CFrame.new(bar[3], bar[4], 0), Color = gold, Material = Enum.Material.Metal }), parent)
+	end
+	for _, face in { Enum.NormalId.Front, Enum.NormalId.Back } do
+		local gui = mk("SurfaceGui", {
+			Name = "SignText",
+			Face = face,
+			SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud,
+			PixelsPerStud = 60,
+			LightInfluence = 0,
+			Brightness = 1.2,
+			ClipsDescendants = true,
+		}, board) :: SurfaceGui
+		local titleLabel = mk("TextLabel", {
+			BackgroundTransparency = 1,
+			Position = UDim2.fromScale(0.03, 0.06),
+			Size = UDim2.fromScale(0.94, 0.58),
+			Text = "LIMITED TREASURE CHEST",
+			Font = Enum.Font.LuckiestGuy,
+			TextScaled = true,
+			TextColor3 = Color3.fromRGB(255, 215, 90),
+		}, gui)
+		mk("UIStroke", { Thickness = 3, Color = Color3.fromRGB(40, 22, 8) }, titleLabel)
+		local sub = mk("TextLabel", {
+			BackgroundTransparency = 1,
+			Position = UDim2.fromScale(0.03, 0.66),
+			Size = UDim2.fromScale(0.94, 0.28),
+			Text = "Sunken Treasure event",
+			Font = Enum.Font.LuckiestGuy,
+			TextScaled = true,
+			TextColor3 = Color3.fromRGB(190, 235, 255),
+		}, gui)
+		mk("UIStroke", { Thickness = 2, Color = Color3.fromRGB(40, 22, 8) }, sub)
 	end
 	-- The glow inside, seen when the lid opens.
 	local glow = mkPart("Part", decor({ Name = "ChestGlow", Size = Vector3.new(1, 1, 1), CFrame = base * CFrame.new(0, H + 1.8, 0), Transparency = 1, CastShadow = false }), model)
@@ -1681,14 +1791,12 @@ local function buildTreasureChest(parent: Instance)
 	model.PrimaryPart = box
 	model:SetAttribute("ZoneRadius", CHEST_ZONE_RADIUS)
 	CollectionService:AddTag(model, "EventChest")
-	worldSign(box, "LIMITED TREASURE CHEST", 15, 2.8, 19, Color3.fromRGB(255, 215, 90))
-	worldSign(box, "Sunken Treasure event", 9, 1.4, 16.2, Color3.fromRGB(190, 235, 255))
 end
 
 -- The Next Event spot: a glowing ring on the floor with a sign. Walk in and the client
 -- (EventZone) shows what's coming next, with Roblox's Notify Me (Config.UpcomingEvents).
 local function buildEventZone(parent: Instance)
-	local x, z = 34, -18
+	local x, z = Layout.Event.X, Layout.Event.Z
 	local ring = mkPart("Part", decor({
 		Name = "EventRing",
 		Shape = Enum.PartType.Cylinder,
@@ -1925,9 +2033,13 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 	local function checkpoint(index: number, cx: number, yTop: number, cz: number)
 		local pad = plat("Checkpoint" .. index, cx, yTop, cz, 20, 20, Color3.fromRGB(70, 205, 130))
 		pad:SetAttribute("Index", index)
-		-- A glowing flag so it reads from far away (pole and flag don't share any face).
-		mkPart("Part", decor({ Name = "FlagPole", Size = Vector3.new(0.6, 12, 0.6), CFrame = at(cx - 8, yTop + 6.2, cz - 8), Color = Color3.fromRGB(240, 240, 240), Material = LOW }), model)
-		mkPart("Part", decor({ Name = "Flag", Size = Vector3.new(0.3, 4, 6), CFrame = at(cx - 8, yTop + 10, cz - 4.8), Color = Color3.fromRGB(255, 255, 255), Material = Enum.Material.Neon }), model)
+		-- A banner on a pole so it reads from far away: a round pole with a gold ball on top, a crossbar, and a glowing green banner
+		-- with a white stripe hanging from it (nothing shares a face with anything else).
+		mkPart("Part", decor({ Name = "FlagPole", Shape = Enum.PartType.Cylinder, Size = Vector3.new(14, 0.7, 0.7), CFrame = upright(cx - 8, yTop + 7.2, cz - 8), Color = Color3.fromRGB(240, 240, 240), Material = Enum.Material.Metal }), model)
+		mkPart("Part", decor({ Name = "FlagBall", Shape = Enum.PartType.Ball, Size = Vector3.new(1.4, 1.4, 1.4), CFrame = at(cx - 8, yTop + 14.4, cz - 8), Color = Color3.fromRGB(255, 205, 60), Material = Enum.Material.Metal }), model)
+		mkPart("Part", decor({ Name = "FlagBar", Size = Vector3.new(0.4, 0.4, 7.4), CFrame = at(cx - 8, yTop + 13.2, cz - 4.2), Color = Color3.fromRGB(240, 240, 240), Material = Enum.Material.Metal }), model)
+		mkPart("Part", decor({ Name = "Flag", Size = Vector3.new(0.25, 5.4, 6.6), CFrame = at(cx - 8, yTop + 10.2, cz - 4.2), Color = Color3.fromRGB(70, 220, 130), Material = Enum.Material.Neon }), model)
+		mkPart("Part", decor({ Name = "FlagStripe", Size = Vector3.new(0.4, 1.0, 6.7), CFrame = at(cx - 8, yTop + 10.2, cz - 4.2), Color = Color3.fromRGB(255, 255, 255), Material = Enum.Material.Neon }), model)
 		worldSign(pad, "CHECKPOINT " .. index, 22, 4, 16, Color3.fromRGB(150, 255, 190))
 		table.insert(checkpointPads, pad)
 	end
@@ -1955,7 +2067,7 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 
 	-- Stage 2 (different from the plain hops of stage 1): platforms that slide from side to side as you cross them
 	-- (they carry you), each a different beat.
-	local sliders: { { Part: BasePart, Base: Vector3, Phase: number, Speed: number, Axis: Vector3? } } = {}
+	local sliders: { { Part: BasePart, Base: Vector3, Phase: number, Speed: number, Axis: Vector3?, Amp: number? } } = {}
 	for i = 1, 5 do
 		local p = plat("SideSlider" .. i, 0, Y + 1.5, 226 + (i - 1) * 14, 8, 8, nil, { Bare = true })
 		table.insert(sliders, { Part = p, Base = p.Position, Phase = i * 1.3, Speed = 0.8 + (i % 3) * 0.18, Axis = Vector3.xAxis })
@@ -1973,10 +2085,11 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 	end
 	checkpoint(3, 134, Y + 1.5, 300)
 
-	-- Stage 4: three sliders crossing the way (they carry you).
-	for i, x in { 156, 171, 186 } do
-		local p = plat("Slider" .. i, x, Y + 1.5, 300, 8, 8, nil, { Bare = true })
-		table.insert(sliders, { Part = p, Base = p.Position, Phase = i * 1.7, Speed = 0.9 + i * 0.12 })
+	-- Stage 4 (harder than stage 2): three SMALL sliders, further apart, crossing the way over a longer stretch and faster, each
+	-- on its own beat (they carry you).
+	for i, x in { 156, 173, 190 } do
+		local p = plat("Slider" .. i, x, Y + 1.5, 300, 6.5, 6.5, nil, { Bare = true })
+		table.insert(sliders, { Part = p, Base = p.Position, Phase = i * 2.1, Speed = ({ 1.5, 1.1, 1.75 })[i], Amp = 16 })
 	end
 	checkpoint(4, 206, Y + 1.5, 300)
 
@@ -1996,27 +2109,60 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 	plat("Landing", 312, Y + 1.5, 300, 12, 12, nil)
 
 	-- Stage 7: balance beams (round the corner and back over the sofa): thin ones.
-	plat("Beam1", 312, Y + 3, 322, 0.8, 32, Color3.fromRGB(255, 255, 255), { Bare = true })
+	-- (thinner than before, and the jump from the first long beam to the second is 8.5 studs, was 6)
+	plat("Beam1", 312, Y + 3, 322, 0.6, 32, Color3.fromRGB(255, 255, 255), { Bare = true })
 	plat("Corner", 312, Y + 3, 345, 10, 10, nil)
-	plat("Beam2a", 275.5, Y + 3, 345, 51, 0.8, Color3.fromRGB(255, 255, 255), { Bare = true })
-	plat("Beam2b", 220, Y + 3, 345, 48, 0.8, Color3.fromRGB(255, 255, 255), { Bare = true })
+	plat("Beam2a", 275.5, Y + 3, 345, 51, 0.6, Color3.fromRGB(255, 255, 255), { Bare = true })
+	plat("Beam2b", 218.75, Y + 3, 345, 45.5, 0.6, Color3.fromRGB(255, 255, 255), { Bare = true })
 	checkpoint(5, 180, Y + 3, 345)
 
-	-- Stage 8: the climb: stairs of small platforms up to the finish.
-	for i = 1, 8 do
-		plat("Stair" .. i, 180 - 10 - i * 11, Y + 3 + i * 3.5, 345 + (if i % 2 == 0 then 3 else -3), 7, 7)
+	-- Stage 8: the climb. A spiral round a glowing pillar: nine platforms that get smaller as they rise, each a jump round the
+	-- circle and 3.5 up, to the finish on top.
+	local CX, CZ, SR = 136, 345, 24
+	local STEPS = 9
+	for i = 1, STEPS do
+		local a = math.rad((i - 1) * 40)
+		local size = 8 - (i - 1) * 0.4
+		plat("Stair" .. i, CX + math.cos(a) * SR, Y + 3 + i * 3.5, CZ + math.sin(a) * SR, size, size)
 	end
-	local finishTop = Y + 3 + 8 * 3.5 + 3
-	local finish = plat("Finish", 56, finishTop, 345, 24, 24, Color3.fromRGB(255, 205, 60))
-	for _, dz in { -10, 10 } do
-		mkPart("Part", decor({ Name = "FinishPost", Size = Vector3.new(2, 18, 2), CFrame = at(56, finishTop + 9, 345 + dz), Color = Color3.fromRGB(255, 124, 178), Material = LOW }), model)
+	local finishTop = Y + 3 + (STEPS + 1) * 3.5
+	local finish = plat("Finish", CX, finishTop, CZ, 20, 20, Color3.fromRGB(255, 205, 60))
+	-- the pillar under it and a beam of light over it (so the goal can be seen from the start)
+	mkPart("Part", decor({ Name = "FinishPillar", Shape = Enum.PartType.Cylinder, Size = Vector3.new(finishTop + 132, 7, 7), CFrame = upright(CX, (finishTop - 3.4 - 132) / 2, CZ), Color = Color3.fromRGB(255, 124, 178), Material = Enum.Material.Metal }), model)
+	mkPart("Part", decor({ Name = "FinishBeam", Shape = Enum.PartType.Cylinder, Size = Vector3.new(90, 3, 3), CFrame = upright(CX, finishTop + 52, CZ), Color = Color3.fromRGB(255, 232, 140), Material = Enum.Material.Neon, Transparency = 0.55, CastShadow = false }), model)
+	for _, dz in { -8.6, 8.6 } do
+		mkPart("Part", decor({ Name = "FinishPost", Size = Vector3.new(1.6, 16, 1.6), CFrame = at(CX, finishTop + 8, CZ + dz), Color = Color3.fromRGB(255, 124, 178), Material = LOW }), model)
 	end
-	local arch = mkPart("Part", decor({ Name = "FinishArch", Size = Vector3.new(3.4, 4, 22.6), CFrame = at(56, finishTop + 19.5, 345), Color = Color3.fromRGB(255, 124, 178), Material = LOW }), model)
+	local arch = mkPart("Part", decor({ Name = "FinishArch", Size = Vector3.new(3.4, 4, 19.4), CFrame = at(CX, finishTop + 17.5, CZ), Color = Color3.fromRGB(255, 124, 178), Material = LOW }), model)
 	worldSign(arch, "FINISH", 24, 7, 8, Color3.fromRGB(255, 255, 255))
-	-- The trophy: a gold cup of stacked blocks.
-	mkPart("Part", decor({ Name = "TrophyBase", Size = Vector3.new(6, 2, 6), CFrame = at(56, finishTop + 1, 345), Color = Color3.fromRGB(120, 80, 50), Material = LOW }), model)
-	mkPart("Part", decor({ Name = "TrophyStem", Size = Vector3.new(2, 4, 2), CFrame = at(56, finishTop + 4, 345), Color = Color3.fromRGB(255, 205, 60), Material = Enum.Material.Metal }), model)
-	mkPart("Part", decor({ Name = "TrophyCup", Size = Vector3.new(6.4, 5, 6.4), CFrame = at(56, finishTop + 8.6, 345), Color = Color3.fromRGB(255, 215, 80), Material = Enum.Material.Metal }), model)
+	-- The trophy: a proper cup. A round wooden foot, a gold plinth, a stem with a knob, a cup that widens up to a bright rim with
+	-- a dark inside, two handles, and a spinning star over it. (Cylinders stacked so the cup has a curved outline.)
+	local gold = Color3.fromRGB(255, 205, 60)
+	local goldLight = Color3.fromRGB(255, 232, 130)
+	local function ring(name: string, d: number, h: number, yBottom: number, color: Color3, material: Enum.Material?)
+		return mkPart("Part", decor({ Name = name, Shape = Enum.PartType.Cylinder, Size = Vector3.new(h, d, d), CFrame = upright(CX, finishTop + yBottom + h / 2, CZ), Color = color, Material = material or Enum.Material.Metal }), model)
+	end
+	ring("TrophyFoot", 7, 1.0, 0, Color3.fromRGB(110, 72, 44), LOW)
+	ring("TrophyPlinth", 4.8, 1.2, 1.0, gold)
+	ring("TrophyStem", 1.5, 3.4, 2.2, gold)
+	mkPart("Part", decor({ Name = "TrophyKnob", Shape = Enum.PartType.Ball, Size = Vector3.new(2.6, 2.6, 2.6), CFrame = at(CX, finishTop + 3.9, CZ), Color = gold, Material = Enum.Material.Metal }), model)
+	ring("TrophyCup1", 3.6, 1.2, 5.6, gold)
+	ring("TrophyCup2", 4.8, 1.3, 6.8, gold)
+	ring("TrophyCup3", 5.8, 1.4, 8.1, goldLight)
+	ring("TrophyCup4", 6.5, 1.6, 9.5, goldLight)
+	ring("TrophyRim", 6.9, 0.45, 11.1, Color3.fromRGB(255, 244, 190))
+	ring("TrophyInside", 6.0, 0.1, 11.45, Color3.fromRGB(90, 50, 20), Enum.Material.SmoothPlastic)
+	for _, side in { -1, 1 } do
+		-- a handle: out, up and back in (three bars)
+		local hx = side * 4.1
+		mkPart("Part", decor({ Name = "TrophyHandle", Size = Vector3.new(1.4, 0.6, 0.6), CFrame = at(CX + hx * 0.92, finishTop + 10.6, CZ), Color = gold, Material = Enum.Material.Metal }), model)
+		mkPart("Part", decor({ Name = "TrophyHandle", Size = Vector3.new(0.6, 2.6, 0.6), CFrame = at(CX + hx * 1.12, finishTop + 9.4, CZ), Color = gold, Material = Enum.Material.Metal }), model)
+		mkPart("Part", decor({ Name = "TrophyHandle", Size = Vector3.new(1.4, 0.6, 0.6), CFrame = at(CX + hx * 0.92, finishTop + 8.2, CZ), Color = gold, Material = Enum.Material.Metal }), model)
+	end
+	local star = mkPart("Part", decor({ Name = "TrophyStar", Size = Vector3.new(2.2, 2.2, 2.2), CFrame = at(CX, finishTop + 14.2, CZ) * CFrame.Angles(math.rad(45), 0, math.rad(45)), Color = goldLight, Material = Enum.Material.Neon, CastShadow = false }), model)
+	star:SetAttribute("SpinSpeed", 1.6)
+	CollectionService:AddTag(star, "SpinY")
+	mk("PointLight", { Range = 22, Brightness = 1.2, Color = Color3.fromRGB(255, 225, 140) }, star)
 
 	-- ----- Runtime ----------------------------------------------------------------------------
 	-- Flying (the admin fly, or the one the show offers) doesn't count: no checkpoint or finish while in the air.
@@ -2030,20 +2176,42 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 		-- "Flying" attribute, and for a few seconds after landing it still counts, so nobody can fly to a checkpoint or
 		-- to the finish and just drop onto it)
 		local offAt = player:GetAttribute("FlyOffAt")
+		local grabbed = player:GetAttribute("AbuseGrabbed") == true -- (carried by the black hole / tornado / ship: not their flying)
 		return player:GetAttribute("Flying") == true
 			or (type(offAt) == "number" and os.clock() - offAt < 8)
-			or root:FindFirstChildWhichIsA("LinearVelocity") ~= nil
-			or root:FindFirstChildWhichIsA("BodyVelocity") ~= nil
-			or root:FindFirstChildWhichIsA("BodyPosition") ~= nil
+			or (not grabbed and (root:FindFirstChildWhichIsA("LinearVelocity") ~= nil or root:FindFirstChildWhichIsA("BodyVelocity") ~= nil or root:FindFirstChildWhichIsA("BodyPosition") ~= nil))
+	end
+	-- Flying never counts here. Whoever flies over the obby (past the start area) loses their progress and is told so (at most
+	-- every few seconds); touching a checkpoint or the finish while flying says it too. The start area, up to about halfway to
+	-- checkpoint 1, is free: land there, turn fly off (F) and start from the beginning.
+	local FLY_WARN = "You can't use fly in the obby. Land, turn fly off (F) and start from the beginning to win the prize."
+	local START_ZONE_Z = 150 -- (obby z; the start pad is at 92 and checkpoint 1 at 210)
+	local flyWarnedAt: { [number]: number } = {}
+	local function warnFly(player: Player)
+		if os.clock() - (flyWarnedAt[player.UserId] or -1e9) > 6 then
+			flyWarnedAt[player.UserId] = os.clock()
+			notifyPlayer(player, FLY_WARN, "Bad")
+		end
 	end
 	for _, pad in checkpointPads do
 		onTouch(pad, function(hit)
 			local player = playerOfPart(hit)
 			local index = pad:GetAttribute("Index")
-			if obbyOpen and player and not flyingNow(player) and type(index) == "number" and (obbyProgress[player.UserId] or 0) < index then
-				obbyProgress[player.UserId] = index
-				obbySpawnAt[player.UserId] = pad.CFrame + Vector3.new(0, 1, 0)
-				notifyPlayer(player, string.format("Checkpoint %d of %d!", index, OBBY_CHECKPOINTS), "Good")
+			if obbyOpen and player and type(index) == "number" then
+				local have = obbyProgress[player.UserId] or 0
+				if flyingNow(player) then
+					obbyProgress[player.UserId] = 0
+					obbySpawnAt[player.UserId] = nil
+					warnFly(player)
+				elseif index == have + 1 then
+					-- (in order: each checkpoint counts only after the one before it)
+					obbyProgress[player.UserId] = index
+					obbySpawnAt[player.UserId] = pad.CFrame + Vector3.new(0, 1, 0)
+					notifyPlayer(player, string.format("Checkpoint %d of %d!", index, OBBY_CHECKPOINTS), "Good")
+				elseif index > have + 1 and os.clock() - (flyWarnedAt[player.UserId] or -1e9) > 6 then
+					flyWarnedAt[player.UserId] = os.clock()
+					notifyPlayer(player, "You skipped part of the obby. Go back to the start and do it in order to win the prize.", "Info")
+				end
 			end
 		end)
 	end
@@ -2059,7 +2227,13 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 	end
 	onTouch(finish, function(hit)
 		local player = playerOfPart(hit)
-		if not obbyOpen or not player or flyingNow(player) or (obbyProgress[player.UserId] or 0) < OBBY_CHECKPOINTS then
+		if obbyOpen and player and flyingNow(player) then
+			obbyProgress[player.UserId] = 0
+			obbySpawnAt[player.UserId] = nil
+			warnFly(player)
+			return
+		end
+		if not obbyOpen or not player or (obbyProgress[player.UserId] or 0) < OBBY_CHECKPOINTS then
 			return
 		end
 		obbyProgress[player.UserId] = 0
@@ -2088,7 +2262,11 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 					return require(script.Parent:WaitForChild("GiftService"))
 				end)
 				if okData then
-					DataService.AddGems(player, gems)
+					DataService.AddGems(player, gems, "Obby")
+					DataService.Track(player, "obby.finish")
+					if show then
+						DataService.Track(player, "show.obby")
+					end
 				end
 				if okGift and not show then
 					-- (during the show the director shows ONE popup for it: first finisher or not)
@@ -2147,8 +2325,9 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 				local p = s.Part
 				local phase = clock * s.Speed + s.Phase
 				local axis = s.Axis or Vector3.zAxis
-				p.Position = s.Base + axis * (13 * math.sin(phase))
-				p.AssemblyLinearVelocity = axis * (13 * s.Speed * math.cos(phase))
+				local amp = s.Amp or 13
+				p.Position = s.Base + axis * (amp * math.sin(phase))
+				p.AssemblyLinearVelocity = axis * (amp * s.Speed * math.cos(phase))
 			end
 			if fallClock > 0.3 then
 				fallClock = 0
@@ -2156,8 +2335,14 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 					local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
 					if root and obbyOpen then
 						local p = root.Position - ORIGIN
-						if p.Y < -35 and p.Y > -125 and p.X > OBBY_BOX.X0 and p.X < OBBY_BOX.X1 and p.Z > OBBY_BOX.Z0 and p.Z < OBBY_BOX.Z1 then
+						local inBox = p.X > OBBY_BOX.X0 and p.X < OBBY_BOX.X1 and p.Z > OBBY_BOX.Z0 and p.Z < OBBY_BOX.Z1
+						if p.Y < -35 and p.Y > -125 and inBox then
 							sendToCheckpoint(player)
+						elseif inBox and p.Z > START_ZONE_Z and p.Y > -35 and flyingNow(player) then
+							-- flying over the course: no progress, and a reminder (and when they land, the start is where to go)
+							obbyProgress[player.UserId] = 0
+							obbySpawnAt[player.UserId] = nil
+							warnFly(player)
 						end
 					end
 				end
@@ -2707,6 +2892,7 @@ local dishwasherSaved: { [BasePart]: { number | boolean } }? = nil
 local dishwasherChunks: { BasePart } = {}
 local dishwasherGuis: { [SurfaceGui]: boolean } = {}
 local dishwasherSavedCF: { [BasePart]: CFrame } = {}
+local duckSaved: { [BasePart]: { number | boolean } } = {} -- the rubber duck that sits on the roof: hidden while the building is gone
 function LobbyBuilder.DishwasherBroken(): boolean
 	return dishwasherSaved ~= nil
 end
@@ -2770,6 +2956,29 @@ function LobbyBuilder.BreakDishwasher(impact: Vector3)
 			d.CanQuery = false
 		elseif d:IsA("ParticleEmitter") then
 			d.Enabled = false
+		end
+	end
+	-- Whatever stands on its roof goes with it: the rubber duck up there (it stayed floating in the air).
+	local lo, hi = Vector3.new(math.huge, math.huge, math.huge), Vector3.new(-math.huge, -math.huge, -math.huge)
+	for part in saved do
+		local half = part.Size / 2
+		lo = Vector3.new(math.min(lo.X, part.Position.X - half.X), math.min(lo.Y, part.Position.Y - half.Y), math.min(lo.Z, part.Position.Z - half.Z))
+		hi = Vector3.new(math.max(hi.X, part.Position.X + half.X), math.max(hi.Y, part.Position.Y + half.Y), math.max(hi.Z, part.Position.Z + half.Z))
+	end
+	for _, duck in CollectionService:GetTagged("RubberDuck") do
+		local hit = (duck :: Model).PrimaryPart
+		if hit then
+			local at = hit.Position
+			if at.X > lo.X and at.X < hi.X and at.Z > lo.Z and at.Z < hi.Z and at.Y > lo.Y + (hi.Y - lo.Y) * 0.5 then
+				for _, d in duck:GetDescendants() do
+					if d:IsA("BasePart") and not duckSaved[d] then
+						duckSaved[d] = { d.Transparency, d.CanTouch, d.CanQuery }
+						d.Transparency = 1
+						d.CanTouch = false
+						d.CanQuery = false
+					end
+				end
+			end
 		end
 	end
 end
@@ -2848,6 +3057,18 @@ function LobbyBuilder.RepairDishwasher(seconds: number?)
 			end
 		end)
 	end
+	-- the duck comes back with the roof it sits on
+	local ducks = duckSaved
+	duckSaved = {}
+	task.delay(fade * 0.8, function()
+		for d, orig in ducks do
+			if d.Parent then
+				d.Transparency = orig[1] :: number
+				d.CanTouch = orig[2] :: boolean
+				d.CanQuery = orig[3] :: boolean
+			end
+		end
+	end)
 end
 
 -- What the giant punches off the table (the soap shop, the eggs, the pet stand): every loose prop near a
@@ -2859,13 +3080,14 @@ local smashedPrompts: { [ProximityPrompt]: boolean } = {}
 local smashedUi: { Instance } = {}
 local smashedInvisible: { BasePart } = {} -- invisible solid parts (hit boxes) near what was smashed: made non-solid
 function LobbyBuilder.GetSmashTargets(): { { Name: string, Pos: Vector3, Radius: number } }
-	local list = { { Name = "Soap shop", Pos = Vector3.new(SHOP_X, 0, EGG_Z), Radius = 15 } }
-	local eggs = Config.Eggs
-	local n = #eggs
-	for i, egg in eggs do
-		table.insert(list, { Name = tostring(egg.Name or ("Egg " .. i)), Pos = Vector3.new((i - (n + 1) / 2) * 20, 0, EGG_Z), Radius = 9 })
+	-- (the left wing first, then the eggs down the right one: he works along the table)
+	local list = {
+		{ Name = "Soap shop", Pos = Layout.Shop, Radius = 15 },
+		{ Name = "Pet stand", Pos = Layout.PetStand, Radius = 11 },
+	}
+	for i, egg in Config.Eggs do
+		table.insert(list, { Name = tostring(egg.Name or ("Egg " .. i)), Pos = Layout.Egg(i), Radius = 8 })
 	end
-	table.insert(list, { Name = "Pet stand", Pos = Vector3.new(PETSTAND_X, 0, EGG_Z), Radius = 11 })
 	return list
 end
 function LobbyBuilder.SmashProps(center: Vector3, radius: number, launch: Vector3)
@@ -3101,6 +3323,17 @@ function LobbyBuilder.SetBarriers(open: boolean)
 	end
 end
 
+-- The chair at the end of the table slides sideways (dx studs, 0 = back where it stands) so the giant can walk into the place
+-- where it stands and lower himself in without passing through its back and legs, and slides back under him.
+function LobbyBuilder.SlideGiantChair(dx: number, seconds: number)
+	for _, part in giantChairParts do
+		if part.Parent then
+			giantChairHome[part] = giantChairHome[part] or part.CFrame
+			TweenService:Create(part, TweenInfo.new(math.max(0.05, seconds), Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { CFrame = (giantChairHome[part] :: CFrame) + Vector3.new(dx, 0, 0) }):Play()
+		end
+	end
+end
+
 ----------------------------------------------------------------------------------------------------
 -- The lobby exactly as it was before a show. Snapshot() takes a picture when the show goes live (every part's place and
 -- state, and which prompts and signs were on); HardReset() runs after the last effect and puts back whatever the
@@ -3239,16 +3472,17 @@ function LobbyBuilder.Build(): Lobby
 		pads[i] = buildPad(model, i)
 	end
 
+	buildPadGantry(model)
 	buildDishwasherBuilding(model)
 	buildEggHatchery(model)
 	buildSoapShop(model)
 	buildPetStand(model)
 	buildRoofLadder(model)
 
-	-- Leaderboards in the back corners, angled at the middle of the plaza; How to Play beside the
+	-- Leaderboards either side of the dishwasher, turned toward the walkway; How to Play beside the
 	-- spawn, facing it. Nothing stands behind the spawn, so the default camera has a clear view.
-	local timesBoard = buildBoard(model, -80, -74, "Fastest Clean", 0, 0, #Config.Levels)
-	local dishesBoard = buildBoard(model, 80, -74, "Top Players", 0, 0, 3) -- dishes / rebirths / bubbles
+	local timesBoard = buildBoard(model, Layout.TimesBoard.X, Layout.TimesBoard.Z, "Fastest Clean", Layout.BoardsFace.X, Layout.BoardsFace.Z, #Config.Levels)
+	local dishesBoard = buildBoard(model, Layout.DishesBoard.X, Layout.DishesBoard.Z, "Top Players", Layout.BoardsFace.X, Layout.BoardsFace.Z, 3) -- dishes / rebirths / bubbles
 	buildHowToPlay(model, 34, 44, SPAWN.X, SPAWN.Z)
 
 	buildRankShrine(model)
@@ -3273,6 +3507,9 @@ function LobbyBuilder.Build(): Lobby
 	LobbyBuilder.SetRescue(true)
 	return built
 end
+
+-- Where things stand (plaza coordinates): the Admin Abuse show, the lobby bubbles and the ducks read this.
+LobbyBuilder.Layout = Layout
 
 function LobbyBuilder.GetLobby(): Lobby?
 	return lobby

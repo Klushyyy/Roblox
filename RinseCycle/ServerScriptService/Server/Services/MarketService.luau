@@ -69,7 +69,7 @@ function MarketService.GrantProduct(player: Player, product: any): boolean
 	if product.Kind == "Bubbles" then
 		return DataService.AddBubbles(player, product.Amount, "Product")
 	elseif product.Kind == "Gems" then
-		return DataService.AddGems(player, product.Amount)
+		return DataService.AddGems(player, product.Amount, "Product")
 	elseif product.Kind == "RestoreStreak" then
 		return DataService.RestoreStreak(player)
 	elseif product.Kind == "Coins" then
@@ -199,22 +199,51 @@ local function checkPasses(player: Player, isRetry: boolean)
 	end
 end
 
+-- Roblox Premium: a pass-like flag (DataService.SetPass "Premium") that follows player.MembershipType,
+-- so +10% Bubbles and the badge turn on or off if they subscribe or lapse mid-session. The daily
+-- gift is paid the first time Premium is seen each UTC day.
+local function applyPremium(player: Player, announce: boolean)
+	if not isHere(player) then
+		return
+	end
+	local isPremium = player.MembershipType == Enum.MembershipType.Premium
+	DataService.SetPass(player, "Premium", isPremium)
+	DataService.PushMeta(player)
+	if isPremium and announce then
+		local text = DataService.ClaimPremiumDaily(player)
+		if text then
+			task.delay(4, function() -- after their UI has built (join toasts wait the same way)
+				GiftService.Celebrate(player, "Thanks for being Premium!", "Daily Premium gift: +" .. text, "@Gem")
+			end)
+		end
+	end
+end
+
 local function onProfileLoaded(player: Player)
 	if checked[player] or not isHere(player) then
 		return
 	end
 	checked[player] = true
+	applyPremium(player, true)
+	player:GetPropertyChangedSignal("MembershipType"):Connect(function()
+		applyPremium(player, true)
+	end)
 	checkPasses(player, false)
 end
 
 local function onPassPurchaseFinished(player: Player, passId: number, wasPurchased: boolean)
-	if not wasPurchased or not isHere(player) then
+	if not isHere(player) then
 		return
 	end
 	local pass = passById(passId)
 	if not pass then
 		return
 	end
+	if not wasPurchased then
+		DataService.Track(player, "buy.cancel." .. pass.Key)
+		return
+	end
+	DataService.Track(player, "buy.ok." .. pass.Key, { Robux = pass.Price })
 	local bought = boughtThisSession[player]
 	if not bought then
 		bought = {}
@@ -241,6 +270,21 @@ local function markUnsaved(player: Player, purchaseId: string, unsaved: boolean)
 	elseif set then
 		set[purchaseId] = nil
 	end
+end
+
+-- The Config key and price of a developer product (a normal pack or a Treasure Chest pack), for Analytics.
+local function productInfo(productId: number): (string, number)
+	for _, product in Config.DevProducts do
+		if product.Id == productId then
+			return product.Key, product.Price or 0
+		end
+	end
+	for key, id in Config.EventProducts do
+		if id == productId then
+			return key, 0
+		end
+	end
+	return "Other", 0
 end
 
 local function grantReceipt(receipt: Receipt, purchaseId: string): Enum.ProductPurchaseDecision
@@ -283,6 +327,8 @@ local function grantReceipt(receipt: Receipt, purchaseId: string): Enum.ProductP
 		while #receipts > MAX_RECEIPTS do
 			table.remove(receipts, 1)
 		end
+		local productKey, price = productInfo(receipt.ProductId)
+		DataService.Track(player, "buy.ok." .. productKey, { Robux = price })
 		markUnsaved(player, purchaseId, true)
 		DataService.PushMeta(player)
 	end
@@ -336,6 +382,12 @@ function MarketService.Init()
 	end
 
 	MarketplaceService.PromptGamePassPurchaseFinished:Connect(onPassPurchaseFinished)
+	MarketplaceService.PromptProductPurchaseFinished:Connect(function(userId: number, productId: number, isPurchased: boolean)
+		local player = Players:GetPlayerByUserId(userId)
+		if player and not isPurchased then
+			DataService.Track(player, "buy.cancel." .. (productInfo(productId)))
+		end
+	end)
 	MarketplaceService.ProcessReceipt = processReceipt
 
 	Players.PlayerRemoving:Connect(function(player)

@@ -63,7 +63,8 @@ local function setupCountdown()
 				pill.Visible = true
 				if nowT < current.EndsAt then
 					local left = current.EndsAt - nowT
-					title.Text = current.Name .. " STARTS IN"
+					-- (no name = just the timer)
+					title.Text = if current.Name == "" then "COUNTDOWN" else current.Name .. " STARTS IN"
 					title.TextColor3 = Colors.Coin
 					stroke.Color = Colors.Coin
 					clock.Text = if left >= 86400
@@ -73,7 +74,7 @@ local function setupCountdown()
 					title.Text = current.Name
 					title.TextColor3 = Colors.Good
 					stroke.Color = Colors.Good
-					clock.Text = "IS LIVE NOW!"
+					clock.Text = if current.Name == "" then "TIME'S UP!" else "IS LIVE NOW!"
 				end
 			else
 				pill.Visible = false
@@ -101,6 +102,7 @@ function PollUI.Init()
 	holder.ClipsDescendants = true
 	holder.Visible = false
 	holder.Parent = root
+	UIKit.PhoneBoost(holder)
 
 	local slider = Instance.new("Frame")
 	slider.Name = "Slider"

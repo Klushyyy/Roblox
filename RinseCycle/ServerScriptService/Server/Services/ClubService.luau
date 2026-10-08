@@ -730,7 +730,7 @@ local function create(player: Player, value: any)
 		return fail("A club already has that name.")
 	end
 	-- Pay after the name is ours (nothing yields between the check and the spend).
-	if not DataService.SpendGems(player, rules.CreateCost) then
+	if not DataService.SpendGems(player, rules.CreateCost, "ClubCreate") then
 		remove(nameKey(name))
 		return fail(string.format("You need %d Gems to make a club.", rules.CreateCost))
 	end
@@ -756,7 +756,7 @@ local function create(player: Player, value: any)
 		return club
 	end)
 	if not okSave then
-		DataService.AddGems(player, rules.CreateCost) -- refund
+		DataService.AddGems(player, rules.CreateCost, "ClubRefund") -- refund
 		remove(nameKey(name))
 		return fail("Couldn't save your club. Your Gems were given back.")
 	end
@@ -1211,6 +1211,9 @@ local function onRequest(player: Player, action: any, value: any): any
 	if not DataService.Get(player) then
 		return fail("Your save is still loading.")
 	end
+	if type(action) == "string" and action ~= "Mine" then
+		DataService.Track(player, "club." .. action)
+	end
 	local ok, result = pcall(function(): any
 		if action == "Mine" then
 			local id, club = clubOf(player)
@@ -1288,7 +1291,7 @@ function donate(player: Player, value: any): any
 	if not id then
 		return fail("You're not in a club.")
 	end
-	if not DataService.SpendBubbles(player, amount) then
+	if not DataService.SpendBubbles(player, amount, "ClubDonate") then
 		return fail("You don't have that many Bubbles.")
 	end
 	local season = currentSeason()
@@ -1393,13 +1396,13 @@ local function claimPrize(player: Player)
 		if table.find(c.Members or {}, player.UserId) then
 			local gems = rules.PrizeGems[c.Rank] or 0
 			local text = string.format("%s finished #%d in %s: +%d Gems", tostring(c.Name), c.Rank, seasonName(prev), gems)
-			DataService.AddGems(player, gems)
+			DataService.AddGems(player, gems, "ClubPrize")
 			if c.Rank == 1 and rules.Pet then
 				local okPet = (require(script.Parent:WaitForChild("PetService")) :: any).GivePet(player, rules.Pet)
 				if okPet then
 					text ..= " and the limited " .. Config.Pets[rules.Pet].Name .. " pet!"
 				else
-					DataService.AddGems(player, 150)
+					DataService.AddGems(player, 150, "ClubPrize")
 					text ..= " (pet bag full: +150 Gems instead of the pet)"
 				end
 			end

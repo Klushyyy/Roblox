@@ -32,21 +32,29 @@ local GOLDEN_SIZE = 3.8
 
 -- Spots the bubbles keep away from (x, z, radius): props they would sit inside of.
 local AVOID = {
-	{ -34, 14, 9 }, -- rebirth fountain
 	{ -32, 40, 8 }, -- rank shrine
 	{ 34, 44, 15 }, -- how-to-play board
 	{ -11, -52, 3 },
 	{ 11, -52, 3 },
 	{ -11, -22, 3 },
 	{ 11, -22, 3 }, -- path lamps
+	{ -38, -46, 13 },
+	{ -38, -20, 13 },
+	{ -38, 6, 13 },
+	{ 38, -46, 13 },
+	{ 38, -20, 13 },
+	{ 38, 6, 13 }, -- the six party pads
+	{ -25, -20, 4 },
+	{ 25, -20, 4 }, -- the posts of the arch over the walkway
 }
 
 -- Where each duck sits (feet position) and which way it faces (yaw, degrees; 0 = facing +Z).
+local Layout = LobbyBuilder.Layout
 local DUCK_SPOTS: { [string]: { Pos: Vector3, Yaw: number, Float: boolean? } } = {
-	Fountain = { Pos = Vector3.new(-34, FLOOR_Y + 2.4, 18.6), Yaw = 70, Float = true },
-	Doghouse = { Pos = Vector3.new(40, 3, -62.4), Yaw = 0 },
+	Fountain = { Pos = Vector3.new(Layout.Fountain.X, FLOOR_Y + 2.4, Layout.Fountain.Z + 4.6), Yaw = 70, Float = true },
+	Doghouse = { Pos = Vector3.new(Layout.PetStand.X, 3, Layout.PetStand.Z + 3.6), Yaw = 0 },
 	Sponge = { Pos = Vector3.new(-79, 6.7, 45), Yaw = 160 },
-	Board = { Pos = Vector3.new(88, FLOOR_Y, -86), Yaw = 200 },
+	Board = { Pos = Vector3.new(Layout.DishesBoard.X + 8, FLOOR_Y, Layout.DishesBoard.Z - 14), Yaw = 200 },
 	Shakers = { Pos = Vector3.new(-44, 55.1, -101.5), Yaw = 130 }, -- on the building's roof, back corner
 	Saucer = { Pos = Vector3.new(84.4, FLOOR_Y + 0.8, 56), Yaw = -60 },
 }
@@ -142,6 +150,7 @@ local function pop(bubble: BasePart, player: Player)
 	local pos = bubble.Position
 	bubble:Destroy()
 	DataService.AddBubbles(player, amount, "LobbyBubble")
+	DataService.Track(player, "fun.bubble")
 	fire("LobbyPop", { Position = pos, Golden = golden, By = player.UserId, Amount = amount })
 	local delay = Config.LobbyBubbles.RespawnDelay
 	task.delay(rng:NextNumber(delay[1], delay[2]), spawnBubble)
@@ -219,6 +228,7 @@ local function makeFloatPoppable(bubble: BasePart)
 		bubble.CanTouch = false
 		click.Parent = nil
 		DataService.AddBubbles(player, Config.LobbyBubbles.Reward, "LobbyBubble")
+		DataService.Track(player, "fun.bubble")
 		fire("LobbyPop", { Position = pos, Golden = false, By = player.UserId, Amount = Config.LobbyBubbles.Reward })
 		task.delay(rng:NextNumber(8, 16), function()
 			if bubble.Parent then
@@ -317,11 +327,12 @@ local function syncAttribute(player: Player)
 end
 
 local function giveReward(player: Player, reward: { Bubbles: number?, Gems: number? })
+	DataService.Track(player, "fun.duck")
 	if reward.Bubbles and reward.Bubbles > 0 then
 		DataService.AddBubbles(player, reward.Bubbles, "Duck")
 	end
 	if reward.Gems and reward.Gems > 0 then
-		DataService.AddGems(player, reward.Gems)
+		DataService.AddGems(player, reward.Gems, "Duck")
 	end
 end
 

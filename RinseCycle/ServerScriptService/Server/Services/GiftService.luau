@@ -169,6 +169,7 @@ local function onGiftRequest(player: Player, key: any, toUserId: any)
 	if not pass or not gift then
 		return { Ok = false, Error = "That can't be gifted." }
 	end
+	DataService.Track(player, "gift.request")
 	if type(toUserId) ~= "number" or toUserId == player.UserId then
 		return { Ok = false, Error = "Pick someone to gift it to." }
 	end

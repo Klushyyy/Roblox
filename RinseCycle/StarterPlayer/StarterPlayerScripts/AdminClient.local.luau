@@ -95,6 +95,7 @@ local AdminStaffList = laterRemote("AdminStaffList")
 local AdminStaffAction = laterRemote("AdminStaffAction")
 local AdminServerList = laterRemote("AdminServerList")
 local AdminServerAction = laterRemote("AdminServerAction")
+local AdminReport = laterRemote("AdminReport")
 
 ----------------------------------------------------------------------------------------------------
 -- Small helpers
@@ -782,7 +783,9 @@ do
 	UIKit.Label({ Text = abuse.OwnerName, TextSize = 20, TextColor3 = Colors.Coin, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(16, 8), Size = UDim2.new(1, -32, 0, 24), Parent = box })
 	local speech = UIKit.Label({ Text = "", TextSize = 19, TextWrapped = true, TextScaled = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(16, 36), Size = UDim2.new(1, -32, 1, -44), Parent = box })
 	box.Parent = talkRoot
+	UIKit.PhoneBoost(box, 1.2)
 	local talkToken = 0
+	local HOLD_SECONDS = 15
 	local function speak(text: string, append: boolean?)
 		talkToken += 1
 		local mine = talkToken
@@ -790,7 +793,7 @@ do
 			-- (a countdown: "the obby comes down in 5..." then " 4..." " 3...": ONE box that keeps growing, never a new one)
 			speech.Text ..= text
 			speech.MaxVisibleGraphemes = -1
-			task.delay(2.6, function()
+			task.delay(HOLD_SECONDS, function()
 				if talkToken == mine then
 					box.Visible = false
 				end
@@ -808,7 +811,8 @@ do
 				speech.MaxVisibleGraphemes = i
 				task.wait(0.03)
 			end
-			task.wait(math.max(3, #text * 0.06))
+			-- (what he says stays up until his next line comes: at most HOLD_SECONDS, so there is nearly always something there)
+			task.wait(HOLD_SECONDS)
 			if talkToken == mine then
 				box.Visible = false
 			end
@@ -1055,6 +1059,107 @@ do
 			end
 		end)
 	end
+	-- The obby builds itself in about 9 seconds ("now. im going to build something."): every camera turns, on the spot (it never
+	-- moves, so it cannot clip), to the start of the course, then sweeps along it with the pieces as they rise, then turns back.
+	local function buildShot()
+		local camera = workspace.CurrentCamera
+		if cinemaBusy or not camera or camera.CameraType == Enum.CameraType.Scriptable or ReplicatedStorage:GetAttribute("AbuseLive") ~= true then
+			return
+		end
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if not root or not humanoid then
+			return
+		end
+		cinemaBusy = true
+		local obby: Instance? = nil
+		for _ = 1, 25 do
+			local lobby = workspace:FindFirstChild("Lobby")
+			obby = lobby and lobby:FindFirstChild("Obby")
+			if obby then
+				break
+			end
+			task.wait(0.1)
+		end
+		local points: { Vector3 } = {}
+		if obby then
+			-- (the pieces start 45 studs below where they end up, and rise one after another from the start)
+			for _, name in { "Start", "Hop4", "Checkpoint1", "SideSlider3", "Checkpoint2", "SpinnerDeck", "Checkpoint3", "Slider2", "Checkpoint4", "Conveyor", "Checkpoint5", "Finish" } do
+				local part = obby:FindFirstChild(name)
+				if part and part:IsA("BasePart") then
+					table.insert(points, part.Position + Vector3.new(0, if part.Transparency >= 0.5 then 49 else 4, 0))
+				end
+			end
+		end
+		if #points < 2 then
+			cinemaBusy = false
+			return
+		end
+		local startCF = camera.CFrame
+		local startRoot = root.Position
+		local PAN, FOLLOW, BACK = 1.0, 4.4, 1.2
+		local t0, last = os.clock(), os.clock()
+		local focus = points[1]
+		local function smooth(x: number): number
+			x = math.clamp(x, 0, 1)
+			return x * x * (3 - 2 * x)
+		end
+		-- a point `f` (0..1) of the way along the course
+		local total = 0
+		for i = 2, #points do
+			total += (points[i] - points[i - 1]).Magnitude
+		end
+		local function along(f: number): Vector3
+			local want = f * total
+			for i = 2, #points do
+				local seg = (points[i] - points[i - 1]).Magnitude
+				if want <= seg or i == #points then
+					return points[i - 1]:Lerp(points[i], if seg > 0 then math.clamp(want / seg, 0, 1) else 0)
+				end
+				want -= seg
+			end
+			return points[#points]
+		end
+		local function finish()
+			pcall(function()
+				RunService:UnbindFromRenderStep("AbuseBuildShot")
+			end)
+			camera.CameraType = Enum.CameraType.Custom
+			camera.CameraSubject = humanoid
+			cinemaBusy = false
+		end
+		camera.CameraType = Enum.CameraType.Scriptable
+		RunService:BindToRenderStep("AbuseBuildShot", Enum.RenderPriority.Camera.Value, function()
+			if not root.Parent or ReplicatedStorage:GetAttribute("AbuseLive") ~= true then
+				finish()
+				return
+			end
+			local now = os.clock()
+			local dt = now - last
+			last = now
+			local e = now - t0
+			local home = startCF + (root.Position - startRoot)
+			local wanted = if e < PAN then points[1] else along(smooth((e - PAN) / FOLLOW))
+			focus = focus:Lerp(wanted, 1 - math.exp(-dt * 5))
+			local shot = CFrame.lookAt(home.Position, focus)
+			if e < PAN then
+				camera.CFrame = home:Lerp(shot, smooth(e / PAN))
+			elseif e < PAN + FOLLOW then
+				camera.CFrame = shot
+			else
+				local a = (e - PAN - FOLLOW) / BACK
+				if a >= 1 then
+					finish()
+					return
+				end
+				camera.CFrame = shot:Lerp(home, smooth(a))
+			end
+		end)
+	end
+	ReplicatedStorage:GetAttributeChangedSignal("AbuseObbyBuild"):Connect(function()
+		task.spawn(buildShot)
+	end)
 	ReplicatedStorage:GetAttributeChangedSignal("AbuseLive"):Connect(function()
 		if ReplicatedStorage:GetAttribute("AbuseLive") == true then
 			local starts = tonumber(ReplicatedStorage:GetAttribute("AbuseStarts"))
@@ -1096,6 +1201,7 @@ do
 		holder.BackgroundTransparency = 1
 		holder.Visible = false
 		holder.Parent = root
+		UIKit.PhoneBoost(holder)
 		local card = UIKit.Card({
 			Name = "Pick",
 			Position = UDim2.fromOffset(4, 2),
@@ -1321,7 +1427,22 @@ local COMMANDS: { Command } = ({
 	{ Name = "bring", Icon = "⬅️", Label = "Bring", Desc = "Teleports them to you.", Group = "Move", Target = "player" },
 	{ Name = "spectate", Icon = "👁️", Label = "Spectate", Desc = "Watch them. Stop from the bar at the bottom.", Group = "Move", Target = "player" },
 	{ Name = "controlplayer", Icon = "🎮", Label = "Control", Desc = "Move their character with your controls.", Group = "Move", Target = "player" },
-	{ Name = "serverlist", Icon = "🌍", Label = "All servers", Desc = "Everyone in every server: Join them (you arrive invisible) or Bring them here.", Group = "Global", Target = "none" },
+	{ Name = "serverlist", Icon = "🌍", Label = "All servers", Desc = "Every server of the game, sorted: Lobby 1, Lobby 2...; and game servers by level (Level 1 / Chapter 1, Level 2 / Chapter 2, Level 3 / Chapter 3) with who is in each and how long it has been up. Use the arrows to filter: All, Lobbies only, Game servers only, or one level. Join any of them (you arrive invisible).", Group = "Global", Target = "none" },
+	{ Name = "analytics", Icon = "📈", Label = "Analytics", Desc = "Where players get stuck and leave. Pick a report (what new players do step by step, retention, where they were when they left, runs, features, money, devices and errors, the Admin Abuse show) and how many days back. The arrows flip between reports. Needs the game published for real numbers.", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+	return {
+		{ Label = "Overview", Value = "1" },
+		{ Label = "What new players do (funnel)", Value = "2" },
+		{ Label = "Retention", Value = "3" },
+		{ Label = "Where players leave", Value = "4" },
+		{ Label = "Runs", Value = "5" },
+		{ Label = "Features used", Value = "6" },
+		{ Label = "Economy", Value = "7" },
+		{ Label = "Devices and errors", Value = "8" },
+		{ Label = "Admin Abuse show", Value = "9" },
+	}
+end }, { Kind = "choice", Required = true, Options = function()
+	return { { Label = "Last 7 days", Value = "7" }, { Label = "Today", Value = "1" }, { Label = "Last 3 days", Value = "3" }, { Label = "Last 14 days", Value = "14" }, { Label = "Last 30 days", Value = "30" } }
+end } } },
 	{ Name = "joinserver", Icon = "🛰️", Label = "Join server", Desc = "Teleport to that player's server, wherever they are (type their username).", Group = "Global", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
 	{ Name = "bringserver", Icon = "🧲", Label = "Bring (any server)", Desc = "Pull that player from their server into yours (type their username).", Group = "Global", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
 	{ Name = "viewpets", Icon = "🐾", Label = "Pets", Desc = "See their pets. Remove any, or add new ones.", Group = "Game", Target = "player" },
@@ -1395,14 +1516,14 @@ local COMMANDS: { Command } = ({
 		return { { Label = "30 seconds", Value = "30" }, { Label = "1 minute", Value = "60" }, { Label = "2 minutes", Value = "120" } }
 	end }, { Kind = "text", Placeholder = "Which level next? | Pizzeria | Castle", Required = true } } },
 	{ Name = "globalgive", Icon = "🎁", Label = "Give everyone", Desc = "Everyone online in EVERY server gets this much (Coins only reach people inside a dishwasher).", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "Bubbles", "Gems", "Coins" }) }, { Kind = "number", Placeholder = "Amount", Required = true } } },
-	{ Name = "globalpassdrop", Icon = "🎟️", Label = "Pass drop", Desc = "Random players across EVERY server win a game pass. Already own it? They get another one they don't have.", Group = "Global", Target = "none", Inputs = { { Kind = "number", Placeholder = "Winners (1-25)", Required = true }, { Kind = "choice", Required = true, Options = function()
+	{ Name = "globalpassdrop", Icon = "🎟️", Label = "Pass drop", Desc = "Random players from EVERY server win a game pass. Type HOW MANY players win (a number from 1 to 25), then pick what they win: 'Random pass each' gives every winner a different random pass, or pick one pass and every winner gets that same pass. Winners get a congratulations pop-up with confetti. Anyone who already owns the pass gets 100 Gems instead.", Group = "Global", Target = "none", Inputs = { { Kind = "number", Placeholder = "How many players win? (type 1 to 25)", Required = true }, { Kind = "choice", Required = true, Options = function()
 		local out = { { Label = "Random pass each", Value = "random" } }
 		for _, pass in Config.GamePasses do
 			table.insert(out, { Label = pass.Name, Value = pass.Key })
 		end
 		return out
 	end } } },
-	{ Name = "globalcountdown", Icon = "⏳", Label = "Event countdown", Desc = "A countdown on everyone's screen in EVERY server (and for anyone who joins later), then LIVE NOW for an hour. Pick the time, then type the event's name (blank = Admin Abuse).", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "1h", "6h", "12h", "24h", "48h", "3d", "7d" }) }, { Kind = "text", Placeholder = "Event name (blank = Admin Abuse)" } } },
+	{ Name = "globalcountdown", Icon = "⏳", Label = "Event countdown", Desc = "A countdown on everyone's screen in EVERY server (and for anyone who joins later), then LIVE NOW for an hour. Pick the time, then type a name if you want one on it; leave the name blank for just a countdown timer with no name.", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "1h", "6h", "12h", "24h", "48h", "3d", "7d" }) }, { Kind = "text", Placeholder = "Name (optional: blank = just the timer)" } } },
 	{ Name = "notifytest", Icon = "🔔", Label = "Notification test", Desc = "Sends the \"daily reward is ready\" notification to you right now and says how it went: is the key found, is HTTP on, are you opted in.", Group = "Studio", Target = "none" },
 	{ Name = "abusefx", Icon = "💥", Label = "Test Admin Abuse effects", Desc = "Tries one piece of the Admin Abuse show on its own (it spawns the giant first): each effect, the table holes, the obby, the heat, the exit. 'Every effect' plays them all, 9 seconds apart.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		local list = {}
@@ -1442,7 +1563,7 @@ local COMMANDS: { Command } = ({
 		}
 	end } } },
 	{ Name = "cancelcountdown", Icon = "🛑", Label = "Cancel countdown", Desc = "Removes the event countdown from everyone's screen, in every server.", Group = "Global", Target = "none", Danger = true },
-	{ Name = "globalboost", Icon = "⚡", Label = "x2 boost", Desc = "x2 Cleaning for everyone online in EVERY server, for this many minutes.", Group = "Global", Target = "none", Inputs = { { Kind = "number", Placeholder = "Minutes (1-180)", Required = true } } },
+	{ Name = "globalboost", Icon = "⚡", Label = "x2 boost", Desc = "x2 Cleaning for everyone online in EVERY server, for this many minutes.", Group = "Global", Target = "none", Inputs = { { Kind = "number", Placeholder = "How many minutes? (type 1 to 180)", Required = true } } },
 }) :: any
 local GROUPS = {
 	{ Name = "Punish", Icon = "🔨" },
@@ -1802,7 +1923,7 @@ local function buildPanel(info: any)
 				local row = inputRow()
 				local box = field(row, UDim2.fromScale(1, 1), UDim2.new(), input.Placeholder or "")
 				if input.Kind == "number" then
-					box.PlaceholderText = (input.Placeholder or "Number") .. " (numbers only)"
+					box.PlaceholderText = input.Placeholder or "Type a number"
 				end
 				values[i] = ""
 				box:GetPropertyChangedSignal("Text"):Connect(function()
@@ -2323,19 +2444,44 @@ local function buildPanel(info: any)
 		end
 	end
 	-- All servers: one row per server (its players underneath) with a single Join (arrive invisible).
-	AdminServerList.OnClientEvent:Connect(function(title, entries, busiestJobId)
+	AdminServerList.OnClientEvent:Connect(function(title, entries, busiestJobId, filterIndex, filterCount)
 		local extra = nil
 		if type(busiestJobId) == "string" then
 			extra = {
-				Text = "Busiest server",
+				Text = "Busiest lobby",
 				OnClick = function()
 					AdminServerAction:FireServer("Join", busiestJobId)
 				end,
 			}
 		end
+		-- The arrows flip through the filters: All servers, Lobby servers, Game servers, Level 1, Level 2, Level 3.
+		local index = tonumber(filterIndex) or 1
+		local count = math.max(tonumber(filterCount) or 1, 1)
 		showList(tostring(title), entries, "Join", function(entry)
 			AdminServerAction:FireServer("Join", entry.JobId, entry.Id)
-		end, nil, extra)
+		end, {
+			Prev = function()
+				AdminServerAction:FireServer("List", tostring(((index - 2) % count) + 1))
+			end,
+			Next = function()
+				AdminServerAction:FireServer("List", tostring((index % count) + 1))
+			end,
+		}, extra)
+	end)
+
+	-- Analytics reports: the same list window, the arrows flip between the reports.
+	AdminReport.OnClientEvent:Connect(function(title, entries, index, count, days)
+		local shown = tonumber(index) or 1
+		local total = math.max(tonumber(count) or 1, 1)
+		local back = tonumber(days) or 7
+		showList(tostring(title), entries, nil, nil, {
+			Prev = function()
+				AdminServerAction:FireServer("Report", string.format("%d:%d", ((shown - 2) % total) + 1, back))
+			end,
+			Next = function()
+				AdminServerAction:FireServer("Report", string.format("%d:%d", (shown % total) + 1, back))
+			end,
+		})
 	end)
 
 	AdminStaffList.OnClientEvent:Connect(function(title, entries)

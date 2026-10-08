@@ -37,6 +37,9 @@ local ChestUI = require(Client:WaitForChild("ChestUI"))
 local ClubsUI = require(Client:WaitForChild("ClubsUI"))
 local EventZone = require(Client:WaitForChild("EventZone"))
 local Tutorial = require(Client:WaitForChild("Tutorial"))
+-- (Telemetry is optional: if the script is missing the game plays the same, just without analytics)
+local TelemetryModule = Client:WaitForChild("Telemetry", 5)
+local Telemetry = if TelemetryModule and TelemetryModule:IsA("ModuleScript") then require(TelemetryModule) :: any else nil
 
 local function step(name: string, fn: () -> ())
 	local ok, err = xpcall(fn, debug.traceback)
@@ -49,6 +52,10 @@ step("ClientState", ClientState.Init)
 step("UIKit", UIKit.Init)
 
 ClientState.Notified:Connect(function(text, kind)
+	-- (the first-run tutorial keeps the screen clear: no "your pet found golden dirt" and the like, only errors)
+	if ClientState.TutorialStep ~= nil and ClientState.Run ~= nil and kind ~= "Bad" then
+		return
+	end
 	UIKit.Toast(text, kind)
 end)
 
@@ -81,3 +88,6 @@ step("ChestUI", ChestUI.Init)
 step("ClubsUI", ClubsUI.Init)
 step("EventZone", EventZone.Init)
 step("Tutorial", Tutorial.Init)
+if Telemetry then
+	step("Telemetry", Telemetry.Init)
+end

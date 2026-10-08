@@ -699,7 +699,7 @@ local function hatch(player: Player, eggId: any, count: any): Types.RequestResul
 	for i = 1, count do
 		rolled[i] = Util.WeightedPick(egg.Pets, "Chance", rng).Pet
 	end
-	local paid, spent = safe(DataService.SpendBubbles, player, cost)
+	local paid, spent = safe(DataService.SpendBubbles, player, cost, "Egg:" .. eggId)
 	if not paid or spent ~= true then
 		return fail("Not enough Bubbles!")
 	end

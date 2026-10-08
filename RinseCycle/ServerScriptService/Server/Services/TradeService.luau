@@ -264,6 +264,7 @@ local function onAction(player: Player, action: any, value: any)
 		return
 	end
 	local trade = tradeOf[player]
+	DataService.Track(player, "trade." .. action)
 
 	if action == "Request" then
 		if trade then

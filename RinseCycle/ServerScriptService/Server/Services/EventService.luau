@@ -55,7 +55,7 @@ local function give(player: Player, reward: any): string
 	if reward.Kind == "Bubbles" then
 		DataService.AddBubbles(player, reward.Amount, "Chest")
 	elseif reward.Kind == "Gems" then
-		DataService.AddGems(player, reward.Amount)
+		DataService.AddGems(player, reward.Amount, "Chest")
 	elseif reward.Kind == "Boost" then
 		DataService.AddBoost(player, reward.Minutes * 60)
 	elseif reward.Kind == "Pet" then
@@ -63,7 +63,7 @@ local function give(player: Player, reward: any): string
 		if not ok then
 			-- Inventory full: the pet's worth in Gems instead, so nothing is lost.
 			local gems = if reward.Tier and reward.Tier > 1 then 250 elseif Config.Pets[reward.Pet].Rarity == "Legendary" then 150 else 60
-			DataService.AddGems(player, gems)
+			DataService.AddGems(player, gems, "Chest")
 			name = string.format("%s (bag full: %d Gems)", name, gems)
 		end
 	elseif reward.Kind == "Pass" then
@@ -78,7 +78,7 @@ local function give(player: Player, reward: any): string
 			giftService().GrantPass(player, pass.Key, "JACKPOT!", "The Treasure Chest had " .. pass.Name .. " inside!")
 			name = pass.Name .. " pass!"
 		else
-			DataService.AddGems(player, reward.Fallback or 150)
+			DataService.AddGems(player, reward.Fallback or 150, "Chest")
 			name = string.format("%d Gems (you own every pass!)", reward.Fallback or 150)
 		end
 	end
@@ -113,6 +113,9 @@ local function onRequest(player: Player, action: any, value: any): any
 	lastRequest[player] = now
 	if not DataService.Get(player) then
 		return { Ok = false, Error = "Your save is still loading." }
+	end
+	if type(action) == "string" then
+		DataService.Track(player, "chest." .. action)
 	end
 	if action == "Free" then
 		if not DataService.UseFreeChest(player) then

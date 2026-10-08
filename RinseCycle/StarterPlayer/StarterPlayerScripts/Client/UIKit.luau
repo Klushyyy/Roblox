@@ -530,6 +530,19 @@ function UIKit.CanvasSize(): Vector2
 	return canvasSize()
 end
 
+-- Small cards (the show's vote, power-up and prize cards, the speech box) are drawn a bit bigger on phones, where
+-- their 16-20 px text would otherwise be about 9 px on the real screen. The card grows from its AnchorPoint.
+function UIKit.PhoneBoost(frame: GuiObject, factor: number?)
+	local boost = Instance.new("UIScale")
+	boost.Name = "PhoneBoost"
+	local function apply()
+		boost.Scale = if UIKit.IsTouch() and UIKit.CanvasSize().Y <= 800 then (factor or 1.3) else 1
+	end
+	apply()
+	boost.Parent = frame
+	UIKit.LayoutChanged:Connect(apply)
+end
+
 -- Extra (not in DESIGN): notch / home-indicator insets in canvas units. Every Root spans the whole
 -- screen (ScreenInsets None), so add Left/Right to margins of anything hugging a side edge on phones.
 -- All zeros on devices without cutouts. LayoutChanged fires when they change.

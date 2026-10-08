@@ -18,6 +18,13 @@ ClientState.Run = nil :: Types.RunState?
 -- The first-run tutorial (Tutorial.luau): the step it is on while it is running (nil = not running). The HUD hides most of
 -- itself while it is on, and shows the rest as the steps introduce it.
 ClientState.TutorialStep = nil :: number?
+-- True while the tutorial wants the player to open the Upgrade Book (the book's hotkeys only work then).
+ClientState.TutorialAllowBook = false :: boolean
+
+-- Analytics hook. Telemetry.luau replaces it when it starts; until then (or if that script is
+-- missing) it does nothing, so any screen can call it.
+--   Track("tut.s2") / Track("buy.prompt", "VIP") tells the server what the player just saw or did
+ClientState.Track = function(_key: string, _detail: string?) end
 
 -- Fired with "Meta", "Party", "Run" or "Tutorial" after that field is replaced / changes.
 ClientState.Changed = Util.Signal.new()

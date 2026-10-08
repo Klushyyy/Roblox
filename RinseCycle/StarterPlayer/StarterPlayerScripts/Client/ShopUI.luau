@@ -168,6 +168,7 @@ end
 -- Buying a pass for yourself: Roblox's prompt (MarketService grants it), or a free Studio test.
 local function buyPassForSelf(def: any)
 	if type(def.Id) == "number" and def.Id ~= 0 then
+		ClientState.Track("buy.prompt", def.Key)
 		pcall(function()
 			MarketplaceService:PromptGamePassPurchase(LocalPlayer, def.Id)
 		end)
@@ -270,6 +271,7 @@ function ShopUI.BuyPass(key: string)
 		return
 	end
 	if type(def.Id) == "number" and def.Id ~= 0 then
+		ClientState.Track("buy.prompt", def.Key)
 		pcall(function()
 			MarketplaceService:PromptGamePassPurchase(LocalPlayer, def.Id)
 		end)
@@ -317,6 +319,7 @@ function ShopUI.BuyProduct(key: string): boolean
 		return false
 	end
 	if type(def.Id) == "number" and def.Id ~= 0 then
+		ClientState.Track("buy.prompt", def.Key)
 		pcall(function()
 			MarketplaceService:PromptProductPurchase(LocalPlayer, def.Id)
 		end)
@@ -380,6 +383,7 @@ local function buildProductRow(def: any): Frame
 		Parent = row,
 		OnClick = function()
 			if type(def.Id) == "number" and def.Id ~= 0 then
+				ClientState.Track("buy.prompt", def.Key)
 				pcall(function()
 					MarketplaceService:PromptProductPurchase(LocalPlayer, def.Id)
 				end)
@@ -531,6 +535,7 @@ function ShopUI.Init()
 		end
 		UIKit.CloseWindow("PassBuy")
 		if type(result.ProductId) == "number" then
+			ClientState.Track("buy.prompt", "Gift")
 			pcall(function()
 				MarketplaceService:PromptProductPurchase(LocalPlayer, result.ProductId)
 			end)

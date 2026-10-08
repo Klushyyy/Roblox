@@ -18,6 +18,7 @@ local Config = require(Shared:WaitForChild("Config"))
 
 local Client = script.Parent
 local UIKit = require(Client:WaitForChild("UIKit"))
+local ClientState = require(Client:WaitForChild("ClientState"))
 
 local EventZone = {}
 
@@ -37,6 +38,9 @@ function EventZone.WhenText(event: any, now: number?): string
 	if not event then
 		return "More events soon!"
 	end
+	if event.Soon then
+		return "COMING SOON"
+	end
 	local t = now or os.time()
 	if t >= event.Starts then
 		return "LIVE NOW!"
@@ -52,6 +56,7 @@ function EventZone.WhenText(event: any, now: number?): string
 end
 
 local function notify(event: any)
+	ClientState.Track("event.rsvp")
 	local id = tostring(event and event.RobloxEventId or "0")
 	if id ~= "" and id ~= "0" then
 		local ok, err = pcall(function()
@@ -84,6 +89,8 @@ local function robloxPopup(event: any): boolean
 	end)
 	if not ok then
 		warn("[EventZone] event pop-up failed: " .. tostring(err))
+	else
+		ClientState.Track("event.rsvp")
 	end
 	return ok
 end
@@ -180,6 +187,16 @@ function EventZone.Init()
 	local wasInside = false
 	task.spawn(function()
 		while true do
+			-- (the server may have moved Admin Abuse's schedule: a test start, or the show being over, which makes Chapter 4 the
+			-- next event; its attributes are the truth, this copy of Config is only the default)
+			local starts, ends = tonumber(ReplicatedStorage:GetAttribute("AbuseStarts")), tonumber(ReplicatedStorage:GetAttribute("AbuseEnds"))
+			if starts and ends then
+				for _, e in Config.UpcomingEvents do
+					if e.Key == Config.AbuseShow.EventKey then
+						e.Starts, e.Ends = starts, ends
+					end
+				end
+			end
 			local event = Config.NextEvent()
 			local when = EventZone.WhenText(event)
 			for _, label in CollectionService:GetTagged("NextEventName") do
@@ -208,6 +225,7 @@ function EventZone.Init()
 				card.Visible = false
 			end
 			if isInside and not wasInside then
+				ClientState.Track("event.sign")
 				show(event)
 			elseif isInside and card.Visible then
 				whenLabel.Text = when

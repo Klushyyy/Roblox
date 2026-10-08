@@ -21,6 +21,7 @@ Remotes.Events = {
 	"ChestResult", -- S->C (rewards: { { Index: number, Text: string } }) bought chests opened
 	"ClubState", -- S->C (club: ClubInfo?) your club changed (joined, left, kicked, edited)
 	"ClubChat", -- S->C (message: { U, N, T, At }) a new message in your club's chat
+	"Telemetry", -- C->S (batch: { { key: string, detail: string? } }) what the player's screen saw (Analytics)
 }
 
 Remotes.Functions = {

@@ -1255,6 +1255,7 @@ function HUD.Init()
 		setGems(if meta then meta.Gems or 0 else 0)
 	end
 
+	local tutorialWasOn = false
 	local function refreshMode()
 		local run = ClientState.Run :: Types.RunState?
 		local inRun = run ~= nil
@@ -1306,6 +1307,22 @@ function HUD.Init()
 			freeTag.Visible = false
 			hotbar.Visible = playing and tutorialStep >= 4
 		end
+		-- ...and no Bubbles / Gems / level bar / clock while it runs (the tip card sits at the very top and they got in its way);
+		-- when it is over they all come back with a little pop.
+		local tutorialOn = tutorialStep ~= nil and inRun
+		topCurrency.Visible = not tutorialOn
+		gemsPill.Visible = not tutorialOn
+		if tutorialOn then
+			topBar.Visible = false
+			timerLabel.Visible = false
+		end
+		if tutorialWasOn and not tutorialOn then
+			for _, gui in { topCurrency, gemsPill, rightColumn, leftColumn } do
+				UIKit.Bounce(gui)
+			end
+			UIKit.PlaySound("Sparkle")
+		end
+		tutorialWasOn = tutorialOn
 		local key = hotbarKey()
 		if key ~= lastHotbarKey then
 			lastHotbarKey = key
@@ -1434,6 +1451,13 @@ function HUD.Init()
 		end
 		local key = input.KeyCode
 		local inRun = ClientState.Run ~= nil
+		if ClientState.TutorialStep ~= nil and inRun then
+			-- (the tutorial: only the Upgrade Book's keys, and only while it is asking for the book)
+			local bookKey = key == Enum.KeyCode.Q or key == Enum.KeyCode.Tab or key == Enum.KeyCode.ButtonY
+			if not (bookKey and ClientState.TutorialAllowBook) then
+				return
+			end
+		end
 		-- Roblox's player list marks Tab as processed, so Tab (and gamepad Y) skip that check.
 		if processed and not (inRun and key == Enum.KeyCode.Tab) and key ~= Enum.KeyCode.ButtonY then
 			return

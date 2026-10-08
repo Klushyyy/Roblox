@@ -34,6 +34,7 @@ local PASS_BADGES = {
 	{ Key = "MegaTank", Text = "x2 Tank", Color = Colors.Primary },
 	{ Key = "SuperScrub", Text = "+50% Clean", Color = Colors.Primary },
 	{ Key = "DoubleBubbles", Text = "x2 Bubbles", Color = Colors.Bubble },
+	{ Key = "Premium", Text = "Premium +10%", Color = Colors.Bubble }, -- Roblox Premium members (Config.Premium)
 }
 
 local initialized = false
@@ -293,6 +294,7 @@ function StayOffer.Init()
 			return
 		end
 		offeredThisSession = true
+		ClientState.Track("stay.offer")
 		UIKit.OpenWindow("StayOffer")
 	end)
 end

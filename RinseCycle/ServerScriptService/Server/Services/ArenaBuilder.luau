@@ -1742,7 +1742,7 @@ local function buildLifts(b: Builder, theme)
 end
 
 -- A real-looking sink drain: a chrome rim round a dark gap, a brushed steel strainer with a
--- centre hole, a ring of 6 holes and an outer ring of 12, and a thin film of swirling water.
+-- centre hole, a ring of 6 holes and an outer ring of 12 (no spinning piece on top of it: a drain doesn't have one).
 local function buildDrain(b: Builder, _theme): Vector3
 	local x, z = DRAIN_POS.X, DRAIN_POS.Z
 	local chrome = Color3.fromRGB(196, 202, 210)
@@ -1762,11 +1762,6 @@ local function buildDrain(b: Builder, _theme): Vector3
 		local a = math.rad(i * 30 + 15)
 		cyl(b, "DrainHole", 0.04, 1.05, x + math.cos(a) * 4.1, 0.68, z + math.sin(a) * 4.1, hole, Enum.Material.SmoothPlastic, noCollide())
 	end
-	-- Water swirling down it (spun by the client, SpinY).
-	local ring = cyl(b, "DrainSwirl", 0.04, 9.6, x, 0.72, z, Color3.fromRGB(170, 220, 255), Enum.Material.Glass, noCollide())
-	ring.Transparency = 0.7
-	ring:SetAttribute("SpinSpeed", 2.4)
-	CollectionService:AddTag(ring, "SpinY")
 	local post = box(b, "DrainSign", Vector3.new(0.6, 0.6, 0.6), DRAIN_POS.X, 1, DRAIN_POS.Z, Color3.new(1, 1, 1), nil, { Transparency = 1, CanCollide = false })
 	sign(post, "DRAIN\nstand here to sell", 16, 5, 8, Color3.fromRGB(150, 230, 255))
 	return worldPoint(b.origin, DRAIN_POS.X, 0, DRAIN_POS.Z)

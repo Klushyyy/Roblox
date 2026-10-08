@@ -688,6 +688,92 @@ local function countdownLoop()
 	end
 end
 
+-- A brand-new player (no run finished, tutorial not done) gets a bouncing arrow over the nearest party pad
+-- until they start playing, so they know what to do. Nobody else ever sees it.
+local function padHintLoop()
+	local TweenService = game:GetService("TweenService")
+	local LocalPlayer = Players.LocalPlayer
+	local anchor = Instance.new("Part")
+	anchor.Name = "PadHintAnchor"
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.CanQuery = false
+	anchor.CanTouch = false
+	anchor.Transparency = 1
+	anchor.Size = Vector3.new(1, 1, 1)
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "PadHint"
+	gui.Size = UDim2.fromScale(15, 7.5)
+	gui.LightInfluence = 0
+	gui.AlwaysOnTop = false
+	gui.MaxDistance = 400
+	gui.Adornee = anchor
+	gui.Enabled = false
+	local function line(y: number, h: number, text: string, color: Color3)
+		local label = Instance.new("TextLabel")
+		label.Position = UDim2.fromScale(0, y)
+		label.Size = UDim2.fromScale(1, h)
+		label.BackgroundTransparency = 1
+		label.Text = text
+		label.Font = Enum.Font.LuckiestGuy
+		label.TextScaled = true
+		label.TextColor3 = color
+		label.Parent = gui
+		local stroke = Instance.new("UIStroke")
+		stroke.Thickness = 3
+		stroke.Color = Color3.fromRGB(10, 36, 78)
+		stroke.Parent = label
+	end
+	line(0, 0.34, "STEP ON A PAD", Color3.new(1, 1, 1))
+	line(0.34, 0.26, "to start playing!", Color3.fromRGB(255, 226, 120))
+	line(0.58, 0.42, "v", Color3.fromRGB(255, 226, 120))
+	gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	pcall(function()
+		TweenService:Create(gui, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { StudsOffsetWorldSpace = Vector3.new(0, 2.2, 0) }):Play()
+	end)
+
+	while true do
+		task.wait(0.5)
+		local meta = ClientState.Meta :: any
+		local stats = meta and meta.Stats
+		local wanted = stats ~= nil
+			and (stats.Runs or 0) == 0
+			and meta.TutorialDone ~= true
+			and not ClientState.InRun()
+			and not ClientState.InParty()
+			and ReplicatedStorage:GetAttribute("AbuseLive") ~= true
+			and not UIKit.IsWindowOpen()
+		local best: BasePart? = nil
+		if wanted then
+			local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			local lobby = workspace:FindFirstChild("Lobby")
+			if root and root:IsA("BasePart") and lobby then
+				local bestDistance = math.huge
+				for _, pad in lobby:GetChildren() do
+					local zone = pad:IsA("Model") and string.sub(pad.Name, 1, 3) == "Pad" and pad:FindFirstChild("Zone")
+					if zone and zone:IsA("BasePart") then
+						local distance = (zone.Position - root.Position).Magnitude
+						if distance < bestDistance then
+							best, bestDistance = zone, distance
+						end
+					end
+				end
+				-- (only while they are out in the lobby: not once they have walked up to it)
+				if best and bestDistance < 9 then
+					best = nil
+				end
+			end
+		end
+		if best then
+			anchor.Position = best.Position + Vector3.new(0, 17, 0)
+			anchor.Parent = workspace
+			gui.Enabled = true
+		else
+			gui.Enabled = false
+		end
+	end
+end
+
 function PartyUI.Init()
 	if initialized then
 		return
@@ -726,6 +812,7 @@ function PartyUI.Init()
 
 	render()
 	task.spawn(countdownLoop)
+	task.spawn(padHintLoop)
 end
 
 return PartyUI
