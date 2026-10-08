@@ -32162,7 +32162,13 @@ local function buildBoard(model: Model): boolean
 	local size = 26
 	for _, r in Config.ChestEvent.Rewards do
 		local text = Config.ChestRewardName(r)
-		while size &gt; 12 and TextService:GetTextSize(text, size, font, Vector2.new(1000, 100)).X &gt; NAME_W do
+		local function width(px: number): number
+			local ok, bounds = pcall(function()
+				return TextService:GetTextSize(text, px, font, Vector2.new(1000, 100))
+			end)
+			return if ok and bounds then bounds.X else #text * px * 0.55 -- (a guess if it can't be measured)
+		end
+		while size &gt; 12 and width(size) &gt; NAME_W do
 			size -= 1
 		end
 	end
