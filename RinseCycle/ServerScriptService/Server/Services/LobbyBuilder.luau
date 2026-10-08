@@ -1713,12 +1713,18 @@ local function buildEventZone(parent: Instance)
 	for _, dx in { -6.5, 6.5 } do
 		mkPart("Part", { Name = "EventPost", Shape = Enum.PartType.Cylinder, Size = Vector3.new(11, 0.8, 0.8), CFrame = upright(x + dx, FLOOR_Y + 5.5, z - 6.5), Color = Color3.fromRGB(240, 240, 250), Material = Enum.Material.Metal }, parent)
 	end
-	local banner = mkPart("Part", { Name = "EventBanner", Size = Vector3.new(13, 4, 0.4), CFrame = at(x, FLOOR_Y + 9, z - 6.5), Color = Color3.fromRGB(70, 40, 120), Material = LOW }, parent)
-	local gui = mk("SurfaceGui", { Name = "Sign", Face = Enum.NormalId.Back, CanvasSize = Vector2.new(650, 200), LightInfluence = 0 }, banner) -- faces the spawn (+Z)
-	local title = mk("TextLabel", { Name = "Title", Size = UDim2.fromScale(1, 0.45), BackgroundTransparency = 1, Text = "NEXT EVENT", Font = Enum.Font.LuckiestGuy, TextScaled = true, TextColor3 = Color3.fromRGB(255, 200, 230) }, gui)
-	mk("UIStroke", { Thickness = 3, Color = Color3.fromRGB(12, 30, 60) }, title)
-	local when = mk("TextLabel", { Name = "When", Position = UDim2.fromScale(0, 0.45), Size = UDim2.fromScale(1, 0.55), BackgroundTransparency = 1, Text = "", Font = Enum.Font.LuckiestGuy, TextScaled = true, TextColor3 = Color3.new(1, 1, 1) }, gui)
-	mk("UIStroke", { Thickness = 3, Color = Color3.fromRGB(12, 30, 60) }, when)
+	-- (the sign: three short lines, each scaled to fit with a margin, so nothing is cut off at the edges)
+	local banner = mkPart("Part", { Name = "EventBanner", Size = Vector3.new(14, 5, 0.4), CFrame = at(x, FLOOR_Y + 9.2, z - 6.5), Color = Color3.fromRGB(70, 40, 120), Material = LOW }, parent)
+	local gui = mk("SurfaceGui", { Name = "Sign", Face = Enum.NormalId.Back, CanvasSize = Vector2.new(700, 250), LightInfluence = 0 }, banner) -- faces the spawn (+Z)
+	local function signLine(name: string, y: number, h: number, text: string, color: Color3): TextLabel
+		local label = mk("TextLabel", { Name = name, Position = UDim2.fromScale(0.06, y), Size = UDim2.fromScale(0.88, h), BackgroundTransparency = 1, Text = text, Font = Enum.Font.LuckiestGuy, TextScaled = true, TextWrapped = false, TextColor3 = color }, gui) :: TextLabel
+		mk("UIStroke", { Thickness = 2, Color = Color3.fromRGB(12, 30, 60) }, label)
+		return label
+	end
+	signLine("Title", 0.06, 0.24, "NEXT EVENT", Color3.fromRGB(255, 200, 230))
+	local eventName = signLine("EventName", 0.32, 0.32, "", Color3.new(1, 1, 1))
+	CollectionService:AddTag(eventName, "NextEventName")
+	local when = signLine("When", 0.68, 0.26, "", Color3.fromRGB(255, 220, 120))
 	CollectionService:AddTag(when, "NextEventCountdown")
 	mk("PointLight", { Range = 16, Brightness = 0.8, Color = Color3.fromRGB(255, 150, 200) }, ring)
 end

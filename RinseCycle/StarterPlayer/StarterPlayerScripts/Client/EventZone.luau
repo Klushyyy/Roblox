@@ -182,9 +182,14 @@ function EventZone.Init()
 		while true do
 			local event = Config.NextEvent()
 			local when = EventZone.WhenText(event)
+			for _, label in CollectionService:GetTagged("NextEventName") do
+				if label:IsA("TextLabel") then
+					label.Text = if event then event.Name else ""
+				end
+			end
 			for _, label in CollectionService:GetTagged("NextEventCountdown") do
 				if label:IsA("TextLabel") then
-					label.Text = if event then event.Name .. "  •  " .. when else when
+					label.Text = when
 				end
 			end
 			local character = LocalPlayer.Character
