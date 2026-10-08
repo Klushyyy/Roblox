@@ -1710,8 +1710,17 @@ local function buildEventZone(parent: Instance)
 	}, parent)
 	CollectionService:AddTag(zone, "NextEventZone")
 	-- Two posts and a banner across the back.
-	for _, dx in { -6.5, 6.5 } do
-		mkPart("Part", { Name = "EventPost", Shape = Enum.PartType.Cylinder, Size = Vector3.new(11, 0.8, 0.8), CFrame = upright(x + dx, FLOOR_Y + 5.5, z - 6.5), Color = Color3.fromRGB(240, 240, 250), Material = Enum.Material.Metal }, parent)
+	-- (the posts stand just outside the banner's edges, with a round foot, a ball on top and two clamps that
+	-- hold the banner: they used to run through the banner itself, which looked like a glitched flat strip)
+	for _, side in { -1, 1 } do
+		local px = x + side * 7.8
+		local pz = z - 6.5
+		mkPart("Part", { Name = "EventPost", Shape = Enum.PartType.Cylinder, Size = Vector3.new(13, 1, 1), CFrame = upright(px, FLOOR_Y + 6.5, pz), Color = Color3.fromRGB(240, 240, 250), Material = Enum.Material.Metal }, parent)
+		mkPart("Part", { Name = "EventPostFoot", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.5, 2.6, 2.6), CFrame = upright(px, FLOOR_Y + 0.25, pz), Color = Color3.fromRGB(150, 150, 170), Material = Enum.Material.Metal }, parent)
+		mkPart("Part", { Name = "EventPostCap", Shape = Enum.PartType.Ball, Size = Vector3.new(1.7, 1.7, 1.7), CFrame = at(px, FLOOR_Y + 13.2, pz), Color = Color3.fromRGB(255, 200, 230), Material = Enum.Material.SmoothPlastic }, parent)
+		for _, cy in { 7.4, 11 } do
+			mkPart("Part", decor({ Name = "EventClamp", Size = Vector3.new(1.1, 0.8, 0.8), CFrame = at(x + side * 7.35, FLOOR_Y + cy, pz), Color = Color3.fromRGB(110, 110, 130), Material = Enum.Material.Metal }), parent)
+		end
 	end
 	-- (the sign: three short lines, each scaled to fit with a margin, so nothing is cut off at the edges)
 	local banner = mkPart("Part", { Name = "EventBanner", Size = Vector3.new(14, 5, 0.4), CFrame = at(x, FLOOR_Y + 9.2, z - 6.5), Color = Color3.fromRGB(70, 40, 120), Material = LOW }, parent)

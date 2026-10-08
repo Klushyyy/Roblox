@@ -4869,6 +4869,9 @@ do
 	end)
 
 	local function bannerAll(text)
+		if ReplicatedStorage:GetAttribute("AbuseLive") == true then
+			return -- (no announcement banners during the Admin Abuse show: the speech box and the pill say it all)
+		end
 		for _, plr in ipairs(Players:GetPlayers()) do
 			Remote.AdminAnnouncement:FireClient(plr, string.sub(text, 1, 200))
 		end
@@ -5364,7 +5367,6 @@ do
 	local function applyOutcome(option: any)
 		if option.Kind == "Bubbles" or option.Kind == "Gems" then
 			publish({ Kind = "GiveAll", Currency = option.Kind, Amount = option.PerPlayer })
-			publish({ Kind = "Banner", Text = string.format("Admin Abuse: the vote picked it, so everyone gets %s %s!", Format.Commas(option.PerPlayer), option.Kind) })
 		elseif option.Kind == "Passes" then
 			Commands.globalpassdrop(STUB, tostring(option.Count) .. " random")
 		elseif option.Kind == "Pet" then
@@ -7985,13 +7987,6 @@ do
 			end
 			local t = Config.Now() - e.Starts -- negative before the start
 			local tag = tostring(e.Starts)
-			-- Countdown warnings (only if we're still within a minute of them: late servers stay quiet).
-			for _, w in ipairs(Show.Warnings) do
-				if t >= -w and t < -w + 60 and once("warn" .. w .. tag) then
-					local mins = math.floor(w / 60)
-					bannerAll(string.format("Admin Abuse starts in %d minute%s! You can't start a round right now. Stay tuned for free game passes, Bubbles and surprises!", mins, if mins == 1 then "" else "s"))
-				end
-			end
 			if t >= 0 and t < Show.ShowSeconds then
 				local wasHeat = heat
 				heat = t >= Show.HeatAt
@@ -8018,9 +8013,6 @@ do
 					if giantRescale then
 						giantRescale(if heat then Show.HeatScale else Show.GiantScale, 3)
 					end
-				end
-				if once("start" .. tag) then
-					bannerAll("ADMIN ABUSE IS LIVE!")
 				end
 				-- Anyone still in a run goes back to the lobby.
 				for _, plr in ipairs(Players:GetPlayers()) do
@@ -8069,7 +8061,6 @@ do
 						elseif kind == "obby" then
 							if step[3] then
 								LobbyBuilder.OpenObby()
-								bannerAll("THE OBBY IS OPEN! It's behind the spawn. Everyone who finishes wins Gems, and the first to finish wins a game pass!")
 								task.delay(10, function()
 									setObby(true)
 								end)
@@ -8097,9 +8088,6 @@ do
 					if wasLocal and realStarts then
 						-- a local test is over: this server goes back to the real event time
 						handlers.AbuseSchedule({ Starts = realStarts, Ends = realEnds })
-					end
-					if t < Show.ShowSeconds + 120 then
-						bannerAll("ADMIN ABUSE IS OVER! You can start rounds again. Stay tuned for Chapter 4!")
 					end
 				end
 			end
@@ -8144,10 +8132,6 @@ do
 		resetShow() -- (this server) put away anything from an earlier try
 		localShow = localOnly and arg ~= "reset"
 		local ok = publish({ Kind = "AbuseSchedule", Starts = starts, Ends = ends })
-		if arg ~= "reset" then
-			local mins = math.ceil((starts - Config.Now()) / 60)
-			publish({ Kind = "Banner", Text = string.format("Admin Abuse starts in %d minute%s! You can't start a round right now. Stay tuned for free game passes, Bubbles and surprises!", mins, if mins == 1 then "" else "s") })
-		end
 		sendFeedback(admin, if arg == "reset" then "Admin Abuse is back on its real time." else string.format("Admin Abuse show starts in %s%s. Rounds are paused from now.", Format.Time and Format.Time(starts - Config.Now()) or tostring(math.floor((starts - Config.Now()) / 60)) .. " min", if localOnly then " (this server only: a local test)" elseif ok then " (every server)" else " (this server only)"), false)
 		logCommand(admin, if localOnly then "abuselocal" else "abuseshow", nil, arg, admin.Name .. " set the Admin Abuse show: " .. tostring(arg))
 	end

@@ -316,10 +316,13 @@ chipRow.Parent = statusRoot
 local chipLayout = listLayout(chipRow, 10, true)
 chipLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 local function placeChips()
-	chipRow.Position = UDim2.new(0.5, 0, 0, UIKit.TopInset() + 70)
+	-- (during the Admin Abuse show the speech box sits at the very top middle, so the chips go under it)
+	local live = ReplicatedStorage:GetAttribute("AbuseLive") == true
+	chipRow.Position = UDim2.new(0.5, 0, 0, UIKit.TopInset() + (if live then (if UIKit.CanvasSize().X < 900 then 150 else 114) else 70))
 end
 placeChips()
 UIKit.LayoutChanged:Connect(placeChips)
+ReplicatedStorage:GetAttributeChangedSignal("AbuseLive"):Connect(placeChips)
 
 local function makeChip(name: string, color: Color3, order: number): (TextButton, TextLabel)
 	local chip = Instance.new("TextButton")
@@ -728,7 +731,14 @@ do
 	local box = Instance.new("Frame")
 	box.Name = "Box"
 	box.AnchorPoint = Vector2.new(0.5, 0)
-	box.Position = UDim2.new(0.5, 0, 0.26, 0) -- under the announcement banner, clear of the poll card at the bottom
+	local function placeBox()
+		-- top middle: clear of the pill (top right), the chips (under it) and the poll card (bottom); on a narrow
+		-- screen the box would run under the pill, so it goes just below it
+		local narrow = UIKit.CanvasSize().X < 900
+		box.Position = UDim2.new(0.5, 0, 0, UIKit.TopInset() + (if narrow then 44 else 8))
+	end
+	placeBox()
+	UIKit.LayoutChanged:Connect(placeBox)
 	box.Size = UDim2.fromOffset(560, 92)
 	box.BackgroundColor3 = Colors.PanelDark
 	box.Visible = false

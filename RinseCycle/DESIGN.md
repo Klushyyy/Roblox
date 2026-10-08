@@ -1812,3 +1812,10 @@ While he charges the dishwasher ball both arms go straight out in front, turned 
 
 ### 6zzn. Next Event sign fits (v2.12.25)
 The banner over the Next Event ring is bigger (14 x 5 studs, canvas 700 x 250) with three separate lines, each inset 6% from the edges and scaled to fit on one line: "NEXT EVENT", the event name (tag `NextEventName`), and the countdown (tag `NextEventCountdown`). EventZone fills the two tags. Before, "Admin Abuse  •  Starts in 3d 04h" was one long line that wrapped and ran into the edges.
+
+### 6zzo. Next Event sign posts (v2.12.26)
+The two posts of the Next Event banner stand just outside the banner's edges (x +/- 7.8, 1 stud thick, 13 tall) with a round foot, a ball on top and two clamps each holding the banner. Before, they were at x +/- 6.5, inside the banner's width, so they ran through it.
+
+### 6zzp. Speech box at the top, no announcement banners in the show (v2.12.27)
+- The giant's speech box (`AbuseTalk`) sits at the top middle (TopInset + 8; just under the pill on screens narrower than 900 canvas px); the status chips move under it while `AbuseLive`.
+- `bannerAll` does nothing while `AbuseLive` is true, and the show's own banners (starts in N minutes, is live, obby open, is over) are gone: the top-right pill counts down and the speech box talks. Staff `:announce` banners still work.

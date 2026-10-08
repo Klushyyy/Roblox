@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.25"
+Config.Version = "2.12.27"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -8536,6 +8536,9 @@ do
 	end)
 
 	local function bannerAll(text)
+		if ReplicatedStorage:GetAttribute("AbuseLive") == true then
+			return -- (no announcement banners during the Admin Abuse show: the speech box and the pill say it all)
+		end
 		for _, plr in ipairs(Players:GetPlayers()) do
 			Remote.AdminAnnouncement:FireClient(plr, string.sub(text, 1, 200))
 		end
@@ -9031,7 +9034,6 @@ do
 	local function applyOutcome(option: any)
 		if option.Kind == "Bubbles" or option.Kind == "Gems" then
 			publish({ Kind = "GiveAll", Currency = option.Kind, Amount = option.PerPlayer })
-			publish({ Kind = "Banner", Text = string.format("Admin Abuse: the vote picked it, so everyone gets %s %s!", Format.Commas(option.PerPlayer), option.Kind) })
 		elseif option.Kind == "Passes" then
 			Commands.globalpassdrop(STUB, tostring(option.Count) .. " random")
 		elseif option.Kind == "Pet" then
@@ -11652,13 +11654,6 @@ do
 			end
 			local t = Config.Now() - e.Starts -- negative before the start
 			local tag = tostring(e.Starts)
-			-- Countdown warnings (only if we're still within a minute of them: late servers stay quiet).
-			for _, w in ipairs(Show.Warnings) do
-				if t &gt;= -w and t &lt; -w + 60 and once("warn" .. w .. tag) then
-					local mins = math.floor(w / 60)
-					bannerAll(string.format("Admin Abuse starts in %d minute%s! You can't start a round right now. Stay tuned for free game passes, Bubbles and surprises!", mins, if mins == 1 then "" else "s"))
-				end
-			end
 			if t &gt;= 0 and t &lt; Show.ShowSeconds then
 				local wasHeat = heat
 				heat = t &gt;= Show.HeatAt
@@ -11685,9 +11680,6 @@ do
 					if giantRescale then
 						giantRescale(if heat then Show.HeatScale else Show.GiantScale, 3)
 					end
-				end
-				if once("start" .. tag) then
-					bannerAll("ADMIN ABUSE IS LIVE!")
 				end
 				-- Anyone still in a run goes back to the lobby.
 				for _, plr in ipairs(Players:GetPlayers()) do
@@ -11736,7 +11728,6 @@ do
 						elseif kind == "obby" then
 							if step[3] then
 								LobbyBuilder.OpenObby()
-								bannerAll("THE OBBY IS OPEN! It's behind the spawn. Everyone who finishes wins Gems, and the first to finish wins a game pass!")
 								task.delay(10, function()
 									setObby(true)
 								end)
@@ -11764,9 +11755,6 @@ do
 					if wasLocal and realStarts then
 						-- a local test is over: this server goes back to the real event time
 						handlers.AbuseSchedule({ Starts = realStarts, Ends = realEnds })
-					end
-					if t &lt; Show.ShowSeconds + 120 then
-						bannerAll("ADMIN ABUSE IS OVER! You can start rounds again. Stay tuned for Chapter 4!")
 					end
 				end
 			end
@@ -11811,10 +11799,6 @@ do
 		resetShow() -- (this server) put away anything from an earlier try
 		localShow = localOnly and arg ~= "reset"
 		local ok = publish({ Kind = "AbuseSchedule", Starts = starts, Ends = ends })
-		if arg ~= "reset" then
-			local mins = math.ceil((starts - Config.Now()) / 60)
-			publish({ Kind = "Banner", Text = string.format("Admin Abuse starts in %d minute%s! You can't start a round right now. Stay tuned for free game passes, Bubbles and surprises!", mins, if mins == 1 then "" else "s") })
-		end
 		sendFeedback(admin, if arg == "reset" then "Admin Abuse is back on its real time." else string.format("Admin Abuse show starts in %s%s. Rounds are paused from now.", Format.Time and Format.Time(starts - Config.Now()) or tostring(math.floor((starts - Config.Now()) / 60)) .. " min", if localOnly then " (this server only: a local test)" elseif ok then " (every server)" else " (this server only)"), false)
 		logCommand(admin, if localOnly then "abuselocal" else "abuseshow", nil, arg, admin.Name .. " set the Admin Abuse show: " .. tostring(arg))
 	end
@@ -22241,8 +22225,17 @@ local function buildEventZone(parent: Instance)
 	}, parent)
 	CollectionService:AddTag(zone, "NextEventZone")
 	-- Two posts and a banner across the back.
-	for _, dx in { -6.5, 6.5 } do
-		mkPart("Part", { Name = "EventPost", Shape = Enum.PartType.Cylinder, Size = Vector3.new(11, 0.8, 0.8), CFrame = upright(x + dx, FLOOR_Y + 5.5, z - 6.5), Color = Color3.fromRGB(240, 240, 250), Material = Enum.Material.Metal }, parent)
+	-- (the posts stand just outside the banner's edges, with a round foot, a ball on top and two clamps that
+	-- hold the banner: they used to run through the banner itself, which looked like a glitched flat strip)
+	for _, side in { -1, 1 } do
+		local px = x + side * 7.8
+		local pz = z - 6.5
+		mkPart("Part", { Name = "EventPost", Shape = Enum.PartType.Cylinder, Size = Vector3.new(13, 1, 1), CFrame = upright(px, FLOOR_Y + 6.5, pz), Color = Color3.fromRGB(240, 240, 250), Material = Enum.Material.Metal }, parent)
+		mkPart("Part", { Name = "EventPostFoot", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.5, 2.6, 2.6), CFrame = upright(px, FLOOR_Y + 0.25, pz), Color = Color3.fromRGB(150, 150, 170), Material = Enum.Material.Metal }, parent)
+		mkPart("Part", { Name = "EventPostCap", Shape = Enum.PartType.Ball, Size = Vector3.new(1.7, 1.7, 1.7), CFrame = at(px, FLOOR_Y + 13.2, pz), Color = Color3.fromRGB(255, 200, 230), Material = Enum.Material.SmoothPlastic }, parent)
+		for _, cy in { 7.4, 11 } do
+			mkPart("Part", decor({ Name = "EventClamp", Size = Vector3.new(1.1, 0.8, 0.8), CFrame = at(x + side * 7.35, FLOOR_Y + cy, pz), Color = Color3.fromRGB(110, 110, 130), Material = Enum.Material.Metal }), parent)
+		end
 	end
 	-- (the sign: three short lines, each scaled to fit with a margin, so nothing is cut off at the edges)
 	local banner = mkPart("Part", { Name = "EventBanner", Size = Vector3.new(14, 5, 0.4), CFrame = at(x, FLOOR_Y + 9.2, z - 6.5), Color = Color3.fromRGB(70, 40, 120), Material = LOW }, parent)
@@ -52028,10 +52021,13 @@ chipRow.Parent = statusRoot
 local chipLayout = listLayout(chipRow, 10, true)
 chipLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 local function placeChips()
-	chipRow.Position = UDim2.new(0.5, 0, 0, UIKit.TopInset() + 70)
+	-- (during the Admin Abuse show the speech box sits at the very top middle, so the chips go under it)
+	local live = ReplicatedStorage:GetAttribute("AbuseLive") == true
+	chipRow.Position = UDim2.new(0.5, 0, 0, UIKit.TopInset() + (if live then (if UIKit.CanvasSize().X &lt; 900 then 150 else 114) else 70))
 end
 placeChips()
 UIKit.LayoutChanged:Connect(placeChips)
+ReplicatedStorage:GetAttributeChangedSignal("AbuseLive"):Connect(placeChips)
 
 local function makeChip(name: string, color: Color3, order: number): (TextButton, TextLabel)
 	local chip = Instance.new("TextButton")
@@ -52440,7 +52436,14 @@ do
 	local box = Instance.new("Frame")
 	box.Name = "Box"
 	box.AnchorPoint = Vector2.new(0.5, 0)
-	box.Position = UDim2.new(0.5, 0, 0.26, 0) -- under the announcement banner, clear of the poll card at the bottom
+	local function placeBox()
+		-- top middle: clear of the pill (top right), the chips (under it) and the poll card (bottom); on a narrow
+		-- screen the box would run under the pill, so it goes just below it
+		local narrow = UIKit.CanvasSize().X &lt; 900
+		box.Position = UDim2.new(0.5, 0, 0, UIKit.TopInset() + (if narrow then 44 else 8))
+	end
+	placeBox()
+	UIKit.LayoutChanged:Connect(placeBox)
 	box.Size = UDim2.fromOffset(560, 92)
 	box.BackgroundColor3 = Colors.PanelDark
 	box.Visible = false
