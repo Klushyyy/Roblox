@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.13.2"
+Config.Version = "2.14.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1320,8 +1320,8 @@ do
 	at(467, "attack", "petchase")
 	at(486, "attack", "ufo")
 	at(506, "attack", "laser")
-	at(536, "say", "that spot looks empty. i am redecorating.")
-	at(538, "attack", "nuke")
+	at(543, "say", "that spot looks empty. i am redecorating.")
+	at(545, "attack", "nuke") -- (it lands about 15 s before it goes off at NukeAt)
 	at(548, "attack", "tornado")
 	at(561, "say", "one more thing is about to go off. stand back.")
 	at(572, "attack", "fireworks")
@@ -3445,6 +3445,7 @@ export type MetaState = {
 	LikeState: string, -- "" / "Pending" (paid when you rejoin) / "Claimed"
 	BoostUntil: number?, -- os.time() until which cleaning is x2 (the stay boost)
 	StayBoostReady: boolean?, -- today's free stay boost can still be claimed
+	TutorialDone: boolean?, -- the first-run tutorial is over (finished or skipped)
 	PetsResting: boolean?, -- pets switched off: they follow you but don't clean
 	PetIndex: { [string]: number }?, -- every pet species/tier ever owned (bits 1/2/4)
 	PetIndexPaid: { [string]: boolean }?, -- tier sets whose Gems were paid
@@ -4364,6 +4365,9 @@ Remote.AbuseOfferReply.Parent = ReplicatedStorage
 Remote.AbusePerk = Instance.new("RemoteEvent") -- S-&gt;C (kind: "giant" or nil, on): the giant power-up's on/off button
 Remote.AbusePerk.Name = "AbusePerk"
 Remote.AbusePerk.Parent = ReplicatedStorage
+Remote.AbuseGrab = Instance.new("RemoteEvent") -- S-&gt;C (on): the player is caught by a black hole / tornado / UFO: flying stops
+Remote.AbuseGrab.Name = "AbuseGrab"
+Remote.AbuseGrab.Parent = ReplicatedStorage
 Remote.AbusePerkToggle = Instance.new("RemoteEvent") -- C-&gt;S: turn the giant power-up off / on
 Remote.AbusePerkToggle.Name = "AbusePerkToggle"
 Remote.AbusePerkToggle.Parent = ReplicatedStorage
@@ -9224,9 +9228,11 @@ do
 		local ch = plr.Character
 		local root = ch and ch:FindFirstChild("HumanoidRootPart") :: BasePart?
 		local hum = ch and ch:FindFirstChildOfClass("Humanoid")
-		if not root or not hum or hum.Health &lt;= 0 or flyingUserIds[plr.UserId] or plr:GetAttribute("AdminInvis") == true then
+		if not root or not hum or hum.Health &lt;= 0 or plr:GetAttribute("AdminInvis") == true then
 			return nil
 		end
+		-- someone who is flying is caught too: their flight is switched off (they can press F again afterwards)
+		Remote.AbuseGrab:FireClient(plr, true)
 		local att = Instance.new("Attachment")
 		att.Parent = root
 		local mover = Instance.new("LinearVelocity")
@@ -9240,6 +9246,7 @@ do
 	end
 	local function releasePlayer(g: any, velocity: Vector3?)
 		pcall(function()
+			Remote.AbuseGrab:FireClient(g.Plr, false)
 			g.Mover:Destroy()
 			g.Att:Destroy()
 			if velocity and g.Root.Parent then
@@ -9250,6 +9257,22 @@ do
 				g.Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 			end
 		end)
+	end
+	-- Where the nearest living player is (flat), from a point: the tornado and the UFO drift after somebody.
+	local function nearestPlayerXZ(x: number, z: number): (number, number)
+		local bestD, bx, bz = math.huge, x, z
+		for _, plr in Players:GetPlayers() do
+			local ch = plr.Character
+			local root = ch and ch:FindFirstChild("HumanoidRootPart") :: BasePart?
+			local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+			if root and hum and hum.Health &gt; 0 and root.Position.Y &gt; ROOM_FLOOR + 20 and root.Position.Y &lt; 160 and plr:GetAttribute("AdminInvis") ~= true then
+				local d = (root.Position.X - x) ^ 2 + (root.Position.Z - z) ^ 2
+				if d &lt; bestD then
+					bestD, bx, bz = d, root.Position.X, root.Position.Z
+				end
+			end
+		end
+		return bx, bz
 	end
 	-- A shove for everyone near a blast: up and away (harmless: the rescue puts anyone who ends up off the table back).
 	local function shoveNear(pos: Vector3, radius: number, up: number, out: number)
@@ -9403,9 +9426,9 @@ do
 		fx.meteors = function()
 			-- A real meteor shower: lots of big rocks with fire tails. Every impact blasts away whoever is near it
 			-- (a wide radius, hard), every third one leaves a small dent in the table, every fourth a patch of fire.
-			local n = if heat then 28 else 18
+			local n = if heat then 44 else 30
 			for i = 1, n do
-				task.delay(i * 0.2, function()
+				task.delay(i * 0.14, function()
 					local target = plazaSpot()
 					local rock = neonPart(Vector3.new(22, 22, 22), Color3.fromRGB(255, 140, 50), Enum.PartType.Ball)
 					rock.Position = target + Vector3.new(math.random(-180, 180), 300, math.random(-180, 180))
@@ -9425,7 +9448,7 @@ do
 						harmlessBlast(target, 20)
 						boom(2.2, target)
 						shoveNear(target, 46, 85, 120)
-						if i % 3 == 0 and not LobbyBuilder.IsHoleAt(target.X, target.Z, 10) then
+						if i % 4 == 0 and not LobbyBuilder.IsHoleAt(target.X, target.Z, 10) then
 							dentCount += 1
 							LobbyBuilder.OpenCrater(dentCount, target.X, target.Z, 5.5) -- (small: the storm should not eat the table)
 						end
@@ -9757,13 +9780,23 @@ do
 				local caught: { [Player]: boolean } = {}
 				local last = os.clock()
 				local lastBoom = 0
+				-- it wanders across the table but keeps swinging toward the nearest player, so it really finds people
+				local cx, cz = math.random(-60, 60), math.random(-80, 20)
 				while os.clock() - t0 &lt; length do
 					local now = os.clock()
 					local dt = now - last
 					last = now
 					local t = now - t0
-					local cx = math.sin(t * 0.7) * 75
-					local cz = -20 + math.cos(t * 0.5) * 55
+					local nx, nz = nearestPlayerXZ(cx, cz)
+					local toX, toZ = nx - cx, nz - cz
+					local dist = math.sqrt(toX * toX + toZ * toZ)
+					if dist &gt; 1 then
+						local step = math.min(dist, 38 * dt)
+						cx += toX / dist * step
+						cz += toZ / dist * step
+					end
+					cx = math.clamp(cx, -92, 92)
+					cz = math.clamp(cz, -96, 60)
 					foot.CFrame = CFrame.new(cx, 3, cz)
 					for i, disc in discs do
 						local wob = math.sin(t * 3 + i) * 2.5 * (i / N)
@@ -9780,7 +9813,7 @@ do
 						for _, plr in Players:GetPlayers() do
 							local ch = plr.Character
 							local root = ch and ch:FindFirstChild("HumanoidRootPart") :: BasePart?
-							if root and not caught[plr] and root.Position.Y &gt; ROOM_FLOOR + 20 and root.Position.Y &lt; 60 and Vector3.new(root.Position.X - cx, 0, root.Position.Z - cz).Magnitude &lt; 42 then
+							if root and not caught[plr] and root.Position.Y &gt; ROOM_FLOOR + 20 and root.Position.Y &lt; 160 and Vector3.new(root.Position.X - cx, 0, root.Position.Z - cz).Magnitude &lt; 48 then
 								local g = catchPlayer(plr)
 								if g then
 									caught[plr] = true
@@ -9829,32 +9862,140 @@ do
 			end)
 		end
 		fx.ufo = function()
+			-- The ship flies over somebody (it picks a player on the table, then keeps drifting after whoever is
+			-- nearest) and its beam pulls everyone under it up, slowly at first. Whoever is pulled all the way up
+			-- is held in the ship for a moment, then is gone (they respawn). Anyone it did not finish with is let go.
 			local ship = Instance.new("Model")
 			local body = neonPart(Vector3.new(6, 46, 46), Color3.fromRGB(170, 180, 200), Enum.PartType.Cylinder)
 			body.Material = Enum.Material.Metal
 			upright(body, Vector3.new(0, 0, 0))
 			local dome = neonPart(Vector3.new(22, 22, 22), Color3.fromRGB(120, 255, 200), Enum.PartType.Ball)
 			dome.Transparency = 0.3
-			local beamPart = neonPart(Vector3.new(120, 26, 26), Color3.fromRGB(150, 255, 190), Enum.PartType.Cylinder)
+			local SHIP_Y, BEAM_R = 130, 20
+			local beamPart = neonPart(Vector3.new(SHIP_Y + 10, BEAM_R * 2, BEAM_R * 2), Color3.fromRGB(150, 255, 190), Enum.PartType.Cylinder)
 			beamPart.Transparency = 0.6
 			body.Parent, dome.Parent, beamPart.Parent = ship, ship, ship
 			ship.Parent = workspace
-			local start = Vector3.new(-170, 130, math.random(-60, 10))
-			local finish = Vector3.new(170, 130, math.random(-60, 10))
+			local function nearestTo(x: number, z: number): (number, number)
+				local bestD, bx, bz = math.huge, x, z
+				for _, plr in Players:GetPlayers() do
+					local ch = plr.Character
+					local root = ch and ch:FindFirstChild("HumanoidRootPart") :: BasePart?
+					local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+					if root and hum and hum.Health &gt; 0 and root.Position.Y &gt; ROOM_FLOOR + 20 and root.Position.Y &lt; 80 then
+						local d = (root.Position.X - x) ^ 2 + (root.Position.Z - z) ^ 2
+						if d &lt; bestD then
+							bestD, bx, bz = d, root.Position.X, root.Position.Z
+						end
+					end
+				end
+				return bx, bz
+			end
+			local startSpot = plazaSpot()
+			local tx, tz = nearestTo(startSpot.X, startSpot.Z)
+			local start = Vector3.new(-200, SHIP_Y, tz + math.random(-30, 30))
+			local finish = Vector3.new(200, SHIP_Y, tz + math.random(-30, 30))
 			task.spawn(function()
+				local APPROACH, HOVER, LEAVE = 2.6, 7.5, 3
 				local t0 = os.clock()
-				local length = 7
-				while os.clock() - t0 &lt; length do
-					local f = (os.clock() - t0) / length
-					local p = start:Lerp(finish, f) + Vector3.new(0, math.sin(f * 14) * 4, 0)
-					upright(body, p)
-					dome.Position = p + Vector3.new(0, 8, 0)
-					beamPart.CFrame = CFrame.new(p - Vector3.new(0, 60, 0)) * CFrame.Angles(0, 0, math.pi / 2)
-					beamPart.Transparency = 0.55 + math.sin(os.clock() * 12) * 0.12
-					if math.floor(f * 12) ~= math.floor((f - 0.012) * 12) then
-						boom(0.8, Vector3.new(p.X, 0.2, p.Z))
+				local last = t0
+				local grabs: { any } = {}
+				local caught: { [Player]: boolean } = {}
+				local shipPos = start
+				local lastBoom = 0
+				while true do
+					local now = os.clock()
+					local t = now - t0
+					local dt = now - last
+					last = now
+					if t &gt;= APPROACH + HOVER + LEAVE then
+						break
+					end
+					local beamOn = false
+					if t &lt; APPROACH then
+						local f = t / APPROACH
+						f = f * f * (3 - 2 * f)
+						shipPos = start:Lerp(Vector3.new(tx, SHIP_Y, tz), f)
+					elseif t &lt; APPROACH + HOVER then
+						-- drifts after the nearest player, so it really stays over somebody
+						local nx, nz = nearestTo(shipPos.X, shipPos.Z)
+						local toX, toZ = nx - shipPos.X, nz - shipPos.Z
+						local dist = math.sqrt(toX * toX + toZ * toZ)
+						if dist &gt; 1 then
+							local step = math.min(dist, 34 * dt)
+							shipPos = Vector3.new(shipPos.X + toX / dist * step, SHIP_Y, shipPos.Z + toZ / dist * step)
+						end
+						beamOn = true
+					else
+						local toFinish = finish - shipPos
+						if toFinish.Magnitude &gt; 1 then
+							shipPos += toFinish.Unit * math.min(toFinish.Magnitude, 110 * dt)
+						end
+					end
+					shipPos = Vector3.new(shipPos.X, SHIP_Y + math.sin(t * 2.2) * 3, shipPos.Z)
+					upright(body, shipPos)
+					dome.Position = shipPos + Vector3.new(0, 8, 0)
+					beamPart.CFrame = CFrame.new(shipPos - Vector3.new(0, (SHIP_Y + 10) / 2, 0)) * CFrame.Angles(0, 0, math.pi / 2)
+					beamPart.Transparency = if beamOn then 0.5 + math.sin(now * 12) * 0.12 else 1
+					-- the beam: catch whoever is under it, then pull everyone up (slow at first, then faster)
+					if beamOn then
+						for _, plr in Players:GetPlayers() do
+							local ch = plr.Character
+							local root = ch and ch:FindFirstChild("HumanoidRootPart") :: BasePart?
+							if root and not caught[plr] and root.Position.Y &gt; ROOM_FLOOR + 20 and Vector3.new(root.Position.X - shipPos.X, 0, root.Position.Z - shipPos.Z).Magnitude &lt; BEAM_R then
+								local g = catchPlayer(plr)
+								if g then
+									caught[plr] = true
+									g.T0 = t
+									g.Held = nil
+									table.insert(grabs, g)
+								end
+							end
+						end
+					end
+					for _, g in grabs do
+						if g.Done then
+							continue
+						end
+						if not g.Root.Parent or g.Hum.Health &lt;= 0 then
+							g.Done = true
+							releasePlayer(g, nil)
+							continue
+						end
+						local heldFor = if g.Held then now - g.Held else 0
+						local rise = math.min(1, (t - g.T0) / 5)
+						local up = 10 + 34 * rise * rise
+						local toCentre = Vector3.new(shipPos.X - g.Root.Position.X, 0, shipPos.Z - g.Root.Position.Z)
+						local v = toCentre * 2.5 + Vector3.new(0, up, 0)
+						if g.Root.Position.Y &gt;= shipPos.Y - 16 then
+							-- all the way up: held inside the ship for a moment ...
+							g.Held = g.Held or now
+							v = (shipPos - Vector3.new(0, 8, 0) - g.Root.Position) * 4
+							if heldFor &gt; 1.3 then
+								-- ... then gone
+								g.Done = true
+								harmlessBlast(shipPos, 18)
+								Remote.AbuseBoom:FireAllClients(1.2, shipPos)
+								releasePlayer(g, nil)
+								pcall(function()
+									g.Hum.Health = 0
+								end)
+								continue
+							end
+						end
+						g.Mover.VectorVelocity = if v.Magnitude &gt; 70 then v.Unit * 70 else v
+					end
+					if t - lastBoom &gt; 0.9 then
+						lastBoom = t
+						boom(0.8, Vector3.new(shipPos.X, 0.2, shipPos.Z))
 					end
 					RunService.Heartbeat:Wait()
+				end
+				-- anyone not carried all the way up is let go
+				for _, g in grabs do
+					if not g.Done then
+						releasePlayer(g, Vector3.zero)
+					end
 				end
 				ship:Destroy()
 			end)
@@ -11110,6 +11251,7 @@ do
 		local flyHeight, flySpeed = 0, 60
 		local rollAngle = 0 -- the somersault he does while he leaps
 		local leapHeight = 0 -- how far he is above the floor while jumping over the obby
+		local airborne = false -- the walk cycle is held while he is in the air
 		local function face(dir: Vector3, dt: number)
 			local flat = Vector3.new(dir.X, 0, dir.Z)
 			if flat.Magnitude &gt; 1e-3 then
@@ -11483,7 +11625,7 @@ do
 					-- (never higher than the ceiling allows: his head, which swings round during the flips, stays under it)
 					local ceilingRoom = ROOF_Y - 25 - 3.7 * scaleNow - rootY
 					leapHeight = math.max(0, math.min(215, ceilingRoom)) * math.min(smooth((deg - 8) / 14), smooth((120 - deg) / 14))
-					rollAngle = -math.pi * 4 * smooth((deg - 24) / 74) -- two forward flips over the obby
+					rollAngle = -math.pi * 4 * smooth((deg - 24) / 94) -- two forward flips over the obby, finished just as he lands (no walking steps tacked on)
 				else
 					leapHeight = 0
 					rollAngle = 0
@@ -11495,6 +11637,16 @@ do
 				end
 				if wasLeap &gt; 30 and leapHeight &lt;= 30 and deg &gt; 100 then
 					boom(3, Vector3.new(pos.X, ROOM_FLOOR, pos.Z)) -- lands
+				end
+				-- the legs do not walk in the air: the stride is held while he is off the ground and goes on at the landing
+				if leapHeight &gt; 3 then
+					if walkTrack and not airborne then
+						airborne = true
+						walkTrack:AdjustSpeed(0)
+					end
+				elseif airborne then
+					airborne = false
+					setWalking(true)
 				end
 			elseif state == "act" then
 				face(TABLE_CENTER - pos, dt)
@@ -12295,7 +12447,8 @@ local TOP_RACK_Z = { -40, 60 }
 
 -- Bottom rack: three rows of plates facing the door, spaced so a character fits between them.
 local PLATE_ROW_X = { -34, 0, 34 }
-local PLATE_Z = { -28, -21, -14, -7, 0, 7, 14, 21, 28 }
+-- (8 studs between plates, was 7: a little more room to scrub each one, especially on a phone)
+local PLATE_Z = { -32, -24, -16, -8, 0, 8, 16, 24, 32 }
 local PAN_SLOTS = { { x = -43, z = 47 }, { x = 43, z = 47 } }
 local POT_SLOTS = { { x = -22, z = 47 }, { x = 22, z = 47 } }
 local BASKET_CENTER = Vector3.new(0, 0, 47)
@@ -16529,6 +16682,7 @@ export type Profile = {
 	RebirthReady: boolean, -- the last level has been cleared since the last rebirth
 	BoostUntil: number, -- os.time() until which cleaning is x2 (the "stay" boost); 0 = none
 	StayBoostDay: string, -- UTC date ("2026-10-03") the stay boost was last claimed: once a day
+	TutorialDone: boolean, -- the first-run tutorial has been finished or skipped (anyone with a run behind them counts as done)
 	PetIndex: { [string]: number }, -- every pet id ever owned -&gt; bits (1 normal, 2 Golden, 4 Rainbow)
 	PetIndexPaid: { [string]: boolean }, -- collection sets already paid ("1".."3")
 	PetsResting: boolean, -- the player switched their pets off: they follow but don't clean
@@ -16613,6 +16767,7 @@ local TEMPLATE: Profile = {
 	LikePending = false,
 	BoostUntil = 0,
 	StayBoostDay = "",
+	TutorialDone = false,
 	PetIndex = {},
 	PetIndexPaid = {},
 	PetsResting = false,
@@ -16990,6 +17145,8 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	for key in TEMPLATE.Stats :: any do
 		p.Stats[key] = toCount(p.Stats[key], 0)
 	end
+	-- (people who already finished a run don't need the first-run tutorial)
+	p.TutorialDone = p.TutorialDone == true or (p.Stats.Runs :: number) &gt; 0
 
 	local receipts = {}
 	if type(p.Receipts) == "table" then
@@ -17115,6 +17272,7 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		LikeState = if profile.LikeReward then "Claimed" elseif profile.LikePending then "Pending" else "",
 		BoostUntil = profile.BoostUntil,
 		StayBoostReady = profile.StayBoostDay ~= os.date("!%Y-%m-%d"),
+		TutorialDone = profile.TutorialDone == true,
 		PetsResting = profile.PetsResting,
 		PetIndex = table.clone(profile.PetIndex),
 		PetIndexPaid = table.clone(profile.PetIndexPaid),
@@ -18007,6 +18165,21 @@ end
 
 -- The pets on / off switch: resting pets follow you but don't clean. Saved, so it carries over
 -- between the lobby and the dishwashers.
+-- The first-run tutorial was finished (or skipped).
+function DataService.SetTutorialDone(player: Player): boolean
+	local profile = DataService.Get(player)
+	if not profile then
+		return false
+	end
+	profile.TutorialDone = true
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + 5)
+	end
+	DataService.PushMeta(player)
+	return true
+end
+
 function DataService.SetPetsResting(player: Player, resting: boolean): boolean
 	local profile = DataService.Get(player)
 	if not profile then
@@ -23126,7 +23299,7 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 		return
 	end
 	local roof = opts.Roof == true
-	local TILE = if roof then 18 elseif R &gt;= 40 then 14 elseif R &gt;= 30 then 11 else TILE -- (big holes: bigger tiles, so a half-table crater is not thousands of parts)
+	local TILE = if roof then 22 elseif R &gt;= 50 then 18 elseif R &gt;= 40 then 14 elseif R &gt;= 30 then 11 else TILE -- (big holes: bigger tiles, so a half-table crater is not thousands of parts)
 	local light = roof or R &gt;= 30 -- big holes: tiles drop by tween (anchored) instead of by physics, far cheaper
 	local cx, cz = ORIGIN.X + holeX, ORIGIN.Z + holeZ
 	local S = R + 10
@@ -23222,20 +23395,26 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 							-- and are taken away once they have fallen out of sight.
 							tile.CanCollide = false
 							tile:SetAttribute("Falling", true)
-							task.delay(rng:NextNumber(0, 0.25) + (d / R) * 0.35, function()
-								if tile.Parent then
-									tile.Anchored = false
-									tile.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-10, 10), rng:NextNumber(-6, 4), rng:NextNumber(-10, 10))
-									tile.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-4, 4), rng:NextNumber(-4, 4), rng:NextNumber(-4, 4))
-									pcall(function()
-										tile:SetNetworkOwner(nil)
-									end)
-									task.delay(2.2, function()
-										tile.Anchored = true
-										tile.Parent = nil
-									end)
-								end
-							end)
+							if rng:NextNumber() &lt; 0.4 then
+								task.delay(rng:NextNumber(0, 0.25) + (d / R) * 0.35, function()
+									if tile.Parent then
+										tile.Anchored = false
+										tile.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-10, 10), rng:NextNumber(-6, 4), rng:NextNumber(-10, 10))
+										tile.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-4, 4), rng:NextNumber(-4, 4), rng:NextNumber(-4, 4))
+										pcall(function()
+											tile:SetNetworkOwner(nil)
+										end)
+										task.delay(2.2, function()
+											tile.Anchored = true
+											tile.Parent = nil
+										end)
+									end
+								end)
+							else
+								-- (most tiles of a big hole are simply taken away: only a few fall as visible debris, which is
+								-- far less for the server and everyone's screen to handle; the repair brings them all back)
+								tile.Parent = nil
+							end
 						else
 							tile.Anchored = false
 							tile.CanCollide = not roof
@@ -23263,6 +23442,9 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 			table.insert(rec.Hidden, p)
 		else
 			p:Destroy() -- (a piece of an earlier hole: replaced by the smaller pieces cut from it)
+		end
+		if light then
+			task.wait() -- (a big hole is cut a layer per frame, not all in one server hitch)
 		end
 	end
 
@@ -29939,7 +30121,16 @@ local function setPetsResting(player: Player, value: any): Types.RequestResult
 	return { Ok = true }
 end
 
+-- The first-run tutorial was finished or skipped (never shown again).
+local function tutorialDone(player: Player, _value: any): Types.RequestResult
+	if not DataService.SetTutorialDone(player) then
+		return fail("Your data is still loading.")
+	end
+	return { Ok = true }
+end
+
 local HANDLERS: { [string]: (Player, any) -&gt; Types.RequestResult } = {
+	TutorialDone = tutorialDone,
 	ClaimDaily = claimDaily,
 	ClaimStayBoost = claimStayBoost,
 	SetPetsResting = setPetsResting,
@@ -31833,8 +32024,14 @@ local function showPrize()
 		return
 	end
 	prizeBusy = true
+	-- "You won!" on top of "You won ..." is said twice: for those the card is just the message, big
+	local plain = string.find(item.Title, "^You won") ~= nil or string.find(item.Title, "^You got") ~= nil
 	prizeTitle.Text = item.Title
+	prizeTitle.Visible = not plain
 	prizeText.Text = item.Text
+	prizeText.Position = if plain then UDim2.fromOffset(90, 12) else UDim2.fromOffset(90, 42)
+	prizeText.Size = if plain then UDim2.new(1, -104, 1, -30) else UDim2.new(1, -104, 0, 44)
+	prizeText.TextYAlignment = if plain then Enum.TextYAlignment.Center else Enum.TextYAlignment.Top
 	for _, c in prizeIconHolder:GetChildren() do
 		c:Destroy()
 	end
@@ -32764,6 +32961,7 @@ local PollUI = require(Client:WaitForChild("PollUI"))
 local ChestUI = require(Client:WaitForChild("ChestUI"))
 local ClubsUI = require(Client:WaitForChild("ClubsUI"))
 local EventZone = require(Client:WaitForChild("EventZone"))
+local Tutorial = require(Client:WaitForChild("Tutorial"))
 
 local function step(name: string, fn: () -&gt; ())
 	local ok, err = xpcall(fn, debug.traceback)
@@ -32806,7 +33004,8 @@ step("BoardView", BoardView.Init)
 step("PollUI", PollUI.Init)
 step("ChestUI", ChestUI.Init)
 step("ClubsUI", ClubsUI.Init)
-step("EventZone", EventZone.Init)</ProtectedString></Properties></Item>
+step("EventZone", EventZone.Init)
+step("Tutorial", Tutorial.Init)</ProtectedString></Properties></Item>
 <Item class="ModuleScript" referent="RBX00000032"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
 -- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
 -- Changed instead of each hooking the remotes themselves.
@@ -32824,8 +33023,11 @@ local ClientState = {}
 ClientState.Meta = nil :: Types.MetaState?
 ClientState.Party = nil :: Types.PartyState?
 ClientState.Run = nil :: Types.RunState?
+-- The first-run tutorial (Tutorial.luau): the step it is on while it is running (nil = not running). The HUD hides most of
+-- itself while it is on, and shows the rest as the steps introduce it.
+ClientState.TutorialStep = nil :: number?
 
--- Fired with "Meta", "Party" or "Run" after that field is replaced.
+-- Fired with "Meta", "Party", "Run" or "Tutorial" after that field is replaced / changes.
 ClientState.Changed = Util.Signal.new()
 -- Fired with (kind: string, data: table) for every RunFX message.
 ClientState.FX = Util.Signal.new()
@@ -35030,6 +35232,7 @@ return DailyUI</ProtectedString></Properties></Item>
 
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
+local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -35189,11 +35392,33 @@ local function onCleaned(data: Types.FXCleaned)
 	end
 end
 
+local dishStreak, lastDishAt = 0, 0
 local function onDishDone(data: Types.FXDishDone)
-	burst(data.Position, UIKit.Theme.Colors.Good, "rbxasset://textures/particles/sparkles_main.dds", 24, 0.8)
-	popBubbles(data.Position, 6, 2)
-	UIKit.PlaySound("Sparkle")
-	billboardNumber(data.Position, "Sparkling!", UIKit.Theme.Colors.Text, FLOATER_RISE + 1)
+	-- A whole dish clean should feel great: a ring of light spreads over it, more sparkles, a chime that climbs
+	-- with every dish in a row ("Sparkling! x3"), and the coins pop out.
+	local now = os.clock()
+	dishStreak = if now - lastDishAt &lt; 8 then math.min(dishStreak + 1, 8) else 1
+	lastDishAt = now
+	burst(data.Position, UIKit.Theme.Colors.Good, "rbxasset://textures/particles/sparkles_main.dds", 34, 0.9)
+	burst(data.Position, Color3.fromRGB(255, 255, 255), "rbxasset://textures/particles/sparkles_main.dds", 14, 0.5)
+	popBubbles(data.Position, 8, 2.4)
+	UIKit.PlaySound("Sparkle", 0.9 + dishStreak * 0.07)
+	local ring = Instance.new("Part")
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Material = Enum.Material.Neon
+	ring.Color = UIKit.Theme.Colors.Good
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.CanQuery = false
+	ring.CanTouch = false
+	ring.CastShadow = false
+	ring.Transparency = 0.2
+	ring.Size = Vector3.new(0.3, 2, 2)
+	ring.CFrame = CFrame.new(data.Position) * CFrame.Angles(0, 0, math.pi / 2)
+	ring.Parent = workspace
+	TweenService:Create(ring, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(0.3, 16, 16), Transparency = 1 }):Play()
+	Debris:AddItem(ring, 0.6)
+	billboardNumber(data.Position, if dishStreak &gt;= 2 then string.format("Sparkling! x%d", dishStreak) else "Sparkling!", UIKit.Theme.Colors.Text, FLOATER_RISE + 1)
 	if data.By == LocalPlayer.UserId and data.Bonus &gt; 0 then
 		billboardNumber(data.Position + Vector3.new(0, 1.4, 0), "+" .. UIKit.Short(data.Bonus) .. " coins", UIKit.Theme.Colors.Coin, FLOATER_RISE + 1.6)
 	end
@@ -36660,9 +36885,11 @@ function HUD.Init()
 		return b
 	end
 
-	local upgradesButton = sideButton("@Book", "Upgrades", Colors.Good, "Tab", "Y", function()
+	local upgradesButton
+	upgradesButton = sideButton("@Book", "Upgrades", Colors.Good, "Tab", "Y", function()
 		UIKit.ToggleWindow("Upgrades")
 	end)
+	HUD.UpgradesButton = upgradesButton -- (the tutorial points at it)
 	local shopButton = sideButton("@Bag", "Shop", Colors.Bad, "G", "Y", function()
 		UIKit.ToggleWindow("Shop")
 	end)
@@ -37727,6 +37954,19 @@ function HUD.Init()
 		leaveButton.LayoutOrder = 7
 		plusButton.Visible = true
 		hotbar.Visible = playing
+		-- The first-run tutorial keeps the screen simple: only what the current step introduces is there.
+		local tutorialStep = ClientState.TutorialStep
+		if tutorialStep and inRun then
+			shopButton.Visible = false
+			petsButton.Visible = false
+			leaveButton.Visible = false
+			upgradesButton.Visible = tutorialStep &gt;= 4
+			dailyButton.Visible = false
+			musicButton.Visible = false
+			petsToggle.Visible = false
+			freeTag.Visible = false
+			hotbar.Visible = playing and tutorialStep &gt;= 4
+		end
 		local key = hotbarKey()
 		if key ~= lastHotbarKey then
 			lastHotbarKey = key
@@ -37797,11 +38037,13 @@ function HUD.Init()
 			updateCurrencyValues()
 			refreshArenaWatch()
 			checkRunStartBanner()
+		elseif kind == "Tutorial" then
+			refreshMode()
 		elseif kind == "Meta" then
 			updateCurrencyValues()
 			local meta = ClientState.Meta :: any
-			freeTag.Visible = meta ~= nil and (tonumber(meta.ChestFreeLeft) or 0) &gt; 0
-			petsToggle.Visible = petsToggleWanted(ClientState.Run ~= nil)
+			freeTag.Visible = ClientState.TutorialStep == nil and meta ~= nil and (tonumber(meta.ChestFreeLeft) or 0) &gt; 0
+			petsToggle.Visible = ClientState.TutorialStep == nil and petsToggleWanted(ClientState.Run ~= nil)
 		end
 	end)
 
@@ -48312,11 +48554,17 @@ function StayOffer.Init()
 	-- Opening the Roblox menu: offer today's boost (once a session, and only if it's still free).
 	local lastEventNote = 0
 	GuiService.MenuOpened:Connect(function()
-		local locked = Config.EventLockdown()
+		-- (the schedule comes from the replicated attributes: the server may have moved the show's time, which
+		-- the client's own copy of Config does not know)
+		local nowT = Config.Now()
+		local starts = tonumber(ReplicatedStorage:GetAttribute("AbuseStarts"))
+		local pre = Config.AbuseShow.PreSeconds
+		local locked = ReplicatedStorage:GetAttribute("AbuseLive") == true
+			or (starts ~= nil and starts - nowT &gt; 0 and starts - nowT &lt;= pre)
+			or Config.EventLockdown()
 		if locked then
 			if os.clock() - lastEventNote &gt; 20 then
 				lastEventNote = os.clock()
-				local starts = tonumber(ReplicatedStorage:GetAttribute("AbuseStarts"))
 				local left = if starts then starts - Config.Now() else 0
 				setMode(if left &gt; 0 then string.format("Admin Abuse starts in %d minute%s!", math.ceil(left / 60), if math.ceil(left / 60) == 1 then "" else "s") else "The Admin Abuse event is on right now!")
 				UIKit.OpenWindow("StayOffer")
@@ -48874,7 +49122,328 @@ function TradeUI.Init()
 end
 
 return TradeUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000048"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000048"><Properties><string name="Name">Tutorial</string><ProtectedString name="Source">--[[
+	Tutorial - the first-run guide for new players (level 1, the kitchen).
+
+	Until it is finished (or skipped) the screen stays simple: only the coins, the tank and the progress bar are there. A
+	hint card at the top says what to do next and the world points at it, then each step shows a bit more:
+
+	  1. Hold on a dirty dish to scrub it clean (the closest dish is marked)
+	  2. Keep scrubbing: every spot you clean fills the tank
+	  3. Tank filling up: walk to the glowing drain to sell it for coins (the drain is marked)
+	  4. Coins buy upgrades: press Tab / tap Upgrades (that button appears and pulses)
+	  5. Inside the Upgrade Book: buy something
+	  6. Done: the rest of the buttons appear
+
+	Finishing or skipping it tells the server (MetaRequest "TutorialDone"), so it never shows again; anyone who has
+	already finished a run counts as done. ClientState.TutorialStep tells the HUD which buttons to show.
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+
+local Client = script.Parent
+local UIKit = require(Client:WaitForChild("UIKit"))
+local ClientState = require(Client:WaitForChild("ClientState"))
+local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
+
+local Tutorial = {}
+
+local Colors = UIKit.Theme.Colors
+local LocalPlayer = Players.LocalPlayer
+
+local initialized = false
+
+local TOTAL_STEPS = 5
+
+local function upgradeLevels(run: Types.RunState): number
+	local up = run.Upgrades :: any
+	local total = 0
+	for _, key in { "Hold", "HandSize", "ScrubPower", "TankSize", "Sneakers" } do
+		total += tonumber(up[key]) or 0
+	end
+	-- tools bought count as well
+	for _, owned in run.OwnedTools do
+		if owned then
+			total += 1
+		end
+	end
+	return total
+end
+
+function Tutorial.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+
+	local _gui, root = UIKit.CreateScreen("Tutorial", 40)
+
+	-- The hint card.
+	local holder = Instance.new("Frame")
+	holder.Name = "HintHolder"
+	holder.AnchorPoint = Vector2.new(0.5, 0)
+	holder.Size = UDim2.fromOffset(560, 104)
+	holder.BackgroundTransparency = 1
+	holder.Visible = false
+	holder.Parent = root
+	local card = UIKit.Card({ Name = "Hint", Position = UDim2.fromOffset(4, 3), Size = UDim2.new(1, -8, 1, -6), Color = Colors.PanelDark, Parent = holder })
+	UIKit.Stroke(card, Colors.Good, 3, 0)
+	local stepLabel = UIKit.Label({ Text = "", Font = UIKit.Theme.Fonts.Title, TextSize = 16, TextColor3 = Colors.Good, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(16, 8), Size = UDim2.new(1, -140, 0, 20), Parent = card })
+	local hintLabel = UIKit.Label({ Text = "", Font = UIKit.Theme.Fonts.Title, TextSize = 22, TextWrapped = true, TextScaled = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(16, 32), Size = UDim2.new(1, -32, 1, -42), Parent = card })
+	local skipButton = UIKit.Button({
+		Text = "Skip",
+		Color = Colors.PanelLight,
+		TextSize = 16,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -10, 0, 6),
+		Size = UDim2.fromOffset(90, 28),
+		Parent = card,
+	})
+
+	local function place()
+		holder.Position = UDim2.new(0.5, 0, 0, UIKit.TopInset() + 78)
+	end
+	place()
+	UIKit.LayoutChanged:Connect(place)
+
+	-- The pointer in the world: a bouncing arrow over a dish or the drain.
+	local pointerPart: Part? = nil
+	local pointerGui: BillboardGui? = nil
+	local pointerKey: any = nil -- what it points at now (an Instance, or a Vector3): rebuilt only when that changes
+	local function clearPointer()
+		if pointerGui then
+			pointerGui:Destroy()
+			pointerGui = nil
+		end
+		if pointerPart then
+			pointerPart:Destroy()
+			pointerPart = nil
+		end
+		pointerKey = nil
+	end
+	local function pointAt(target: Instance?, position: Vector3?)
+		local key: any = target or position
+		if key ~= nil and key == pointerKey then
+			return
+		end
+		clearPointer()
+		pointerKey = key
+		local adornee: BasePart? = nil
+		if target then
+			adornee = if target:IsA("BasePart") then target else (target :: any).PrimaryPart or target:FindFirstChildWhichIsA("BasePart", true)
+		elseif position then
+			local part = Instance.new("Part")
+			part.Anchored = true
+			part.CanCollide = false
+			part.CanQuery = false
+			part.CanTouch = false
+			part.Transparency = 1
+			part.Size = Vector3.one
+			part.Position = position
+			part.Parent = workspace
+			pointerPart = part
+			adornee = part
+		end
+		if not adornee then
+			return
+		end
+		local gui = Instance.new("BillboardGui")
+		gui.Name = "TutorialPointer"
+		gui.Adornee = adornee
+		gui.AlwaysOnTop = true
+		gui.Size = UDim2.fromOffset(70, 70)
+		gui.StudsOffsetWorldSpace = Vector3.new(0, 7, 0)
+		gui.MaxDistance = 400
+		gui.LightInfluence = 0
+		local arrow = Instance.new("TextLabel")
+		arrow.BackgroundTransparency = 1
+		arrow.Size = UDim2.fromScale(1, 1)
+		arrow.Font = UIKit.Theme.Fonts.Title
+		arrow.Text = "v"
+		arrow.TextScaled = true
+		arrow.TextColor3 = Colors.Coin
+		local stroke = Instance.new("UIStroke")
+		stroke.Thickness = 3
+		stroke.Color = Colors.Stroke
+		stroke.Parent = arrow
+		arrow.Parent = gui
+		TweenService:Create(arrow, TweenInfo.new(0.45, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Position = UDim2.fromOffset(0, 14) }):Play()
+		gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+		pointerGui = gui
+	end
+
+	-- A pulsing gold outline on the Upgrades button.
+	local pulse: UIStroke? = nil
+	local pulseTween: Tween? = nil
+	local function pulseUpgrades(on: boolean)
+		local hud = require(Client:WaitForChild("HUD")) :: any
+		local button = hud.UpgradesButton :: GuiObject?
+		if on and button and not pulse then
+			local stroke = Instance.new("UIStroke")
+			stroke.Color = Colors.Coin
+			stroke.Thickness = 3
+			stroke.Parent = button
+			local tween = TweenService:Create(stroke, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Thickness = 8 })
+			tween:Play()
+			pulse, pulseTween = stroke, tween
+		elseif not on and pulse then
+			if pulseTween then
+				pulseTween:Cancel()
+			end
+			pulse:Destroy()
+			pulse, pulseTween = nil, nil
+		end
+	end
+
+	local function nearestDish(run: Types.RunState): Instance?
+		local arenas = workspace:FindFirstChild("Arenas")
+		local arena = arenas and arenas:FindFirstChild(run.ArenaName)
+		local dishes = arena and arena:FindFirstChild("Dishes")
+		local character = LocalPlayer.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if not dishes or not root then
+			return nil
+		end
+		local best, bestD = nil, math.huge
+		for _, d in dishes:GetChildren() do
+			if d:IsA("Model") then
+				local d2 = (d:GetPivot().Position - root.Position).Magnitude
+				if d2 &lt; bestD then
+					best, bestD = d, d2
+				end
+			end
+		end
+		return best
+	end
+
+	local isTouch = UIKit.IsTouch() and not UIKit.IsGamepad()
+	local finished = false
+	local step = 0
+	local resumeStep = 1 -- where the tutorial carries on if a run ends in the middle of it
+	local stepSince = 0
+	local baseline = 0
+	local showHint: (number, string) -&gt; ()
+	local function setStep(n: number)
+		step = n
+		stepSince = os.clock()
+		ClientState.TutorialStep = if n &gt;= 1 and n &lt;= TOTAL_STEPS then n else nil
+		ClientState.Changed:Fire("Tutorial")
+		local run = ClientState.Run :: Types.RunState?
+		baseline = if run then upgradeLevels(run) else 0
+	end
+
+	local function finish(toast: boolean)
+		if finished then
+			return
+		end
+		finished = true
+		clearPointer()
+		pulseUpgrades(false)
+		step = 0
+		ClientState.TutorialStep = nil
+		ClientState.Changed:Fire("Tutorial")
+		task.spawn(function()
+			ClientState.MetaRequest("TutorialDone")
+		end)
+		if toast then
+			stepLabel.Text = "ALL SET!"
+			hintLabel.Text = "That's it! Clean every dish to finish the level, then try the next kitchen."
+			holder.Visible = true
+			UIKit.Bounce(card)
+			UIKit.PlaySound("Sparkle")
+			UIKit.Confetti(60)
+			task.delay(6, function()
+				holder.Visible = false
+			end)
+		else
+			holder.Visible = false
+		end
+	end
+	skipButton.Activated:Connect(function()
+		finish(false)
+	end)
+
+	local shown = 0
+	showHint = function(n: number, text: string)
+		stepLabel.Text = string.format("TIP %d of %d", n, TOTAL_STEPS)
+		hintLabel.Text = text
+		if shown ~= n then
+			shown = n
+			holder.Visible = true
+			UIKit.Bounce(card)
+			UIKit.PlaySound("Pop")
+		end
+	end
+
+	task.spawn(function()
+		while not finished do
+			task.wait(0.25)
+			local meta = ClientState.Meta :: any
+			local run = ClientState.Run :: Types.RunState?
+			if not meta or meta.TutorialDone == true then
+				if meta and meta.TutorialDone == true then
+					finished = true
+					ClientState.TutorialStep = nil
+				end
+				continue
+			end
+			local active = run ~= nil and run.Level == 1 and run.Phase == "Playing" and (run.ClockAt or 0) &gt; 0
+			if not active or not run then
+				-- between runs: the card goes, the screen goes back to normal; the tutorial picks up again next run
+				holder.Visible = false
+				shown = 0
+				clearPointer()
+				pulseUpgrades(false)
+				if step ~= 0 then
+					resumeStep = step
+					setStep(0)
+				end
+				continue
+			end
+			if step &lt;= 0 then
+				setStep(math.max(1, math.min(resumeStep, 4)))
+			end
+			local tankFrac = if run.TankMax &gt; 0 then run.Tank / run.TankMax else 0
+			if step == 1 then
+				showHint(1, if isTouch then "Press and hold on a dirty dish to scrub it clean!" else "Hold the mouse button on a dirty dish to scrub it clean!")
+				pointAt(nearestDish(run))
+				if (run.Cleaned or 0) &gt;= 1 then
+					clearPointer()
+					setStep(2)
+				end
+			elseif step == 2 then
+				showHint(2, "Nice! Keep scrubbing: every spot you clean fills your tank.")
+				if (run.Cleaned or 0) &gt;= 6 or tankFrac &gt;= 0.4 then
+					setStep(3)
+				end
+			elseif step == 3 then
+				showHint(3, "Your tank fills up as you clean. Walk to the glowing drain to sell it for coins!")
+				pointAt(nil, run.DrainPosition)
+				if (run.Coins or 0) &gt; 0 then
+					clearPointer()
+					setStep(4)
+				end
+			elseif step == 4 then
+				showHint(4, if isTouch then "Coins buy upgrades! Tap Upgrades to open the Upgrade Book." else "Coins buy upgrades! Press TAB or click Upgrades to open the Upgrade Book.")
+				pulseUpgrades(true)
+				if UIKit.IsWindowOpen("Upgrades") then
+					pulseUpgrades(false)
+					setStep(5)
+				end
+			elseif step == 5 then
+				showHint(5, "Buy something you can afford: upgrades make you clean faster and carry more.")
+				if upgradeLevels(run) &gt; baseline or (not UIKit.IsWindowOpen("Upgrades") and os.clock() - stepSince &gt; 1.5) then
+					finish(true)
+				end
+			end
+		end
+	end)
+end
+
+return Tutorial</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000049"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -51547,7 +52116,7 @@ end
 
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000049"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000004A"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button
@@ -52023,7 +52592,7 @@ function UpgradesUI.Init()
 end
 
 return UpgradesUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000004A"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000004B"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
 	WaterFX - the water coming out of your own hose and pressure washer, built from real parts so
 	it looks solid from every angle (a camera-facing Beam flattens to nothing when you look straight
 	down it, which is exactly the first-person view).
@@ -52263,7 +52832,7 @@ end
 
 return WaterFX</ProtectedString></Properties></Item>
 </Item>
-<Item class="LocalScript" referent="RBX0000004B"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
+<Item class="LocalScript" referent="RBX0000004C"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
 	AdminClient - Rinse Cycle's admin panel and the admin effects every player can see.
 
 	Everyone:
@@ -52802,8 +53371,10 @@ local function refreshFlyChip()
 	flyLabel.Text = if flying then "Fly perk: ON (F)" else "Fly perk: OFF (F)"
 end
 
+-- Caught by a black hole, tornado or UFO: flight stops, and can't be switched on until it lets go.
+local grabbed = false
 local function toggleFly()
-	if not flyAllowed then
+	if not flyAllowed or grabbed then
 		return
 	end
 	if flying then
@@ -52814,6 +53385,18 @@ local function toggleFly()
 	refreshFlyChip()
 end
 flyChip.MouseButton1Click:Connect(toggleFly)
+task.spawn(function()
+	local grabRemote = ReplicatedStorage:WaitForChild("AbuseGrab", 60) :: RemoteEvent?
+	if grabRemote then
+		grabRemote.OnClientEvent:Connect(function(on: boolean)
+			grabbed = on == true
+			if grabbed and flying then
+				stopFlying()
+				refreshFlyChip()
+			end
+		end)
+	end
+end)
 
 -- The giant and speed power-ups: a chip that turns the power-up off and on again during the event.
 local PERK_NAMES = { giant = "Size perk", speed = "Speed perk" }
@@ -52975,7 +53558,7 @@ do
 			local now = Config.Now()
 			if starts then
 				local left = starts - now
-				if left &gt; 0 and left &lt;= abuse.PreSeconds then
+				if left &gt; 0 and left &lt;= math.max(abuse.PreSeconds, 3600) then
 					pill.Visible = true
 					pillText.Text = string.format("ADMIN ABUSE IN %d:%02d", left // 60, left % 60)
 					pillStroke.Color = if left &lt;= 60 then Colors.Bad else Colors.Coin
@@ -53006,7 +53589,7 @@ do
 		-- top middle: clear of the pill (top right), the chips (under it) and the poll card (bottom); on a narrow
 		-- screen the box would run under the pill, so it goes just below it
 		local narrow = UIKit.CanvasSize().X &lt; 900
-		box.Position = UDim2.new(0.5, 0, 0, UIKit.TopInset() + (if narrow then 44 else 8))
+		box.Position = UDim2.new(0.5, 0, 0, if narrow then UIKit.TopInset() + 40 else 6) -- (right at the top edge on a wide screen)
 	end
 	placeBox()
 	UIKit.LayoutChanged:Connect(placeBox)
@@ -53282,6 +53865,23 @@ do
 			if starts and Config.Now() - starts &lt;= 12 then
 				task.spawn(openingShot)
 			end
+		end
+	end)
+	-- Joining while the event is on (or within the hour before it): say so, so people stay.
+	task.spawn(function()
+		task.wait(7)
+		local starts = tonumber(ReplicatedStorage:GetAttribute("AbuseStarts"))
+		if not starts then
+			return
+		end
+		local now = Config.Now()
+		if ReplicatedStorage:GetAttribute("AbuseLive") == true then
+			if now - starts &gt; 15 then
+				UIKit.Toast("Admin Abuse is LIVE! Stay in the game for free game passes, gems and limited pets.", "Good")
+			end
+		elseif starts - now &gt; 0 and starts - now &lt;= 3600 then
+			local mins = math.ceil((starts - now) / 60)
+			UIKit.Toast(string.format("Admin Abuse starts in %d minute%s. Stay tuned for free game passes, ranks and giveaways!", mins, if mins == 1 then "" else "s"), "Info")
 		end
 	end)
 	-- The power-up pick: everyone gets a card (same look as the vote card) with 3 power-ups and "No thanks".
@@ -54896,5 +55496,5 @@ task.spawn(function()
 end)</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="TextChatService" referent="RBX0000004C"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
+<Item class="TextChatService" referent="RBX0000004D"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
 </roblox>

@@ -128,6 +128,7 @@ export type MetaState = {
 	LikeState: string, -- "" / "Pending" (paid when you rejoin) / "Claimed"
 	BoostUntil: number?, -- os.time() until which cleaning is x2 (the stay boost)
 	StayBoostReady: boolean?, -- today's free stay boost can still be claimed
+	TutorialDone: boolean?, -- the first-run tutorial is over (finished or skipped)
 	PetsResting: boolean?, -- pets switched off: they follow you but don't clean
 	PetIndex: { [string]: number }?, -- every pet species/tier ever owned (bits 1/2/4)
 	PetIndexPaid: { [string]: boolean }?, -- tier sets whose Gems were paid

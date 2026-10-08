@@ -9,6 +9,7 @@
 
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
+local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -168,11 +169,33 @@ local function onCleaned(data: Types.FXCleaned)
 	end
 end
 
+local dishStreak, lastDishAt = 0, 0
 local function onDishDone(data: Types.FXDishDone)
-	burst(data.Position, UIKit.Theme.Colors.Good, "rbxasset://textures/particles/sparkles_main.dds", 24, 0.8)
-	popBubbles(data.Position, 6, 2)
-	UIKit.PlaySound("Sparkle")
-	billboardNumber(data.Position, "Sparkling!", UIKit.Theme.Colors.Text, FLOATER_RISE + 1)
+	-- A whole dish clean should feel great: a ring of light spreads over it, more sparkles, a chime that climbs
+	-- with every dish in a row ("Sparkling! x3"), and the coins pop out.
+	local now = os.clock()
+	dishStreak = if now - lastDishAt < 8 then math.min(dishStreak + 1, 8) else 1
+	lastDishAt = now
+	burst(data.Position, UIKit.Theme.Colors.Good, "rbxasset://textures/particles/sparkles_main.dds", 34, 0.9)
+	burst(data.Position, Color3.fromRGB(255, 255, 255), "rbxasset://textures/particles/sparkles_main.dds", 14, 0.5)
+	popBubbles(data.Position, 8, 2.4)
+	UIKit.PlaySound("Sparkle", 0.9 + dishStreak * 0.07)
+	local ring = Instance.new("Part")
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Material = Enum.Material.Neon
+	ring.Color = UIKit.Theme.Colors.Good
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.CanQuery = false
+	ring.CanTouch = false
+	ring.CastShadow = false
+	ring.Transparency = 0.2
+	ring.Size = Vector3.new(0.3, 2, 2)
+	ring.CFrame = CFrame.new(data.Position) * CFrame.Angles(0, 0, math.pi / 2)
+	ring.Parent = workspace
+	TweenService:Create(ring, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(0.3, 16, 16), Transparency = 1 }):Play()
+	Debris:AddItem(ring, 0.6)
+	billboardNumber(data.Position, if dishStreak >= 2 then string.format("Sparkling! x%d", dishStreak) else "Sparkling!", UIKit.Theme.Colors.Text, FLOATER_RISE + 1)
 	if data.By == LocalPlayer.UserId and data.Bonus > 0 then
 		billboardNumber(data.Position + Vector3.new(0, 1.4, 0), "+" .. UIKit.Short(data.Bonus) .. " coins", UIKit.Theme.Colors.Coin, FLOATER_RISE + 1.6)
 	end

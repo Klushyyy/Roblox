@@ -705,6 +705,9 @@ Remote.AbuseOfferReply.Parent = ReplicatedStorage
 Remote.AbusePerk = Instance.new("RemoteEvent") -- S->C (kind: "giant" or nil, on): the giant power-up's on/off button
 Remote.AbusePerk.Name = "AbusePerk"
 Remote.AbusePerk.Parent = ReplicatedStorage
+Remote.AbuseGrab = Instance.new("RemoteEvent") -- S->C (on): the player is caught by a black hole / tornado / UFO: flying stops
+Remote.AbuseGrab.Name = "AbuseGrab"
+Remote.AbuseGrab.Parent = ReplicatedStorage
 Remote.AbusePerkToggle = Instance.new("RemoteEvent") -- C->S: turn the giant power-up off / on
 Remote.AbusePerkToggle.Name = "AbusePerkToggle"
 Remote.AbusePerkToggle.Parent = ReplicatedStorage
@@ -5565,9 +5568,11 @@ do
 		local ch = plr.Character
 		local root = ch and ch:FindFirstChild("HumanoidRootPart") :: BasePart?
 		local hum = ch and ch:FindFirstChildOfClass("Humanoid")
-		if not root or not hum or hum.Health <= 0 or flyingUserIds[plr.UserId] or plr:GetAttribute("AdminInvis") == true then
+		if not root or not hum or hum.Health <= 0 or plr:GetAttribute("AdminInvis") == true then
 			return nil
 		end
+		-- someone who is flying is caught too: their flight is switched off (they can press F again afterwards)
+		Remote.AbuseGrab:FireClient(plr, true)
 		local att = Instance.new("Attachment")
 		att.Parent = root
 		local mover = Instance.new("LinearVelocity")
@@ -5581,6 +5586,7 @@ do
 	end
 	local function releasePlayer(g: any, velocity: Vector3?)
 		pcall(function()
+			Remote.AbuseGrab:FireClient(g.Plr, false)
 			g.Mover:Destroy()
 			g.Att:Destroy()
 			if velocity and g.Root.Parent then
@@ -5591,6 +5597,22 @@ do
 				g.Hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 			end
 		end)
+	end
+	-- Where the nearest living player is (flat), from a point: the tornado and the UFO drift after somebody.
+	local function nearestPlayerXZ(x: number, z: number): (number, number)
+		local bestD, bx, bz = math.huge, x, z
+		for _, plr in Players:GetPlayers() do
+			local ch = plr.Character
+			local root = ch and ch:FindFirstChild("HumanoidRootPart") :: BasePart?
+			local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+			if root and hum and hum.Health > 0 and root.Position.Y > ROOM_FLOOR + 20 and root.Position.Y < 160 and plr:GetAttribute("AdminInvis") ~= true then
+				local d = (root.Position.X - x) ^ 2 + (root.Position.Z - z) ^ 2
+				if d < bestD then
+					bestD, bx, bz = d, root.Position.X, root.Position.Z
+				end
+			end
+		end
+		return bx, bz
 	end
 	-- A shove for everyone near a blast: up and away (harmless: the rescue puts anyone who ends up off the table back).
 	local function shoveNear(pos: Vector3, radius: number, up: number, out: number)
@@ -5744,9 +5766,9 @@ do
 		fx.meteors = function()
 			-- A real meteor shower: lots of big rocks with fire tails. Every impact blasts away whoever is near it
 			-- (a wide radius, hard), every third one leaves a small dent in the table, every fourth a patch of fire.
-			local n = if heat then 28 else 18
+			local n = if heat then 44 else 30
 			for i = 1, n do
-				task.delay(i * 0.2, function()
+				task.delay(i * 0.14, function()
 					local target = plazaSpot()
 					local rock = neonPart(Vector3.new(22, 22, 22), Color3.fromRGB(255, 140, 50), Enum.PartType.Ball)
 					rock.Position = target + Vector3.new(math.random(-180, 180), 300, math.random(-180, 180))
@@ -5766,7 +5788,7 @@ do
 						harmlessBlast(target, 20)
 						boom(2.2, target)
 						shoveNear(target, 46, 85, 120)
-						if i % 3 == 0 and not LobbyBuilder.IsHoleAt(target.X, target.Z, 10) then
+						if i % 4 == 0 and not LobbyBuilder.IsHoleAt(target.X, target.Z, 10) then
 							dentCount += 1
 							LobbyBuilder.OpenCrater(dentCount, target.X, target.Z, 5.5) -- (small: the storm should not eat the table)
 						end
@@ -6098,13 +6120,23 @@ do
 				local caught: { [Player]: boolean } = {}
 				local last = os.clock()
 				local lastBoom = 0
+				-- it wanders across the table but keeps swinging toward the nearest player, so it really finds people
+				local cx, cz = math.random(-60, 60), math.random(-80, 20)
 				while os.clock() - t0 < length do
 					local now = os.clock()
 					local dt = now - last
 					last = now
 					local t = now - t0
-					local cx = math.sin(t * 0.7) * 75
-					local cz = -20 + math.cos(t * 0.5) * 55
+					local nx, nz = nearestPlayerXZ(cx, cz)
+					local toX, toZ = nx - cx, nz - cz
+					local dist = math.sqrt(toX * toX + toZ * toZ)
+					if dist > 1 then
+						local step = math.min(dist, 38 * dt)
+						cx += toX / dist * step
+						cz += toZ / dist * step
+					end
+					cx = math.clamp(cx, -92, 92)
+					cz = math.clamp(cz, -96, 60)
 					foot.CFrame = CFrame.new(cx, 3, cz)
 					for i, disc in discs do
 						local wob = math.sin(t * 3 + i) * 2.5 * (i / N)
@@ -6121,7 +6153,7 @@ do
 						for _, plr in Players:GetPlayers() do
 							local ch = plr.Character
 							local root = ch and ch:FindFirstChild("HumanoidRootPart") :: BasePart?
-							if root and not caught[plr] and root.Position.Y > ROOM_FLOOR + 20 and root.Position.Y < 60 and Vector3.new(root.Position.X - cx, 0, root.Position.Z - cz).Magnitude < 42 then
+							if root and not caught[plr] and root.Position.Y > ROOM_FLOOR + 20 and root.Position.Y < 160 and Vector3.new(root.Position.X - cx, 0, root.Position.Z - cz).Magnitude < 48 then
 								local g = catchPlayer(plr)
 								if g then
 									caught[plr] = true
@@ -6170,32 +6202,140 @@ do
 			end)
 		end
 		fx.ufo = function()
+			-- The ship flies over somebody (it picks a player on the table, then keeps drifting after whoever is
+			-- nearest) and its beam pulls everyone under it up, slowly at first. Whoever is pulled all the way up
+			-- is held in the ship for a moment, then is gone (they respawn). Anyone it did not finish with is let go.
 			local ship = Instance.new("Model")
 			local body = neonPart(Vector3.new(6, 46, 46), Color3.fromRGB(170, 180, 200), Enum.PartType.Cylinder)
 			body.Material = Enum.Material.Metal
 			upright(body, Vector3.new(0, 0, 0))
 			local dome = neonPart(Vector3.new(22, 22, 22), Color3.fromRGB(120, 255, 200), Enum.PartType.Ball)
 			dome.Transparency = 0.3
-			local beamPart = neonPart(Vector3.new(120, 26, 26), Color3.fromRGB(150, 255, 190), Enum.PartType.Cylinder)
+			local SHIP_Y, BEAM_R = 130, 20
+			local beamPart = neonPart(Vector3.new(SHIP_Y + 10, BEAM_R * 2, BEAM_R * 2), Color3.fromRGB(150, 255, 190), Enum.PartType.Cylinder)
 			beamPart.Transparency = 0.6
 			body.Parent, dome.Parent, beamPart.Parent = ship, ship, ship
 			ship.Parent = workspace
-			local start = Vector3.new(-170, 130, math.random(-60, 10))
-			local finish = Vector3.new(170, 130, math.random(-60, 10))
+			local function nearestTo(x: number, z: number): (number, number)
+				local bestD, bx, bz = math.huge, x, z
+				for _, plr in Players:GetPlayers() do
+					local ch = plr.Character
+					local root = ch and ch:FindFirstChild("HumanoidRootPart") :: BasePart?
+					local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+					if root and hum and hum.Health > 0 and root.Position.Y > ROOM_FLOOR + 20 and root.Position.Y < 80 then
+						local d = (root.Position.X - x) ^ 2 + (root.Position.Z - z) ^ 2
+						if d < bestD then
+							bestD, bx, bz = d, root.Position.X, root.Position.Z
+						end
+					end
+				end
+				return bx, bz
+			end
+			local startSpot = plazaSpot()
+			local tx, tz = nearestTo(startSpot.X, startSpot.Z)
+			local start = Vector3.new(-200, SHIP_Y, tz + math.random(-30, 30))
+			local finish = Vector3.new(200, SHIP_Y, tz + math.random(-30, 30))
 			task.spawn(function()
+				local APPROACH, HOVER, LEAVE = 2.6, 7.5, 3
 				local t0 = os.clock()
-				local length = 7
-				while os.clock() - t0 < length do
-					local f = (os.clock() - t0) / length
-					local p = start:Lerp(finish, f) + Vector3.new(0, math.sin(f * 14) * 4, 0)
-					upright(body, p)
-					dome.Position = p + Vector3.new(0, 8, 0)
-					beamPart.CFrame = CFrame.new(p - Vector3.new(0, 60, 0)) * CFrame.Angles(0, 0, math.pi / 2)
-					beamPart.Transparency = 0.55 + math.sin(os.clock() * 12) * 0.12
-					if math.floor(f * 12) ~= math.floor((f - 0.012) * 12) then
-						boom(0.8, Vector3.new(p.X, 0.2, p.Z))
+				local last = t0
+				local grabs: { any } = {}
+				local caught: { [Player]: boolean } = {}
+				local shipPos = start
+				local lastBoom = 0
+				while true do
+					local now = os.clock()
+					local t = now - t0
+					local dt = now - last
+					last = now
+					if t >= APPROACH + HOVER + LEAVE then
+						break
+					end
+					local beamOn = false
+					if t < APPROACH then
+						local f = t / APPROACH
+						f = f * f * (3 - 2 * f)
+						shipPos = start:Lerp(Vector3.new(tx, SHIP_Y, tz), f)
+					elseif t < APPROACH + HOVER then
+						-- drifts after the nearest player, so it really stays over somebody
+						local nx, nz = nearestTo(shipPos.X, shipPos.Z)
+						local toX, toZ = nx - shipPos.X, nz - shipPos.Z
+						local dist = math.sqrt(toX * toX + toZ * toZ)
+						if dist > 1 then
+							local step = math.min(dist, 34 * dt)
+							shipPos = Vector3.new(shipPos.X + toX / dist * step, SHIP_Y, shipPos.Z + toZ / dist * step)
+						end
+						beamOn = true
+					else
+						local toFinish = finish - shipPos
+						if toFinish.Magnitude > 1 then
+							shipPos += toFinish.Unit * math.min(toFinish.Magnitude, 110 * dt)
+						end
+					end
+					shipPos = Vector3.new(shipPos.X, SHIP_Y + math.sin(t * 2.2) * 3, shipPos.Z)
+					upright(body, shipPos)
+					dome.Position = shipPos + Vector3.new(0, 8, 0)
+					beamPart.CFrame = CFrame.new(shipPos - Vector3.new(0, (SHIP_Y + 10) / 2, 0)) * CFrame.Angles(0, 0, math.pi / 2)
+					beamPart.Transparency = if beamOn then 0.5 + math.sin(now * 12) * 0.12 else 1
+					-- the beam: catch whoever is under it, then pull everyone up (slow at first, then faster)
+					if beamOn then
+						for _, plr in Players:GetPlayers() do
+							local ch = plr.Character
+							local root = ch and ch:FindFirstChild("HumanoidRootPart") :: BasePart?
+							if root and not caught[plr] and root.Position.Y > ROOM_FLOOR + 20 and Vector3.new(root.Position.X - shipPos.X, 0, root.Position.Z - shipPos.Z).Magnitude < BEAM_R then
+								local g = catchPlayer(plr)
+								if g then
+									caught[plr] = true
+									g.T0 = t
+									g.Held = nil
+									table.insert(grabs, g)
+								end
+							end
+						end
+					end
+					for _, g in grabs do
+						if g.Done then
+							continue
+						end
+						if not g.Root.Parent or g.Hum.Health <= 0 then
+							g.Done = true
+							releasePlayer(g, nil)
+							continue
+						end
+						local heldFor = if g.Held then now - g.Held else 0
+						local rise = math.min(1, (t - g.T0) / 5)
+						local up = 10 + 34 * rise * rise
+						local toCentre = Vector3.new(shipPos.X - g.Root.Position.X, 0, shipPos.Z - g.Root.Position.Z)
+						local v = toCentre * 2.5 + Vector3.new(0, up, 0)
+						if g.Root.Position.Y >= shipPos.Y - 16 then
+							-- all the way up: held inside the ship for a moment ...
+							g.Held = g.Held or now
+							v = (shipPos - Vector3.new(0, 8, 0) - g.Root.Position) * 4
+							if heldFor > 1.3 then
+								-- ... then gone
+								g.Done = true
+								harmlessBlast(shipPos, 18)
+								Remote.AbuseBoom:FireAllClients(1.2, shipPos)
+								releasePlayer(g, nil)
+								pcall(function()
+									g.Hum.Health = 0
+								end)
+								continue
+							end
+						end
+						g.Mover.VectorVelocity = if v.Magnitude > 70 then v.Unit * 70 else v
+					end
+					if t - lastBoom > 0.9 then
+						lastBoom = t
+						boom(0.8, Vector3.new(shipPos.X, 0.2, shipPos.Z))
 					end
 					RunService.Heartbeat:Wait()
+				end
+				-- anyone not carried all the way up is let go
+				for _, g in grabs do
+					if not g.Done then
+						releasePlayer(g, Vector3.zero)
+					end
 				end
 				ship:Destroy()
 			end)
@@ -7451,6 +7591,7 @@ do
 		local flyHeight, flySpeed = 0, 60
 		local rollAngle = 0 -- the somersault he does while he leaps
 		local leapHeight = 0 -- how far he is above the floor while jumping over the obby
+		local airborne = false -- the walk cycle is held while he is in the air
 		local function face(dir: Vector3, dt: number)
 			local flat = Vector3.new(dir.X, 0, dir.Z)
 			if flat.Magnitude > 1e-3 then
@@ -7824,7 +7965,7 @@ do
 					-- (never higher than the ceiling allows: his head, which swings round during the flips, stays under it)
 					local ceilingRoom = ROOF_Y - 25 - 3.7 * scaleNow - rootY
 					leapHeight = math.max(0, math.min(215, ceilingRoom)) * math.min(smooth((deg - 8) / 14), smooth((120 - deg) / 14))
-					rollAngle = -math.pi * 4 * smooth((deg - 24) / 74) -- two forward flips over the obby
+					rollAngle = -math.pi * 4 * smooth((deg - 24) / 94) -- two forward flips over the obby, finished just as he lands (no walking steps tacked on)
 				else
 					leapHeight = 0
 					rollAngle = 0
@@ -7836,6 +7977,16 @@ do
 				end
 				if wasLeap > 30 and leapHeight <= 30 and deg > 100 then
 					boom(3, Vector3.new(pos.X, ROOM_FLOOR, pos.Z)) -- lands
+				end
+				-- the legs do not walk in the air: the stride is held while he is off the ground and goes on at the landing
+				if leapHeight > 3 then
+					if walkTrack and not airborne then
+						airborne = true
+						walkTrack:AdjustSpeed(0)
+					end
+				elseif airborne then
+					airborne = false
+					setWalking(true)
 				end
 			elseif state == "act" then
 				face(TABLE_CENTER - pos, dt)

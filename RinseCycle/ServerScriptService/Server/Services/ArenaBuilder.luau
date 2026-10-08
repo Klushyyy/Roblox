@@ -59,7 +59,8 @@ local TOP_RACK_Z = { -40, 60 }
 
 -- Bottom rack: three rows of plates facing the door, spaced so a character fits between them.
 local PLATE_ROW_X = { -34, 0, 34 }
-local PLATE_Z = { -28, -21, -14, -7, 0, 7, 14, 21, 28 }
+-- (8 studs between plates, was 7: a little more room to scrub each one, especially on a phone)
+local PLATE_Z = { -32, -24, -16, -8, 0, 8, 16, 24, 32 }
 local PAN_SLOTS = { { x = -43, z = 47 }, { x = 43, z = 47 } }
 local POT_SLOTS = { { x = -22, z = 47 }, { x = 22, z = 47 } }
 local BASKET_CENTER = Vector3.new(0, 0, 47)

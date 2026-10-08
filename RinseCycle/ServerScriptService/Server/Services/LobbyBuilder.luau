@@ -2307,7 +2307,7 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 		return
 	end
 	local roof = opts.Roof == true
-	local TILE = if roof then 18 elseif R >= 40 then 14 elseif R >= 30 then 11 else TILE -- (big holes: bigger tiles, so a half-table crater is not thousands of parts)
+	local TILE = if roof then 22 elseif R >= 50 then 18 elseif R >= 40 then 14 elseif R >= 30 then 11 else TILE -- (big holes: bigger tiles, so a half-table crater is not thousands of parts)
 	local light = roof or R >= 30 -- big holes: tiles drop by tween (anchored) instead of by physics, far cheaper
 	local cx, cz = ORIGIN.X + holeX, ORIGIN.Z + holeZ
 	local S = R + 10
@@ -2403,20 +2403,26 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 							-- and are taken away once they have fallen out of sight.
 							tile.CanCollide = false
 							tile:SetAttribute("Falling", true)
-							task.delay(rng:NextNumber(0, 0.25) + (d / R) * 0.35, function()
-								if tile.Parent then
-									tile.Anchored = false
-									tile.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-10, 10), rng:NextNumber(-6, 4), rng:NextNumber(-10, 10))
-									tile.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-4, 4), rng:NextNumber(-4, 4), rng:NextNumber(-4, 4))
-									pcall(function()
-										tile:SetNetworkOwner(nil)
-									end)
-									task.delay(2.2, function()
-										tile.Anchored = true
-										tile.Parent = nil
-									end)
-								end
-							end)
+							if rng:NextNumber() < 0.4 then
+								task.delay(rng:NextNumber(0, 0.25) + (d / R) * 0.35, function()
+									if tile.Parent then
+										tile.Anchored = false
+										tile.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-10, 10), rng:NextNumber(-6, 4), rng:NextNumber(-10, 10))
+										tile.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-4, 4), rng:NextNumber(-4, 4), rng:NextNumber(-4, 4))
+										pcall(function()
+											tile:SetNetworkOwner(nil)
+										end)
+										task.delay(2.2, function()
+											tile.Anchored = true
+											tile.Parent = nil
+										end)
+									end
+								end)
+							else
+								-- (most tiles of a big hole are simply taken away: only a few fall as visible debris, which is
+								-- far less for the server and everyone's screen to handle; the repair brings them all back)
+								tile.Parent = nil
+							end
 						else
 							tile.Anchored = false
 							tile.CanCollide = not roof
@@ -2444,6 +2450,9 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 			table.insert(rec.Hidden, p)
 		else
 			p:Destroy() -- (a piece of an earlier hole: replaced by the smaller pieces cut from it)
+		end
+		if light then
+			task.wait() -- (a big hole is cut a layer per frame, not all in one server hitch)
 		end
 	end
 

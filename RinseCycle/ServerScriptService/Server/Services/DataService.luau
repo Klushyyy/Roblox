@@ -100,6 +100,7 @@ export type Profile = {
 	RebirthReady: boolean, -- the last level has been cleared since the last rebirth
 	BoostUntil: number, -- os.time() until which cleaning is x2 (the "stay" boost); 0 = none
 	StayBoostDay: string, -- UTC date ("2026-10-03") the stay boost was last claimed: once a day
+	TutorialDone: boolean, -- the first-run tutorial has been finished or skipped (anyone with a run behind them counts as done)
 	PetIndex: { [string]: number }, -- every pet id ever owned -> bits (1 normal, 2 Golden, 4 Rainbow)
 	PetIndexPaid: { [string]: boolean }, -- collection sets already paid ("1".."3")
 	PetsResting: boolean, -- the player switched their pets off: they follow but don't clean
@@ -184,6 +185,7 @@ local TEMPLATE: Profile = {
 	LikePending = false,
 	BoostUntil = 0,
 	StayBoostDay = "",
+	TutorialDone = false,
 	PetIndex = {},
 	PetIndexPaid = {},
 	PetsResting = false,
@@ -561,6 +563,8 @@ local function sanitizeProfile(profile: Profile, player: Player)
 	for key in TEMPLATE.Stats :: any do
 		p.Stats[key] = toCount(p.Stats[key], 0)
 	end
+	-- (people who already finished a run don't need the first-run tutorial)
+	p.TutorialDone = p.TutorialDone == true or (p.Stats.Runs :: number) > 0
 
 	local receipts = {}
 	if type(p.Receipts) == "table" then
@@ -686,6 +690,7 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		LikeState = if profile.LikeReward then "Claimed" elseif profile.LikePending then "Pending" else "",
 		BoostUntil = profile.BoostUntil,
 		StayBoostReady = profile.StayBoostDay ~= os.date("!%Y-%m-%d"),
+		TutorialDone = profile.TutorialDone == true,
 		PetsResting = profile.PetsResting,
 		PetIndex = table.clone(profile.PetIndex),
 		PetIndexPaid = table.clone(profile.PetIndexPaid),
@@ -1578,6 +1583,21 @@ end
 
 -- The pets on / off switch: resting pets follow you but don't clean. Saved, so it carries over
 -- between the lobby and the dishwashers.
+-- The first-run tutorial was finished (or skipped).
+function DataService.SetTutorialDone(player: Player): boolean
+	local profile = DataService.Get(player)
+	if not profile then
+		return false
+	end
+	profile.TutorialDone = true
+	local session = sessions[player]
+	if session then
+		session.NextAutosave = math.min(session.NextAutosave, os.clock() + 5)
+	end
+	DataService.PushMeta(player)
+	return true
+end
+
 function DataService.SetPetsResting(player: Player, resting: boolean): boolean
 	local profile = DataService.Get(player)
 	if not profile then

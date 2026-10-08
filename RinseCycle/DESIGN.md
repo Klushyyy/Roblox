@@ -1838,3 +1838,15 @@ The two posts of the Next Event banner stand just outside the banner's edges (x 
 - Vote card, results and power-up pick card use the same font (Title) for every line; the prize card sits at the same bottom-middle spot as the vote cards (stacking above them while one is up) in the same font.
 - "see that machine? i never liked it." is said when he starts gathering the fireball (a few seconds before it hits), and "my legs hurt. im sitting down..." when he reaches the chair (`giantSit`), not at fixed times (he used to have to walk round the whole table first).
 - Meteors: every impact blasts players within 46 studs away (up 85, out 120) and every third leaves a small dent (R 5.5, hole index 200+).
+
+### 6zzt. Tutorial, UFO abduction, grabs, nuke, and the rest (v2.14.0)
+- **Speech box** sits at the very top (y 6) on wide screens. **Leave message**: StayOffer reads the schedule from the replicated `AbuseStarts` / `AbuseLive` attributes (the client's own Config copy does not know when the server moved the show), so "DON'T LEAVE" shows in the 30 minutes before the event and during it.
+- **UFO** picks a player, flies over them and keeps drifting after the nearest one; its beam (radius 20) catches everyone under it and pulls them up (slow, then faster). Whoever reaches the ship is held ~1.3 s and then respawns (Health 0); anyone not finished with is let go when it leaves.
+- **Grabs** (black hole, tornado, UFO) now catch flying players too: `AbuseGrab` (S->C) stops their flight and blocks F until they are let go (flight can be switched on again). The tornado steers toward the nearest player (38 studs/s) and catches within 48 studs up to y 160; meteors are denser (30 / 44) and every 4th leaves a small dent.
+- **Nuke**: throw moved to t=545 so it lands ~15 s before it goes off; the crater is cut a layer per frame, with 18-stud tiles and only ~40% of its tiles falling as visible debris (the rest are simply taken away), far lighter.
+- **Prize card**: when the title starts with "You won" / "You got" only the message is shown (no duplicate title line).
+- **Flip**: the two flips now end exactly as he lands, and the walk cycle is held while he is off the ground (no walking steps in the air / tacked on at the end).
+- **Joining mid-event**: a toast "Admin Abuse is LIVE! ..." (or "starts in N minutes..." within the hour before; the top-right pill now shows from 60 minutes before).
+- **Kitchen plates** are 8 studs apart (were 7) in every level.
+- **First-run tutorial** (Client/Tutorial.luau, new): `DataService` field `TutorialDone` (anyone with a finished run counts as done; MetaRequest "TutorialDone"), `ClientState.TutorialStep` hides the HUD while it runs: 1 scrub (closest dish marked), 2 keep scrubbing, 3 sell at the drain (marked), 4 Upgrades button appears and pulses (Tab / tap), 5 buy something, then everything appears. Skip button. Only in level 1, after the run's cutscene.
+- **Dish clean feel**: a ring of light, more sparkles, a chime that climbs per dish in a row, "Sparkling! xN".

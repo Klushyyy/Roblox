@@ -270,11 +270,17 @@ function StayOffer.Init()
 	-- Opening the Roblox menu: offer today's boost (once a session, and only if it's still free).
 	local lastEventNote = 0
 	GuiService.MenuOpened:Connect(function()
-		local locked = Config.EventLockdown()
+		-- (the schedule comes from the replicated attributes: the server may have moved the show's time, which
+		-- the client's own copy of Config does not know)
+		local nowT = Config.Now()
+		local starts = tonumber(ReplicatedStorage:GetAttribute("AbuseStarts"))
+		local pre = Config.AbuseShow.PreSeconds
+		local locked = ReplicatedStorage:GetAttribute("AbuseLive") == true
+			or (starts ~= nil and starts - nowT > 0 and starts - nowT <= pre)
+			or Config.EventLockdown()
 		if locked then
 			if os.clock() - lastEventNote > 20 then
 				lastEventNote = os.clock()
-				local starts = tonumber(ReplicatedStorage:GetAttribute("AbuseStarts"))
 				local left = if starts then starts - Config.Now() else 0
 				setMode(if left > 0 then string.format("Admin Abuse starts in %d minute%s!", math.ceil(left / 60), if math.ceil(left / 60) == 1 then "" else "s") else "The Admin Abuse event is on right now!")
 				UIKit.OpenWindow("StayOffer")

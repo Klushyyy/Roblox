@@ -382,7 +382,16 @@ local function setPetsResting(player: Player, value: any): Types.RequestResult
 	return { Ok = true }
 end
 
+-- The first-run tutorial was finished or skipped (never shown again).
+local function tutorialDone(player: Player, _value: any): Types.RequestResult
+	if not DataService.SetTutorialDone(player) then
+		return fail("Your data is still loading.")
+	end
+	return { Ok = true }
+end
+
 local HANDLERS: { [string]: (Player, any) -> Types.RequestResult } = {
+	TutorialDone = tutorialDone,
 	ClaimDaily = claimDaily,
 	ClaimStayBoost = claimStayBoost,
 	SetPetsResting = setPetsResting,

@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.13.2"
+Config.Version = "2.14.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1316,8 +1316,8 @@ do
 	at(467, "attack", "petchase")
 	at(486, "attack", "ufo")
 	at(506, "attack", "laser")
-	at(536, "say", "that spot looks empty. i am redecorating.")
-	at(538, "attack", "nuke")
+	at(543, "say", "that spot looks empty. i am redecorating.")
+	at(545, "attack", "nuke") -- (it lands about 15 s before it goes off at NukeAt)
 	at(548, "attack", "tornado")
 	at(561, "say", "one more thing is about to go off. stand back.")
 	at(572, "attack", "fireworks")

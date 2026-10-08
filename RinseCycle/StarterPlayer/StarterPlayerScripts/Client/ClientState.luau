@@ -15,8 +15,11 @@ local ClientState = {}
 ClientState.Meta = nil :: Types.MetaState?
 ClientState.Party = nil :: Types.PartyState?
 ClientState.Run = nil :: Types.RunState?
+-- The first-run tutorial (Tutorial.luau): the step it is on while it is running (nil = not running). The HUD hides most of
+-- itself while it is on, and shows the rest as the steps introduce it.
+ClientState.TutorialStep = nil :: number?
 
--- Fired with "Meta", "Party" or "Run" after that field is replaced.
+-- Fired with "Meta", "Party", "Run" or "Tutorial" after that field is replaced / changes.
 ClientState.Changed = Util.Signal.new()
 -- Fired with (kind: string, data: table) for every RunFX message.
 ClientState.FX = Util.Signal.new()

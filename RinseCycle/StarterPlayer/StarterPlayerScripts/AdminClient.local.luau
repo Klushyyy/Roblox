@@ -537,8 +537,10 @@ local function refreshFlyChip()
 	flyLabel.Text = if flying then "Fly perk: ON (F)" else "Fly perk: OFF (F)"
 end
 
+-- Caught by a black hole, tornado or UFO: flight stops, and can't be switched on until it lets go.
+local grabbed = false
 local function toggleFly()
-	if not flyAllowed then
+	if not flyAllowed or grabbed then
 		return
 	end
 	if flying then
@@ -549,6 +551,18 @@ local function toggleFly()
 	refreshFlyChip()
 end
 flyChip.MouseButton1Click:Connect(toggleFly)
+task.spawn(function()
+	local grabRemote = ReplicatedStorage:WaitForChild("AbuseGrab", 60) :: RemoteEvent?
+	if grabRemote then
+		grabRemote.OnClientEvent:Connect(function(on: boolean)
+			grabbed = on == true
+			if grabbed and flying then
+				stopFlying()
+				refreshFlyChip()
+			end
+		end)
+	end
+end)
 
 -- The giant and speed power-ups: a chip that turns the power-up off and on again during the event.
 local PERK_NAMES = { giant = "Size perk", speed = "Speed perk" }
@@ -710,7 +724,7 @@ do
 			local now = Config.Now()
 			if starts then
 				local left = starts - now
-				if left > 0 and left <= abuse.PreSeconds then
+				if left > 0 and left <= math.max(abuse.PreSeconds, 3600) then
 					pill.Visible = true
 					pillText.Text = string.format("ADMIN ABUSE IN %d:%02d", left // 60, left % 60)
 					pillStroke.Color = if left <= 60 then Colors.Bad else Colors.Coin
@@ -741,7 +755,7 @@ do
 		-- top middle: clear of the pill (top right), the chips (under it) and the poll card (bottom); on a narrow
 		-- screen the box would run under the pill, so it goes just below it
 		local narrow = UIKit.CanvasSize().X < 900
-		box.Position = UDim2.new(0.5, 0, 0, UIKit.TopInset() + (if narrow then 44 else 8))
+		box.Position = UDim2.new(0.5, 0, 0, if narrow then UIKit.TopInset() + 40 else 6) -- (right at the top edge on a wide screen)
 	end
 	placeBox()
 	UIKit.LayoutChanged:Connect(placeBox)
@@ -1017,6 +1031,23 @@ do
 			if starts and Config.Now() - starts <= 12 then
 				task.spawn(openingShot)
 			end
+		end
+	end)
+	-- Joining while the event is on (or within the hour before it): say so, so people stay.
+	task.spawn(function()
+		task.wait(7)
+		local starts = tonumber(ReplicatedStorage:GetAttribute("AbuseStarts"))
+		if not starts then
+			return
+		end
+		local now = Config.Now()
+		if ReplicatedStorage:GetAttribute("AbuseLive") == true then
+			if now - starts > 15 then
+				UIKit.Toast("Admin Abuse is LIVE! Stay in the game for free game passes, gems and limited pets.", "Good")
+			end
+		elseif starts - now > 0 and starts - now <= 3600 then
+			local mins = math.ceil((starts - now) / 60)
+			UIKit.Toast(string.format("Admin Abuse starts in %d minute%s. Stay tuned for free game passes, ranks and giveaways!", mins, if mins == 1 then "" else "s"), "Info")
 		end
 	end)
 	-- The power-up pick: everyone gets a card (same look as the vote card) with 3 power-ups and "No thanks".

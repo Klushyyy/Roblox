@@ -73,8 +73,14 @@ local function showPrize()
 		return
 	end
 	prizeBusy = true
+	-- "You won!" on top of "You won ..." is said twice: for those the card is just the message, big
+	local plain = string.find(item.Title, "^You won") ~= nil or string.find(item.Title, "^You got") ~= nil
 	prizeTitle.Text = item.Title
+	prizeTitle.Visible = not plain
 	prizeText.Text = item.Text
+	prizeText.Position = if plain then UDim2.fromOffset(90, 12) else UDim2.fromOffset(90, 42)
+	prizeText.Size = if plain then UDim2.new(1, -104, 1, -30) else UDim2.new(1, -104, 0, 44)
+	prizeText.TextYAlignment = if plain then Enum.TextYAlignment.Center else Enum.TextYAlignment.Top
 	for _, c in prizeIconHolder:GetChildren() do
 		c:Destroy()
 	end

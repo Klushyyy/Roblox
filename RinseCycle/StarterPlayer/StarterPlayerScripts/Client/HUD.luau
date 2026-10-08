@@ -223,9 +223,11 @@ function HUD.Init()
 		return b
 	end
 
-	local upgradesButton = sideButton("@Book", "Upgrades", Colors.Good, "Tab", "Y", function()
+	local upgradesButton
+	upgradesButton = sideButton("@Book", "Upgrades", Colors.Good, "Tab", "Y", function()
 		UIKit.ToggleWindow("Upgrades")
 	end)
+	HUD.UpgradesButton = upgradesButton -- (the tutorial points at it)
 	local shopButton = sideButton("@Bag", "Shop", Colors.Bad, "G", "Y", function()
 		UIKit.ToggleWindow("Shop")
 	end)
@@ -1290,6 +1292,19 @@ function HUD.Init()
 		leaveButton.LayoutOrder = 7
 		plusButton.Visible = true
 		hotbar.Visible = playing
+		-- The first-run tutorial keeps the screen simple: only what the current step introduces is there.
+		local tutorialStep = ClientState.TutorialStep
+		if tutorialStep and inRun then
+			shopButton.Visible = false
+			petsButton.Visible = false
+			leaveButton.Visible = false
+			upgradesButton.Visible = tutorialStep >= 4
+			dailyButton.Visible = false
+			musicButton.Visible = false
+			petsToggle.Visible = false
+			freeTag.Visible = false
+			hotbar.Visible = playing and tutorialStep >= 4
+		end
 		local key = hotbarKey()
 		if key ~= lastHotbarKey then
 			lastHotbarKey = key
@@ -1360,11 +1375,13 @@ function HUD.Init()
 			updateCurrencyValues()
 			refreshArenaWatch()
 			checkRunStartBanner()
+		elseif kind == "Tutorial" then
+			refreshMode()
 		elseif kind == "Meta" then
 			updateCurrencyValues()
 			local meta = ClientState.Meta :: any
-			freeTag.Visible = meta ~= nil and (tonumber(meta.ChestFreeLeft) or 0) > 0
-			petsToggle.Visible = petsToggleWanted(ClientState.Run ~= nil)
+			freeTag.Visible = ClientState.TutorialStep == nil and meta ~= nil and (tonumber(meta.ChestFreeLeft) or 0) > 0
+			petsToggle.Visible = ClientState.TutorialStep == nil and petsToggleWanted(ClientState.Run ~= nil)
 		end
 	end)
 
