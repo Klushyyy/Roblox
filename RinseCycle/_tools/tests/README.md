@@ -83,3 +83,4 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
 - v2.12.21: pets a bit slower (30/16), nearly stopped while held (1.5).
 - v2.12.22: big holes drop tiles by tween (scen_dishwasher still checks solidity under holes and healing); adminsim shows the fly chip for "Klushy".
 - v2.12.24: power-up pick card for everyone (fly/giant/speed), poll hint line, hotkeys off during the show (no new scenario needed; scen_abuse still passes).
+- v2.13.0: show update (power-up pick card, results card, finale fade, new black hole/tornado/meteors/fireworks); effects need the giant, which the offline sim cannot build, so they are only syntax/type checked here.

@@ -225,13 +225,15 @@ function PollUI.Init()
 		UIKit.Bounce(card)
 	end
 
-	local function showResult(id: string, text: string, options: { string }, counts: { number })
+	local close: () -> ()
+
+	local function showResult(id: string, text: string, options: { string }, counts: { number }, autoClose: number?)
 		if closed[id] then
 			return
 		end
 		currentId = id
 		phase = "Result"
-		title.Text = "POLL FINISHED"
+		title.Text = if autoClose then "RESULTS ARE IN" else "POLL FINISHED"
 		title.TextColor3 = Colors.Good
 		timer.Text = ""
 		question.Text = text
@@ -242,18 +244,28 @@ function PollUI.Init()
 			total += tonumber(counts[i]) or 0
 		end
 		layout.CellSize = if #options <= 2 then UDim2.new(1 / #options, -8, 0, 70) else UDim2.new(0.5, -4, 0, 38)
+		local best, bestN = 1, -1
+		for i = 1, #options do
+			local n = tonumber(counts[i]) or 0
+			if n > bestN then
+				best, bestN = i, n
+			end
+		end
 		for i, option in options do
 			local n = tonumber(counts[i]) or 0
 			local pct = if total > 0 then math.floor(n / total * 100 + 0.5) else 0
 			local cell = UIKit.Card({ Name = "Result", LayoutOrder = i, Color = Colors.PanelLight, Parent = row })
-			-- A bar for the share of votes.
+			-- A bar for the share of votes; the winner is lit up.
 			local bar = Instance.new("Frame")
-			bar.BackgroundColor3 = Colors.Good
-			bar.BackgroundTransparency = 0.45
+			bar.BackgroundColor3 = if i == best then Colors.Good else Colors.Primary
+			bar.BackgroundTransparency = if i == best then 0.25 else 0.7
+			if i == best then
+				UIKit.Stroke(cell, Colors.Good, 3, 0)
+			end
 			bar.Size = UDim2.fromScale(pct / 100, 1)
 			UIKit.Corner(bar, 10)
 			bar.Parent = cell
-			UIKit.Label({ Text = string.format("%s  %d (%d%%)", tostring(option), n, pct), TextSize = 16, TextScaled = true, Size = UDim2.new(1, -10, 1, -6), Position = UDim2.fromOffset(5, 3), Parent = cell })
+			UIKit.Label({ Text = string.format("%d%%  %s", pct, tostring(option)), TextSize = 16, TextScaled = true, Size = UDim2.new(1, -10, 1, -6), Position = UDim2.fromOffset(5, 3), Parent = cell })
 			table.insert(buttons, cell)
 		end
 		timer.Text = string.format("%d vote%s", total, if total == 1 then "" else "s")
@@ -261,9 +273,17 @@ function PollUI.Init()
 		setTucked(false)
 		UIKit.Bounce(card)
 		UIKit.PlaySound("Sparkle")
+		if autoClose then
+			-- a show vote: the results stay a few seconds, then go
+			task.delay(autoClose, function()
+				if currentId == id and phase == "Result" then
+					close()
+				end
+			end)
+		end
 	end
 
-	local function close()
+	close = function()
 		if currentId then
 			closed[currentId] = true
 		end
@@ -295,7 +315,7 @@ function PollUI.Init()
 				UIKit.SetDisabled(b, true)
 			end
 		elseif kind == "Result" and type(id) == "string" and type(options) == "table" and type(extra) == "table" then
-			showResult(id, tostring(text), options, extra)
+			showResult(id, tostring(text), options, extra, tonumber(hint))
 		end
 	end)
 

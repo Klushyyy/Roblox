@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.12.27"
+Config.Version = "2.13.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1136,7 +1136,7 @@ Config.UpcomingEvents = {
 Config.AbuseShow = ({
 	EventKey = "AdminAbuse",
 	PreSeconds = 1800, -- rounds can't start this long before the event
-	ShowSeconds = 555, -- the whole show, from the first boom to the end (rounds are paused for it)
+	ShowSeconds = 560, -- the whole show, from the first boom to the end (rounds are paused for it)
 	Warnings = { 1800, 900, 300, 60 }, -- banners this many seconds before the start
 	OwnerUserId = 2297538363,
 	OwnerName = "Klushy",
@@ -1162,7 +1162,7 @@ Config.AbuseShow = ({
 				{ Kind = "Bubbles", PerPlayer = 400 },
 				{ Kind = "Gems", PerPlayer = 40 },
 			},
-			Chosen = "the vote is in. most votes: {text}. coming right up.",
+			Chosen = "the results are in. {text}.",
 		},
 		Passes = {
 			Kind = "Announce",
@@ -1180,19 +1180,37 @@ Config.AbuseShow = ({
 				{ Kind = "Effect", Effect = "blackhole", Text = "Black hole" },
 				{ Kind = "Effect", Effect = "tornado", Text = "Tornado" },
 			},
-			Chosen = "the vote is in. most votes: {text}. hold on to something.",
+			Chosen = "the results are in. {text}. hold on to something.",
+		},
+		Rain = {
+			Kind = "Announce",
+			Option = { Kind = "Gems", PerPlayer = 25 },
+			Intro = "25 gems for everyone. no vote.",
+			Done = "check your gems.",
+		},
+		Passes2 = {
+			Kind = "Announce",
+			Option = { Kind = "Passes", Share = 0.1 },
+			Intro = "{players} are about to win a random game pass.",
+			Done = "winners, check your screen.",
+		},
+		PetGift = {
+			Kind = "Announce",
+			Option = { Kind = "Pet", Share = 0.1 },
+			Intro = "{players} are about to win the limited pet.",
+			Done = "congratulations to whoever that was.",
 		},
 		Final = {
 			Kind = "Poll",
 			Seconds = 30,
-			Question = "FINAL VOTE: the prize everyone fights for",
+			Question = "FINAL VOTE",
 			Options = {
 				{ Kind = "Pet", Share = 0.1 },
 				{ Kind = "Passes", Share = 0.2 },
 				{ Kind = "Bubbles", PerPlayer = 1500 },
 				{ Kind = "Gems", PerPlayer = 150 },
 			},
-			Chosen = "the vote is in. most votes: {text}. lets go.",
+			Chosen = "the results are in. {text}.",
 		},
 	},
 	-- Holes in the table: { x, z, radius } on the plaza. The first is where the Fastest Clean board and the
@@ -1230,36 +1248,26 @@ do
 	at(22, "say", "first thing: a vote. everyone votes. the option with the most votes wins, and then everyone gets it.")
 	at(26, "round", "Gifts")
 	at(31, "attack", "beam")
-	at(38, "say", "bubbles or gems, for everyone. if your pick loses, thats democracy.")
 	at(41, "say", "see that machine? i never liked it.")
 	at(44, "attack", "dishwasher")
 	at(58, "say", "my legs hurt. im sitting down. and then im going to have a look at that table.")
 	at(60, "attack", "chairshow")
 	at(62, "attack", "fountains")
-	at(52, "say", "the vote closes in a few seconds. most votes wins.")
-	at(68, "attack", "lightning")
-	at(74, "say", "prizes are landing in your inventory right now.")
 	at(78, "attack", "barrage")
-	at(86, "say", "that was the easy part.")
-	at(114, "attack", "laser")
 	at(98, "say", "this next round is not going to be fair.")
 	at(101, "round", "Passes")
 	at(106, "attack", "ufo")
+	at(114, "attack", "laser")
 	at(122, "attack", "shockwave")
-	at(126, "say", "you can feel that, right? thats the floor. it is not happy.")
 	at(134, "say", "the world needs some colour. one second.")
 	at(138, "attack", "disco")
 	at(144, "say", "next vote. most votes wins, and i do whatever it says.")
 	at(147, "round", "Break")
 	at(152, "attack", "lightning")
-	at(164, "say", "choose carefully. i have to live with it too.")
 	at(172, "attack", "laser")
 	-- (the winning effect plays by itself when the vote is counted, around 182)
-	at(190, "say", "thats what you picked. dont blame me.")
 	at(196, "say", "right. the table. lets see how much it can take.")
 	at(199, "hole", 2)
-	at(207, "say", "stay off the edges. or dont. i get to watch either way.")
-	at(211, "attack", "beam")
 	at(217, "say", "now. im going to build something. give me a second.")
 	at(218, "obby", true)
 	at(230, "say", "an obby. behind the spawn, at the end of the table.")
@@ -1267,17 +1275,14 @@ do
 	at(240, "attack", "winner")
 	at(246, "say", "bombs. a red circle on the table is where one lands. get out of it, or fall in.")
 	at(248, "attack", "bombs")
-	at(251, "say", "everyone gets to pick ONE power-up for the rest of the event. fly, giant or speed. not a vote, you just get what you choose.")
+	at(251, "say", "everyone gets to pick ONE power-up for the rest of the event. fly, size or speed. not a vote, you just get what you choose.")
 	at(254, "attack", "perkpick")
-	at(258, "say", "i built it to be fair. mostly.")
 	at(268, "attack", "fountains")
-	at(272, "say", "the spinners are my favourite part.")
 	at(276, "attack", "ufo")
-	at(286, "say", "fall off and its back to your last checkpoint. no mercy. ok, a little mercy.")
 	at(290, "attack", "winner")
-	at(300, "say", "keep going. i can see you from up here. you are tiny. be proud.")
+	at(296, "say", "gem rain. everyone, right now.")
+	at(297, "round", "Rain")
 	at(304, "attack", "disco")
-	at(312, "attack", "lightning")
 	at(318, "say", "right. im done warming up.")
 	at(322, "attack", "shockwave")
 	-- Turn up the heat
@@ -1286,56 +1291,45 @@ do
 	at(333, "round", "Final")
 	at(336, "attack", "meteors")
 	at(344, "say", "four options. one of them is a limited pet for a few lucky players. just saying.")
-	at(350, "attack", "lightning")
 	at(358, "attack", "fireworks")
-	at(352, "say", "ten seconds left on the vote. if your pick isnt winning, tell your friends.")
-	at(366, "attack", "blackhole")
-	at(378, "attack", "laser")
-	at(384, "say", "winners incoming. check your screen.")
-	at(388, "attack", "tornado")
-	at(394, "say", "again. why not.")
-	at(396, "hole", 2)
-	at(404, "attack", "meteors")
-	at(410, "attack", "ufo")
-	at(416, "say", "nothing is balanced anymore and i love it.")
-	at(420, "attack", "lightning")
-	at(426, "attack", "fountains")
-	at(432, "attack", "barrage")
-	at(438, "say", "if you are still in the obby, keep going.")
+	at(372, "attack", "blackhole")
+	at(386, "attack", "laser")
+	at(392, "say", "another game pass is going to a few of you.")
+	at(393, "round", "Passes2")
+	at(398, "attack", "tornado")
+	at(412, "say", "again. why not.")
+	at(414, "hole", 2)
+	at(418, "attack", "meteors")
+	at(424, "attack", "ufo")
+	at(430, "say", "somebody is getting a limited pet. right now.")
+	at(431, "round", "PetGift")
+	at(438, "attack", "barrage")
 	at(442, "attack", "blackhole")
-	at(450, "attack", "disco")
-	at(456, "attack", "lightning")
-	at(444, "say", "ok. this bit is boring. lets make it more interesting.")
-	at(448, "say", "im letting some limited pets loose on the table. they run from you. hold E on one to catch it. you have one minute.")
-	at(452, "attack", "petchase")
-	at(486, "say", "somebody screenshot this. i want proof later.")
-	at(490, "attack", "lightning")
-	at(496, "attack", "ufo")
-	at(514, "attack", "laser")
-	at(518, "attack", "barrage")
-	at(524, "say", "that spot looks empty. i am redecorating.")
-	at(526, "attack", "nuke")
-	at(530, "attack", "laser")
-	at(501, "say", "all right. five seconds till the obby comes down.")
-	at(503, "say", "5")
-	at(504, "say", "4")
-	at(505, "say", "3")
-	at(506, "say", "2")
-	at(507, "say", "1")
-	at(508, "obby", false)
-	at(508, "say", "boom.")
+	at(448, "say", "all right. five seconds till the obby comes down.")
+	at(450, "say", "5")
+	at(451, "say", "4")
+	at(452, "say", "3")
+	at(453, "say", "2")
+	at(454, "say", "1")
+	at(455, "obby", false)
+	at(455, "say", "boom.")
+	at(459, "say", "ok. this bit is boring. lets make it more interesting.")
+	at(463, "say", "im letting some limited pets loose on the table. they run from you. hold E on one to catch it. you have one minute.")
+	at(467, "attack", "petchase")
+	at(486, "attack", "ufo")
+	at(506, "attack", "laser")
+	at(536, "say", "that spot looks empty. i am redecorating.")
+	at(538, "attack", "nuke")
 	at(548, "attack", "tornado")
-	at(554, "attack", "lightning")
-	at(560, "say", "one more thing is about to go off. stand back.")
-	at(564, "attack", "blackhole")
+	at(561, "say", "one more thing is about to go off. stand back.")
 	at(572, "attack", "fireworks")
-	at(578, "attack", "lightning")
 	at(582, "attack", "parksouth")
 	at(592, "say", "alright. thats everything i had.")
 	at(596, "say", "now everyone watch this.")
 	at(599, "leave")
 	at(611, "thanks")
-	at(613, "heal")
+	at(614, "restore")
+	at(626, "say", "the event is done. thank you for coming.")
 	Config.AbuseShow.Script = S
 end
 
@@ -1359,10 +1353,10 @@ function Config.AbuseOption(option: any, n: number): any
 		out.Text = string.format("%s %s for EVERYONE", commas(out.PerPlayer), option.Kind)
 	elseif option.Kind == "Passes" then
 		out.Count = math.clamp(math.ceil(n * (option.Share or 0.1)), 1, 25)
-		out.Text = string.format("A random game pass for %d lucky player%s", out.Count, if out.Count == 1 then "" else "s")
+		out.Text = string.format("Random game pass for %d lucky player%s", out.Count, if out.Count == 1 then "" else "s")
 	else
 		out.Count = math.clamp(math.ceil(n * (option.Share or 0.1)), 1, 15)
-		out.Text = string.format("The limited pet for %d lucky player%s", out.Count, if out.Count == 1 then "" else "s")
+		out.Text = string.format("Limited pet for %d lucky player%s", out.Count, if out.Count == 1 then "" else "s")
 	end
 	return out
 end

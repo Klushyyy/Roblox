@@ -12,8 +12,10 @@
 
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
+local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 local Client = script.Parent
 local UIKit = require(Client:WaitForChild("UIKit"))
 local ClientState = require(Client:WaitForChild("ClientState"))
@@ -118,7 +120,7 @@ function StayOffer.Init()
 		Parent = content,
 	})
 	pulse(headline, 0.06, 0.9)
-	UIKit.Label({
+	local subtitle = UIKit.Label({
 		Text = "FREE x2 Cleaning Speed for 15 minutes!",
 		TextSize = 44,
 		TextScaled = true,
@@ -128,7 +130,7 @@ function StayOffer.Init()
 		Position = UDim2.new(0.5, 0, 0, 96),
 		Parent = content,
 	})
-	UIKit.Label({
+	local bodyText = UIKit.Label({
 		Text = "Everything you and your pets clean counts DOUBLE. Only once a day, and it's gone if you leave now!",
 		TextSize = 26,
 		TextWrapped = true,
@@ -150,7 +152,7 @@ function StayOffer.Init()
 		end,
 	})
 	pulse(claimButton, 0.05, 0.8)
-	UIKit.Button({
+	local leaveButton = UIKit.Button({
 		Text = "No thanks, I'll leave",
 		Color = Colors.Disabled,
 		TextSize = 18,
@@ -163,6 +165,22 @@ function StayOffer.Init()
 		end,
 	})
 	UIKit.RegisterWindow("StayOffer", { Open = function() end })
+
+	-- Two faces of the same window: the daily boost, and (only from the moment the Admin Abuse countdown starts
+	-- until the show is over) "don't leave, the event is on / about to start".
+	local function setMode(eventNote: string?)
+		local event = eventNote ~= nil
+		headline.Text = if event then "DON'T LEAVE!" else "WAIT! DON'T LEAVE YET!"
+		subtitle.Text = eventNote or "FREE x2 Cleaning Speed for 15 minutes!"
+		bodyText.Text = if event then "Free ranks, free game passes, limited pets and giveaways. You'd miss all of it." else "Everything you and your pets clean counts DOUBLE. Only once a day, and it's gone if you leave now!"
+		claimButton.Visible = not event
+		leaveButton.Text = if event then "Stay" else "No thanks, I'll leave"
+		local label = leaveButton:FindFirstChild("Label", true)
+		if label and label:IsA("TextLabel") then
+			label.Text = leaveButton.Text
+		end
+		leaveButton.Position = UDim2.new(0.5, 0, 0, if event then 250 else 378)
+	end
 
 	-- Boost badges: a neat column just right of the left-hand buttons (Daily, Codes, ...), clear of
 	-- the Bubbles pill, the pop-up messages, the run's progress bar and Roblox's player list.
@@ -250,7 +268,20 @@ function StayOffer.Init()
 	end)
 
 	-- Opening the Roblox menu: offer today's boost (once a session, and only if it's still free).
+	local lastEventNote = 0
 	GuiService.MenuOpened:Connect(function()
+		local locked = Config.EventLockdown()
+		if locked then
+			if os.clock() - lastEventNote > 20 then
+				lastEventNote = os.clock()
+				local starts = tonumber(ReplicatedStorage:GetAttribute("AbuseStarts"))
+				local left = if starts then starts - Config.Now() else 0
+				setMode(if left > 0 then string.format("Admin Abuse starts in %d minute%s!", math.ceil(left / 60), if math.ceil(left / 60) == 1 then "" else "s") else "The Admin Abuse event is on right now!")
+				UIKit.OpenWindow("StayOffer")
+			end
+			return
+		end
+		setMode(nil)
 		local meta = ClientState.Meta :: any
 		if offeredThisSession or not meta or meta.StayBoostReady ~= true or boostLeft() > 0 then
 			return

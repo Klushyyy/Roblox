@@ -2391,20 +2391,30 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 			while z < iz1 - 0.01 do
 				local z1 = math.min(z + TILE, iz1)
 				local tcx, tcz = (x + x1) / 2, (z + z1) / 2
-				local d = math.sqrt((tcx - cx) ^ 2 + (tcz - cz) ^ 2) + (rng:NextNumber() - 0.5) * 6
+				local d = math.sqrt((tcx - cx) ^ 2 + (tcz - cz) ^ 2) + (rng:NextNumber() - 0.5) * (if light then 2 else 6)
 				if d < R then
 					if not invisible then
 						local tile = piece(x, x1, z, z1)
 						local flat = tile.CFrame
 						table.insert(rec.Tiles, { Part = tile, Flat = flat, D = d, Fall = true, Transparency = tile.Transparency })
 						if light then
+							-- Big holes: the tiles stay put (not solid) and drop a moment later, rippling out from the
+							-- middle, as loose parts that touch nothing (no collisions to work out, so it stays smooth),
+							-- and are taken away once they have fallen out of sight.
 							tile.CanCollide = false
-							tile:SetAttribute("Falling", true) -- (a later crater must not cut it up again: the bits would hang there, solid and invisible)
-							local drop = if roof then rng:NextNumber(40, 90) else rng:NextNumber(30, 60)
-							local goal = flat * CFrame.Angles(rng:NextNumber(-1.2, 1.2), rng:NextNumber(-1.2, 1.2), rng:NextNumber(-1.2, 1.2)) - Vector3.new(0, drop, 0)
-							task.delay(rng:NextNumber(0, 0.5) + (d / R) * 0.25, function()
+							tile:SetAttribute("Falling", true)
+							task.delay(rng:NextNumber(0, 0.25) + (d / R) * 0.35, function()
 								if tile.Parent then
-									TweenService:Create(tile, TweenInfo.new(1.1, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { CFrame = goal, Transparency = 1 }):Play()
+									tile.Anchored = false
+									tile.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-10, 10), rng:NextNumber(-6, 4), rng:NextNumber(-10, 10))
+									tile.AssemblyAngularVelocity = Vector3.new(rng:NextNumber(-4, 4), rng:NextNumber(-4, 4), rng:NextNumber(-4, 4))
+									pcall(function()
+										tile:SetNetworkOwner(nil)
+									end)
+									task.delay(2.2, function()
+										tile.Anchored = true
+										tile.Parent = nil
+									end)
 								end
 							end)
 						else
@@ -2719,42 +2729,80 @@ function LobbyBuilder.BreakDishwasher(impact: Vector3)
 		end
 	end
 end
-function LobbyBuilder.RepairDishwasher()
+function LobbyBuilder.RepairDishwasher(seconds: number?)
 	local saved = dishwasherSaved
 	if not saved then
 		return
 	end
+	local fade = seconds or 1.5
 	dishwasherSaved = nil
 	local chunks = dishwasherChunks
 	dishwasherChunks = {}
 	for _, c in chunks do
-		TweenService:Create(c, TweenInfo.new(1.5), { Transparency = 1 }):Play()
+		TweenService:Create(c, TweenInfo.new(math.min(fade, 2)), { Transparency = 1 }):Play()
 		c.CanCollide = false
-		task.delay(1.6, function()
+		task.delay(math.min(fade, 2) + 0.1, function()
 			c:Destroy()
 		end)
 	end
-	for gui, enabled in dishwasherGuis do
-		gui.Enabled = enabled
-	end
+	-- the signs and labels on it fade in over the last stretch (they used to simply appear)
+	local guis = dishwasherGuis
 	dishwasherGuis = {}
+	task.delay(fade * 0.55, function()
+		for gui, enabled in guis do
+			if not gui.Parent then
+				continue
+			end
+			local recs: { { any } } = {}
+			for _, d in gui:GetDescendants() do
+				if d:IsA("GuiObject") then
+					table.insert(recs, { d, "BackgroundTransparency", d.BackgroundTransparency })
+					if d:IsA("TextLabel") or d:IsA("TextButton") then
+						table.insert(recs, { d, "TextTransparency", (d :: any).TextTransparency })
+					elseif d:IsA("ImageLabel") then
+						table.insert(recs, { d, "ImageTransparency", (d :: any).ImageTransparency })
+					end
+				elseif d:IsA("UIStroke") then
+					table.insert(recs, { d, "Transparency", d.Transparency })
+				end
+			end
+			for _, r in recs do
+				pcall(function()
+					r[1][r[2]] = 1
+				end)
+			end
+			gui.Enabled = enabled
+			for _, r in recs do
+				pcall(function()
+					TweenService:Create(r[1], TweenInfo.new(fade * 0.45), { [r[2]] = r[3] }):Play()
+				end)
+			end
+		end
+	end)
 	for part, cf in dishwasherSavedCF do
 		part.CFrame = cf
 	end
 	dishwasherSavedCF = {}
 	for part, orig in saved do
 		if part.Parent then
-			TweenService:Create(part, TweenInfo.new(1.5), { Transparency = orig[1] :: number }):Play()
-			part.CanCollide = orig[2] :: boolean
-			part.CanQuery = orig[3] :: boolean
+			TweenService:Create(part, TweenInfo.new(fade), { Transparency = orig[1] :: number }):Play()
+			task.delay(fade * 0.8, function()
+				if part.Parent then
+					part.CanCollide = orig[2] :: boolean
+					part.CanQuery = orig[3] :: boolean
+				end
+			end)
 		end
 	end
-	if dishwasherFolder then
-		for _, e in dishwasherFolder:GetDescendants() do
-			if e:IsA("ParticleEmitter") then
-				e.Enabled = true
+	local folder = dishwasherFolder
+	if folder then
+		task.delay(fade * 0.7, function()
+			for _, e in folder:GetDescendants() do
+				if e:IsA("ParticleEmitter") then
+					e.Enabled = true
+				end
 			end
-		end
+		end)
 	end
 end
 
@@ -2942,6 +2990,31 @@ function LobbyBuilder.SetUiEnabled(on: boolean)
 				table.insert(uiOff, d)
 				d.Enabled = false
 			end
+		end
+	end
+end
+
+-- The E prompts of the lobby (rebirth fountain, ranks stand, shop...) are switched off for the whole show:
+-- nothing they open is usable then. The ones switched off are switched back on at the end.
+local promptsOff: { ProximityPrompt } = {}
+function LobbyBuilder.SetPromptsEnabled(on: boolean)
+	local model = lobby and lobby.Model
+	if on then
+		for _, prompt in promptsOff do
+			if prompt.Parent then
+				prompt.Enabled = true
+			end
+		end
+		promptsOff = {}
+		return
+	end
+	if not model then
+		return
+	end
+	for _, d in model:GetDescendants() do
+		if d:IsA("ProximityPrompt") and d.Enabled then
+			table.insert(promptsOff, d)
+			d.Enabled = false
 		end
 	end
 end

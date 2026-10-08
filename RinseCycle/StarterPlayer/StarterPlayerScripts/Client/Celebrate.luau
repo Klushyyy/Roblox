@@ -55,8 +55,56 @@ showNext = function()
 	UIKit.Confetti()
 end
 
+-- During the Admin Abuse show prizes use a small card (the same look as the vote card) instead of the big
+-- window, one at a time, so they never pile up on top of the vote, the power-up pick and the speech box.
+local prizeQueue: { { Title: string, Text: string, Icon: string } } = {}
+local prizeBusy = false
+local prizeHolder: Frame? = nil
+local prizeTitle: TextLabel
+local prizeText: TextLabel
+local prizeIconHolder: Frame
+
+local function showPrize()
+	local item = table.remove(prizeQueue, 1)
+	local holder = prizeHolder
+	if not item or not holder then
+		prizeBusy = false
+		return
+	end
+	prizeBusy = true
+	prizeTitle.Text = item.Title
+	prizeText.Text = item.Text
+	for _, c in prizeIconHolder:GetChildren() do
+		c:Destroy()
+	end
+	local kind = string.match(item.Icon, "^@(%a+)$")
+	if kind then
+		local art = UIKit.Icon(kind, 56)
+		art.AnchorPoint = Vector2.new(0.5, 0.5)
+		art.Position = UDim2.fromScale(0.5, 0.5)
+		art.Parent = prizeIconHolder
+	else
+		UIKit.Label({ Text = item.Icon, TextSize = 44, Stroke = false, Size = UDim2.fromScale(1, 1), Parent = prizeIconHolder })
+	end
+	holder.Visible = true
+	UIKit.Bounce(holder)
+	UIKit.PlaySound("Sparkle")
+	UIKit.Confetti(40)
+	task.delay(4.2, function()
+		holder.Visible = false
+		task.delay(0.25, showPrize)
+	end)
+end
+
 -- Shows a popup now (or after the ones already waiting).
 function Celebrate.Show(title: string, text: string, icon: string?)
+	if ReplicatedStorage:GetAttribute("AbuseLive") == true and prizeHolder then
+		table.insert(prizeQueue, { Title = tostring(title), Text = tostring(text), Icon = if icon and icon ~= "" then icon else "🎁" })
+		if not prizeBusy then
+			showPrize()
+		end
+		return
+	end
 	table.insert(queue, { Title = tostring(title), Text = tostring(text), Icon = if icon and icon ~= "" then icon else "🎁" })
 	if not showing then
 		showNext()
@@ -120,6 +168,26 @@ function Celebrate.Init()
 			task.delay(0.3, showNext)
 		end,
 	})
+
+	-- the small prize card of the show
+	local holder = Instance.new("Frame")
+	holder.Name = "ShowPrize"
+	holder.AnchorPoint = Vector2.new(0.5, 0)
+	holder.Position = UDim2.new(0.5, 0, 0.3, 0)
+	holder.Size = UDim2.fromOffset(480, 100)
+	holder.BackgroundTransparency = 1
+	holder.Visible = false
+	holder.Parent = root
+	local card = UIKit.Card({ Name = "Prize", Size = UDim2.new(1, -8, 1, -6), Position = UDim2.fromOffset(4, 3), Color = Colors.PanelDark, Parent = holder })
+	UIKit.Stroke(card, Colors.Primary, 3, 0)
+	prizeIconHolder = Instance.new("Frame")
+	prizeIconHolder.BackgroundTransparency = 1
+	prizeIconHolder.Position = UDim2.fromOffset(12, 12)
+	prizeIconHolder.Size = UDim2.fromOffset(64, 64)
+	prizeIconHolder.Parent = card
+	prizeTitle = UIKit.Label({ Text = "", TextSize = 22, TextScaled = true, TextColor3 = Colors.Warning, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(90, 10), Size = UDim2.new(1, -104, 0, 28), Parent = card })
+	prizeText = UIKit.Label({ Text = "", TextSize = 16, TextScaled = true, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(90, 42), Size = UDim2.new(1, -104, 0, 44), Parent = card })
+	prizeHolder = holder
 
 	Remotes.Event("Celebrate").OnClientEvent:Connect(function(title, text, icon)
 		Celebrate.Show(title, text, icon)
