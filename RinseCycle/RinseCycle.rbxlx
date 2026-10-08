@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.13.1"
+Config.Version = "2.13.2"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1252,9 +1252,7 @@ do
 	at(22, "say", "first thing: a vote. everyone votes. the option with the most votes wins, and then everyone gets it.")
 	at(26, "round", "Gifts")
 	at(31, "attack", "beam")
-	at(41, "say", "see that machine? i never liked it.")
 	at(44, "attack", "dishwasher")
-	at(58, "say", "my legs hurt. im sitting down. and then im going to have a look at that table.")
 	at(60, "attack", "chairshow")
 	at(62, "attack", "fountains")
 	at(78, "attack", "barrage")
@@ -9401,9 +9399,10 @@ do
 				end)
 			end
 		end
+		local dentCount = 199 -- hole indexes 200 and up are the meteors' small dents
 		fx.meteors = function()
-			-- A real meteor shower: lots of big rocks with fire tails, every impact shoves whoever is near it, and
-			-- every fourth one leaves a patch of fire that burns for a few seconds.
+			-- A real meteor shower: lots of big rocks with fire tails. Every impact blasts away whoever is near it
+			-- (a wide radius, hard), every third one leaves a small dent in the table, every fourth a patch of fire.
 			local n = if heat then 28 else 18
 			for i = 1, n do
 				task.delay(i * 0.2, function()
@@ -9425,7 +9424,11 @@ do
 						rock:Destroy()
 						harmlessBlast(target, 20)
 						boom(2.2, target)
-						shoveNear(target, 26, 55, 38)
+						shoveNear(target, 46, 85, 120)
+						if i % 3 == 0 and not LobbyBuilder.IsHoleAt(target.X, target.Z, 10) then
+							dentCount += 1
+							LobbyBuilder.OpenCrater(dentCount, target.X, target.Z, 5.5) -- (small: the storm should not eat the table)
+						end
 						if i % 4 == 0 then
 							local fire = neonPart(Vector3.new(14, 1, 14), Color3.fromRGB(255, 120, 40), Enum.PartType.Cylinder)
 							fire.Transparency = 0.5
@@ -10054,6 +10057,7 @@ do
 			if not model or not rootPart or LobbyBuilder.DishwasherBroken() then
 				return
 			end
+			say("see that machine? i never liked it.") -- (said as he starts to gather the fireball, a few seconds before it hits)
 			local unit = if giantHead then giantHead.Size.Y else 45
 			-- where his hands meet: out in front of his chest (a head is about 1.2 studs tall at scale 1)
 			local scale = unit / 1.2
@@ -11133,6 +11137,7 @@ do
 				return
 			end
 			state = "sitleap"
+			say("my legs hurt. im sitting down. and then im going to have a look at that table.")
 			moveT0, moveFromPos, moveFromY = os.clock(), pos, rootY
 			if walkTrack then
 				walkTrack:Stop(0.4)
@@ -31759,6 +31764,7 @@ return Bubbles</ProtectedString></Properties></Item>
 	are shown one after another.
 ]]
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
@@ -31845,6 +31851,20 @@ local function showPrize()
 	UIKit.Bounce(holder)
 	UIKit.PlaySound("Sparkle")
 	UIKit.Confetti(40)
+	-- it sits where the vote / power-up cards sit, and stacks above them while one of those is up
+	task.spawn(function()
+		while holder.Visible do
+			local gui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+			local pollUp = false
+			if gui then
+				local poll = gui:FindFirstChild("PollHolder", true)
+				local pick = gui:FindFirstChild("PickHolder", true)
+				pollUp = (poll ~= nil and poll:IsA("GuiObject") and poll.Visible) or (pick ~= nil and pick:IsA("GuiObject") and pick.Visible)
+			end
+			holder.Position = UDim2.new(0.5, 0, 1, if pollUp then -340 else -110)
+			task.wait(0.15)
+		end
+	end)
 	task.delay(4.2, function()
 		holder.Visible = false
 		task.delay(0.25, showPrize)
@@ -31927,8 +31947,8 @@ function Celebrate.Init()
 	-- the small prize card of the show
 	local holder = Instance.new("Frame")
 	holder.Name = "ShowPrize"
-	holder.AnchorPoint = Vector2.new(0.5, 0)
-	holder.Position = UDim2.new(0.5, 0, 0.3, 0)
+	holder.AnchorPoint = Vector2.new(0.5, 1)
+	holder.Position = UDim2.new(0.5, 0, 1, -110) -- the same spot as the vote and power-up cards
 	holder.Size = UDim2.fromOffset(480, 100)
 	holder.BackgroundTransparency = 1
 	holder.Visible = false
@@ -31940,8 +31960,8 @@ function Celebrate.Init()
 	prizeIconHolder.Position = UDim2.fromOffset(12, 12)
 	prizeIconHolder.Size = UDim2.fromOffset(64, 64)
 	prizeIconHolder.Parent = card
-	prizeTitle = UIKit.Label({ Text = "", TextSize = 22, TextScaled = true, TextColor3 = Colors.Warning, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(90, 10), Size = UDim2.new(1, -104, 0, 28), Parent = card })
-	prizeText = UIKit.Label({ Text = "", TextSize = 16, TextScaled = true, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(90, 42), Size = UDim2.new(1, -104, 0, 44), Parent = card })
+	prizeTitle = UIKit.Label({ Text = "", Font = UIKit.Theme.Fonts.Title, TextSize = 22, TextScaled = true, TextColor3 = Colors.Warning, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(90, 10), Size = UDim2.new(1, -104, 0, 28), Parent = card })
+	prizeText = UIKit.Label({ Text = "", Font = UIKit.Theme.Fonts.Title, TextSize = 18, TextScaled = true, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(90, 42), Size = UDim2.new(1, -104, 0, 44), Parent = card })
 	prizeHolder = holder
 
 	Remotes.Event("Celebrate").OnClientEvent:Connect(function(title, text, icon)
@@ -44662,8 +44682,8 @@ function PollUI.Init()
 		Parent = slider,
 	})
 	UIKit.Stroke(card, Colors.Primary, 3, 0)
-	local title = UIKit.Label({ Text = "POLL", TextSize = 16, TextScaled = true, TextColor3 = Colors.Primary, Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -230, 0, 20), TextXAlignment = Enum.TextXAlignment.Left, Parent = card })
-	local timer = UIKit.Label({ Text = "", TextSize = 16, TextColor3 = Colors.TextDim, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -52, 0, 6), Size = UDim2.fromOffset(150, 20), TextXAlignment = Enum.TextXAlignment.Right, Parent = card })
+	local title = UIKit.Label({ Text = "POLL", Font = UIKit.Theme.Fonts.Title, TextSize = 16, TextScaled = true, TextColor3 = Colors.Primary, Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -230, 0, 20), TextXAlignment = Enum.TextXAlignment.Left, Parent = card })
+	local timer = UIKit.Label({ Text = "", Font = UIKit.Theme.Fonts.Title, TextSize = 16, TextColor3 = Colors.TextDim, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -52, 0, 6), Size = UDim2.fromOffset(150, 20), TextXAlignment = Enum.TextXAlignment.Right, Parent = card })
 	local question = UIKit.Label({ Text = "", TextSize = 20, TextWrapped = true, TextScaled = true, Position = UDim2.fromOffset(14, 30), Size = UDim2.new(1, -28, 0, 44), Parent = card })
 	local row = Instance.new("Frame")
 	row.Name = "Answers"
@@ -44796,7 +44816,7 @@ function PollUI.Init()
 			bar.Size = UDim2.fromScale(pct / 100, 1)
 			UIKit.Corner(bar, 10)
 			bar.Parent = cell
-			UIKit.Label({ Text = string.format("%d%%  %s", pct, tostring(option)), TextSize = 16, TextScaled = true, Size = UDim2.new(1, -10, 1, -6), Position = UDim2.fromOffset(5, 3), Parent = cell })
+			UIKit.Label({ Text = string.format("%d%%  %s", pct, tostring(option)), Font = UIKit.Theme.Fonts.Title, TextSize = 16, TextScaled = true, Size = UDim2.new(1, -10, 1, -6), Position = UDim2.fromOffset(5, 3), Parent = cell })
 			table.insert(buttons, cell)
 		end
 		timer.Text = string.format("%d vote%s", total, if total == 1 then "" else "s")
@@ -53288,8 +53308,8 @@ do
 			Parent = holder,
 		})
 		UIKit.Stroke(card, Colors.Primary, 3, 0)
-		UIKit.Label({ Text = "POWER-UP", TextSize = 16, TextScaled = true, TextColor3 = Colors.Primary, Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -230, 0, 20), TextXAlignment = Enum.TextXAlignment.Left, Parent = card })
-		local timerLabel = UIKit.Label({ Text = "", TextSize = 16, TextColor3 = Colors.TextDim, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 6), Size = UDim2.fromOffset(150, 20), TextXAlignment = Enum.TextXAlignment.Right, Parent = card })
+		UIKit.Label({ Text = "POWER-UP", Font = UIKit.Theme.Fonts.Title, TextSize = 16, TextScaled = true, TextColor3 = Colors.Primary, Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -230, 0, 20), TextXAlignment = Enum.TextXAlignment.Left, Parent = card })
+		local timerLabel = UIKit.Label({ Text = "", Font = UIKit.Theme.Fonts.Title, TextSize = 16, TextColor3 = Colors.TextDim, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 6), Size = UDim2.fromOffset(150, 20), TextXAlignment = Enum.TextXAlignment.Right, Parent = card })
 		UIKit.Label({ Text = "Pick one power-up for the rest of the event", TextSize = 20, TextWrapped = true, TextScaled = true, Position = UDim2.fromOffset(14, 30), Size = UDim2.new(1, -28, 0, 44), Parent = card })
 		local row = Instance.new("Frame")
 		row.BackgroundTransparency = 1

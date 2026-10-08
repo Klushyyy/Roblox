@@ -1043,8 +1043,8 @@ do
 			Parent = holder,
 		})
 		UIKit.Stroke(card, Colors.Primary, 3, 0)
-		UIKit.Label({ Text = "POWER-UP", TextSize = 16, TextScaled = true, TextColor3 = Colors.Primary, Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -230, 0, 20), TextXAlignment = Enum.TextXAlignment.Left, Parent = card })
-		local timerLabel = UIKit.Label({ Text = "", TextSize = 16, TextColor3 = Colors.TextDim, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 6), Size = UDim2.fromOffset(150, 20), TextXAlignment = Enum.TextXAlignment.Right, Parent = card })
+		UIKit.Label({ Text = "POWER-UP", Font = UIKit.Theme.Fonts.Title, TextSize = 16, TextScaled = true, TextColor3 = Colors.Primary, Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -230, 0, 20), TextXAlignment = Enum.TextXAlignment.Left, Parent = card })
+		local timerLabel = UIKit.Label({ Text = "", Font = UIKit.Theme.Fonts.Title, TextSize = 16, TextColor3 = Colors.TextDim, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 6), Size = UDim2.fromOffset(150, 20), TextXAlignment = Enum.TextXAlignment.Right, Parent = card })
 		UIKit.Label({ Text = "Pick one power-up for the rest of the event", TextSize = 20, TextWrapped = true, TextScaled = true, Position = UDim2.fromOffset(14, 30), Size = UDim2.new(1, -28, 0, 44), Parent = card })
 		local row = Instance.new("Frame")
 		row.BackgroundTransparency = 1

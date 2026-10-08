@@ -131,8 +131,8 @@ function PollUI.Init()
 		Parent = slider,
 	})
 	UIKit.Stroke(card, Colors.Primary, 3, 0)
-	local title = UIKit.Label({ Text = "POLL", TextSize = 16, TextScaled = true, TextColor3 = Colors.Primary, Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -230, 0, 20), TextXAlignment = Enum.TextXAlignment.Left, Parent = card })
-	local timer = UIKit.Label({ Text = "", TextSize = 16, TextColor3 = Colors.TextDim, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -52, 0, 6), Size = UDim2.fromOffset(150, 20), TextXAlignment = Enum.TextXAlignment.Right, Parent = card })
+	local title = UIKit.Label({ Text = "POLL", Font = UIKit.Theme.Fonts.Title, TextSize = 16, TextScaled = true, TextColor3 = Colors.Primary, Position = UDim2.fromOffset(14, 6), Size = UDim2.new(1, -230, 0, 20), TextXAlignment = Enum.TextXAlignment.Left, Parent = card })
+	local timer = UIKit.Label({ Text = "", Font = UIKit.Theme.Fonts.Title, TextSize = 16, TextColor3 = Colors.TextDim, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -52, 0, 6), Size = UDim2.fromOffset(150, 20), TextXAlignment = Enum.TextXAlignment.Right, Parent = card })
 	local question = UIKit.Label({ Text = "", TextSize = 20, TextWrapped = true, TextScaled = true, Position = UDim2.fromOffset(14, 30), Size = UDim2.new(1, -28, 0, 44), Parent = card })
 	local row = Instance.new("Frame")
 	row.Name = "Answers"
@@ -265,7 +265,7 @@ function PollUI.Init()
 			bar.Size = UDim2.fromScale(pct / 100, 1)
 			UIKit.Corner(bar, 10)
 			bar.Parent = cell
-			UIKit.Label({ Text = string.format("%d%%  %s", pct, tostring(option)), TextSize = 16, TextScaled = true, Size = UDim2.new(1, -10, 1, -6), Position = UDim2.fromOffset(5, 3), Parent = cell })
+			UIKit.Label({ Text = string.format("%d%%  %s", pct, tostring(option)), Font = UIKit.Theme.Fonts.Title, TextSize = 16, TextScaled = true, Size = UDim2.new(1, -10, 1, -6), Position = UDim2.fromOffset(5, 3), Parent = cell })
 			table.insert(buttons, cell)
 		end
 		timer.Text = string.format("%d vote%s", total, if total == 1 then "" else "s")

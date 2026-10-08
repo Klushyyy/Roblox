@@ -1833,3 +1833,8 @@ The two posts of the Next Event banner stand just outside the banner's edges (x 
 ### 6zzr. Opening camera shot, odds board (v2.13.1)
 - **Opening shot** (AdminClient `openingShot`): when the show goes live (and only within 12 s of its start, never over a Scriptable camera) every player's camera pans (1.6 s) to the giant where he appears, holds 2.4 s, follows him (slowly drifting round him) for 3.6 s, then swings back (1.4 s) to the usual spot behind their own character and hands the camera back (Custom). Bound at `RenderPriority.Camera` so the screen shake (Camera+1) still works.
 - **Chest odds board** (ChestUI `buildBoard`): drawn on a fixed 520 px canvas with ONE text size for all rows (the largest at which the longest name fits, measured with TextService), a rounded panel with the blue outline, and the canvas scaled to the billboard's on-screen size (UIScale), so nothing is squeezed, cut off or a different size.
+
+### 6zzs. Fonts and positions, timing of the lines, meteor blast (v2.13.2)
+- Vote card, results and power-up pick card use the same font (Title) for every line; the prize card sits at the same bottom-middle spot as the vote cards (stacking above them while one is up) in the same font.
+- "see that machine? i never liked it." is said when he starts gathering the fireball (a few seconds before it hits), and "my legs hurt. im sitting down..." when he reaches the chair (`giantSit`), not at fixed times (he used to have to walk round the whole table first).
+- Meteors: every impact blasts players within 46 studs away (up 85, out 120) and every third leaves a small dent (R 5.5, hole index 200+).

@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.13.1"
+Config.Version = "2.13.2"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1248,9 +1248,7 @@ do
 	at(22, "say", "first thing: a vote. everyone votes. the option with the most votes wins, and then everyone gets it.")
 	at(26, "round", "Gifts")
 	at(31, "attack", "beam")
-	at(41, "say", "see that machine? i never liked it.")
 	at(44, "attack", "dishwasher")
-	at(58, "say", "my legs hurt. im sitting down. and then im going to have a look at that table.")
 	at(60, "attack", "chairshow")
 	at(62, "attack", "fountains")
 	at(78, "attack", "barrage")

@@ -4,6 +4,7 @@
 	are shown one after another.
 ]]
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
@@ -90,6 +91,20 @@ local function showPrize()
 	UIKit.Bounce(holder)
 	UIKit.PlaySound("Sparkle")
 	UIKit.Confetti(40)
+	-- it sits where the vote / power-up cards sit, and stacks above them while one of those is up
+	task.spawn(function()
+		while holder.Visible do
+			local gui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+			local pollUp = false
+			if gui then
+				local poll = gui:FindFirstChild("PollHolder", true)
+				local pick = gui:FindFirstChild("PickHolder", true)
+				pollUp = (poll ~= nil and poll:IsA("GuiObject") and poll.Visible) or (pick ~= nil and pick:IsA("GuiObject") and pick.Visible)
+			end
+			holder.Position = UDim2.new(0.5, 0, 1, if pollUp then -340 else -110)
+			task.wait(0.15)
+		end
+	end)
 	task.delay(4.2, function()
 		holder.Visible = false
 		task.delay(0.25, showPrize)
@@ -172,8 +187,8 @@ function Celebrate.Init()
 	-- the small prize card of the show
 	local holder = Instance.new("Frame")
 	holder.Name = "ShowPrize"
-	holder.AnchorPoint = Vector2.new(0.5, 0)
-	holder.Position = UDim2.new(0.5, 0, 0.3, 0)
+	holder.AnchorPoint = Vector2.new(0.5, 1)
+	holder.Position = UDim2.new(0.5, 0, 1, -110) -- the same spot as the vote and power-up cards
 	holder.Size = UDim2.fromOffset(480, 100)
 	holder.BackgroundTransparency = 1
 	holder.Visible = false
@@ -185,8 +200,8 @@ function Celebrate.Init()
 	prizeIconHolder.Position = UDim2.fromOffset(12, 12)
 	prizeIconHolder.Size = UDim2.fromOffset(64, 64)
 	prizeIconHolder.Parent = card
-	prizeTitle = UIKit.Label({ Text = "", TextSize = 22, TextScaled = true, TextColor3 = Colors.Warning, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(90, 10), Size = UDim2.new(1, -104, 0, 28), Parent = card })
-	prizeText = UIKit.Label({ Text = "", TextSize = 16, TextScaled = true, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(90, 42), Size = UDim2.new(1, -104, 0, 44), Parent = card })
+	prizeTitle = UIKit.Label({ Text = "", Font = UIKit.Theme.Fonts.Title, TextSize = 22, TextScaled = true, TextColor3 = Colors.Warning, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(90, 10), Size = UDim2.new(1, -104, 0, 28), Parent = card })
+	prizeText = UIKit.Label({ Text = "", Font = UIKit.Theme.Fonts.Title, TextSize = 18, TextScaled = true, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(90, 42), Size = UDim2.new(1, -104, 0, 44), Parent = card })
 	prizeHolder = holder
 
 	Remotes.Event("Celebrate").OnClientEvent:Connect(function(title, text, icon)

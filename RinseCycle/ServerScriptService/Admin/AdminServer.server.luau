@@ -5740,9 +5740,10 @@ do
 				end)
 			end
 		end
+		local dentCount = 199 -- hole indexes 200 and up are the meteors' small dents
 		fx.meteors = function()
-			-- A real meteor shower: lots of big rocks with fire tails, every impact shoves whoever is near it, and
-			-- every fourth one leaves a patch of fire that burns for a few seconds.
+			-- A real meteor shower: lots of big rocks with fire tails. Every impact blasts away whoever is near it
+			-- (a wide radius, hard), every third one leaves a small dent in the table, every fourth a patch of fire.
 			local n = if heat then 28 else 18
 			for i = 1, n do
 				task.delay(i * 0.2, function()
@@ -5764,7 +5765,11 @@ do
 						rock:Destroy()
 						harmlessBlast(target, 20)
 						boom(2.2, target)
-						shoveNear(target, 26, 55, 38)
+						shoveNear(target, 46, 85, 120)
+						if i % 3 == 0 and not LobbyBuilder.IsHoleAt(target.X, target.Z, 10) then
+							dentCount += 1
+							LobbyBuilder.OpenCrater(dentCount, target.X, target.Z, 5.5) -- (small: the storm should not eat the table)
+						end
 						if i % 4 == 0 then
 							local fire = neonPart(Vector3.new(14, 1, 14), Color3.fromRGB(255, 120, 40), Enum.PartType.Cylinder)
 							fire.Transparency = 0.5
@@ -6393,6 +6398,7 @@ do
 			if not model or not rootPart or LobbyBuilder.DishwasherBroken() then
 				return
 			end
+			say("see that machine? i never liked it.") -- (said as he starts to gather the fireball, a few seconds before it hits)
 			local unit = if giantHead then giantHead.Size.Y else 45
 			-- where his hands meet: out in front of his chest (a head is about 1.2 studs tall at scale 1)
 			local scale = unit / 1.2
@@ -7472,6 +7478,7 @@ do
 				return
 			end
 			state = "sitleap"
+			say("my legs hurt. im sitting down. and then im going to have a look at that table.")
 			moveT0, moveFromPos, moveFromY = os.clock(), pos, rootY
 			if walkTrack then
 				walkTrack:Stop(0.4)
