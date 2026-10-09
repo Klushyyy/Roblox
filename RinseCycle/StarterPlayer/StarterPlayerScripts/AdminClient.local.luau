@@ -1225,6 +1225,10 @@ do
 		local startCF = camera.CFrame
 		local startRoot = root.Position
 		local PAN, HOLD, BACK = 1.0, 9.0, 1.4 -- seconds: turn to the spot, watch him, turn back
+		-- It watches from higher up (it rises with the turn and comes back down with it): from the player's own low camera, whoever walked
+		-- about went behind the pads' walls, the boards and the arch, which looked wrong. From up here they stay in view, seen from
+		-- above, and nothing stands between the camera and them (25 studs is above every prop on the plaza but the dishwasher).
+		local RISE = 25
 		local ARRIVAL = Vector3.new(0, -130 + 100, 282) -- where he appears (the south end of the room), at about chest height
 		local t0 = os.clock()
 		local last = t0
@@ -1261,7 +1265,7 @@ do
 			local height = if present and g then math.max(80, (g :: Model):GetExtentsSize().Y) else 200
 			local wanted = if present and gRoot then gRoot.Position + Vector3.new(0, height * 0.3, 0) else ARRIVAL
 			focus = focus:Lerp(wanted, 1 - math.exp(-dt * 4))
-			local shot = CFrame.lookAt(home.Position, focus)
+			local shot = CFrame.lookAt(home.Position + Vector3.new(0, RISE, 0), focus)
 			if e < PAN then
 				camera.CFrame = home:Lerp(shot, smooth(e / PAN))
 			elseif e < PAN + HOLD and (present or e < PAN + 6) then
