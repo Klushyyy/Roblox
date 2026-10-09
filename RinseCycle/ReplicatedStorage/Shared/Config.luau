@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.19.3"
+Config.Version = "2.19.4"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1490,6 +1490,7 @@ Config.Analytics = {
 		{ "pad.timeout", "Stood in a pad without pressing Create" },
 		{ "policy.restricted", "Roblox says this player may not use paid random items" },
 		{ "policy.allowed", "Roblox says this player may use paid random items" },
+		{ "policy.unknown", "Roblox could not say (4 tries): paid random items stayed on" },
 		{ "obby.finish", "Finished the lobby obby" },
 		{ "fun.duck", "Found a lobby duck" },
 		{ "fun.bubble", "Popped a lobby bubble" },

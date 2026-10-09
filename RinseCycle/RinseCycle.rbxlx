@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.19.3"
+Config.Version = "2.19.4"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1494,6 +1494,7 @@ Config.Analytics = {
 		{ "pad.timeout", "Stood in a pad without pressing Create" },
 		{ "policy.restricted", "Roblox says this player may not use paid random items" },
 		{ "policy.allowed", "Roblox says this player may use paid random items" },
+		{ "policy.unknown", "Roblox could not say (4 tries): paid random items stayed on" },
 		{ "obby.finish", "Finished the lobby obby" },
 		{ "fun.duck", "Found a lobby duck" },
 		{ "fun.bubble", "Popped a lobby bubble" },
@@ -21520,7 +21521,8 @@ end
 -- Some players (by country / age) may not use paid random item generators: anything random that costs Robux, or an
 -- in-game currency that can be bought with Robux. Here that is the rank roll (Gems), egg hatching (Bubbles) and the
 -- Treasure Chest packs (Robux). Each player is asked once when they join; DataService.PaidRandomRestricted(player) says
--- the answer (it waits a moment if Roblox has not answered yet, and an unknown answer counts as restricted). The player
+-- the answer (it waits a moment if Roblox has not answered yet; if Roblox cannot answer at all after four tries, paid
+-- random items simply stay ON for that player, as you chose). The player
 -- attribute PaidRandomRestricted tells the screens, which grey those buttons out. For testing, set the attribute
 -- ForcePaidRandomRestricted on a player to true (it can only restrict more, and a player's own screen cannot set it).
 do
@@ -21544,27 +21546,31 @@ do
 			if player.Parent ~= Players then
 				return
 			end
-			task.wait(attempt)
+			if attempt &lt; 4 then
+				task.wait(attempt)
+			end
 		end
+		-- (how many of your players Roblox restricts, allows, or could not answer for: Studio Test &gt; Analytics &gt; Features)
 		if answer == nil then
-			-- Roblox could not say. Studio has no policy to ask (play on); a live server is careful.
-			answer = not RunService:IsStudio()
+			-- Roblox could not say after four tries: paid random items stay on.
+			restricted[player] = false
+			DataService.Track(player, "policy.unknown")
+		else
+			restricted[player] = answer
+			DataService.Track(player, if answer then "policy.restricted" else "policy.allowed")
 		end
-		restricted[player] = answer == true
 		publish(player)
-		-- (how many of your players Roblox restricts: Studio Test &gt; Analytics &gt; Features)
-		DataService.Track(player, if answer == true then "policy.restricted" else "policy.allowed")
 	end
 	function DataService.PaidRandomRestricted(player: Player): boolean
 		if player:GetAttribute("ForcePaidRandomRestricted") == true then
 			return true
 		end
 		local waited = 0
-		while restricted[player] == nil and waited &lt; 8 and player.Parent == Players do
+		while restricted[player] == nil and waited &lt; 10 and player.Parent == Players do
 			task.wait(0.1)
 			waited += 0.1
 		end
-		return restricted[player] ~= false
+		return restricted[player] == true -- (no answer yet after 10 s: not restricted)
 	end
 	local function watch(player: Player)
 		player:GetAttributeChangedSignal("ForcePaidRandomRestricted"):Connect(function()
@@ -21572,6 +21578,7 @@ do
 		end)
 		task.spawn(fetch, player)
 	end
+	DataService._WatchPaidRandomPolicy = watch -- (for tests)
 	Players.PlayerAdded:Connect(watch)
 	for _, player in Players:GetPlayers() do
 		watch(player)

@@ -81,3 +81,16 @@ out(string.format("clicking it hatched nothing: pets=%d bubbles=%d", #prof.Pets,
 -- lifted again
 paidtest("off")
 out("lifted: attribute=" .. tostring(p:GetAttribute("PaidRandomRestricted")) .. "  roll button: [" .. tostring(openBtn and openBtn.Text) .. "]")
+
+-- Roblox cannot answer (four failed tries): paid random items stay ON for that player
+local Players = game:GetService("Players")
+local policy = game:GetService("PolicyService")
+local asked = 0
+policy.GetPolicyInfoForPlayerAsync = function() asked += 1 error("PolicyService is down") end
+local fake = Instance.new("Player")
+fake.Name = "NoAnswer"
+fake.UserId = 987654
+fake.Parent = Players
+DS._WatchPaidRandomPolicy(fake)
+pump(12, G.frame)
+out(string.format("policy down: asked %d times, restricted=%s, attribute=%s", asked, tostring(DS.PaidRandomRestricted(fake)), tostring(fake:GetAttribute("PaidRandomRestricted"))))
