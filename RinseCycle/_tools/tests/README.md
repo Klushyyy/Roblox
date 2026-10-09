@@ -95,4 +95,4 @@ than 200 locals alive at once ("Out of local registers"), and Lune doesn't catch
 - v2.18.0: `scen_playerlist` (2 players = 2 rows, 10 players = 4 rows tall with scrolling, the HUD column and the reserved space do not move, Tab closes / opens it, Roblox's list is switched off), `scen_pads` now walks along the wall of the pad (not moved) and through it (put back near the edge, not the middle).
 - v2.18.1: `scen_boards` now checks the board has no plate / prompt left, the Refresh chip shows only near a board, and a tap, X and D-pad up all reach the server (the 20 s wait message); `scen_playerlist` prints the room the list was given.
 - v2.18.2: the opening shot is lifted 25 studs (camera work cannot be seen offline: scen_abuse / scen_eventui / adminsim still run it without errors).
-
+- v2.18.3: the ending camera follows the giant out through the roof and cuts back (AdminClient `exitShot`, server attribute `AbuseGiantLeaving`; cannot be seen offline, scen_abuse / adminsim still run without errors) and crater props fade back in instead of snapping (`scen_dishwasher` still checks the table is solid and healed afterwards).

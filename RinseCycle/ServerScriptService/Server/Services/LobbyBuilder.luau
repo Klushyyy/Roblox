@@ -2494,7 +2494,7 @@ type HoleRec = {
 	Hidden: { BasePart },
 	Pieces: { Instance },
 	Tiles: { Tile },
-	Props: { { Part: BasePart, CF: CFrame, Anchored: boolean, Collide: boolean } },
+	Props: { { Part: BasePart, CF: CFrame, Anchored: boolean, Collide: boolean, Transparency: number } },
 	Cracks: { BasePart },
 	Center: Vector3,
 	Radius: number,
@@ -2734,7 +2734,7 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 				local dx, dz = d.Position.X - cx, d.Position.Z - cz
 				local y = d.Position.Y - ORIGIN.Y
 				if math.sqrt(dx * dx + dz * dz) < R + 4 and y > -1 and y < 60 and not d:IsDescendantOf(folder) then
-					table.insert(rec.Props, { Part = d, CF = d.CFrame, Anchored = d.Anchored :: boolean, Collide = d.CanCollide })
+					table.insert(rec.Props, { Part = d, CF = d.CFrame, Anchored = d.Anchored :: boolean, Collide = d.CanCollide, Transparency = d.Transparency })
 					switchOffUiOn(d, holeUi)
 				end
 			end
@@ -2897,14 +2897,32 @@ local function healRec(index: number, rec: HoleRec, total: number)
 				TweenService:Create(tile.Part, TweenInfo.new(math.max(0.6, total * 0.12), Enum.EasingStyle.Quad), { CFrame = tile.Flat }):Play()
 			end)
 		end
+		-- Whatever fell with the hole (the inlays, trim and things that stood on the table) comes back the way the tiles do: each piece
+		-- reappears where it stood, fading in, the outer ones first, spread over the repair. (They used to snap back all at once,
+		-- which looked like an instant fix next to the slowly closing floor.)
+		for _, prop in rec.Props do
+			local part = prop.Part
+			local dx, dz = prop.CF.Position.X - rec.Center.X, prop.CF.Position.Z - rec.Center.Z
+			local k = math.clamp(math.sqrt(dx * dx + dz * dz) / (rec.Radius + 4), 0, 1)
+			task.delay(total * (0.1 + 0.6 * (1 - k)), function()
+				if not part.Parent then
+					return
+				end
+				part.Anchored = true
+				part.AssemblyLinearVelocity = Vector3.zero
+				part.AssemblyAngularVelocity = Vector3.zero
+				part.CFrame = prop.CF
+				part.CanCollide = false
+				part.Transparency = 1
+				TweenService:Create(part, TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Transparency = prop.Transparency }):Play()
+				task.delay(0.9, function()
+					if part.Parent then
+						part.CanCollide = prop.Collide
+					end
+				end)
+			end)
+		end
 		task.delay(total * 0.8, function()
-			for _, prop in rec.Props do
-				prop.Part.Anchored = true
-				prop.Part.AssemblyLinearVelocity = Vector3.zero
-				prop.Part.AssemblyAngularVelocity = Vector3.zero
-				prop.Part.CFrame = prop.CF
-				prop.Part.CanCollide = prop.Collide
-			end
 			-- (their signs and prompts come back with them, not before)
 			for _, inst in ((rec :: any).Ui or {}) :: { Instance } do
 				(inst :: any).Enabled = true

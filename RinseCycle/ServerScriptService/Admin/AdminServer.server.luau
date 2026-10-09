@@ -5716,6 +5716,7 @@ do
 	local giantRescale: ((number, number) -> ())? = nil
 	local boom: (number, Vector3) -> () = function() end
 	local function removeGiant()
+		ReplicatedStorage:SetAttribute("AbuseGiantLeaving", nil) -- (the cameras cut back to their players)
 		if giantConn then
 			giantConn:Disconnect()
 			giantConn = nil
@@ -8212,6 +8213,7 @@ do
 			end
 			leaving = true
 			state = "leave"
+			ReplicatedStorage:SetAttribute("AbuseGiantLeaving", true) -- (every camera follows him out: AdminClient `exitShot`)
 			standStill()
 			setGesture("point")
 			commandText(":noclip")

@@ -1286,6 +1286,72 @@ do
 			end
 		end)
 	end
+	-- The ending: when he leaves (the beam, the hole in the ceiling, the flight up through the roof) every camera follows him from
+	-- up in the air above where its player stands (the same high view as the opening shot, so nothing stands in the way), tilting
+	-- up with him, and CUTS straight back to its own player the moment he is gone (no turn back: he is already out of view).
+	local function exitShot()
+		local camera = workspace.CurrentCamera
+		if cinemaBusy or not camera or camera.CameraType == Enum.CameraType.Scriptable or ReplicatedStorage:GetAttribute("AbuseLive") ~= true then
+			return
+		end
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local g0 = workspace:FindFirstChild("AbuseGiant")
+		local gRoot0 = g0 and g0:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if not root or not humanoid or not gRoot0 then
+			return
+		end
+		cinemaBusy = true
+		local startCF = camera.CFrame
+		local startRoot = root.Position
+		local PAN, RISE = 0.9, 25 -- seconds to turn to him; studs the camera is lifted
+		local OUT_OF_VIEW = 480 -- studs above the camera at which he is just a speck: the cut
+		local t0 = os.clock()
+		local last = t0
+		local focus = gRoot0.Position
+		local function smooth(x: number): number
+			x = math.clamp(x, 0, 1)
+			return x * x * (3 - 2 * x)
+		end
+		local function finish()
+			pcall(function()
+				RunService:UnbindFromRenderStep("AbuseExitShot")
+			end)
+			camera.CameraType = Enum.CameraType.Custom
+			camera.CameraSubject = humanoid
+			cinemaBusy = false
+		end
+		camera.CameraType = Enum.CameraType.Scriptable
+		RunService:BindToRenderStep("AbuseExitShot", Enum.RenderPriority.Camera.Value, function()
+			local g = workspace:FindFirstChild("AbuseGiant")
+			local gRoot = g and g:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if not root.Parent or ReplicatedStorage:GetAttribute("AbuseLive") ~= true or ReplicatedStorage:GetAttribute("AbuseGiantLeaving") ~= true or not gRoot then
+				finish() -- he is gone: back to the player at once
+				return
+			end
+			local now = os.clock()
+			local dt = now - last
+			last = now
+			local home = startCF + (root.Position - startRoot) -- (the player's own camera, following them if they walk)
+			local from = home.Position + Vector3.new(0, RISE, 0)
+			if gRoot.Position.Y - from.Y > OUT_OF_VIEW then
+				finish() -- out of view
+				return
+			end
+			local height = math.max(80, (g :: Model):GetExtentsSize().Y)
+			local wanted = gRoot.Position + Vector3.new(0, height * 0.3, 0)
+			focus = focus:Lerp(wanted, 1 - math.exp(-dt * 6)) -- (quick enough to keep up with him when he shoots up)
+			local shot = CFrame.lookAt(from, focus)
+			local e = now - t0
+			camera.CFrame = if e < PAN then home:Lerp(shot, smooth(e / PAN)) else shot
+		end)
+	end
+	ReplicatedStorage:GetAttributeChangedSignal("AbuseGiantLeaving"):Connect(function()
+		if ReplicatedStorage:GetAttribute("AbuseGiantLeaving") == true then
+			task.spawn(exitShot)
+		end
+	end)
 	-- The obby builds itself in about 9 seconds ("now. im going to build something."): every camera turns, on the spot (it never
 	-- moves, so it cannot clip), to the start of the course, then sweeps along it with the pieces as they rise, then turns back.
 	local function buildShot()
