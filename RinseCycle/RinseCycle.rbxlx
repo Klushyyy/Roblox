@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.17.1"
+Config.Version = "2.18.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -23885,7 +23885,8 @@ export type PadInfo = {
 	Exit: CFrame,
 	Barriers: { BasePart },
 	Gui: PadGui,
-}
+	Radius: number?, -- the round pad's radius (the walls stand just outside it): PartyService lets members walk the whole circle
+	}
 export type BoardPage = { Title: TextLabel, List: ScrollingFrame }
 -- Pages: one per level on a paged board (the Fastest Clean board); each client flips them locally
 -- with the arrows (tag "BoardArrow"), so nobody changes the page for anyone else.
@@ -24804,7 +24805,8 @@ local function buildPad(parent: Instance, id: number): PadInfo
 		Exit = CFrame.lookAt(exitPos.Position, exitPos.Position + Vector3.new(toCentre, 0, 0)),
 		Barriers = barriers,
 		Gui = { Count = countLbl, Title = titleLbl, Status = statusLbl, Privacy = privacyLbl },
-	}
+		Radius = PAD_RADIUS,
+		}
 end
 
 
@@ -28586,9 +28588,11 @@ local ACTIONS_PER_SECOND = 5 -- PartyAction rate limit per player
 local FRIEND_CACHE_TTL = 300 -- seconds a friends answer is trusted
 local FRIEND_FAIL_TTL = 5 -- a failed friends lookup counts as "no" for this long, then it retries
 local PUT_BACK_COOLDOWN = 0.75 -- min seconds between "you escaped the pad" teleports per member
--- Members are held to a looser box than the entry check, so hugging a wall or jumping never counts
--- as escaping (and a slightly-off LobbyBuilder Zone can't cause a teleport loop).
-local HOLD_MARGIN_XZ = 1.5
+-- Members are held to the pad's whole round floor plus a margin (the glass walls stand at about radius + 0.3, the invisible
+-- ones at + 0.9), so they can walk anywhere on it, hug a wall or jump without being counted as escaping: the old box
+-- (the entry square, a little bigger) was smaller than the circle along its sides, so walking toward the edge sent
+-- you back to the middle. (And a slightly-off Zone can't cause a teleport loop.)
+local HOLD_MARGIN_RADIUS = 2.5
 local HOLD_MARGIN_BELOW = 3
 local HOLD_MARGIN_ABOVE = 12
 
@@ -28759,13 +28763,35 @@ local function isInsideZone(zone: BasePart, position: Vector3): boolean
 	return math.abs(p.X) &lt;= half.X and math.abs(p.Y) &lt;= half.Y and math.abs(p.Z) &lt;= half.Z
 end
 
--- Loose point-in-box: is a member still (near enough) inside their pad?
-local function isHeldInZone(zone: BasePart, position: Vector3): boolean
+-- The pad's round floor: its radius (LobbyBuilder gives it; the Zone is the 0.72 inscribed square if it ever doesn't).
+local function padRadius(info: PadInfo): number
+	local r = (info :: any).Radius
+	if type(r) == "number" and r &gt; 0 then
+		return r
+	end
+	return info.Zone.Size.X / 2 / 0.72
+end
+
+-- Loose point-in-cylinder: is a member still (near enough) on their pad's round floor?
+local function isHeldInZone(info: PadInfo, position: Vector3): boolean
+	local zone = info.Zone
 	local p, half = toZoneSpace(zone, position)
-	return math.abs(p.X) &lt;= half.X + HOLD_MARGIN_XZ
-		and math.abs(p.Z) &lt;= half.Z + HOLD_MARGIN_XZ
+	return math.sqrt(p.X * p.X + p.Z * p.Z) &lt;= padRadius(info) + HOLD_MARGIN_RADIUS
 		and p.Y &gt;= -half.Y - HOLD_MARGIN_BELOW
 		and p.Y &lt;= half.Y + HOLD_MARGIN_ABOVE
+end
+
+-- Where to put back someone found outside: the nearest spot of the floor (a little in from the edge), not the middle.
+local function nearestSpot(pad: Pad, position: Vector3): CFrame
+	local info = pad.Info
+	local center = info.Zone.Position
+	local flat = Vector3.new(position.X - center.X, 0, position.Z - center.Z)
+	local limit = padRadius(info) - 2
+	if flat.Magnitude &gt; limit then
+		flat = flat.Unit * limit
+	end
+	local inside = info.Inside
+	return CFrame.new(center.X + flat.X, inside.Position.Y, center.Z + flat.Z) * (inside - inside.Position)
 end
 
 -- Where member slot `slot` stands: a 2x2 grid around the pad centre (a bigger MaxPlayers would
@@ -29077,7 +29103,12 @@ local function joinParty(party: Party, player: Player)
 	Characters.SetGroup(player, Characters.Groups.PartyMember)
 	player:SetAttribute("InParty", true)
 	hookMember(player)
-	teleport(player, slotCFrame(pad, slot))
+	-- Walked in: stay where you are. Only someone who is not on the pad floor (the party was made for them somewhere else,
+	-- or a rejoin) is put on a spot.
+	local root = Characters.GetRoot(player)
+	if not root or not isHeldInZone(pad.Info, root.Position) then
+		teleport(player, slotCFrame(pad, slot))
+	end
 	DataService.Track(player, "pad.enter")
 	if party.Host ~= player then
 		DataService.Track(player, "pad.join")
@@ -29351,12 +29382,12 @@ local function validateMember(party: Party, player: Player, clock: number)
 		removeMember(player, "Stay", "You left the party.")
 		return
 	end
-	if not isHeldInZone(party.Pad.Info.Zone, root.Position) then
-		-- Glitched or exploited out through a wall: put them back on their spot.
+	if not isHeldInZone(party.Pad.Info, root.Position) then
+		-- Glitched or exploited out through a wall: put them back at the nearest bit of the floor.
 		if clock - (lastPutBack[player] or 0) &gt;= PUT_BACK_COOLDOWN then
 			lastPutBack[player] = clock
 			Characters.SetGroup(player, Characters.Groups.PartyMember)
-			teleport(player, slotCFrame(party.Pad, party.Slots[player] or 1))
+			teleport(player, nearestSpot(party.Pad, root.Position))
 		end
 	end
 end
@@ -36460,6 +36491,9 @@ local Tutorial = require(Client:WaitForChild("Tutorial"))
 -- (Telemetry is optional: if the script is missing the game plays the same, just without analytics)
 local TelemetryModule = Client:WaitForChild("Telemetry", 5)
 local Telemetry = if TelemetryModule and TelemetryModule:IsA("ModuleScript") then require(TelemetryModule) :: any else nil
+-- (PlayerListUI is optional too: without it Roblox's own player list stays)
+local PlayerListModule = Client:WaitForChild("PlayerListUI", 5)
+local PlayerListUI = if PlayerListModule and PlayerListModule:IsA("ModuleScript") then require(PlayerListModule) :: any else nil
 
 local function step(name: string, fn: () -&gt; ())
 	local ok, err = xpcall(fn, debug.traceback)
@@ -36510,6 +36544,9 @@ step("EventZone", EventZone.Init)
 step("Tutorial", Tutorial.Init)
 if Telemetry then
 	step("Telemetry", Telemetry.Init)
+end
+if PlayerListUI then
+	step("PlayerListUI", PlayerListUI.Init)
 end</ProtectedString></Properties></Item>
 <Item class="ModuleScript" referent="RBX00000033"><Properties><string name="Name">ClientState</string><ProtectedString name="Source">-- The client's copy of everything the server tells it: permanent data (Meta), the party it is
 -- waiting in (Party) and the run it is playing (Run). UI modules read from here and listen to
@@ -40943,9 +40980,13 @@ function HUD.Init()
 			centerY = math.min(centerY, canvas.Y - 300 - colH / 2)
 		end
 		centerY = math.max(centerY, inset + 80 + colH / 2)
-		-- (This column used to slide down by a row for every player in the server, to stay clear of Roblox's own player list in
-		-- the top right. That made the buttons jump about as people joined and left, even with the list shut: it stays put now,
-		-- wherever the list is.)
+		-- The player list (PlayerListUI) is at most four rows tall, so a fixed space under it is kept clear (it used to be a row
+		-- per player in the server, which made the buttons jump about as people joined and left, even with the list shut).
+		local listH = tonumber(LocalPlayer:GetAttribute("PlayerListHeight")) or 0
+		if listH &gt; 0 then
+			local below = inset + listH + 14 + colH / 2
+			centerY = math.max(centerY, math.min(below, canvas.Y - 12 - safe.Bottom - colH / 2))
+		end
 		-- The side columns only keep half of the notch / rounded-corner inset: close to the edges on
 		-- phones, still clear of the notch itself.
 		local sideLeft = 12 + math.floor(safe.Left * 0.5)
@@ -40993,6 +41034,7 @@ function HUD.Init()
 	end
 	rightColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 	LocalPlayer:GetAttributeChangedSignal("BadgeStackHeight"):Connect(relayoutHud)
+	LocalPlayer:GetAttributeChangedSignal("PlayerListHeight"):Connect(relayoutHud)
 	leftColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 	moneyBlock:GetPropertyChangedSignal("Visible"):Connect(relayoutHud)
 
@@ -41584,9 +41626,10 @@ function HUD.Init()
 			lastHotbarKey = key
 			refreshHotbar()
 		end
-		-- In a run Tab opens the Upgrade Book, so Roblox's player list (also on Tab) steps aside.
+		-- In a run Tab opens the Upgrade Book, so Roblox's player list (also on Tab) steps aside; on a computer with PlayerListUI
+		-- (which sets CustomPlayerList) Roblox's list is never shown.
 		pcall(function()
-			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not inRun)
+			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not inRun and LocalPlayer:GetAttribute("CustomPlayerList") ~= true)
 		end)
 
 		if playing and run then
@@ -48508,7 +48551,313 @@ function PetsUI.Init()
 end
 
 return PetsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000041"><Properties><string name="Name">PollUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000041"><Properties><string name="Name">PlayerListUI</string><ProtectedString name="Source">--[[
+	PlayerListUI - the player list (Tab), replacing Roblox's own on a computer.
+
+	Roblox's list can't be resized by a game: it grows a row per player and covers whatever is under it. This one is always
+	at most FOUR rows tall; with more players it scrolls. The HUD keeps the buttons on the right below that fixed space, so
+	nothing moves when people join or leave (player attribute PlayerListHeight, set here).
+
+	  * Columns: People, then the player's leaderstats (Bubbles, Dishes, Rebirths), sorted by Bubbles like Roblox's.
+	  * Open by default in the lobby; Tab or the X closes and opens it. In a run Tab belongs to the Upgrade Book, so the
+	    list is away then (and during the first-run tutorial).
+	  * Phones and consoles keep Roblox's own list (it is closed until opened from the menu): this one only runs on a
+	    computer. If this script is missing the game plays the same with Roblox's list.
+]]
+
+local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
+local UserInputService = game:GetService("UserInputService")
+
+local Client = script.Parent
+local UIKit = require(Client:WaitForChild("UIKit"))
+local ClientState = require(Client:WaitForChild("ClientState"))
+
+local PlayerListUI = {}
+
+local Colors = UIKit.Theme.Colors
+local Fonts = UIKit.Theme.Fonts
+local LocalPlayer = Players.LocalPlayer
+
+local VISIBLE_ROWS = 4
+local ROW_H = 40
+local HEAD_H = 28
+local PAD = 8
+local PANEL_W = 430
+local COL_W = 88 -- the three number columns
+local MAX_H = PAD + HEAD_H + ROW_H * VISIBLE_ROWS + PAD -- the most it is ever tall (what the HUD keeps clear)
+local STATS = { "Bubbles", "Dishes", "Rebirths" }
+
+local STAFF_COLORS = {
+	MOD = Color3.fromRGB(80, 220, 100),
+	ADMIN = Color3.fromRGB(255, 75, 75),
+	DEV = Color3.fromRGB(80, 160, 255),
+	OWNER = Color3.fromRGB(185, 100, 255),
+}
+
+local initialized = false
+local panel: Frame? = nil
+local scroller: ScrollingFrame? = nil
+local rows: { [Player]: { Frame: Frame, Name: TextLabel, Values: { TextLabel } } } = {}
+local wantOpen = true -- Tab / X
+local shown = false
+
+local function statValue(player: Player, name: string): number
+	local folder = player:FindFirstChild("leaderstats")
+	local value = folder and folder:FindFirstChild(name)
+	if value and value:IsA("IntValue") then
+		return value.Value
+	end
+	return 0
+end
+
+local function onComputer(): boolean
+	return not UIKit.IsTouch() and not UIKit.IsGamepad()
+end
+
+local function makeRow(player: Player)
+	local row = Instance.new("Frame")
+	row.Name = "Row"
+	row.Size = UDim2.new(1, -10, 0, ROW_H)
+	row.BackgroundColor3 = Colors.Primary
+	row.BackgroundTransparency = if player == LocalPlayer then 0.82 else 1
+	row.BorderSizePixel = 0
+	row.Parent = scroller
+	UIKit.Corner(row, 6)
+	local name = UIKit.Label({
+		Text = "",
+		TextSize = 19,
+		Font = Fonts.Body,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		RichText = true,
+		Size = UDim2.new(1, -(COL_W * #STATS + 18), 1, 0),
+		Position = UDim2.fromOffset(10, 0),
+		Parent = row,
+	})
+	local values = {}
+	for i = 1, #STATS do
+		values[i] = UIKit.Label({
+			Text = "0",
+			TextSize = 18,
+			Font = Fonts.Body,
+			TextXAlignment = Enum.TextXAlignment.Right,
+			AnchorPoint = Vector2.new(1, 0),
+			Size = UDim2.fromOffset(COL_W - 8, ROW_H),
+			Position = UDim2.new(1, -8 - (#STATS - i) * COL_W, 0, 0),
+			Parent = row,
+		})
+	end
+	-- a thin line under each row
+	local line = Instance.new("Frame")
+	line.Name = "Line"
+	line.AnchorPoint = Vector2.new(0, 1)
+	line.Position = UDim2.new(0, 0, 1, 0)
+	line.Size = UDim2.new(1, 0, 0, 1)
+	line.BackgroundColor3 = Colors.TextDim
+	line.BackgroundTransparency = 0.85
+	line.BorderSizePixel = 0
+	line.Parent = row
+	rows[player] = { Frame = row, Name = name, Values = values }
+end
+
+local function nameText(player: Player): string
+	local text = player.DisplayName ~= "" and player.DisplayName or player.Name
+	text = string.gsub(string.gsub(string.gsub(text, "&amp;", "&amp;amp;"), "&lt;", "&amp;lt;"), "&gt;", "&amp;gt;") -- (the label reads rich text)
+	local tag = player:GetAttribute("StaffTag")
+	if type(tag) == "string" and STAFF_COLORS[tag] then
+		local c = STAFF_COLORS[tag]
+		text = string.format('&lt;font color="rgb(%d,%d,%d)"&gt;[%s]&lt;/font&gt; %s', math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255), tag, text)
+	end
+	return text
+end
+
+-- Brings the rows up to date: who is here, their numbers, the order (most Bubbles first), the panel's height.
+local function refresh()
+	if not panel or not scroller then
+		return
+	end
+	local list = Players:GetPlayers()
+	for player, row in rows do
+		if player.Parent ~= Players then
+			row.Frame:Destroy()
+			rows[player] = nil
+		end
+	end
+	local stats = {}
+	for _, player in list do
+		if not rows[player] then
+			makeRow(player)
+		end
+		stats[player] = { statValue(player, "Bubbles"), statValue(player, "Dishes"), statValue(player, "Rebirths") }
+	end
+	table.sort(list, function(a, b)
+		local sa, sb = stats[a][1], stats[b][1]
+		if sa ~= sb then
+			return sa &gt; sb
+		end
+		return string.lower(a.Name) &lt; string.lower(b.Name)
+	end)
+	for order, player in list do
+		local row = rows[player]
+		row.Frame.LayoutOrder = order
+		row.Name.Text = nameText(player)
+		for i = 1, #STATS do
+			row.Values[i].Text = UIKit.Short(stats[player][i])
+		end
+	end
+	-- Room for four rows, never more: with fewer it is shorter, with more the list scrolls.
+	local visible = math.clamp(#list, 1, VISIBLE_ROWS)
+	scroller.Size = UDim2.new(1, -(PAD * 2), 0, ROW_H * visible)
+	panel.Size = UDim2.fromOffset(PANEL_W, PAD + HEAD_H + ROW_H * visible + PAD)
+end
+
+local function place()
+	if not panel then
+		return
+	end
+	local safe = UIKit.SafeInsets()
+	panel.Position = UDim2.new(1, -(12 + safe.Right), 0, UIKit.TopInset() + 6)
+end
+
+-- Whether the list is the one in use at all (a computer, in the lobby, not in the tutorial) and whether it is open.
+local function apply()
+	local computer = onComputer()
+	local away = ClientState.Run ~= nil or ClientState.TutorialStep ~= nil
+	local active = computer and not away
+	-- Roblox's own list steps aside whenever this one is the list in use (HUD reads the attribute for the in-run case).
+	LocalPlayer:SetAttribute("CustomPlayerList", if computer then true else nil)
+	local reserve = if active then MAX_H else 0
+	if LocalPlayer:GetAttribute("PlayerListHeight") ~= reserve then
+		LocalPlayer:SetAttribute("PlayerListHeight", reserve)
+	end
+	if computer then
+		pcall(function()
+			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+		end)
+	end
+	local visible = active and wantOpen
+	if panel and visible ~= shown then
+		shown = visible
+		panel.Visible = visible
+		if visible then
+			refresh()
+		end
+	end
+end
+
+function PlayerListUI.Toggle()
+	wantOpen = not wantOpen
+	apply()
+end
+
+function PlayerListUI.Init()
+	if initialized then
+		return
+	end
+	initialized = true
+
+	local _gui, root = UIKit.CreateScreen("PlayerList", 3)
+	local card = Instance.new("Frame")
+	card.Name = "Panel"
+	card.AnchorPoint = Vector2.new(1, 0)
+	card.Size = UDim2.fromOffset(PANEL_W, MAX_H)
+	card.BackgroundColor3 = Color3.fromRGB(22, 28, 40)
+	card.BackgroundTransparency = 0.12
+	card.BorderSizePixel = 0
+	card.Visible = false
+	card.Parent = root
+	UIKit.Corner(card, 10)
+	UIKit.Stroke(card, Colors.Ink, 2, 0.4)
+	panel = card
+
+	local close = Instance.new("TextButton")
+	close.Name = "Close"
+	close.Text = "X"
+	close.Font = Fonts.Body
+	close.TextSize = 18
+	close.TextColor3 = Colors.TextDim
+	close.BackgroundTransparency = 1
+	close.Size = UDim2.fromOffset(HEAD_H, HEAD_H)
+	close.Position = UDim2.fromOffset(PAD - 2, PAD - 2)
+	close.AutoButtonColor = false
+	close.Parent = card
+	close.Activated:Connect(PlayerListUI.Toggle)
+
+	UIKit.Label({
+		Text = "People",
+		TextSize = 16,
+		Font = Fonts.Body,
+		TextColor3 = Colors.TextDim,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Size = UDim2.fromOffset(120, HEAD_H),
+		Position = UDim2.fromOffset(PAD + HEAD_H + 2, PAD),
+		Parent = card,
+	})
+	for i, stat in STATS do
+		UIKit.Label({
+			Text = stat,
+			TextSize = 16,
+			Font = Fonts.Body,
+			TextColor3 = Colors.TextDim,
+			TextXAlignment = Enum.TextXAlignment.Right,
+			AnchorPoint = Vector2.new(1, 0),
+			Size = UDim2.fromOffset(COL_W - 8, HEAD_H),
+			Position = UDim2.new(1, -(PAD + 8) - (#STATS - i) * COL_W - 6, 0, PAD),
+			Parent = card,
+		})
+	end
+
+	local scroll = Instance.new("ScrollingFrame")
+	scroll.Name = "List"
+	scroll.BackgroundTransparency = 1
+	scroll.BorderSizePixel = 0
+	scroll.Position = UDim2.fromOffset(PAD, PAD + HEAD_H)
+	scroll.Size = UDim2.new(1, -(PAD * 2), 0, ROW_H * VISIBLE_ROWS)
+	scroll.CanvasSize = UDim2.new()
+	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	scroll.ScrollingDirection = Enum.ScrollingDirection.Y
+	scroll.ScrollBarThickness = 5
+	scroll.ScrollBarImageColor3 = Colors.TextDim
+	scroll.Parent = card
+	local layout = Instance.new("UIListLayout")
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = scroll
+	scroller = scroll
+
+	place()
+	UIKit.LayoutChanged:Connect(function()
+		place()
+		apply()
+	end)
+
+	-- Tab opens and closes it (in the lobby; in a run Tab is the Upgrade Book)
+	UserInputService.InputBegan:Connect(function(input: InputObject, _processed: boolean)
+		if input.KeyCode == Enum.KeyCode.Tab and onComputer() and ClientState.Run == nil and UserInputService:GetFocusedTextBox() == nil then
+			PlayerListUI.Toggle()
+		end
+	end)
+
+	Players.PlayerAdded:Connect(refresh)
+	Players.PlayerRemoving:Connect(function()
+		task.defer(refresh)
+	end)
+	-- The numbers, the order and who is in a run or the tutorial change all the time: a quick look twice a second
+	task.spawn(function()
+		while true do
+			apply()
+			if shown then
+				refresh()
+			end
+			task.wait(0.5)
+		end
+	end)
+	refresh()
+	apply()
+end
+
+return PlayerListUI</ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000042"><Properties><string name="Name">PollUI</string><ProtectedString name="Source">--[[
 	PollUI - the community poll card (admin panel &gt; Global &gt; Poll, AdminServer "GlobalPoll").
 
 	  * A poll starts: a card comes up near the bottom with the question, an answer button each and
@@ -48856,7 +49205,7 @@ function PollUI.Init()
 end
 
 return PollUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000042"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000043"><Properties><string name="Name">RanksUI</string><ProtectedString name="Source">--[[
 	RanksUI - the "Ranks" window (Rank Shrine in the lobby, the HUD's Ranks button, R / gamepad RB).
 
 	Left: your equipped rank (icon, name in its rarity colour, perk), a big ROLL button that costs
@@ -49675,7 +50024,7 @@ function RanksUI.Init()
 end
 
 return RanksUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000043"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000044"><Properties><string name="Name">RebirthUI</string><ProtectedString name="Source">--[[
 	RebirthUI - the "Rebirth" window (the Rebirth Fountain in the lobby).
 
 	The endgame loop: once you've cleaned the last dishwasher, trade your Bubbles, unlocked
@@ -49828,7 +50177,7 @@ function RebirthUI.Init()
 end
 
 return RebirthUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000044"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000045"><Properties><string name="Name">RewardsUI</string><ProtectedString name="Source">--[[
 	RewardsUI - two small windows opened from the buttons on the left of the lobby HUD.
 
 	  * "Codes" (🎟️): type a code (Config.Codes) and redeem it. "Look out for codes in the game's
@@ -50292,7 +50641,7 @@ function RewardsUI.Init()
 end
 
 return RewardsUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000045"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000046"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source">--[[
 	ShopUI - the lobby "Shop" window: Perks (bought with Bubbles, permanent) and Robux (game passes).
 	Opened from the Soap Shop ProximityPrompt (routed by Effects via OpenWindow="Shop"), the HUD [🛒 Shop]
 	button, or the G key - all outside our scope, they just call UIKit.OpenWindow("Shop").
@@ -51051,7 +51400,7 @@ function ShopUI.Init()
 end
 
 return ShopUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000046"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
+<Item class="ModuleScript" referent="RBX00000047"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
 -- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
 -- Aim comes from the mouse on PC, the finger on touch (tap / hold the dirt), or the screen centre
@@ -52146,7 +52495,7 @@ function SprayController.Init()
 end
 
 return SprayController</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000047"><Properties><string name="Name">StayOffer</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000048"><Properties><string name="Name">StayOffer</string><ProtectedString name="Source">--[[
 	StayOffer - "WAIT! Don't leave yet!" When a player opens the Roblox menu (usually on the way to
 	Leave), they're offered a free x2 cleaning boost for 15 minutes, once a day
 	(DataService.ClaimStayBoost; saved to their data, so leaving and rejoining can't claim it twice).
@@ -52448,7 +52797,7 @@ function StayOffer.Init()
 end
 
 return StayOffer</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000048"><Properties><string name="Name">Telemetry</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX00000049"><Properties><string name="Name">Telemetry</string><ProtectedString name="Source">--[[
 	Telemetry - tells the server what this player's screen saw, for Analytics.luau (server).
 
 	  * ClientState.Track(key, detail) is how any screen records a moment ("tut.s2", "buy.prompt").
@@ -52643,7 +52992,7 @@ function Telemetry.Init()
 end
 
 return Telemetry</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX00000049"><Properties><string name="Name">TradeUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000004A"><Properties><string name="Name">TradeUI</string><ProtectedString name="Source">--[[
 	TradeUI - pet trading (lobby only; TradeService on the server checks everything).
 
 	  * The 🤝 Trade button (HUD) opens the Trade window: everyone in the server with a Request
@@ -53183,7 +53532,7 @@ function TradeUI.Init()
 end
 
 return TradeUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000004A"><Properties><string name="Name">Tutorial</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000004B"><Properties><string name="Name">Tutorial</string><ProtectedString name="Source">--[[
 	Tutorial - the first-run guide for new players (level 1, the kitchen). An interactive one: it points at the thing to do,
 	turns the camera to it, dims everything else and only lets the highlighted thing be pressed.
 
@@ -54024,7 +54373,7 @@ function Tutorial.Init()
 end
 
 return Tutorial</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000004B"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000004C"><Properties><string name="Name">UIKit</string><ProtectedString name="Source">--[[
 	UIKit - Rinse Cycle's design system. Every screen, window, button and toast in the game is built
 	with it, so the whole game shares one look: bright aqua, deep navy glass panels, chunky rounded
 	buttons with a darker "lip" and a soap-bubble shine, white FredokaOne text with a dark outline.
@@ -56722,7 +57071,7 @@ end
 
 
 return UIKit</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000004C"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000004D"><Properties><string name="Name">UpgradesUI</string><ProtectedString name="Source">--[[
 	UpgradesUI - the in-run "Upgrades" window, drawn as an open book:
 	  * left page: your current tool (big), its stats, and the four Coins upgrades as cards with a
 	    level pip bar, the next-level preview and a buy button
@@ -57199,7 +57548,7 @@ function UpgradesUI.Init()
 end
 
 return UpgradesUI</ProtectedString></Properties></Item>
-<Item class="ModuleScript" referent="RBX0000004D"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
+<Item class="ModuleScript" referent="RBX0000004E"><Properties><string name="Name">WaterFX</string><ProtectedString name="Source">--[[
 	WaterFX - the water coming out of your own hose and pressure washer, built from real parts so
 	it looks solid from every angle (a camera-facing Beam flattens to nothing when you look straight
 	down it, which is exactly the first-person view).
@@ -57439,7 +57788,7 @@ end
 
 return WaterFX</ProtectedString></Properties></Item>
 </Item>
-<Item class="LocalScript" referent="RBX0000004E"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
+<Item class="LocalScript" referent="RBX0000004F"><Properties><string name="Name">AdminClient</string><bool name="Disabled">false</bool><ProtectedString name="Source">--[[
 	AdminClient - Rinse Cycle's admin panel and the admin effects every player can see.
 
 	Everyone:
@@ -60507,5 +60856,5 @@ task.spawn(function()
 end)</ProtectedString></Properties></Item>
 </Item>
 </Item>
-<Item class="TextChatService" referent="RBX0000004F"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
+<Item class="TextChatService" referent="RBX00000050"><Properties><string name="Name">TextChatService</string><token name="ChatVersion">1</token><bool name="CreateDefaultTextChannels">true</bool><bool name="CreateDefaultCommands">true</bool></Properties></Item>
 </roblox>

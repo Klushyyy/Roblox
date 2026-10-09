@@ -57,6 +57,28 @@ while not (CS.Party and CS.Party.Status) and waited < 3 do
 end
 out(string.format("walked back in: party again after %.2fs", waited))
 status("re-entered")
+-- Walking about inside the pad: the whole round floor is theirs. (The old held box was the entry square plus 1.5, smaller
+-- than the circle along its sides, so walking toward the wall along an axis sent you back to the middle.)
+local center = pad.Zone.Position
+local rad = pad.Radius or 9
+local function flatFrom(v)
+	return math.sqrt((v.X - center.X) ^ 2 + (v.Z - center.Z) ^ 2)
+end
+local function xzDist(a, b)
+	return math.sqrt((a.X - b.X) ^ 2 + (a.Z - b.Z) ^ 2)
+end
+status("before walking about")
+for _, spot in { Vector3.new(rad - 0.7, 0, 0), Vector3.new(-(rad - 0.7), 0, 0), Vector3.new(0, 0, rad - 0.7), Vector3.new(0, 0, -(rad - 0.7)) } do
+	put(myRoot, CFrame.new(center + spot))
+	pump(2, G.frame)
+	out(string.format("near the wall at (%+.1f, %+.1f): moved %.1f studs (should be 0), still in my party: %s", spot.X, spot.Z, xzDist(myRoot.Position, center + spot), tostring(CS.Party ~= nil)))
+end
+-- Through the wall: put back at the nearest bit of the floor (about 2 studs in from the edge), not the middle
+put(myRoot, CFrame.new(center + Vector3.new(rad + 6, 0, 0)))
+pump(2, G.frame)
+out(string.format("outside the walls: now %.1f studs from the middle (radius %.1f; near the edge, not 0)", flatFrom(myRoot.Position), rad))
+status("after being put back")
+
 -- Launch: the screen must be black before the character is teleported into the dishwasher.
 local Cutscene = M[R .. "StarterPlayer/StarterPlayerScripts/Client/Cutscene.luau"]
 act("Leave")

@@ -48,9 +48,11 @@ local ACTIONS_PER_SECOND = 5 -- PartyAction rate limit per player
 local FRIEND_CACHE_TTL = 300 -- seconds a friends answer is trusted
 local FRIEND_FAIL_TTL = 5 -- a failed friends lookup counts as "no" for this long, then it retries
 local PUT_BACK_COOLDOWN = 0.75 -- min seconds between "you escaped the pad" teleports per member
--- Members are held to a looser box than the entry check, so hugging a wall or jumping never counts
--- as escaping (and a slightly-off LobbyBuilder Zone can't cause a teleport loop).
-local HOLD_MARGIN_XZ = 1.5
+-- Members are held to the pad's whole round floor plus a margin (the glass walls stand at about radius + 0.3, the invisible
+-- ones at + 0.9), so they can walk anywhere on it, hug a wall or jump without being counted as escaping: the old box
+-- (the entry square, a little bigger) was smaller than the circle along its sides, so walking toward the edge sent
+-- you back to the middle. (And a slightly-off Zone can't cause a teleport loop.)
+local HOLD_MARGIN_RADIUS = 2.5
 local HOLD_MARGIN_BELOW = 3
 local HOLD_MARGIN_ABOVE = 12
 
@@ -221,13 +223,35 @@ local function isInsideZone(zone: BasePart, position: Vector3): boolean
 	return math.abs(p.X) <= half.X and math.abs(p.Y) <= half.Y and math.abs(p.Z) <= half.Z
 end
 
--- Loose point-in-box: is a member still (near enough) inside their pad?
-local function isHeldInZone(zone: BasePart, position: Vector3): boolean
+-- The pad's round floor: its radius (LobbyBuilder gives it; the Zone is the 0.72 inscribed square if it ever doesn't).
+local function padRadius(info: PadInfo): number
+	local r = (info :: any).Radius
+	if type(r) == "number" and r > 0 then
+		return r
+	end
+	return info.Zone.Size.X / 2 / 0.72
+end
+
+-- Loose point-in-cylinder: is a member still (near enough) on their pad's round floor?
+local function isHeldInZone(info: PadInfo, position: Vector3): boolean
+	local zone = info.Zone
 	local p, half = toZoneSpace(zone, position)
-	return math.abs(p.X) <= half.X + HOLD_MARGIN_XZ
-		and math.abs(p.Z) <= half.Z + HOLD_MARGIN_XZ
+	return math.sqrt(p.X * p.X + p.Z * p.Z) <= padRadius(info) + HOLD_MARGIN_RADIUS
 		and p.Y >= -half.Y - HOLD_MARGIN_BELOW
 		and p.Y <= half.Y + HOLD_MARGIN_ABOVE
+end
+
+-- Where to put back someone found outside: the nearest spot of the floor (a little in from the edge), not the middle.
+local function nearestSpot(pad: Pad, position: Vector3): CFrame
+	local info = pad.Info
+	local center = info.Zone.Position
+	local flat = Vector3.new(position.X - center.X, 0, position.Z - center.Z)
+	local limit = padRadius(info) - 2
+	if flat.Magnitude > limit then
+		flat = flat.Unit * limit
+	end
+	local inside = info.Inside
+	return CFrame.new(center.X + flat.X, inside.Position.Y, center.Z + flat.Z) * (inside - inside.Position)
 end
 
 -- Where member slot `slot` stands: a 2x2 grid around the pad centre (a bigger MaxPlayers would
@@ -539,7 +563,12 @@ local function joinParty(party: Party, player: Player)
 	Characters.SetGroup(player, Characters.Groups.PartyMember)
 	player:SetAttribute("InParty", true)
 	hookMember(player)
-	teleport(player, slotCFrame(pad, slot))
+	-- Walked in: stay where you are. Only someone who is not on the pad floor (the party was made for them somewhere else,
+	-- or a rejoin) is put on a spot.
+	local root = Characters.GetRoot(player)
+	if not root or not isHeldInZone(pad.Info, root.Position) then
+		teleport(player, slotCFrame(pad, slot))
+	end
 	DataService.Track(player, "pad.enter")
 	if party.Host ~= player then
 		DataService.Track(player, "pad.join")
@@ -813,12 +842,12 @@ local function validateMember(party: Party, player: Player, clock: number)
 		removeMember(player, "Stay", "You left the party.")
 		return
 	end
-	if not isHeldInZone(party.Pad.Info.Zone, root.Position) then
-		-- Glitched or exploited out through a wall: put them back on their spot.
+	if not isHeldInZone(party.Pad.Info, root.Position) then
+		-- Glitched or exploited out through a wall: put them back at the nearest bit of the floor.
 		if clock - (lastPutBack[player] or 0) >= PUT_BACK_COOLDOWN then
 			lastPutBack[player] = clock
 			Characters.SetGroup(player, Characters.Groups.PartyMember)
-			teleport(player, slotCFrame(party.Pad, party.Slots[player] or 1))
+			teleport(player, nearestSpot(party.Pad, root.Position))
 		end
 	end
 end

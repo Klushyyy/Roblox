@@ -685,9 +685,13 @@ function HUD.Init()
 			centerY = math.min(centerY, canvas.Y - 300 - colH / 2)
 		end
 		centerY = math.max(centerY, inset + 80 + colH / 2)
-		-- (This column used to slide down by a row for every player in the server, to stay clear of Roblox's own player list in
-		-- the top right. That made the buttons jump about as people joined and left, even with the list shut: it stays put now,
-		-- wherever the list is.)
+		-- The player list (PlayerListUI) is at most four rows tall, so a fixed space under it is kept clear (it used to be a row
+		-- per player in the server, which made the buttons jump about as people joined and left, even with the list shut).
+		local listH = tonumber(LocalPlayer:GetAttribute("PlayerListHeight")) or 0
+		if listH > 0 then
+			local below = inset + listH + 14 + colH / 2
+			centerY = math.max(centerY, math.min(below, canvas.Y - 12 - safe.Bottom - colH / 2))
+		end
 		-- The side columns only keep half of the notch / rounded-corner inset: close to the edges on
 		-- phones, still clear of the notch itself.
 		local sideLeft = 12 + math.floor(safe.Left * 0.5)
@@ -735,6 +739,7 @@ function HUD.Init()
 	end
 	rightColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 	LocalPlayer:GetAttributeChangedSignal("BadgeStackHeight"):Connect(relayoutHud)
+	LocalPlayer:GetAttributeChangedSignal("PlayerListHeight"):Connect(relayoutHud)
 	leftColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 	moneyBlock:GetPropertyChangedSignal("Visible"):Connect(relayoutHud)
 
@@ -1326,9 +1331,10 @@ function HUD.Init()
 			lastHotbarKey = key
 			refreshHotbar()
 		end
-		-- In a run Tab opens the Upgrade Book, so Roblox's player list (also on Tab) steps aside.
+		-- In a run Tab opens the Upgrade Book, so Roblox's player list (also on Tab) steps aside; on a computer with PlayerListUI
+		-- (which sets CustomPlayerList) Roblox's list is never shown.
 		pcall(function()
-			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not inRun)
+			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not inRun and LocalPlayer:GetAttribute("CustomPlayerList") ~= true)
 		end)
 
 		if playing and run then

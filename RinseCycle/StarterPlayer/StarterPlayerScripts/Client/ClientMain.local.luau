@@ -40,6 +40,9 @@ local Tutorial = require(Client:WaitForChild("Tutorial"))
 -- (Telemetry is optional: if the script is missing the game plays the same, just without analytics)
 local TelemetryModule = Client:WaitForChild("Telemetry", 5)
 local Telemetry = if TelemetryModule and TelemetryModule:IsA("ModuleScript") then require(TelemetryModule) :: any else nil
+-- (PlayerListUI is optional too: without it Roblox's own player list stays)
+local PlayerListModule = Client:WaitForChild("PlayerListUI", 5)
+local PlayerListUI = if PlayerListModule and PlayerListModule:IsA("ModuleScript") then require(PlayerListModule) :: any else nil
 
 local function step(name: string, fn: () -> ())
 	local ok, err = xpcall(fn, debug.traceback)
@@ -90,4 +93,7 @@ step("EventZone", EventZone.Init)
 step("Tutorial", Tutorial.Init)
 if Telemetry then
 	step("Telemetry", Telemetry.Init)
+end
+if PlayerListUI then
+	step("PlayerListUI", PlayerListUI.Init)
 end

@@ -41,7 +41,8 @@ export type PadInfo = {
 	Exit: CFrame,
 	Barriers: { BasePart },
 	Gui: PadGui,
-}
+	Radius: number?, -- the round pad's radius (the walls stand just outside it): PartyService lets members walk the whole circle
+	}
 export type BoardPage = { Title: TextLabel, List: ScrollingFrame }
 -- Pages: one per level on a paged board (the Fastest Clean board); each client flips them locally
 -- with the arrows (tag "BoardArrow"), so nobody changes the page for anyone else.
@@ -960,7 +961,8 @@ local function buildPad(parent: Instance, id: number): PadInfo
 		Exit = CFrame.lookAt(exitPos.Position, exitPos.Position + Vector3.new(toCentre, 0, 0)),
 		Barriers = barriers,
 		Gui = { Count = countLbl, Title = titleLbl, Status = statusLbl, Privacy = privacyLbl },
-	}
+		Radius = PAD_RADIUS,
+		}
 end
 
 
