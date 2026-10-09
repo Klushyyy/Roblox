@@ -988,7 +988,7 @@ click(victimRow)
 
 -- Values to fill per input kind / command.
 local FILL = {
-	givecoins = { "500" }, giant = { "8" }, abuse = { "15" }, setbubbles = { "1234" }, setgems = { "77" }, setrebirths = { "2" },
+	setcoins = { "500" }, setdishes = { "250" }, speed = { "40" }, poll = { "Best? | Yes | No" }, countdown = { "Launch party" }, giant = { "8" }, abuse = { "15" }, setbubbles = { "1234" }, setgems = { "77" }, setrebirths = { "2" },
 	warn = { "spamming" }, msg = { "hello there" }, announce = { "Server restart soon" },
 	playerlogs = { "Klushy" }, kick = { "bye" }, ban = { "test ban" },
 	globalpoll = { "Best? | Yes | No" }, globalgive = { "100" }, globalpassdrop = { "1" }, globalboost = { "5" },

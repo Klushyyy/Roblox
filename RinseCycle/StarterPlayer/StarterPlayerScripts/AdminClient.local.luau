@@ -1676,7 +1676,7 @@ end)
 --   Target: "player" (the picked player), "none", or "text" (typed into the first box).
 --   Inputs: what goes after the name, in order: { Kind = "text"|"number"|"duration"|"choice", ... }
 type Input = { Kind: string, Placeholder: string?, Required: boolean?, Options: (() -> { { Label: string, Value: string } })? }
-type Command = { Name: string, Icon: string, Label: string, Desc: string, Group: string, Target: string, Inputs: { Input }?, Danger: boolean? }
+type Command = { Name: string, Icon: string, Label: string, Desc: string, Target: string, Inputs: { Input }?, Danger: boolean?, Toggle: boolean? }
 
 local function opts(list: { string }): () -> { { Label: string, Value: string } }
 	return function()
@@ -1694,57 +1694,48 @@ local DURATION: Input = { Kind = "duration" }
 
 local COMMANDS: { Command } = ({
 	-- Punish
-	{ Name = "kick", Icon = "👢", Label = "Kick", Desc = "Removes them from the server.", Group = "Punish", Target = "player", Inputs = { REASON }, Danger = true },
-	{ Name = "ban", Icon = "🔨", Label = "Ban", Desc = "Bans them for good (undo it from the Ban list).", Group = "Punish", Target = "player", Inputs = { REASON }, Danger = true },
-	{ Name = "tempban", Icon = "⏳", Label = "Temp ban", Desc = "Bans them for a set time.", Group = "Punish", Target = "player", Inputs = { DURATION, REASON }, Danger = true },
-	{ Name = "mute", Icon = "🔇", Label = "Mute / unmute", Desc = "Stops their chat messages. Run it again to unmute.", Group = "Punish", Target = "player", Inputs = { REASON } },
-	{ Name = "tempmute", Icon = "⏱️", Label = "Temp mute", Desc = "Mutes them for a set time.", Group = "Punish", Target = "player", Inputs = { DURATION, REASON } },
-	{ Name = "warn", Icon = "⚠️", Label = "Warn", Desc = "Gives them a warning they have to read.", Group = "Punish", Target = "player", Inputs = { { Kind = "text", Placeholder = "Reason", Required = true } } },
-	{ Name = "banlist", Icon = "📋", Label = "Ban list", Desc = "Everyone banned. Modify or unban from here.", Group = "Punish", Target = "none" },
-	{ Name = "mutelist", Icon = "📋", Label = "Mute list", Desc = "Everyone muted. Modify or unmute from here.", Group = "Punish", Target = "none" },
-	{ Name = "warnlist", Icon = "📋", Label = "Warn list", Desc = "Everyone with warnings.", Group = "Punish", Target = "none" },
+	{ Name = "kick", Icon = "👢", Label = "Kick", Desc = "Removes them from the server.", Target = "player", Inputs = { REASON }, Danger = true },
+	{ Name = "ban", Icon = "🔨", Label = "Ban", Desc = "Bans them for good (undo it from the Ban list).", Target = "player", Inputs = { REASON }, Danger = true },
+	{ Name = "tempban", Icon = "⏳", Label = "Temp ban", Desc = "Bans them for a set time.", Target = "player", Inputs = { DURATION, REASON }, Danger = true },
+	{ Name = "mute", Icon = "🔇", Label = "Mute", Desc = "Stops their chat messages. Run it again to unmute.", Toggle = true, Target = "player", Inputs = { REASON } },
+	{ Name = "tempmute", Icon = "⏱️", Label = "Temp mute", Desc = "Mutes them for a set time.", Target = "player", Inputs = { DURATION, REASON } },
+	{ Name = "warn", Icon = "⚠️", Label = "Warn", Desc = "Gives them a warning they have to read.", Target = "player", Inputs = { { Kind = "text", Placeholder = "Reason", Required = true } } },
+	{ Name = "banlist", Icon = "📋", Label = "Ban list", Desc = "Everyone banned. Modify or unban from here.", Target = "none" },
+	{ Name = "mutelist", Icon = "📋", Label = "Mute list", Desc = "Everyone muted. Modify or unmute from here.", Target = "none" },
+	{ Name = "warnlist", Icon = "📋", Label = "Warn list", Desc = "Everyone with warnings.", Target = "none" },
 	-- Control
-	{ Name = "freeze", Icon = "🧊", Label = "Freeze / unfreeze", Desc = "Stops them moving. Run it again to thaw.", Group = "Control", Target = "player" },
-	{ Name = "unfreeze", Icon = "🔥", Label = "Unfreeze", Desc = "Lets them move again.", Group = "Control", Target = "player" },
-	{ Name = "kill", Icon = "💀", Label = "Kill", Desc = "Resets their character.", Group = "Control", Target = "player" },
-	{ Name = "respawn", Icon = "🔄", Label = "Respawn", Desc = "Respawns them where they were.", Group = "Control", Target = "player" },
-	{ Name = "jail", Icon = "🚔", Label = "Jail / free", Desc = "Locks them in the jail. Run it again to let them out.", Group = "Control", Target = "player" },
-	{ Name = "god", Icon = "✨", Label = "God mode", Desc = "Can't be hurt. Run it again to turn off.", Group = "Control", Target = "player" },
-	{ Name = "invis", Icon = "👻", Label = "Invisible", Desc = "Hides their character and name tag. Toggles.", Group = "Control", Target = "player" },
-	{ Name = "fly", Icon = "🕊️", Label = "Fly", Desc = "Lets them fly (F to take off / land). Toggles.", Group = "Control", Target = "player" },
-	{ Name = "noclip", Icon = "🚪", Label = "No Clip tool", Desc = "Gives (or takes back) a tool: hold it to fly through walls, click to teleport.", Group = "Control", Target = "player" },
-	{ Name = "giant", Icon = "🗿", Label = "Giant", Desc = "Makes them huge (or back to normal). Toggles.", Group = "Control", Target = "player", Inputs = { { Kind = "number", Placeholder = "Size 2-30 (8)" } } },
-	{ Name = "msg", Icon = "💬", Label = "Message", Desc = "Pops a message up on their screen.", Group = "Control", Target = "player", Inputs = { { Kind = "text", Placeholder = "Message", Required = true } } },
+	-- Player
+	{ Name = "freeze", Icon = "🧊", Label = "Freeze", Desc = "Freezes them in place. Run it again to let them go.", Toggle = true, Target = "player" },
+	{ Name = "jail", Icon = "🚔", Label = "Jail", Desc = "Locks them in the jail. Run it again to let them out.", Toggle = true, Target = "player" },
+	{ Name = "kill", Icon = "💀", Label = "Kill", Desc = "Resets their character.", Target = "player" },
+	{ Name = "respawn", Icon = "🔄", Label = "Respawn", Desc = "Respawns them where they were.", Target = "player" },
+	{ Name = "god", Icon = "✨", Label = "God mode", Desc = "They can't be hurt. Run it again to turn it off.", Toggle = true, Target = "player" },
+	{ Name = "invis", Icon = "👻", Label = "Invisible", Desc = "Hides their character and name tag. Run it again to show them.", Toggle = true, Target = "player" },
+	{ Name = "fly", Icon = "🕊️", Label = "Fly", Desc = "Lets them fly (F to take off and land). Run it again to turn it off.", Toggle = true, Target = "player" },
+	{ Name = "noclip", Icon = "🚪", Label = "No Clip tool", Desc = "Gives them a tool: hold it to fly through walls, click to teleport. Run it again to take it back.", Toggle = true, Target = "player" },
 	-- Move
-	{ Name = "goto", Icon = "➡️", Label = "Go to", Desc = "Teleports you to them.", Group = "Move", Target = "player" },
-	{ Name = "bring", Icon = "⬅️", Label = "Bring", Desc = "Teleports them to you.", Group = "Move", Target = "player" },
-	{ Name = "spectate", Icon = "👁️", Label = "Spectate", Desc = "Watch them. Stop from the bar at the bottom.", Group = "Move", Target = "player" },
-	{ Name = "controlplayer", Icon = "🎮", Label = "Control", Desc = "Move their character with your controls.", Group = "Move", Target = "player" },
-	{ Name = "serverlist", Icon = "🌍", Label = "All servers", Desc = "Every server of the game, sorted: Lobby 1, Lobby 2...; and game servers by level (Chapter 1, 2, 3) with who is in each and how long it has been up. Tap a tab along the top to show All servers, Lobbies, or one chapter. Join any of them (you arrive invisible).", Group = "Global", Target = "none" },
-	{ Name = "badges", Icon = "🏅", Label = "Badges", Desc = "Checks all ten Roblox badges for that player against Roblox itself: earned? really owned? is the badge switched on? Anything they earned but don't have is given on the spot, or the reason it can't be is shown.", Group = "Game", Target = "player" },
-	{ Name = "analytics", Icon = "📈", Label = "Analytics", Desc = "Where players get stuck and leave. Pick a report (what new players do step by step, retention, where they were when they left, runs, features, money, devices and errors, the Admin Abuse show) and how many days back. The arrows flip between reports. Needs the game published for real numbers.", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
-	return {
-		{ Label = "Overview", Value = "1" },
-		{ Label = "What new players do (funnel)", Value = "2" },
-		{ Label = "Retention", Value = "3" },
-		{ Label = "Where players leave", Value = "4" },
-		{ Label = "Runs", Value = "5" },
-		{ Label = "Features used", Value = "6" },
-		{ Label = "Economy", Value = "7" },
-		{ Label = "Devices and errors", Value = "8" },
-		{ Label = "Admin Abuse show", Value = "9" },
-	}
-end }, { Kind = "choice", Required = true, Options = function()
-	return { { Label = "Last 7 days", Value = "7" }, { Label = "Today", Value = "1" }, { Label = "Last 3 days", Value = "3" }, { Label = "Last 14 days", Value = "14" }, { Label = "Last 30 days", Value = "30" } }
-end } } },
-	{ Name = "joinserver", Icon = "🛰️", Label = "Join server", Desc = "Teleport to that player's server, wherever they are (type their username).", Group = "Global", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
-	{ Name = "bringserver", Icon = "🧲", Label = "Bring (any server)", Desc = "Pull that player from their server into yours (type their username).", Group = "Global", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
-	{ Name = "viewpets", Icon = "🐾", Label = "Pets", Desc = "See their pets. Remove any, or add new ones.", Group = "Game", Target = "player" },
+	{ Name = "goto", Icon = "➡️", Label = "Go to player", Desc = "Teleports you to them.", Target = "player" },
+	{ Name = "bring", Icon = "⬅️", Label = "Bring player", Desc = "Teleports them to you.", Target = "player" },
+	{ Name = "spectate", Icon = "👁️", Label = "Spectate", Desc = "Watch them. Stop from the bar at the bottom.", Target = "player" },
+	{ Name = "controlplayer", Icon = "🎮", Label = "Control player", Desc = "Move their character with your controls.", Target = "player" },
+	{ Name = "giant", Icon = "🗿", Label = "Giant", Desc = "Makes them huge (size 2-30, empty = 8). Run it again to go back to normal.", Toggle = true, Target = "player", Inputs = { { Kind = "number", Placeholder = "Size 2-30 (8)" } } },
+	{ Name = "speed", Icon = "💨", Label = "Speed", Desc = "Sets how fast they walk (0-250; the lobby is 22). Leave the box empty to put it back to normal. A respawn keeps it.", Toggle = true, Target = "player", Inputs = { { Kind = "number", Placeholder = "Speed 0-250 (empty = normal)" } } },
+	{ Name = "joinserver", Icon = "🛰️", Label = "Join their server", Desc = "Teleport to that player's server, wherever they are (type their username).", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
+	{ Name = "bringserver", Icon = "🧲", Label = "Bring from any server", Desc = "Pull that player from their server into yours (type their username).", Target = "text", Inputs = { { Kind = "text", Placeholder = "Username", Required = true } } },
 	-- Game
-	{ Name = "givecoins", Icon = "💰", Label = "Give coins", Desc = "Coins for their current run.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
-	{ Name = "setbubbles", Icon = "🧼", Label = "Set bubbles", Desc = "Sets their Bubbles to an amount.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
-	{ Name = "setgems", Icon = "💎", Label = "Set gems", Desc = "Sets their Gems to an amount.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
-	{ Name = "givepet", Icon = "🐾", Label = "Give pet", Desc = "Adds a pet to their pets.", Group = "Game", Target = "player", Inputs = {
+	{ Name = "setbubbles", Icon = "🧼", Label = "Set bubbles", Desc = "Sets their Bubbles to exactly this amount.", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
+	{ Name = "setcoins", Icon = "💰", Label = "Set coins", Desc = "Sets the coins of the run they are in right now (they must be inside a dishwasher).", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
+	{ Name = "setgems", Icon = "💎", Label = "Set gems", Desc = "Sets their Gems to exactly this amount.", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
+	{ Name = "setrebirths", Icon = "🌀", Label = "Set rebirths", Desc = "Sets how many times they have rebirthed.", Target = "player", Inputs = { { Kind = "number", Placeholder = "Rebirths", Required = true } } },
+	{ Name = "setdishes", Icon = "🍽️", Label = "Set dishes cleaned", Desc = "Sets their lifetime Dishes cleaned (the Dishes column of the tab list and the Top Players board).", Target = "player", Inputs = { { Kind = "number", Placeholder = "Amount", Required = true } } },
+	{ Name = "setrank", Icon = "🎖️", Label = "Set rank", Desc = "Gives them a rank and equips it.", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = function()
+		local out = {}
+		for _, rank in Config.Ranks do
+			table.insert(out, { Label = rank.Icon .. " " .. rank.Name, Value = rank.Name })
+		end
+		return out
+	end } } },
+	{ Name = "givepet", Icon = "🐾", Label = "Give pet", Desc = "Adds one pet to their pets (pick the pet, then Normal, Golden or Rainbow).", Target = "player", Inputs = {
 		{ Kind = "choice", Required = true, Options = function()
 			local out = {}
 			for _, def in Config.Pets do
@@ -1759,10 +1750,73 @@ end } } },
 			return { { Label = "Normal", Value = "" }, { Label = "Golden", Value = "golden" }, { Label = "Rainbow", Value = "rainbow" } }
 		end },
 	} },
-	{ Name = "setrebirths", Icon = "🌀", Label = "Set rebirths", Desc = "Sets how many times they've rebirthed.", Group = "Game", Target = "player", Inputs = { { Kind = "number", Placeholder = "Rebirths", Required = true } } },
-	{ Name = "unlockall", Icon = "🔓", Label = "Unlock levels", Desc = "Unlocks every level for them.", Group = "Game", Target = "player" },
-	{ Name = "finishrun", Icon = "🏁", Label = "Finish run", Desc = "Cleans every dish in their current run.", Group = "Game", Target = "player" },
-	{ Name = "daily", Icon = "📅", Label = "Daily streak", Desc = "Check or change their daily reward streak.", Group = "Game", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = function()
+	{ Name = "viewpets", Icon = "🐾", Label = "View pets", Desc = "See their pets. Remove any, or add new ones.", Target = "player" },
+	-- Game
+	-- Server
+	{ Name = "announce", Icon = "📢", Label = "Announce", Desc = "A banner on everyone's screen in THIS server.", Target = "none", Inputs = { { Kind = "text", Placeholder = "Announcement", Required = true } } },
+	{ Name = "msg", Icon = "💬", Label = "Message player", Desc = "Pops a private message up on their screen (only they see it).", Target = "player", Inputs = { { Kind = "text", Placeholder = "Message", Required = true } } },
+	-- Move
+	{ Name = "givegamepass", Icon = "🎟️", Label = "Gift pass", Desc = "Gives them a game pass for free (saved).", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = function()
+		local out = {}
+		for _, pass in Config.GamePasses do
+			table.insert(out, { Label = pass.Icon .. " " .. pass.Name, Value = pass.Key })
+		end
+		return out
+	end } } },
+	{ Name = "removegamepass", Icon = "✂️", Label = "Remove pass", Desc = "Takes back a gifted pass.", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = function()
+		local out = {}
+		for _, pass in Config.GamePasses do
+			table.insert(out, { Label = pass.Icon .. " " .. pass.Name, Value = pass.Key })
+		end
+		return out
+	end } } },
+	{ Name = "poll", Icon = "📊", Label = "Poll", Desc = "A poll in THIS server only: pick how long, then type Question | answer | answer (2 to 4 answers). When it ends everyone here sees the results.", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+		return { { Label = "30 seconds", Value = "30" }, { Label = "1 minute", Value = "60" }, { Label = "2 minutes", Value = "120" } }
+	end }, { Kind = "text", Placeholder = "Which level next? | Pizzeria | Castle", Required = true } } },
+	{ Name = "countdown", Icon = "⏳", Label = "Countdown", Desc = "A countdown on everyone's screen in THIS server, then LIVE NOW for an hour. Pick the time and (optionally) a name. \"Cancel it\" stops it.", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+		return { { Label = "30 minutes", Value = "30m" }, { Label = "1 hour", Value = "1h" }, { Label = "6 hours", Value = "6h" }, { Label = "24 hours", Value = "24h" }, { Label = "Cancel it", Value = "off" } }
+	end }, { Kind = "text", Placeholder = "Name (optional: blank = just the timer)" } } },
+	{ Name = "leaderboards", Icon = "🏆", Label = "Leaderboards", Desc = "See everyone on every leaderboard; reset someone's spot (they keep their stats).", Target = "none" },
+	-- Global
+	{ Name = "globalannounce", Icon = "🌍", Label = "Global announce", Desc = "A banner on everyone's screen in EVERY server.", Target = "none", Inputs = { { Kind = "text", Placeholder = "Announcement", Required = true } } },
+	{ Name = "globalpassdrop", Icon = "🎟️", Label = "Pass drop", Desc = "Random players from EVERY server win a game pass. Type how many win (1 to 25), then pick one pass for all, or a random pass each. Owners get 100 Gems instead.", Target = "none", Inputs = { { Kind = "number", Placeholder = "How many players win? (type 1 to 25)", Required = true }, { Kind = "choice", Required = true, Options = function()
+		local out = { { Label = "Random pass each", Value = "random" } }
+		for _, pass in Config.GamePasses do
+			table.insert(out, { Label = pass.Name, Value = pass.Key })
+		end
+		return out
+	end } } },
+	{ Name = "globalpoll", Icon = "📊", Label = "Global poll", Desc = "A poll in EVERY server: pick how long, then type Question | answer | answer (2 to 4 answers). When it ends everyone's poll card shows the results.", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+		return { { Label = "30 seconds", Value = "30" }, { Label = "1 minute", Value = "60" }, { Label = "2 minutes", Value = "120" } }
+	end }, { Kind = "text", Placeholder = "Which level next? | Pizzeria | Castle", Required = true } } },
+	{ Name = "globalcountdown", Icon = "⏳", Label = "Global countdown", Desc = "A countdown on everyone's screen in EVERY server (and for people who join later), then LIVE NOW for an hour. Pick the time and (optionally) a name.", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "1h", "6h", "12h", "24h", "48h", "3d", "7d" }) }, { Kind = "text", Placeholder = "Name (optional: blank = just the timer)" } } },
+	{ Name = "cancelcountdown", Icon = "🛑", Label = "Cancel countdown", Desc = "Removes the event countdown from everyone's screen, in every server.", Target = "none", Danger = true },
+	{ Name = "globalgive", Icon = "🎁", Label = "Give everyone", Desc = "Everyone online in EVERY server gets this much (Coins only reach people inside a dishwasher).", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "Bubbles", "Gems", "Coins" }) }, { Kind = "number", Placeholder = "Amount", Required = true } } },
+	{ Name = "globalboost", Icon = "⚡", Label = "x2 boost", Desc = "x2 Cleaning for everyone online in EVERY server, for this many minutes.", Target = "none", Inputs = { { Kind = "number", Placeholder = "How many minutes? (type 1 to 180)", Required = true } } },
+	{ Name = "serverlist", Icon = "🌍", Label = "All servers", Desc = "Every server of the game: lobbies, and game servers by chapter, with who is in each. Tap a tab to filter, Join to go there (you arrive invisible).", Target = "none" },
+	{ Name = "analytics", Icon = "📈", Label = "Analytics", Desc = "Where players get stuck and leave. Pick a report (funnels, retention, where they left, runs, money, devices, the show) and how many days back.", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+	return {
+		{ Label = "Overview", Value = "1" },
+		{ Label = "What new players do (funnel)", Value = "2" },
+		{ Label = "Retention", Value = "3" },
+		{ Label = "Where players leave", Value = "4" },
+		{ Label = "Runs", Value = "5" },
+		{ Label = "Features used", Value = "6" },
+		{ Label = "Economy", Value = "7" },
+		{ Label = "Devices and errors", Value = "8" },
+		{ Label = "Admin Abuse show", Value = "9" },
+	}
+end }, { Kind = "choice", Required = true, Options = function()
+	return { { Label = "Last 7 days", Value = "7" }, { Label = "Today", Value = "1" }, { Label = "Last 3 days", Value = "3" }, { Label = "Last 14 days", Value = "14" }, { Label = "Last 30 days", Value = "30" } }
+end } } },
+	-- Staff
+	{ Name = "setadminrank", Icon = "🛡️", Label = "Staff tier", Desc = "Make them Moderator, Admin or Developer (saved, works straight away), or clear it.", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = opts({ "Moderator", "Admin", "Developer", "clear" }) } } },
+	{ Name = "stafflist", Icon = "📋", Label = "Staff list", Desc = "Everyone with a staff rank, online or not. Remove anyone.", Target = "none" },
+	{ Name = "cmdlogs", Icon = "📜", Label = "Command log", Desc = "Every admin command used.", Target = "none" },
+	{ Name = "playerlogs", Icon = "🔎", Label = "Logs by admin", Desc = "Commands used by one admin (type their username).", Target = "text", Inputs = { { Kind = "text", Placeholder = "Admin username", Required = true } } },
+	{ Name = "wipelogs", Icon = "🧹", Label = "Wipe logs", Desc = "Deletes the whole command log.", Target = "none", Danger = true },
+	-- Studio Test
+	{ Name = "daily", Icon = "📅", Label = "Daily streak", Desc = "Check or change their daily reward streak.", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = function()
 		local out = {
 			{ Label = "Show", Value = "show" },
 			{ Label = "Ready now", Value = "skip" },
@@ -1774,52 +1828,17 @@ end } } },
 		end
 		return out
 	end } } },
-	{ Name = "setrank", Icon = "🎖️", Label = "Set rank", Desc = "Gives them a rank and equips it.", Group = "Game", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = function()
-		local out = {}
-		for _, rank in Config.Ranks do
-			table.insert(out, { Label = rank.Icon .. " " .. rank.Name, Value = rank.Name })
-		end
-		return out
-	end } } },
-	{ Name = "promote", Icon = "⬆️", Label = "Promote", Desc = "Next rarer rank.", Group = "Game", Target = "player" },
-	{ Name = "demote", Icon = "⬇️", Label = "Demote", Desc = "Next more common rank.", Group = "Game", Target = "player" },
+	{ Name = "badges", Icon = "🏅", Label = "Badges", Desc = "Checks all ten Roblox badges for that player against Roblox: earned, really owned, switched on? Missing ones are given, or the reason is shown.", Target = "player" },
+	{ Name = "finishrun", Icon = "🏁", Label = "Finish run", Desc = "Cleans every dish in their current run.", Target = "player" },
+	{ Name = "unlockall", Icon = "🔓", Label = "Unlock levels", Desc = "Unlocks every level for them.", Target = "player" },
+	{ Name = "resetfirstrun", Icon = "🆕", Label = "Reset first run", Desc = "Puts your account back to a brand-new player's: the tutorial and the level 1 cutscene play again on your next run. Bubbles and pets stay.", Target = "none", Inputs = {} },
+	{ Name = "clubreset", Icon = "🏷", Label = "Club waiting times", Desc = "Clears the 24 hour wait after leaving a club and any kick bans on your account, so you can test joining, leaving and being kicked again.", Target = "none", Inputs = {} },
+	{ Name = "notifytest", Icon = "🔔", Label = "Notification test", Desc = "Sends the \"daily reward is ready\" notification to you right now and says how it went: is the key found, is HTTP on, are you opted in.", Target = "none" },
+	{ Name = "promote", Icon = "⬆️", Label = "Promote rank", Desc = "Gives them the next rarer rank.", Target = "player" },
+	{ Name = "demote", Icon = "⬇️", Label = "Demote rank", Desc = "Gives them the next more common rank.", Target = "player" },
 	-- Server
-	{ Name = "announce", Icon = "📢", Label = "Announce", Desc = "A banner on everyone's screen.", Group = "Server", Target = "none", Inputs = { { Kind = "text", Placeholder = "Announcement", Required = true } } },
-	{ Name = "globalannounce", Icon = "🌍", Label = "Global announce", Desc = "A banner on everyone's screen in EVERY server of the game.", Group = "Global", Target = "none", Inputs = { { Kind = "text", Placeholder = "Announcement", Required = true } } },
-	{ Name = "leaderboards", Icon = "🏆", Label = "Leaderboards", Desc = "See everyone on every leaderboard; reset someone's spot (they keep their stats).", Group = "Server", Target = "none" },
-	{ Name = "givegamepass", Icon = "🎟️", Label = "Gift pass", Desc = "Gives them a game pass for free (saved).", Group = "Server", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = function()
-		local out = {}
-		for _, pass in Config.GamePasses do
-			table.insert(out, { Label = pass.Icon .. " " .. pass.Name, Value = pass.Key })
-		end
-		return out
-	end } } },
-	{ Name = "removegamepass", Icon = "✂️", Label = "Remove pass", Desc = "Takes back a gifted pass.", Group = "Server", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = function()
-		local out = {}
-		for _, pass in Config.GamePasses do
-			table.insert(out, { Label = pass.Icon .. " " .. pass.Name, Value = pass.Key })
-		end
-		return out
-	end } } },
-	{ Name = "cmdlogs", Icon = "📜", Label = "Command log", Desc = "Every admin command used.", Group = "Server", Target = "none" },
-	{ Name = "playerlogs", Icon = "🔎", Label = "Logs by admin", Desc = "Commands used by one admin (type their username).", Group = "Server", Target = "text", Inputs = { { Kind = "text", Placeholder = "Admin username", Required = true } } },
-	{ Name = "wipelogs", Icon = "🧹", Label = "Wipe logs", Desc = "Deletes the whole command log.", Group = "Server", Target = "none", Danger = true },
-	{ Name = "setadminrank", Icon = "🛡️", Label = "Staff tier", Desc = "Make them Moderator, Admin or Developer (saved, works straight away), or clear it.", Group = "Server", Target = "player", Inputs = { { Kind = "choice", Required = true, Options = opts({ "Moderator", "Admin", "Developer", "clear" }) } } },
-	{ Name = "stafflist", Icon = "📋", Label = "Staff list", Desc = "Everyone with a staff rank, online or not. Remove anyone.", Group = "Server", Target = "none" },
-	{ Name = "globalpoll", Icon = "📊", Label = "Poll", Desc = "A poll in EVERY server. Type: Question | answer | answer (2 to 4 answers). When it ends, everyone's poll card shows the results.", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
-		return { { Label = "30 seconds", Value = "30" }, { Label = "1 minute", Value = "60" }, { Label = "2 minutes", Value = "120" } }
-	end }, { Kind = "text", Placeholder = "Which level next? | Pizzeria | Castle", Required = true } } },
-	{ Name = "globalgive", Icon = "🎁", Label = "Give everyone", Desc = "Everyone online in EVERY server gets this much (Coins only reach people inside a dishwasher).", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "Bubbles", "Gems", "Coins" }) }, { Kind = "number", Placeholder = "Amount", Required = true } } },
-	{ Name = "globalpassdrop", Icon = "🎟️", Label = "Pass drop", Desc = "Random players from EVERY server win a game pass. Type HOW MANY players win (a number from 1 to 25), then pick what they win: 'Random pass each' gives every winner a different random pass, or pick one pass and every winner gets that same pass. Winners get a congratulations pop-up with confetti. Anyone who already owns the pass gets 100 Gems instead.", Group = "Global", Target = "none", Inputs = { { Kind = "number", Placeholder = "How many players win? (type 1 to 25)", Required = true }, { Kind = "choice", Required = true, Options = function()
-		local out = { { Label = "Random pass each", Value = "random" } }
-		for _, pass in Config.GamePasses do
-			table.insert(out, { Label = pass.Name, Value = pass.Key })
-		end
-		return out
-	end } } },
-	{ Name = "globalcountdown", Icon = "⏳", Label = "Event countdown", Desc = "A countdown on everyone's screen in EVERY server (and for anyone who joins later), then LIVE NOW for an hour. Pick the time, then type a name if you want one on it; leave the name blank for just a countdown timer with no name.", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = opts({ "1h", "6h", "12h", "24h", "48h", "3d", "7d" }) }, { Kind = "text", Placeholder = "Name (optional: blank = just the timer)" } } },
-	{ Name = "notifytest", Icon = "🔔", Label = "Notification test", Desc = "Sends the \"daily reward is ready\" notification to you right now and says how it went: is the key found, is HTTP on, are you opted in.", Group = "Studio", Target = "none" },
-	{ Name = "abusefx", Icon = "💥", Label = "Test Admin Abuse effects", Desc = "Tries one piece of the Admin Abuse show on its own (it spawns the giant first): each effect, the table holes, the obby, the heat, the exit. 'Every effect' plays them all, 9 seconds apart.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+	-- Show Test
+	{ Name = "abusefx", Icon = "💥", Label = "Test effects", Desc = "Tries one piece of the Admin Abuse show on its own (the giant spawns first): each effect, the holes, the obby, the heat, the exit.", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		local list = {}
 		for _, name in { "all", "beam", "meteors", "lightning", "shockwave", "barrage", "fireworks", "laser", "blackhole", "tornado", "ufo", "disco", "fountains", "eyes", "fireballs", "dishwasher", "bombs", "chairshow", "nuke", "petchase", "hole1", "hole2", "heal", "obby", "obbybreak", "heat", "calm", "leave", "off" } do
 			local label = if name == "all" then "Every effect, one after another" elseif name == "off" then "Put everything away" elseif name == "heal" then "Close the table holes" elseif name == "hole1" then "Table hole 1" elseif name == "hole2" then "Table hole 2" elseif name == "obby" then "Build the obby" elseif name == "obbybreak" then "Smash the obby" elseif name == "heat" then "Turn up the heat" elseif name == "calm" then "Cool down" elseif name == "leave" then "The exit through the roof" else name
@@ -1827,10 +1846,7 @@ end } } },
 		end
 		return list
 	end } } },
-	{ Name = "resetfirstrun", Icon = "🆕", Label = "Reset my first run", Desc = "Puts your account back to a brand-new player's: the tutorial is not done, your run count is 0 and the level 1 cutscene is unseen, so the next run you start shows the tutorial and the cutscene again. Your Bubbles, pets and everything else stay.", Group = "Studio", Target = "none", Inputs = {} },
-	{ Name = "clubreset", Icon = "🏷", Label = "Reset my club waiting times", Desc = "Clears the 24 hour wait after leaving a club and any 24 hour kick bans on your account (and a waiting \"you were kicked\" message), so you can test joining, leaving and being kicked straight away.", Group = "Studio", Target = "none", Inputs = {} },
-	{ Name = "abusedebug", Icon = "🐞", Label = "Giant debug readout", Desc = "Toggles a floating readout above the Admin Abuse giant (state, height, floor, feet) and prints it to the Output once a second. Use it to see where he sinks or stops.", Group = "Studio", Target = "none", Inputs = {} },
-	{ Name = "abuseshow", Icon = "🎆", Label = "Global Admin Abuse event test", Desc = "Starts the whole Admin Abuse show in EVERY server (what everyone would see): rounds pause, a giant, chat lines, votes and prizes. Pick when it starts, or put the real time back.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+	{ Name = "abuselocal", Icon = "🧪", Label = "Local show test", Desc = "Runs the whole Admin Abuse show in THIS server only (nothing goes to other servers). Pick when it starts, or put the real time back.", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		return {
 			{ Label = "Start in 15 seconds", Value = "0.25" },
 			{ Label = "Start in 1 minute", Value = "1" },
@@ -1840,7 +1856,7 @@ end } } },
 			{ Label = "Back to the real time", Value = "reset" },
 		}
 	end } } },
-	{ Name = "abuselocal", Icon = "🧪", Label = "Local Admin Abuse event test", Desc = "Runs the whole Admin Abuse show in THIS server only (nothing is sent to other servers): the same show, to test it in the real game. Works in the published game too. Pick when it starts, or put the real time back.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+	{ Name = "abuseshow", Icon = "🎆", Label = "Global show test", Desc = "Starts the whole Admin Abuse show in EVERY server: rounds pause, a giant, chat lines, votes and prizes. Pick when it starts, or put the real time back.", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		return {
 			{ Label = "Start in 15 seconds", Value = "0.25" },
 			{ Label = "Start in 1 minute", Value = "1" },
@@ -1850,23 +1866,25 @@ end } } },
 			{ Label = "Back to the real time", Value = "reset" },
 		}
 	end } } },
-	{ Name = "privatelobby", Icon = "🔒", Label = "Private lobby", Desc = "Takes you to a lobby only you can join (a private server of this game that nobody else can reach, not even friends). Combine it with the Local Admin Abuse event test to try the show in the real game. Only works in the published game.", Group = "Studio", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+	{ Name = "abusedebug", Icon = "🐞", Label = "Giant debug", Desc = "Toggles a floating readout above the Admin Abuse giant (state, height, floor, feet) and prints it to the Output once a second. Use it to see where he sinks or stops.", Target = "none", Inputs = {} },
+	{ Name = "privatelobby", Icon = "🔒", Label = "Private lobby", Desc = "Takes you to a lobby only you can enter (a private server of this game). Run it again to return to it, or make a fresh one. Published game only.", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		return {
 			{ Label = "Take me to my private lobby", Value = "join" },
 			{ Label = "Make a fresh private lobby", Value = "new" },
 		}
 	end } } },
-	{ Name = "cancelcountdown", Icon = "🛑", Label = "Cancel countdown", Desc = "Removes the event countdown from everyone's screen, in every server.", Group = "Global", Target = "none", Danger = true },
-	{ Name = "globalboost", Icon = "⚡", Label = "x2 boost", Desc = "x2 Cleaning for everyone online in EVERY server, for this many minutes.", Group = "Global", Target = "none", Inputs = { { Kind = "number", Placeholder = "How many minutes? (type 1 to 180)", Required = true } } },
 }) :: any
+-- The tabs, in order, and which commands each holds (at most nine: three rows of three). A command that is on no tab is never shown.
 local GROUPS = {
-	{ Name = "Punish", Icon = "🔨" },
-	{ Name = "Control", Icon = "🧊" },
-	{ Name = "Move", Icon = "🧭" },
-	{ Name = "Game", Icon = "🧼" },
-	{ Name = "Server", Icon = "📢" },
-	{ Name = "Global", Icon = "🌍" },
-	{ Name = "Studio", Icon = "🧪" },
+	{ Name = "Punish", Icon = "🔨", Blurb = "Kick, ban, mute and warn the player you pick.", Commands = { "kick", "ban", "tempban", "mute", "tempmute", "warn", "banlist", "mutelist", "warnlist" } },
+	{ Name = "Player", Icon = "🧊", Blurb = "Things you do to a player. The on / off ones undo themselves.", Commands = { "freeze", "jail", "kill", "respawn", "god", "invis", "fly", "noclip" } },
+	{ Name = "Move", Icon = "🧭", Blurb = "Teleport, watch and control players; size and speed.", Commands = { "goto", "bring", "spectate", "controlplayer", "giant", "speed", "joinserver", "bringserver" } },
+	{ Name = "Game", Icon = "🧼", Blurb = "Change a player's progress: pick a command, type a number.", Commands = { "setbubbles", "setcoins", "setgems", "setrebirths", "setdishes", "setrank", "givepet", "viewpets" } },
+	{ Name = "Server", Icon = "📢", Blurb = "Only THIS server. Message, Gift pass and Remove pass need a player.", Commands = { "announce", "msg", "givegamepass", "removegamepass", "poll", "countdown", "leaderboards" } },
+	{ Name = "Global", Icon = "🌍", Blurb = "EVERY server at once: everyone online sees it.", Commands = { "globalannounce", "globalpassdrop", "globalpoll", "globalcountdown", "cancelcountdown", "globalgive", "globalboost", "serverlist", "analytics" } },
+	{ Name = "Staff", Icon = "🛡️", Blurb = "Staff ranks and what every admin did.", Commands = { "setadminrank", "stafflist", "cmdlogs", "playerlogs", "wipelogs" } },
+	{ Name = "Studio Test", Icon = "🧪", Blurb = "Testing tools for your own account.", Commands = { "daily", "badges", "finishrun", "unlockall", "resetfirstrun", "clubreset", "notifytest", "promote", "demote" } },
+	{ Name = "Show Test", Icon = "🎆", Blurb = "Try the Admin Abuse show and its pieces.", Commands = { "abusefx", "abuselocal", "abuseshow", "abusedebug", "privatelobby" } },
 }
 local DURATIONS = { "1h", "6h", "24h", "3d", "7d", "30d" }
 local PRESETS = {
@@ -1943,6 +1961,7 @@ local function buildPanel(info: any)
 
 	local formTitle: TextLabel
 	local refreshForm: () -> ()
+	local paintBlurb: () -> () = function() end -- (set below: the line under the tabs)
 
 	local function paintRows()
 		for plr, row in playerRows do
@@ -2028,27 +2047,38 @@ local function buildPanel(info: any)
 	right.Size = UDim2.new(1, -262, 1, -64)
 	right.Parent = content
 
-	-- The group tabs scroll sideways when they don't all fit.
-	local tabs = Instance.new("ScrollingFrame")
+	-- The tabs: two rows (a grid), so every one is always in view.
+	local tabs = Instance.new("Frame")
 	tabs.Name = "Groups"
 	tabs.BackgroundTransparency = 1
-	tabs.BorderSizePixel = 0
-	tabs.Size = UDim2.new(1, 0, 0, 52)
-	tabs.ScrollingDirection = Enum.ScrollingDirection.X
-	tabs.AutomaticCanvasSize = Enum.AutomaticSize.X
-	tabs.CanvasSize = UDim2.new()
-	tabs.ScrollBarThickness = 4
-	tabs.ScrollBarImageColor3 = Colors.Primary
-	tabs.VerticalScrollBarInset = Enum.ScrollBarInset.None
+	tabs.Size = UDim2.new(1, 0, 0, 76)
 	tabs.Parent = right
-	listLayout(tabs, 8, true)
+	local tabsGrid = Instance.new("UIGridLayout")
+	tabsGrid.CellSize = UDim2.new(0.2, -6, 0, 36)
+	tabsGrid.CellPadding = UDim2.fromOffset(7, 4)
+	tabsGrid.SortOrder = Enum.SortOrder.LayoutOrder
+	tabsGrid.Parent = tabs
 	local tabButtons: { [string]: TextButton } = {}
 
-	local grid = scroller(right, UDim2.new(1, 0, 1, -236), UDim2.fromOffset(0, 56))
+	-- One line under the tabs that says what this tab is for (or that a player has to be picked first).
+	local blurb = UIKit.Label({
+		Name = "Blurb",
+		Text = "",
+		TextSize = 15,
+		TextColor3 = Colors.TextDim,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Size = UDim2.new(1, -8, 0, 20),
+		Position = UDim2.fromOffset(4, 80),
+		Parent = right,
+	})
+
+	-- Three columns, three rows: a tab never has more than nine commands.
+	local grid = scroller(right, UDim2.new(1, 0, 0, 174), UDim2.fromOffset(0, 104))
 	grid.Name = "Commands"
 	local gridLayout = Instance.new("UIGridLayout")
-	gridLayout.CellSize = UDim2.fromOffset(170, 64)
-	gridLayout.CellPadding = UDim2.fromOffset(10, 10)
+	gridLayout.CellSize = UDim2.new(1 / 3, -10, 0, 50)
+	gridLayout.CellPadding = UDim2.fromOffset(10, 8)
 	gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	gridLayout.Parent = grid
 	local gridPad = Instance.new("UIPadding")
@@ -2058,8 +2088,8 @@ local function buildPanel(info: any)
 
 	-- The options for the picked command, and RUN.
 	local form = UIKit.Card({
-		Size = UDim2.new(1, 0, 0, 170),
-		Position = UDim2.new(0, 0, 1, -170),
+		Size = UDim2.new(1, 0, 1, -286),
+		Position = UDim2.fromOffset(0, 286),
 		Color = Colors.PanelDark,
 		Parent = right,
 	})
@@ -2078,15 +2108,16 @@ local function buildPanel(info: any)
 		TextColor3 = Colors.TextDim,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextWrapped = true,
-		Size = UDim2.new(1, -200, 0, 20),
+		Size = UDim2.new(1, -200, 0, 40),
 		Position = UDim2.fromOffset(16, 40),
+		TextYAlignment = Enum.TextYAlignment.Top,
 		Parent = form,
 	})
 	local inputsFrame = Instance.new("Frame")
 	inputsFrame.Name = "Inputs"
 	inputsFrame.BackgroundTransparency = 1
 	inputsFrame.Size = UDim2.new(1, -200, 0, 96)
-	inputsFrame.Position = UDim2.fromOffset(12, 66)
+	inputsFrame.Position = UDim2.fromOffset(12, 86)
 	inputsFrame.Parent = form
 	listLayout(inputsFrame, 6)
 	local runButton = UIKit.Button({
@@ -2190,6 +2221,7 @@ local function buildPanel(info: any)
 	end
 
 	refreshForm = function()
+		paintBlurb()
 		clear(inputsFrame)
 		table.clear(values)
 		local cmd = selectedCommand
@@ -2285,14 +2317,58 @@ local function buildPanel(info: any)
 	runButton.MouseButton1Click:Connect(runSelected)
 
 	------------------------------------------------------------------ command grid
+	local byName: { [string]: Command } = {}
+	for _, cmd in COMMANDS do
+		byName[cmd.Name] = cmd
+	end
+	-- True when most of the tab's commands act on a picked player (then the line under the tabs says to pick one first).
+	local function groupNeedsPlayer(group: any): boolean
+		local shown, needing = 0, 0
+		for _, name in group.Commands do
+			local cmd = byName[name]
+			if cmd and allowed[name] then
+				shown += 1
+				if cmd.Target == "player" then
+					needing += 1
+				end
+			end
+		end
+		return shown > 0 and needing * 10 >= shown * 6
+	end
+	paintBlurb = function()
+		local group
+		for _, g in GROUPS do
+			if g.Name == selectedGroup then
+				group = g
+			end
+		end
+		if not group then
+			return
+		end
+		if selectedPlayer == nil and groupNeedsPlayer(group) then
+			blurb.Text = "Pick a player on the left first."
+			blurb.TextColor3 = Colors.Warning
+		else
+			blurb.Text = (if selectedPlayer and groupNeedsPlayer(group) then "@" .. selectedPlayer.Name .. ":   " else "") .. group.Blurb
+			blurb.TextColor3 = Colors.TextDim
+		end
+	end
 	local function drawGroup()
 		clear(grid)
 		for name, b in tabButtons do
 			b.BackgroundColor3 = if name == selectedGroup then Colors.Primary else Colors.PanelLight
 		end
+		paintBlurb()
+		local group
+		for _, g in GROUPS do
+			if g.Name == selectedGroup then
+				group = g
+			end
+		end
 		local order = 0
-		for _, cmd in COMMANDS do
-			if cmd.Group ~= selectedGroup or not allowed[cmd.Name] then
+		for _, name in if group then group.Commands else {} do
+			local cmd = byName[name]
+			if not cmd or not allowed[cmd.Name] then
 				continue
 			end
 			order += 1
@@ -2305,16 +2381,29 @@ local function buildPanel(info: any)
 			cell.BackgroundColor3 = if selectedCommand == cmd then Colors.Primary elseif cmd.Danger then Color3.fromRGB(120, 40, 60) else Colors.PanelLight
 			UIKit.Corner(cell, 12)
 			UIKit.Stroke(cell, Colors.Ink, 2)
-			UIKit.Label({ Text = cmd.Icon, TextSize = 26, Size = UDim2.fromOffset(40, 64), Position = UDim2.fromOffset(6, 0), Parent = cell })
+			UIKit.Label({ Text = cmd.Icon, TextSize = 26, Size = UDim2.fromOffset(40, 50), Position = UDim2.fromOffset(6, 0), Parent = cell })
 			UIKit.Label({
 				Text = cmd.Label,
-				TextSize = 17,
+				TextSize = 18,
 				TextWrapped = true,
 				TextXAlignment = Enum.TextXAlignment.Left,
-				Size = UDim2.new(1, -52, 1, 0),
+				Size = UDim2.new(1, -54, 1, if cmd.Toggle then -14 else 0),
 				Position = UDim2.fromOffset(48, 0),
 				Parent = cell,
 			})
+			if cmd.Toggle then
+				-- a small "on / off" under the name: running it again turns it off
+				UIKit.Label({
+					Name = "ToggleTag",
+					Text = "on / off",
+					TextSize = 12,
+					TextColor3 = Colors.TextDim,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					Size = UDim2.new(1, -54, 0, 14),
+					Position = UDim2.new(0, 48, 1, -17),
+					Parent = cell,
+				})
+			end
 			cell.MouseButton1Click:Connect(function()
 				selectedCommand = cmd
 				refreshForm()
@@ -2337,8 +2426,8 @@ local function buildPanel(info: any)
 			Text = group.Name,
 			Icon = group.Icon,
 			Color = Colors.PanelLight,
-			Size = UDim2.fromOffset(134, 44),
-			TextSize = 18,
+			Size = UDim2.fromOffset(130, 40),
+			TextSize = 17,
 			LayoutOrder = i,
 			Parent = tabs,
 			OnClick = function()
@@ -2474,9 +2563,65 @@ local function buildPanel(info: any)
 			if shown > 300 then
 				break
 			end
-			local row = UIKit.Card({ Size = UDim2.new(1, -10, 0, 64), Color = Colors.PanelLight, Parent = listScroll })
+			local TONES: { [string]: Color3 } = { good = Colors.Good, warn = Colors.Warning, bad = Colors.Bad, info = Colors.Primary }
+			if entry.Kind == "head" then
+				-- a section heading (analytics reports): no card, just the title and what it shows
+				local headRow = Instance.new("Frame")
+				headRow.Name = "Head"
+				headRow.BackgroundTransparency = 1
+				headRow.Size = UDim2.new(1, -10, 0, if line2 ~= "" then 50 else 32)
+				headRow.LayoutOrder = i
+				headRow.Parent = listScroll
+				UIKit.Label({ Text = line1, TextSize = 20, TextColor3 = Colors.Primary, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Size = UDim2.new(1, -8, 0, 26), Position = UDim2.fromOffset(6, 12), Parent = headRow })
+				if line2 ~= "" then
+					UIKit.Label({ Text = line2, TextSize = 14, TextColor3 = Colors.TextDim, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Size = UDim2.new(1, -8, 0, 20), Position = UDim2.fromOffset(6, 36), Parent = headRow })
+				end
+				continue
+			end
+			if entry.Kind == "note" then
+				-- a summary card with a coloured stripe: the one sentence that says what the numbers mean
+				local noteRow = UIKit.Card({ Size = UDim2.new(1, -10, 0, if line2 ~= "" then 76 else 50), Color = Colors.PanelDark, Parent = listScroll })
+				noteRow.Name = "Note"
+				noteRow.LayoutOrder = i
+				local stripe = Instance.new("Frame")
+				stripe.Size = UDim2.new(0, 6, 1, -16)
+				stripe.Position = UDim2.fromOffset(8, 8)
+				stripe.BackgroundColor3 = TONES[tostring(entry.Tone)] or Colors.Primary
+				stripe.BorderSizePixel = 0
+				stripe.Parent = noteRow
+				UIKit.Corner(stripe, 3)
+				UIKit.Label({ Text = line1, TextSize = 19, TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, Size = UDim2.new(1, -40, 0, if line2 ~= "" then 28 else 40), Position = UDim2.fromOffset(24, 6), Parent = noteRow })
+				if line2 ~= "" then
+					UIKit.Label({ Text = line2, TextSize = 14, TextColor3 = Colors.TextDim, TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Size = UDim2.new(1, -40, 0, 38), Position = UDim2.fromOffset(24, 36), Parent = noteRow })
+				end
+				continue
+			end
+			local hasBar = type(entry.Bar) == "number"
+			local row = UIKit.Card({ Size = UDim2.new(1, -10, 0, if hasBar then 72 else 64), Color = Colors.PanelLight, Parent = listScroll })
 			row.LayoutOrder = i
-			local textRoom = if currentAction2 then -310 else -170
+			if hasBar then
+				-- the bar under the text (a share of the whole / of the first step) and the big number on the right
+				local track = Instance.new("Frame")
+				track.Name = "BarTrack"
+				track.Size = UDim2.new(1, -28, 0, 8)
+				track.Position = UDim2.new(0, 14, 1, -16)
+				track.BackgroundColor3 = Colors.PanelDark
+				track.BorderSizePixel = 0
+				track.Parent = row
+				UIKit.Corner(track, 4)
+				local fill = Instance.new("Frame")
+				fill.Name = "BarFill"
+				fill.Size = UDim2.new(math.clamp(entry.Bar, 0.012, 1), 0, 1, 0)
+				fill.BackgroundColor3 = TONES[tostring(entry.Tone)] or Colors.Primary
+				fill.BorderSizePixel = 0
+				fill.Parent = track
+				UIKit.Corner(fill, 4)
+				if entry.Right ~= nil then
+					UIKit.Label({ Text = tostring(entry.Right), TextSize = 24, TextXAlignment = Enum.TextXAlignment.Right, Size = UDim2.fromOffset(150, 30), Position = UDim2.new(1, -164, 0, 4), Parent = row })
+					UIKit.Label({ Text = tostring(entry.RightSub or ""), TextSize = 13, TextColor3 = Colors.TextDim, TextXAlignment = Enum.TextXAlignment.Right, TextTruncate = Enum.TextTruncate.AtEnd, Size = UDim2.fromOffset(150, 18), Position = UDim2.new(1, -164, 0, 34), Parent = row })
+				end
+			end
+			local textRoom = if currentAction2 then -310 elseif hasBar and entry.Right ~= nil then -190 else -170
 			local left = 14
 			if type(entry.Badge) == "string" then
 				-- a coloured badge on the left (LOBBY, CH 2...): the kind of server at a glance
@@ -2831,20 +2976,44 @@ local function buildPanel(info: any)
 		}, extra, tabs)
 	end)
 
-	-- Analytics reports: the same list window, the arrows flip between the reports.
-	AdminReport.OnClientEvent:Connect(function(title, entries, index, count, days)
+	-- Analytics reports: the same list window. A tab per report along the top, and a button that cycles the days (1, 7, 30).
+	AdminReport.OnClientEvent:Connect(function(title, entries, index, count, days, tabNames)
 		local shown = tonumber(index) or 1
 		local total = math.max(tonumber(count) or 1, 1)
 		local back = tonumber(days) or 7
-		-- (count 0 = a plain list with no arrows, like the badge check)
-		showList(tostring(title), entries, nil, nil, if (tonumber(count) or 1) <= 0 then nil else {
+		local items: { string } = {}
+		if type(tabNames) == "table" then
+			for _, name in tabNames do
+				table.insert(items, tostring(name))
+			end
+		end
+		-- (count 0 = a plain list with no tabs or arrows, like the badge check)
+		if (tonumber(count) or 1) <= 0 then
+			showList(tostring(title), entries, nil, nil, nil)
+			return
+		end
+		local nextDays = if back < 7 then 7 elseif back < 30 then 30 else 1
+		local daysButton = {
+			Text = if back == 1 then "Today" else back .. " days",
+			OnClick = function()
+				AdminServerAction:FireServer("Report", string.format("%d:%d", shown, nextDays))
+			end,
+		}
+		local tabs = if #items >= 2 then {
+			Items = items,
+			Selected = math.clamp(shown, 1, #items),
+			OnSelect = function(i: number)
+				AdminServerAction:FireServer("Report", string.format("%d:%d", i, back))
+			end,
+		} else nil
+		showList(tostring(title), entries, nil, nil, if tabs then nil else {
 			Prev = function()
 				AdminServerAction:FireServer("Report", string.format("%d:%d", ((shown - 2) % total) + 1, back))
 			end,
 			Next = function()
 				AdminServerAction:FireServer("Report", string.format("%d:%d", (shown % total) + 1, back))
 			end,
-		})
+		}, daysButton, tabs)
 	end)
 
 	AdminStaffList.OnClientEvent:Connect(function(title, entries)
@@ -3040,8 +3209,13 @@ local function buildPanel(info: any)
 	end)
 
 	------------------------------------------------------------------ window
+	local openedBefore = false
 	UIKit.RegisterWindow("Admin", {
 		Open = function()
+			if not openedBefore then
+				openedBefore = true
+				selectedPlayer = selectedPlayer or player -- (you are picked to begin with: most testing is on yourself)
+			end
 			refreshPlayers()
 			refreshForm()
 			drawGroup()

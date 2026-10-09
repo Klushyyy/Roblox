@@ -430,11 +430,25 @@ local function dropIn(player: Player)
 	end
 end
 
+local privateLobby = false -- set when the owner arrives in their private lobby (see onArrive)
+
 local function onArrive(player: Player)
 	local data: any = nil
 	pcall(function()
 		data = player:GetJoinData().TeleportData
 	end)
+	-- The owner's private lobby (:privatelobby) is a reserved server too, so it looks like a run server from the outside;
+	-- the owner arrives with PrivateOwner in the teleport data and nothing is set up to run here. It is a lobby: leave it
+	-- alone (before, "no run was ever set up here" sent the owner straight back home, so the command seemed to do nothing).
+	if type(data) == "table" and data.PrivateOwner == player.UserId or privateLobby then
+		if not privateLobby then
+			privateLobby = true
+			RunServers.IsRunServer = false
+			Workspace:SetAttribute("RunServer", nil)
+			RoundService.SendHomeHook = nil
+		end
+		return
+	end
 	if type(data) == "table" and (data.Mode == "AdminJoin" or data.Mode == "AdminBring") then
 		if data.Mode == "AdminJoin" then
 			guests[player.UserId] = true

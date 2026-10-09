@@ -2,7 +2,7 @@
 -- AdminServer (Script, ServerScriptService.Admin) - Rinse Cycle's admin commands.
 --
 -- Ported from the owner's admin system for another game: the moderation commands (kick/mute/
--- tempmute/warn/msg/goto/ban/tempban/freeze/unfreeze/bring/warnlist/banlist/mutelist/announce/
+-- tempmute/warn/msg/goto/ban/tempban/freeze/bring/warnlist/banlist/mutelist/announce/
 -- cmdlogs/playerlogs/kill/jail/god/respawn/spectate/controlplayer/invis/viewinv/clearinv/fly/give)
 -- are kept as they were. The game-specific ones were swapped for Rinse Cycle's:
 --   :setrank/:promote/:demote   -> our rolled Ranks (Config.Ranks)
@@ -10,7 +10,7 @@
 --   :givegamepass/:removegamepass -> our game passes (Config.GamePasses), honoured by DataService
 --   :daily                      -> our 24-hour daily reward streak
 --   :dirtycinema/:cleancinema   -> :finishrun (cleans a player's whole dishwasher)
---   :training/:resettraining    -> :givecoins, :givepet, :unlockall, :setrebirths
+--   :training/:resettraining    -> :setcoins, :givepet, :unlockall, :setrebirths
 --
 -- ONLY THE OWNER can use any of it: in a live server the one account allowed is
 -- Config.Social.CreatorUserId (by UserId, which Roblox guarantees is unique). Nobody else gets a
@@ -109,14 +109,14 @@ end
 
 local ALL_COMMANDS = {
 	"kick", "mute", "tempmute", "warn", "msg", "goto", "ban", "tempban",
-	"freeze", "unfreeze", "bring", "warnlist", "banlist", "mutelist",
+	"freeze", "bring", "warnlist", "banlist", "mutelist",
 	"setrank", "promote", "demote", "announce", "cmdlogs", "playerlogs",
 	"kill", "jail", "god", "respawn",
 	"spectate", "controlplayer", "invis",
 	"viewpets", "givepet",
-	"fly", "noclip", "giant",
+	"fly", "noclip", "giant", "speed",
 	"leaderboards", "globalannounce", "joinserver", "bringserver", "serverlist",
-	"globalpoll", "analytics", "badges",
+	"poll", "globalpoll", "analytics", "badges",
 }
 
 -- =====================================================================
@@ -146,7 +146,7 @@ local STUDIO_ONLY_COMMANDS = { "abuseshow", "abuselocal", "privatelobby", "abuse
 -- a Studio tool, it's a live one, but it's also not something a
 -- Developer should be able to do on a whim.
 -- Developer: everything on ALL_COMMANDS plus these game tools.
-local FOUNDER_ONLY_COMMANDS = { "setbubbles", "setgems", "daily", "finishrun", "givecoins", "unlockall", "setrebirths" }
+local FOUNDER_ONLY_COMMANDS = { "setbubbles", "setgems", "setcoins", "setdishes", "setrebirths", "daily", "finishrun", "unlockall" }
 
 local STUDIO_ONLY_SET = {}
 for _, name in ipairs(STUDIO_ONLY_COMMANDS) do
@@ -221,7 +221,7 @@ local TIER_COMMANDS = {
 		for _, name in ipairs(FOUNDER_ONLY_COMMANDS) do
 			table.insert(list, name)
 		end
-		for _, name in ipairs({ "setadminrank", "stafflist", "wipelogs", "givegamepass", "removegamepass", "globalgive", "globalpassdrop", "globalboost", "globalcountdown", "cancelcountdown" }) do
+		for _, name in ipairs({ "setadminrank", "stafflist", "wipelogs", "givegamepass", "removegamepass", "globalgive", "globalpassdrop", "globalboost", "countdown", "globalcountdown", "cancelcountdown" }) do
 			table.insert(list, name)
 		end
 		return list
@@ -1586,10 +1586,7 @@ local function findRank(query)
 end
 
 -- =====================================================================
--- Freeze / unfreeze - two explicit one-way commands rather than a
--- single toggle, so the sidebar/typed command always does exactly what
--- it says instead of depending on hidden state the admin has to
--- remember.
+-- Freeze: ONE command that toggles (like :invis and :fly): run it on someone frozen and they are let go.
 -- =====================================================================
 local frozenUserIds = {}
 
@@ -3445,21 +3442,39 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 		return
 	end
 
-	-- :givecoins [player] [amount] - in-run coins (only while they're in a dishwasher).
-	if commandName == "givecoins" then
-		local target = requireTarget(":givecoins [player] [amount]")
+	-- :setcoins [player] [amount] - sets the coins of their current run (only while they're in a dishwasher).
+	if commandName == "setcoins" then
+		local target = requireTarget(":setcoins [player] [amount]")
 		if not target then return end
 		local amount = tonumber(extraText:match("^%s*(%S*)") or "")
-		if not amount or amount <= 0 then
-			sendFeedback(admin, "Usage: :givecoins [player] [amount]", true)
+		if not amount or amount < 0 then
+			sendFeedback(admin, "Usage: :setcoins [player] [amount]", true)
 			return
 		end
-		if not RoundService.AddCoins(target, math.floor(amount)) then
+		if not RoundService.SetCoins(target, math.floor(amount)) then
 			sendFeedback(admin, target.Name .. " isn't in a run", true)
 			return
 		end
-		logCommand(admin, "givecoins", target.Name, tostring(math.floor(amount)), admin.Name .. " gave " .. target.Name .. " " .. math.floor(amount) .. " coins")
-		sendFeedback(admin, "Gave " .. target.Name .. " " .. math.floor(amount) .. " coins", false)
+		logCommand(admin, "setcoins", target.Name, tostring(math.floor(amount)), admin.Name .. " set " .. target.Name .. "'s coins to " .. math.floor(amount))
+		sendFeedback(admin, "Set " .. target.Name .. "'s coins to " .. math.floor(amount), false)
+		return
+	end
+
+	-- :setdishes [player] [amount] - sets their lifetime "Dishes cleaned" (the Dishes column and the Top Players board).
+	if commandName == "setdishes" then
+		local target = requireTarget(":setdishes [player] [amount]")
+		if not target then return end
+		local amount = tonumber(extraText:match("^%s*(%S*)") or "")
+		local profile = DataService.Get(target)
+		if not amount or amount < 0 or not profile then
+			sendFeedback(admin, if profile then "Usage: :setdishes [player] [amount]" else (target.Name .. "'s data isn't loaded yet"), true)
+			return
+		end
+		profile.Stats = profile.Stats or {} -- (always there for a real profile)
+		profile.Stats.DishesCleaned = math.floor(amount)
+		DataService.PushMeta(target)
+		logCommand(admin, "setdishes", target.Name, tostring(math.floor(amount)), admin.Name .. " set " .. target.Name .. "'s dishes cleaned to " .. math.floor(amount))
+		sendFeedback(admin, "Set " .. target.Name .. "'s dishes cleaned to " .. math.floor(amount), false)
 		return
 	end
 
@@ -3804,7 +3819,7 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 	-- :fly with no name typed targets the issuing admin themselves,
 	-- rather than requiring ":fly MyOwnUsername" every time - :fly [name]
 	-- still works normally for flying someone else.
-	if (commandName == "fly" or commandName == "noclip" or commandName == "giant") and targetName == "" then
+	if (commandName == "fly" or commandName == "noclip" or commandName == "giant" or commandName == "speed") and targetName == "" then
 		targetName = admin.Name
 	end
 
@@ -3996,12 +4011,7 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 		end
 
 	elseif commandName == "freeze" then
-		-- Toggles: running it against someone already frozen unfreezes
-		-- them, rather than refusing with "already frozen". :unfreeze is
-		-- kept as its own command for when you specifically want the
-		-- one-way version (and it's what the sidebar/autocomplete still
-		-- offers), but this way a single command covers the common
-		-- freeze-check-unfreeze loop without switching commands halfway.
+		-- Toggles (like :invis and :fly): running it on someone already frozen lets them go.
 		local nowFrozen = not frozenUserIds[target.UserId]
 		if setFrozen(target, nowFrozen) then
 			logCommand(admin, "freeze", target.Name, nowFrozen and "frozen" or "unfrozen",
@@ -4013,19 +4023,6 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 			sendFeedback(admin, (nowFrozen and "Froze " or "Unfroze ") .. target.Name, false)
 		else
 			sendFeedback(admin, "Could not " .. (nowFrozen and "freeze" or "unfreeze") .. " - character not found", true)
-		end
-
-	elseif commandName == "unfreeze" then
-		if not frozenUserIds[target.UserId] then
-			sendFeedback(admin, target.Name .. " is not frozen", true)
-			return
-		end
-		if setFrozen(target, false) then
-			logCommand(admin, "unfreeze", target.Name, nil, admin.Name .. " unfroze " .. target.Name)
-			Remote.AdminFreezeStatus:FireClient(target, false)
-			sendFeedback(admin, "Unfroze " .. target.Name, false)
-		else
-			sendFeedback(admin, "Could not unfreeze - character not found", true)
 		end
 
 	elseif commandName == "ban" then
@@ -4143,6 +4140,21 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 		logCommand(admin, "noclip", target.Name, given and "given" or "removed",
 			admin.Name .. (given and " gave " or " took ") .. "the No Clip tool " .. (given and "to " or "from ") .. target.Name)
 		sendFeedback(admin, if given then "Gave " .. target.Name .. " the No Clip tool (hold it: fly through walls, click to teleport)" else "Took the No Clip tool from " .. target.Name, false)
+
+	elseif commandName == "speed" then
+		-- :speed [player] [0-250]: walk speed (the game's own speed upgrades give way to it); nothing typed = back to normal.
+		local wanted = tonumber(extraText:match("^%s*(%S*)") or "")
+		local Characters = require(GameServices:WaitForChild("Characters"))
+		if wanted then
+			wanted = math.clamp(wanted, 0, 250)
+			target:SetAttribute("AdminSpeed", wanted)
+		else
+			target:SetAttribute("AdminSpeed", nil)
+		end
+		Characters.RefreshWalkSpeed(target)
+		logCommand(admin, "speed", target.Name, if wanted then tostring(wanted) else "normal",
+			admin.Name .. " set " .. target.Name .. "'s walk speed to " .. (if wanted then tostring(wanted) else "normal"))
+		sendFeedback(admin, target.Name .. (if wanted then ("'s walk speed is now " .. wanted) else "'s walk speed is back to normal"), false)
 
 	elseif commandName == "giant" then
 		local size = math.clamp(tonumber(extraText:match("^%s*(%S*)") or "") or 8, 2, 30)
@@ -4741,7 +4753,7 @@ function AnalyticsReport.Send(admin, index: number?, days: number?)
 		sendFeedback(admin, "The analytics report failed: " .. tostring(title), true)
 		return
 	end
-	Remote.AdminReport:FireClient(admin, title, rows, shown, count, days or Config.Analytics.ReportDays)
+	Remote.AdminReport:FireClient(admin, title, rows, shown, count, days or Config.Analytics.ReportDays, Analytics.ReportTabs)
 end
 
 ServerList.TTL = 90
@@ -4762,8 +4774,8 @@ end
 
 function ServerList.Publish()
 	local map = ServerList.Map
-	if not map then
-		return
+	if not map or ReplicatedStorage:GetAttribute("PrivateLobby") == true then
+		return -- (a private lobby is only for its owner: it is not in the list)
 	end
 	pcall(function()
 		if #Players:GetPlayers() == 0 then
@@ -5010,7 +5022,8 @@ do
 	-- server hears about it, and its votes and prizes are not shared).
 	local LOCAL_KINDS = { AbuseSchedule = true, AbuseEffect = true, AbuseSay = true, Banner = true, GiveAll = true, PetDrop = true, PassDrop = true, PollStart = true, PollTally = true, PollResult = true }
 	local function publish(data)
-		if localShow and LOCAL_KINDS[data.Kind] then
+		-- (a message marked Local, like the Server tab's poll, stays in this server, as in a local Admin Abuse test)
+		if (localShow and LOCAL_KINDS[data.Kind]) or data.Local == true then
 			local handler = handlers[data.Kind]
 			if handler then
 				task.spawn(handler, data)
@@ -5069,7 +5082,7 @@ do
 		if type(d.Id) ~= "string" or type(d.Options) ~= "table" or polls[d.Id] then
 			return
 		end
-		local poll = { Id = d.Id, Question = tostring(d.Question), Options = d.Options, EndsAt = tonumber(d.EndsAt) or Config.Now(), Origin = d.Origin, Votes = {}, Silent = d.Silent == true, Hint = if type(d.Hint) == "string" then string.sub(d.Hint, 1, 60) else nil }
+		local poll = { Id = d.Id, Local = d.Local == true, Question = tostring(d.Question), Options = d.Options, EndsAt = tonumber(d.EndsAt) or Config.Now(), Origin = d.Origin, Votes = {}, Silent = d.Silent == true, Hint = if type(d.Hint) == "string" then string.sub(d.Hint, 1, 60) else nil }
 		polls[d.Id] = poll
 		for _, plr in ipairs(Players:GetPlayers()) do
 			sendPoll(plr, poll)
@@ -5087,7 +5100,7 @@ do
 				-- A show poll's card goes away the second it ends (no results card).
 				Remote.GlobalPoll:FireClient(plr, "End", poll.Id)
 			end
-			publish({ Kind = "PollTally", Id = poll.Id, Origin = poll.Origin, Counts = counts })
+			publish({ Kind = "PollTally", Id = poll.Id, Origin = poll.Origin, Counts = counts, Local = poll.Local })
 		end)
 	end
 	handlers.PollTally = function(d)
@@ -5124,7 +5137,9 @@ do
 		end
 	end)
 
-	Commands.globalpoll = function(admin, text)
+	-- isLocal: the Server tab's poll (this server only) instead of the Global tab's (every server).
+	local function startPoll(admin, text, isLocal)
+		local commandName = if isLocal then "poll" else "globalpoll"
 		local seconds, rest = text:match("^(%d+)%s+(.+)$")
 		seconds = math.clamp(tonumber(seconds) or 60, 15, 300)
 		local parts = {}
@@ -5135,7 +5150,7 @@ do
 			end
 		end
 		if #parts < 3 then
-			sendFeedback(admin, "Usage: :globalpoll 60 Question | answer | answer (2 to 4 answers)", true)
+			sendFeedback(admin, "Usage: :" .. commandName .. " 60 Question | answer | answer (2 to 4 answers)", true)
 			return
 		end
 		local question = table.remove(parts, 1)
@@ -5158,18 +5173,24 @@ do
 			counts[i] = 0
 		end
 		collecting[id] = { Counts = counts, Question = question, Options = options }
-		publish({ Kind = "PollStart", Id = id, Question = question, Options = options, EndsAt = os.time() + seconds, Origin = game.JobId })
-		sendFeedback(admin, string.format("Poll sent to every server: results in %d s", seconds), false)
-		logCommand(admin, "globalpoll", nil, question, admin.Name .. " started a global poll: " .. question)
-		-- Every server's counts come back a few seconds after it closes.
-		task.delay(seconds + 7, function()
+		publish({ Kind = "PollStart", Id = id, Question = question, Options = options, EndsAt = os.time() + seconds, Origin = game.JobId, Local = isLocal or nil })
+		sendFeedback(admin, string.format(if isLocal then "Poll sent to this server: results in %d s" else "Poll sent to every server: results in %d s", seconds), false)
+		logCommand(admin, commandName, nil, question, admin.Name .. (if isLocal then " started a poll in their server: " else " started a global poll: ") .. question)
+		-- Every server's counts come back a few seconds after it closes (this server's own at once).
+		task.delay(seconds + (if isLocal then 1.5 else 7), function()
 			local c = collecting[id]
 			collecting[id] = nil
 			if not c then
 				return
 			end
-			publish({ Kind = "PollResult", Id = id, Question = c.Question, Options = c.Options, Counts = c.Counts })
+			publish({ Kind = "PollResult", Id = id, Question = c.Question, Options = c.Options, Counts = c.Counts, Local = isLocal or nil })
 		end)
+	end
+	Commands.globalpoll = function(admin, text)
+		startPoll(admin, text, false)
+	end
+	Commands.poll = function(admin, text)
+		startPoll(admin, text, true)
 	end
 
 	----------------------------------------------------------------- giveaways
@@ -5351,7 +5372,7 @@ do
 		if type(d.Name) ~= "string" or type(d.EndsAt) ~= "number" then
 			return
 		end
-		countdown = { Name = string.sub(d.Name, 1, 40), EndsAt = d.EndsAt, LiveMinutes = tonumber(d.LiveMinutes) or LIVE_MINUTES }
+		countdown = { Name = string.sub(d.Name, 1, 40), EndsAt = d.EndsAt, LiveMinutes = tonumber(d.LiveMinutes) or LIVE_MINUTES, Local = d.Local == true }
 		for _, plr in ipairs(Players:GetPlayers()) do
 			sendCountdown(plr)
 		end
@@ -5380,8 +5401,8 @@ do
 			if not countdown or countdown.EndsAt ~= value.EndsAt or countdown.Name ~= value.Name then
 				handlers.CountdownSet(value)
 			end
-		elseif countdown then
-			handlers.CountdownClear()
+		elseif countdown and not countdown.Local then
+			handlers.CountdownClear() -- (a Server-tab countdown is only in this server: the store has nothing about it)
 		end
 	end
 	task.spawn(function()
@@ -5390,12 +5411,23 @@ do
 			task.wait(60)
 		end
 	end)
-	Commands.globalcountdown = function(admin, text)
+	-- isLocal: the Server tab's countdown (this server only; nothing is stored) instead of the Global tab's (every server).
+	local function startCountdown(admin, text, isLocal)
+		local commandName = if isLocal then "countdown" else "globalcountdown"
+		if isLocal and string.lower(string.match(text, "^%s*(%S*)") or "") == "off" then
+			if countdown and countdown.Local then
+				handlers.CountdownClear()
+				sendFeedback(admin, "This server's countdown is cancelled", false)
+			else
+				sendFeedback(admin, "This server has no countdown of its own (the Global tab's Cancel countdown stops a global one)", true)
+			end
+			return
+		end
 		local num, unit, rest = string.match(text, "^%s*(%d+%.?%d*)%s*([smhdSMHD]?)%s*(.*)$")
 		local mult = ({ s = 1, m = 60, h = 3600, d = 86400 })[string.lower(unit or "")] or 60
 		local seconds = (tonumber(num) or 0) * mult
 		if seconds < 60 or seconds > 14 * 86400 then
-			sendFeedback(admin, "Usage: :globalcountdown <time 1m-14d, like 24h> [event name]", true)
+			sendFeedback(admin, "Usage: :" .. commandName .. " <time 1m-14d, like 24h> [event name]", true)
 			return
 		end
 		-- (no name typed = a plain countdown timer with no name on it: it no longer says "Admin Abuse")
@@ -5409,8 +5441,8 @@ do
 			end
 		end
 		name = string.sub(name, 1, 40)
-		local data = { Kind = "CountdownSet", Name = name, EndsAt = os.time() + math.floor(seconds), LiveMinutes = LIVE_MINUTES }
-		if countdownMap then
+		local data = { Kind = "CountdownSet", Name = name, EndsAt = os.time() + math.floor(seconds), LiveMinutes = LIVE_MINUTES, Local = isLocal or nil }
+		if countdownMap and not isLocal then
 			pcall(function()
 				countdownMap:SetAsync("current", data, math.min(math.floor(seconds) + LIVE_MINUTES * 60 + 600, 3888000))
 			end)
@@ -5418,7 +5450,13 @@ do
 		local ok = publish(data)
 		local shownName = if name == "" then "a plain timer" else name
 		sendFeedback(admin, string.format("Countdown for %s set (%s)%s", shownName, Format.Time and Format.Time(seconds) or tostring(math.floor(seconds / 60)) .. " min", if ok then " in every server" else " (this server only)"), false)
-		logCommand(admin, "globalcountdown", nil, name, string.format("%s started a countdown for %s (%d min)", admin.Name, shownName, math.floor(seconds / 60)))
+		logCommand(admin, commandName, nil, name, string.format("%s started a countdown for %s (%d min)%s", admin.Name, shownName, math.floor(seconds / 60), if isLocal then " in their server" else ""))
+	end
+	Commands.globalcountdown = function(admin, text)
+		startCountdown(admin, text, false)
+	end
+	Commands.countdown = function(admin, text)
+		startCountdown(admin, text, true)
 	end
 	Commands.cancelcountdown = function(admin, _text)
 		if countdownMap then

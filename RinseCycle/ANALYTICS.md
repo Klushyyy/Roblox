@@ -51,20 +51,22 @@ names, 20 economy transaction types, and 120 + 20 x players events a minute (the
 
 ## Reading the in-game report
 
-Admin panel > **Global > Analytics** (or the command `:analytics`). Pick a report and how many days; the arrows flip
-between the nine reports.
+Admin panel > **Global > Analytics** (or the command `:analytics`). One **tab per report** along the top (Overview, New
+players, Coming back, Leaving, Runs, Features, Money, Devices, Show) and a button that cycles **Today / 7 days / 30 days**.
+Every report starts with a plain-language heading and a coloured **summary card** that says what the numbers mean (green =
+fine, orange = look at it, red = a problem); then each line has a bar and a big number on the right.
 
-| Report | Answers |
+| Tab | Answers |
 |---|---|
-| Overview | players, new players, visits, average visit length, runs started / cleared, errors, per day |
-| What new players do | the Onboarding funnel for everyone who signed up in the period, with % of the first step, % of the step before, and **BIGGEST DROP** marked |
-| Retention | per sign-up day: D1, D2, D3, D7, D14, D30 (came back that many days later) |
-| Where players leave | where new players were when they left their **first** visit (`Lobby`, `Pad`, `Run L1 0-25%`, `Tut3`, `Win:Shop` ...), how long they stayed, the same for everyone |
-| Runs | the Run funnel, level by level, plus teleport failures, Leave presses and mid-run disconnects |
-| Features used | everything players did, by number of players, with the raw key (use the Filter box) |
-| Economy | where Bubbles / Gems / Coins come from and go, and Robux spent per product |
-| Devices and errors | phone / tablet / computer / console, frame-rate buckets, "lost in the lobby", the commonest script errors |
-| Admin Abuse show | the show funnel and the vote / prize counts |
+| Overview | players, new players, visits, average visit length, runs started / cleared, errors; then day by day with a bar per day |
+| New players | the funnel for everyone who joined for the first time in the period: how many reached each step, a bar per step, the share lost at each step, and the **biggest drop** named in the summary |
+| Coming back | do new players come back: the next day, after a week, after a month (summary card), then each sign-up day with a bar for "came back next day" |
+| Leaving | where new players were when they left their **first** visit (summary names the commonest place), how long they stayed, then the same for everyone |
+| Runs | the run funnel, how runs end (first dish, could not start, Leave button, closed the game), and cleared / started for each dishwasher |
+| Features | everything players did, biggest first, with the raw key at the end of the line (use the Filter box) |
+| Money | where Bubbles / Gems / Coins come from and what they are spent on, and Robux spent per product |
+| Devices | phone / tablet / computer / console, frame rate, "lost in the lobby", the commonest script errors |
+| Show | the Admin Abuse show funnel and the vote / prize counts |
 
 Context words: `Lobby` walking about, `Pad` standing in a party pad, `Run L2 25-50%` inside dishwasher 2 and how far along,
 `Results L2` on the results screen, `Show min 7` seven minutes into the show, then `/ Win:Shop` (a window was open),

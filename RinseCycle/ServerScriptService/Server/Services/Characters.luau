@@ -62,8 +62,8 @@ local function onCharacterAdded(player: Player, character: Model)
 	end)
 
 	local humanoid = character:WaitForChild("Humanoid", 10) :: Humanoid?
-	local speed = walkSpeedOf[player]
-	if humanoid and speed then
+	local speed = player:GetAttribute("AdminSpeed") or walkSpeedOf[player]
+	if humanoid and type(speed) == "number" then
 		humanoid.WalkSpeed = speed
 	end
 
@@ -198,8 +198,15 @@ function Characters.SetWalkSpeed(player: Player, speed: number?)
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
-		humanoid.WalkSpeed = speed or game:GetService("StarterPlayer").CharacterWalkSpeed
+		-- (an admin's :speed wins over what the game sets, until it is cleared)
+		local forced = player:GetAttribute("AdminSpeed")
+		humanoid.WalkSpeed = if type(forced) == "number" then forced else (speed or game:GetService("StarterPlayer").CharacterWalkSpeed)
 	end
+end
+
+-- Puts the walk speed back to what it should be now (after the attribute AdminSpeed was set or cleared).
+function Characters.RefreshWalkSpeed(player: Player)
+	Characters.SetWalkSpeed(player, walkSpeedOf[player])
 end
 
 --[[

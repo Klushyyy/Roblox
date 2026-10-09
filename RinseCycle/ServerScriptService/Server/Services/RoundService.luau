@@ -1392,6 +1392,18 @@ function RoundService.AddCoins(player: Player, amount: number): boolean
 	return true
 end
 
+-- Sets the coins of a player who is in a run to exactly this amount (the admin's :setcoins; no level multiplier).
+function RoundService.SetCoins(player: Player, amount: number): boolean
+	local run = runOf[player]
+	local pr = run and run.Players[player]
+	if not run or not pr or run.Ended or type(amount) ~= "number" or amount ~= amount or amount < 0 then
+		return false
+	end
+	pr.Coins = math.floor(amount)
+	queuePush(player)
+	return true
+end
+
 function RoundService.RefreshStats(player: Player)
 	local run = runOf[player]
 	local pr = run and run.Players[player]

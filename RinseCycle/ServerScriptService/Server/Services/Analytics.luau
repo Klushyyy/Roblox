@@ -984,19 +984,24 @@ end
 -- Reports (the :analytics command)
 ----------------------------------------------------------------------------------------------------
 
-type Row = { Line1: string, Line2: string }
+-- A line of a report. Plain rows have Line1 / Line2. The extras make a report easy to read at a glance:
+--   Kind "head" = a section heading (no card), "note" = a coloured summary card; Tone "good" / "warn" / "bad" / "info"
+--   Right / RightSub = the big number on the right and the small text under it; Bar = 0 to 1, a bar under the text.
+type Row = { Line1: string, Line2: string, Kind: string?, Tone: string?, Right: string?, RightSub: string?, Bar: number? }
 
+-- The full names of the reports, in order; ReportTabs are the same in a few plain words (the buttons along the top).
 Analytics.ReportNames = {
 	"Overview",
-	"Onboarding funnel",
-	"Retention",
+	"What new players do",
+	"Do players come back",
 	"Where players leave",
 	"Runs",
-	"Features used",
-	"Economy",
+	"What players use",
+	"Money",
 	"Devices and errors",
 	"Admin Abuse show",
 }
+Analytics.ReportTabs = { "Overview", "New players", "Coming back", "Leaving", "Runs", "Features", "Money", "Devices", "Show" }
 
 local docCache: { [string]: { At: number, Data: { [string]: number } } } = {}
 
@@ -1098,36 +1103,76 @@ local function totalsWithPrefix(docs: { { [string]: number } }, prefix: string):
 	return list
 end
 
-local function funnelRows(funnel: any, getCount: (string) -> number, header: string): { Row }
+local function head(title: string, explain: string?): Row
+	return { Line1 = title, Line2 = explain or "", Kind = "head" }
+end
+
+local function note(title: string, detail: string?, tone: string?): Row
+	return { Line1 = title, Line2 = detail or "", Kind = "note", Tone = tone or "info" }
+end
+
+-- A line with a bar: a name, what it means, the big number, the small text under it, and the bar (0 to 1).
+local function barRow(name: string, detail: string, right: string, rightSub: string, fraction: number, tone: string?): Row
+	return { Line1 = name, Line2 = detail, Right = right, RightSub = rightSub, Bar = math.clamp(fraction, 0, 1), Tone = tone or "good" }
+end
+
+-- A funnel: the players who got to each step, a bar for each, a sentence that says what it means, and the biggest drop marked.
+local function funnelRows(funnel: any, getCount: (string) -> number, who: string): { Row }
 	local rows: { Row } = {}
-	table.insert(rows, { Line1 = header, Line2 = "Each step: players who reached it, % of the first step, and the change from the step before." })
-	local first = getCount(funnel.Steps[1][1])
-	local worstIndex, worstRatio = 0, 2
-	local previous = first
+	local steps = funnel.Steps
 	local counts = {}
-	for index, step in funnel.Steps do
-		local n = getCount(step[1])
-		counts[index] = n
-		if index > 1 and previous >= 5 then
-			local ratio = n / previous
+	for index, step in steps do
+		counts[index] = getCount(step[1])
+	end
+	local first, last = counts[1], counts[#steps]
+	local worstIndex, worstRatio = 0, 2
+	for index = 2, #steps do
+		local previous = counts[index - 1]
+		if previous >= 5 then
+			local ratio = counts[index] / previous
 			if ratio < worstRatio then
 				worstRatio, worstIndex = ratio, index
 			end
 		end
-		previous = n
 	end
-	previous = first
-	for index, step in funnel.Steps do
-		local n = counts[index]
-		local change = ""
-		if index > 1 and previous > 0 then
-			change = string.format("  -  %s of the step before", pct(n, previous))
+	table.insert(rows, head(who, "Each bar is how many players got to that step, compared with the first step."))
+	if first <= 0 then
+		table.insert(rows, note("Nobody yet", "No one has reached the first step in this time.", "info"))
+	else
+		local detail = "No step lost a lot of players (or there are too few players yet to say)."
+		local tone = "good"
+		if worstIndex > 0 then
+			detail = string.format(
+				'Biggest drop: step %d, "%s". Only %s of the players before it got there (%s lost).',
+				worstIndex,
+				steps[worstIndex][2],
+				pct(counts[worstIndex], counts[worstIndex - 1]),
+				commas(counts[worstIndex - 1] - counts[worstIndex])
+			)
+			tone = if worstRatio < 0.5 then "bad" else "warn"
 		end
-		table.insert(rows, {
-			Line1 = string.format("%d. %s  -  %s (%s)%s", index, step[2], commas(n), pct(n, first), if index == worstIndex then "   <== BIGGEST DROP" else ""),
-			Line2 = string.format("%s  -  key %s%s", labelFor(step[1]), step[1], change),
-		})
-		previous = n
+		table.insert(rows, note(string.format("%s players started, %s got all the way to the end (%s)", commas(first), commas(last), pct(last, first)), detail, tone))
+	end
+	for index, step in steps do
+		local n = counts[index]
+		local previous = if index > 1 then counts[index - 1] else n
+		local tone = "good"
+		if index == worstIndex then
+			tone = if worstRatio < 0.5 then "bad" else "warn"
+		elseif index > 1 and previous >= 5 and n / previous < 0.6 then
+			tone = "warn"
+		end
+		table.insert(
+			rows,
+			barRow(
+				string.format("%d. %s%s", index, step[2], if index == worstIndex then "   <- biggest drop" else ""),
+				if index == 1 then "Everyone starts here" else string.format("%s of the step before  -  %s lost", pct(n, previous), commas(math.max(0, previous - n))),
+				commas(n),
+				string.format("%s of the first", pct(n, first)),
+				if first > 0 then n / first else 0,
+				tone
+			)
+		)
 	end
 	return rows
 end
@@ -1136,6 +1181,7 @@ local function reportOverview(days: number): (string, { Row })
 	local docs, numbers = dailyDocs(days)
 	local rows: { Row } = {}
 	local players, newPlayers, visits, seconds, done, starts, clears, errors = 0, 0, 0, 0, 0, 0, 0, 0
+	local busiest = 0
 	for _, doc in docs do
 		players += doc["u:join"] or 0
 		newPlayers += doc["n:visit.new"] or 0
@@ -1145,31 +1191,59 @@ local function reportOverview(days: number): (string, { Row })
 		starts += doc["n:run.arrive"] or 0
 		clears += doc["n:run.clear"] or 0
 		errors += (doc["n:err.server"] or 0) + (doc["n:err.client"] or 0)
+		busiest = math.max(busiest, doc["u:join"] or 0)
 	end
-	table.insert(rows, {
-		Line1 = string.format("Last %d day%s  -  %s player-days, %s new players", days, if days == 1 then "" else "s", commas(players), commas(newPlayers)),
-		Line2 = string.format("%s visits  -  average visit %s  -  %s runs started, %s cleared  -  %s errors", commas(visits), if done > 0 then Format.Time(seconds / done) else "-", commas(starts), commas(clears), commas(errors)),
-	})
+	table.insert(rows, head(string.format("The last %d day%s at a glance", days, if days == 1 then "" else "s"), "How many players came, how long they stayed and how many runs they did."))
+	table.insert(
+		rows,
+		note(
+			string.format("%s players joined, %s of them for the first time", commas(players), commas(newPlayers)),
+			string.format(
+				"(someone who plays on two days counts twice)  -  %s visits, average visit %s  -  %s runs started, %s cleared  -  %s errors",
+				commas(visits),
+				if done > 0 then Format.Time(seconds / done) else "-",
+				commas(starts),
+				commas(clears),
+				commas(errors)
+			),
+			if errors > 0 then "warn" else "info"
+		)
+	)
+	table.insert(rows, head("Day by day", "The bar is that day's players, compared with the busiest day."))
 	for index, doc in docs do
 		local n = doc["visits_done"] or 0
-		table.insert(rows, {
-			Line1 = string.format("%s  -  %s players  -  %s new", dayLabel(numbers[index]), commas(doc["u:join"] or 0), commas(doc["n:visit.new"] or 0)),
-			Line2 = string.format("%s visits  -  average visit %s  -  %s runs started, %s cleared  -  %s errors", commas(doc["n:visit"] or 0), if n > 0 then Format.Time((doc["playsec"] or 0) / n) else "-", commas(doc["n:run.arrive"] or 0), commas(doc["n:run.clear"] or 0), commas((doc["n:err.server"] or 0) + (doc["n:err.client"] or 0))),
-		})
+		table.insert(
+			rows,
+			barRow(
+				dayLabel(numbers[index]),
+				string.format(
+					"%s new  -  %s visits, average %s  -  %s runs started, %s cleared  -  %s errors",
+					commas(doc["n:visit.new"] or 0),
+					commas(doc["n:visit"] or 0),
+					if n > 0 then Format.Time((doc["playsec"] or 0) / n) else "-",
+					commas(doc["n:run.arrive"] or 0),
+					commas(doc["n:run.clear"] or 0),
+					commas((doc["n:err.server"] or 0) + (doc["n:err.client"] or 0))
+				),
+				commas(doc["u:join"] or 0),
+				"players",
+				if busiest > 0 then (doc["u:join"] or 0) / busiest else 0,
+				"good"
+			)
+		)
 	end
 	if not live then
-		table.insert(rows, { Line1 = "Studio / unpublished: only this server's own counts are shown.", Line2 = "Publish the game for the real numbers (they are saved in the DataStore " .. A.StoreName .. ")." })
+		table.insert(rows, note("Studio / unpublished game", "Only this server's own counts are shown. Publish the game for the real numbers (they are saved in the DataStore " .. A.StoreName .. ").", "info"))
 	end
-	return "Analytics - overview", rows
+	return "Overview", rows
 end
 
 local function reportOnboarding(days: number): (string, { Row })
 	local docs = cohortDocs(days)
-	local funnel = A.Funnels[1]
-	local rows = funnelRows(funnel, function(key)
+	local rows = funnelRows(A.Funnels[1], function(key)
 		return total(docs, "f:" .. key)
-	end, string.format("New players who signed up in the last %d day%s", days, if days == 1 then "" else "s"))
-	return "Analytics - what new players do", rows
+	end, string.format("New players who joined for the first time in the last %d day%s", days, if days == 1 then "" else "s"))
+	return "What new players do", rows
 end
 
 local function reportRetention(days: number): (string, { Row })
@@ -1192,25 +1266,40 @@ local function reportRetention(days: number): (string, { Row })
 			end
 		end
 	end
-	local summary = {}
-	for _, n in marks do
-		table.insert(summary, string.format("D%d %s", n, pct(sums[n], bases[n])))
-	end
-	table.insert(rows, { Line1 = "All sign-up days together", Line2 = table.concat(summary, "   ") .. "   (D1 = came back the next day)" })
+	local d1 = if bases[1] > 0 then sums[1] / bases[1] else nil
+	table.insert(rows, head("Do new players come back?", "Of the players who joined for the first time on a day, how many came back 1, 2, 3, 7, 14 and 30 days later (day 1 = the next day)."))
+	table.insert(
+		rows,
+		note(
+			string.format("Next day: %s   -   after a week: %s   -   after a month: %s", pct(sums[1], bases[1]), pct(sums[7], bases[7]), pct(sums[30], bases[30])),
+			"All the new players of these days together. A day only counts once it is old enough to tell (a player who joined yesterday can't have come back after a week yet).",
+			if d1 == nil then "info" elseif d1 >= 0.3 then "good" elseif d1 >= 0.15 then "warn" else "bad"
+		)
+	)
+	table.insert(rows, head("Each day's new players", "The bar is how many of them came back the next day."))
 	for index, doc in docs do
 		local joined = doc["f:join"] or 0
 		if joined > 0 then
 			local parts = {}
 			for _, n in marks do
-				table.insert(parts, string.format("D%d %s", n, if t - numbers[index] >= n then pct(doc["ret." .. n] or 0, joined) else "-"))
+				table.insert(parts, string.format("day %d %s", n, if t - numbers[index] >= n then pct(doc["ret." .. n] or 0, joined) else "-"))
 			end
-			table.insert(rows, {
-				Line1 = string.format("%s  -  %s new players", dayLabel(numbers[index]), commas(joined)),
-				Line2 = table.concat(parts, "   "),
-			})
+			local old = t - numbers[index] >= 1
+			local fraction = if old then (doc["ret.1"] or 0) / joined else 0
+			table.insert(
+				rows,
+				barRow(
+					string.format("%s  -  %s new players", dayLabel(numbers[index]), commas(joined)),
+					table.concat(parts, "   "),
+					if old then pct(doc["ret.1"] or 0, joined) else "-",
+					"back next day",
+					fraction,
+					if not old then "info" elseif fraction >= 0.3 then "good" elseif fraction >= 0.15 then "warn" else "bad"
+				)
+			)
 		end
 	end
-	return "Analytics - retention", rows
+	return "Do players come back", rows
 end
 
 local function leaveRows(list: { { Name: string, Value: number } }, limit: number): { Row }
@@ -1223,7 +1312,10 @@ local function leaveRows(list: { { Name: string, Value: number } }, limit: numbe
 		if index > limit then
 			break
 		end
-		table.insert(rows, { Line1 = string.format("%s  -  %s (%s)", item.Name, commas(item.Value), pct(item.Value, sum)), Line2 = "" })
+		table.insert(rows, barRow(item.Name, "", commas(item.Value), pct(item.Value, sum), if sum > 0 then item.Value / sum else 0, "info"))
+	end
+	if #rows == 0 then
+		table.insert(rows, note("Nothing recorded yet", "This fills in as players leave the game.", "info"))
 	end
 	return rows
 end
@@ -1232,71 +1324,92 @@ local function reportLeaving(days: number): (string, { Row })
 	local cohorts = cohortDocs(days)
 	local daily = dailyDocs(days)
 	local rows: { Row } = {}
-	table.insert(rows, { Line1 = "== NEW PLAYERS: where they were when they left their first visit ==", Line2 = "Run Lx = inside a dishwasher (with how far along), Pad = in a party pad, Lobby = walking about, Tut = tutorial step" })
-	for _, row in leaveRows(totalsWithPrefix(cohorts, "l1:"), 14) do
+	local firstLeaves = totalsWithPrefix(cohorts, "l1:")
+	if #firstLeaves > 0 then
+		local sum = 0
+		for _, item in firstLeaves do
+			sum += item.Value
+		end
+		table.insert(rows, note(string.format('Most new players left from: "%s" (%s of them)', firstLeaves[1].Name, pct(firstLeaves[1].Value, sum)), "That is where to look first when new players don't stay.", "warn"))
+	end
+	table.insert(rows, head("NEW PLAYERS: where they were when they left", "Run L2 = in dishwasher 2 (and how far along)  -  Pad = standing in a party pad  -  Lobby = walking about  -  Tut = a tutorial step"))
+	for _, row in leaveRows(firstLeaves, 14) do
 		table.insert(rows, row)
 	end
-	table.insert(rows, { Line1 = "== NEW PLAYERS: how long their first visit lasted ==", Line2 = "" })
+	table.insert(rows, head("NEW PLAYERS: how long their first visit lasted", "Very short visits mean they left almost at once."))
 	for _, row in leaveRows(totalsWithPrefix(cohorts, "l1len:"), 6) do
 		table.insert(rows, row)
 	end
-	table.insert(rows, { Line1 = "== EVERYONE: where they were when they left ==", Line2 = "" })
+	table.insert(rows, head("EVERYONE: where they were when they left", "The same, for every player (new and returning)."))
 	for _, row in leaveRows(totalsWithPrefix(daily, "left:"), 14) do
 		table.insert(rows, row)
 	end
-	table.insert(rows, { Line1 = "== EVERYONE: how long visits lasted ==", Line2 = "" })
+	table.insert(rows, head("EVERYONE: how long visits lasted", ""))
 	for _, row in leaveRows(totalsWithPrefix(daily, "len:"), 6) do
 		table.insert(rows, row)
 	end
-	return "Analytics - where players leave", rows
+	return "Where players leave", rows
 end
 
 local function reportRuns(days: number): (string, { Row })
 	local docs = dailyDocs(days)
-	local funnel = A.Funnels[2]
-	local rows = funnelRows(funnel, function(key)
+	local rows = funnelRows(A.Funnels[2], function(key)
 		return total(docs, "u:" .. key)
-	end, string.format("Runs, last %d day%s (players per day, added up)", days, if days == 1 then "" else "s"))
+	end, string.format("Runs in the last %d day%s (players per day, added up)", days, if days == 1 then "" else "s"))
+	local arrivals = math.max(total(docs, "n:run.arrive"), 1)
+	table.insert(rows, head("How runs end", "Each bar is compared with the number of runs started."))
 	local extra = {
-		{ "run.fail", "Runs that could not start" },
-		{ "run.leave", "Left with the Leave button" },
-		{ "run.drop", "Closed the game mid-run" },
-		{ "run.dish1", "Finished a first dish" },
+		{ "run.dish1", "Finished a first dish", "good" },
+		{ "run.fail", "Runs that could not start", "bad" },
+		{ "run.leave", "Left with the Leave button", "warn" },
+		{ "run.drop", "Closed the game in the middle of a run", "bad" },
 	}
 	for _, item in extra do
-		table.insert(rows, { Line1 = string.format("%s  -  %s", item[2], commas(total(docs, "n:" .. item[1]))), Line2 = "key " .. item[1] })
+		local n = total(docs, "n:" .. item[1])
+		table.insert(rows, barRow(item[2], "", commas(n), pct(n, arrivals) .. " of runs", n / arrivals, item[3]))
 	end
+	table.insert(rows, head("Each dishwasher", "How many runs started in it and how many were cleared."))
 	for level = 1, #Config.Levels do
-		table.insert(rows, {
-			Line1 = string.format("Dishwasher %d  -  %s started, %s cleared", level, commas(total(docs, "n:run.arrive." .. level)), commas(total(docs, "n:run.clear." .. level))),
-			Line2 = "",
-		})
+		local started = total(docs, "n:run.arrive." .. level)
+		local cleared = total(docs, "n:run.clear." .. level)
+		local ratio = if started > 0 then cleared / started else 0
+		table.insert(
+			rows,
+			barRow(
+				string.format("Dishwasher %d", level),
+				string.format("%s started, %s cleared", commas(started), commas(cleared)),
+				pct(cleared, started),
+				"cleared",
+				ratio,
+				if started == 0 then "info" elseif ratio >= 0.6 then "good" elseif ratio >= 0.35 then "warn" else "bad"
+			)
+		)
 	end
-	return "Analytics - runs", rows
+	return "Runs", rows
 end
 
 local function reportFeatures(days: number): (string, { Row })
 	local docs = dailyDocs(days)
 	local uniques = totalsWithPrefix(docs, "u:")
 	local rows: { Row } = {}
-	table.insert(rows, { Line1 = string.format("Everything players did, last %d day%s", days, if days == 1 then "" else "s"), Line2 = "Players (added up per day) and total uses; biggest first. Check the Filter box to search." })
+	table.insert(rows, head(string.format("What players did in the last %d day%s", days, if days == 1 then "" else "s"), "Biggest first. Players are added up per day. Type in the Filter box to find one."))
+	local top = if uniques[1] then uniques[1].Value else 0
 	for index, item in uniques do
 		if index > 90 then
 			break
 		end
-		table.insert(rows, {
-			Line1 = string.format("%s  -  %s players", labelFor(item.Name), commas(item.Value)),
-			Line2 = string.format("%s uses  -  key %s", commas(total(docs, "n:" .. item.Name)), item.Name),
-		})
+		table.insert(rows, barRow(labelFor(item.Name), string.format("%s uses  -  %s", commas(total(docs, "n:" .. item.Name)), item.Name), commas(item.Value), "players", if top > 0 then item.Value / top else 0, "info"))
 	end
-	return "Analytics - features used", rows
+	if #uniques == 0 then
+		table.insert(rows, note("Nothing recorded yet", "This fills in as players use the game.", "info"))
+	end
+	return "What players use", rows
 end
 
 local function reportEconomy(days: number): (string, { Row })
 	local docs = dailyDocs(days)
 	local rows: { Row } = {}
-	local currencies = { "Bubbles", "Gems", "Coins" }
-	for _, currency in currencies do
+	for _, currency in { "Bubbles", "Gems", "Coins" } do
 		for _, kind in { "src", "snk" } do
 			local list = totalsWithPrefix(docs, string.format("eco:%s:%s:", kind, currency))
 			if #list > 0 then
@@ -1304,18 +1417,12 @@ local function reportEconomy(days: number): (string, { Row })
 				for _, item in list do
 					sum += item.Value
 				end
-				table.insert(rows, {
-					Line1 = string.format("== %s %s: %s ==", currency, if kind == "src" then "EARNED" else "SPENT", commas(sum)),
-					Line2 = "Where it came from / went (add up how many times in brackets)",
-				})
+				table.insert(rows, head(string.format("%s %s: %s", currency, if kind == "src" then "EARNED" else "SPENT", commas(sum)), if kind == "src" then "Where it came from." else "What it was spent on."))
 				for index, item in list do
 					if index > 12 then
 						break
 					end
-					table.insert(rows, {
-						Line1 = string.format("%s  -  %s (%s)", item.Name, commas(item.Value), pct(item.Value, sum)),
-						Line2 = string.format("%s times", commas(total(docs, string.format("ecn:%s:%s:%s", kind, currency, item.Name)))),
-					})
+					table.insert(rows, barRow(item.Name, string.format("%s times", commas(total(docs, string.format("ecn:%s:%s:%s", kind, currency, item.Name)))), commas(item.Value), pct(item.Value, sum), item.Value / sum, if kind == "src" then "good" else "warn"))
 				end
 			end
 		end
@@ -1326,63 +1433,77 @@ local function reportEconomy(days: number): (string, { Row })
 		for _, item in robux do
 			sum += item.Value
 		end
-		table.insert(rows, { Line1 = string.format("== ROBUX SPENT BY PLAYERS: %s ==", commas(sum)), Line2 = "List prices, before Roblox's cut" })
+		table.insert(rows, note(string.format("Robux spent by players: R$ %s", commas(sum)), "List prices, before Roblox's cut.", "good"))
 		for index, item in robux do
 			if index > 14 then
 				break
 			end
-			table.insert(rows, { Line1 = string.format("%s  -  R$ %s (%s)", item.Name, commas(item.Value), pct(item.Value, sum)), Line2 = string.format("%s purchases", commas(total(docs, "n:buy.ok." .. item.Name))) })
+			table.insert(rows, barRow(item.Name, string.format("%s purchases", commas(total(docs, "n:buy.ok." .. item.Name))), "R$ " .. commas(item.Value), pct(item.Value, sum), item.Value / sum, "good"))
 		end
 	end
 	if #rows == 0 then
-		table.insert(rows, { Line1 = "No money has moved yet.", Line2 = "" })
+		table.insert(rows, note("No money has moved yet", "Earnings, spending and Robux purchases show here once players have played.", "info"))
 	end
-	return "Analytics - economy", rows
+	return "Money", rows
 end
 
 local function reportHealth(days: number): (string, { Row })
 	local docs = dailyDocs(days)
 	local rows: { Row } = {}
 	local joins = total(docs, "u:join")
-	table.insert(rows, { Line1 = "== DEVICES (players per day, added up) ==", Line2 = "" })
+	table.insert(rows, head("Devices", "What players play on (players per day, added up)."))
 	for _, device in { "Phone", "Tablet", "Desktop", "Console" } do
 		local n = total(docs, "u:dev." .. device)
-		table.insert(rows, { Line1 = string.format("%s  -  %s (%s)", device, commas(n), pct(n, joins)), Line2 = "" })
+		table.insert(rows, barRow(device, "", commas(n), pct(n, joins), if joins > 0 then n / joins else 0, "info"))
 	end
-	table.insert(rows, { Line1 = "== FRAME RATE ==", Line2 = "Measured about a minute after the screen loads" })
+	table.insert(rows, head("Frame rate", "Measured about a minute after the screen loads. Low = under 25 a second."))
+	local perfTotal = 0
+	for _, bucketName in { "low", "mid", "high" } do
+		perfTotal += total(docs, "u:perf." .. bucketName)
+	end
 	for _, bucketName in { "low", "mid", "high" } do
 		local n = total(docs, "u:perf." .. bucketName)
-		table.insert(rows, { Line1 = string.format("%s  -  %s", labelOf["perf." .. bucketName], commas(n)), Line2 = "" })
+		table.insert(rows, barRow(labelOf["perf." .. bucketName], "", commas(n), pct(n, perfTotal), if perfTotal > 0 then n / perfTotal else 0, if bucketName == "low" then "bad" elseif bucketName == "mid" then "warn" else "good"))
 	end
-	table.insert(rows, { Line1 = "== LOST IN THE LOBBY ==", Line2 = "Players who joined for a new visit and walked into no pad" })
-	table.insert(rows, { Line1 = string.format("After 1 minute  -  %s", commas(total(docs, "n:lobby.lost1"))), Line2 = "" })
-	table.insert(rows, { Line1 = string.format("After 3 minutes  -  %s", commas(total(docs, "n:lobby.lost3"))), Line2 = "" })
-	table.insert(rows, { Line1 = "== SCRIPT ERRORS ==", Line2 = string.format("%s on servers, %s on screens", commas(total(docs, "n:err.server")), commas(total(docs, "n:err.client"))) })
-	for index, item in totalsWithPrefix(docs, "err:") do
+	local lost1, lost3 = total(docs, "n:lobby.lost1"), total(docs, "n:lobby.lost3")
+	table.insert(rows, head("Lost in the lobby", "Players who joined for a new visit and walked into no pad."))
+	table.insert(rows, barRow("After 1 minute", "", commas(lost1), pct(lost1, joins), if joins > 0 then lost1 / joins else 0, "warn"))
+	table.insert(rows, barRow("After 3 minutes", "", commas(lost3), pct(lost3, joins), if joins > 0 then lost3 / joins else 0, "bad"))
+	local errServer, errClient = total(docs, "n:err.server"), total(docs, "n:err.client")
+	table.insert(rows, note(string.format("Script errors: %s on servers, %s on screens", commas(errServer), commas(errClient)), "The most common ones are listed below.", if errServer + errClient > 0 then "warn" else "good"))
+	local errors = totalsWithPrefix(docs, "err:")
+	for index, item in errors do
 		if index > 20 then
 			break
 		end
-		table.insert(rows, { Line1 = string.format("%s  -  %s", item.Name, commas(item.Value)), Line2 = "" })
+		table.insert(rows, barRow(item.Name, "", commas(item.Value), "times", if errors[1].Value > 0 then item.Value / errors[1].Value else 0, "bad"))
 	end
-	table.insert(rows, { Line1 = string.format("Events held back for Roblox's rate limit: %s", commas(total(docs, "rbx:dropped"))), Line2 = "" })
-	return "Analytics - devices and errors", rows
+	local held = total(docs, "rbx:dropped")
+	if held > 0 then
+		table.insert(rows, note(string.format("%s events were held back for Roblox's rate limit", commas(held)), "Nothing is lost in the in-game numbers, only Roblox's own Analytics page.", "info"))
+	end
+	return "Devices and errors", rows
 end
 
 local function reportShow(days: number): (string, { Row })
 	local docs = dailyDocs(days)
 	local rows: { Row } = {}
 	local joined = total(docs, "u:show.join")
-	table.insert(rows, { Line1 = string.format("Players who joined while Admin Abuse was live  -  %s", commas(joined)), Line2 = "The first row of the show funnel" })
-	local funnel = A.Funnels[#A.Funnels]
-	for _, row in funnelRows(funnel, function(key)
+	for _, row in funnelRows(A.Funnels[#A.Funnels], function(key)
 		return total(docs, "u:" .. key)
-	end, "The show, step by step") do
+	end, string.format("Admin Abuse, step by step (%s players joined while it was live)", commas(joined))) do
 		table.insert(rows, row)
 	end
+	table.insert(rows, head("What they did", "Players (added up per day)."))
+	local top = 0
 	for _, key in { "show.vote", "show.prize", "show.obby", "event.sign", "event.rsvp" } do
-		table.insert(rows, { Line1 = string.format("%s  -  %s", labelOf[key] or key, commas(total(docs, "u:" .. key))), Line2 = "key " .. key })
+		top = math.max(top, total(docs, "u:" .. key))
 	end
-	return "Analytics - Admin Abuse show", rows
+	for _, key in { "show.vote", "show.prize", "show.obby", "event.sign", "event.rsvp" } do
+		local n = total(docs, "u:" .. key)
+		table.insert(rows, barRow(labelOf[key] or key, "", commas(n), "players", if top > 0 then n / top else 0, "info"))
+	end
+	return "Admin Abuse show", rows
 end
 
 local REPORTS = { reportOverview, reportOnboarding, reportRetention, reportLeaving, reportRuns, reportFeatures, reportEconomy, reportHealth, reportShow }
