@@ -204,11 +204,14 @@ end
 -- The chips: near a leaderboard two small buttons, "Next page" and "Refresh", sit side by side at a fixed place at the bottom
 -- of the screen (no proximity prompts on the boards: they overlapped each other and the board). Next page: F on a keyboard,
 -- X on a controller; Refresh: X on a keyboard, D-pad up on a controller; a tap on a phone. They fade in as you walk toward a
--- board and fade out as you walk away (all of the way in from FADE_FULL studs, gone at FADE_GONE). Refresh redraws the boards so
--- you can see yourself on them after a run; LeaderboardService answers, at most once per 20 s per player.
+-- board and fade out as you walk away (all of the way in within FADE_FULL studs, gone from FADE_GONE), and they are not there
+-- at all while you stand on a party pad (that would be odd). Refresh redraws the boards so you can see yourself on them after a
+-- run; LeaderboardService answers, at most once per 20 s per player.
+-- (The fade is done piece by piece on the transparencies, not with a CanvasGroup: a CanvasGroup draws into a texture that is
+-- blurry and jagged at the edges under the UI scale.)
 ----------------------------------------------------------------------------------------------------
-local FADE_FULL = 28 -- studs from the nearest board: fully there up to here
-local FADE_GONE = 46 -- ... and gone from here (in between it fades)
+local FADE_FULL = 14 -- studs from the nearest board (its middle): fully there up to here
+local FADE_GONE = 23 -- ... and gone from here (in between it fades)
 local USABLE = 0.35 -- a chip that is less there than this ignores presses
 local REFRESH_PAUSE = 3 -- this screen's own pause between two presses
 local ITEM_H = 66 -- a chip: the key hanging on the button's top edge (18) and the button (48)
@@ -216,7 +219,8 @@ local BUTTON_H = 48
 local KEY_H = 24
 
 type Chip = { Frame: Frame, Button: TextButton, Badge: Frame, Key: TextLabel }
-local group: CanvasGroup? = nil
+local group: Frame? = nil
+local fadeParts: { { Inst: Instance, Prop: string, Base: number } } = {} -- everything in the chips that can fade, with its own transparency
 local nextChip: Chip? = nil
 local refreshChip: Chip? = nil
 local fade = 0 -- how much of the chips shows: 0 (gone) to 1 (all of the way there)
@@ -301,6 +305,40 @@ local function makeChip(parent: Instance, text: string, color: Color3, onClick: 
 	return { Frame = frame, Button = button, Badge = badge, Key = key }
 end
 
+-- Remembers every transparency in the chips (their buttons draw several layers) so the whole thing can fade as one.
+local function collectFadeParts(root: Instance)
+	local function add(inst: Instance, prop: string)
+		local value = (inst :: any)[prop]
+		if type(value) == "number" then
+			table.insert(fadeParts, { Inst = inst, Prop = prop, Base = value })
+		end
+	end
+	local function visit(inst: Instance)
+		if inst:IsA("UIStroke") then
+			add(inst, "Transparency")
+		elseif inst:IsA("GuiObject") then
+			add(inst, "BackgroundTransparency")
+			if inst:IsA("TextLabel") or inst:IsA("TextButton") or inst:IsA("TextBox") then
+				add(inst, "TextTransparency")
+				add(inst, "TextStrokeTransparency")
+			elseif inst:IsA("ImageLabel") or inst:IsA("ImageButton") then
+				add(inst, "ImageTransparency")
+			end
+		end
+	end
+	visit(root)
+	for _, d in root:GetDescendants() do
+		visit(d)
+	end
+end
+
+-- Draws the chips `alpha` of the way in (1 = as built, 0 = nothing).
+local function applyFade(alpha: number)
+	for _, part in fadeParts do
+		(part.Inst :: any)[part.Prop] = 1 - (1 - part.Base) * alpha
+	end
+end
+
 local layoutKey = ""
 -- Sizes and places the chips for what is on show (two, or only Refresh when the board has one page) and for the device.
 local function layoutChips(withNext: boolean)
@@ -343,12 +381,11 @@ end
 
 local function setupChips()
 	local _gui, root = UIKit.CreateScreen("BoardChips", 6)
-	local g = Instance.new("CanvasGroup") -- (one group so everything fades together)
+	local g = Instance.new("Frame")
 	g.Name = "Chips"
 	g.AnchorPoint = Vector2.new(0.5, 1)
 	g.Size = UDim2.fromOffset(354, ITEM_H)
 	g.BackgroundTransparency = 1
-	g.GroupTransparency = 1
 	g.Visible = false
 	g.Parent = root
 	UIKit.PhoneBoost(g, 1.15)
@@ -356,6 +393,8 @@ local function setupChips()
 	nextChip = makeChip(g, "Next page", UIKit.Theme.Colors.Primary, pressNext)
 	refreshChip = makeChip(g, "Refresh", UIKit.Theme.Colors.Accent, pressRefresh)
 	layoutChips(true)
+	collectFadeParts(g)
+	applyFade(0)
 	placeChips()
 	UIKit.LayoutChanged:Connect(function()
 		placeChips()
@@ -377,11 +416,19 @@ local function setupChips()
 
 	-- The fade: toward 1 as you come up to a board, toward 0 as you walk off (or while a run, the tutorial, the show or a window
 	-- has the screen), eased so it is smooth rather than jumping.
+	local shownBefore = false
 	RunService.RenderStepped:Connect(function(dt: number)
 		local board, dist = nearestBoard()
 		nearest = board
-		local away = ClientState.Run ~= nil or ClientState.TutorialStep ~= nil or ReplicatedStorage:GetAttribute("AbuseLive") == true or UIKit.IsWindowOpen()
+		-- not at all while a run, the tutorial, the show or a window has the screen, or while standing on a party pad
+		local away = ClientState.Run ~= nil
+			or ClientState.TutorialStep ~= nil
+			or ClientState.InParty()
+			or LocalPlayer:GetAttribute("InParty") == true
+			or ReplicatedStorage:GetAttribute("AbuseLive") == true
+			or UIKit.IsWindowOpen()
 		local target = if away or not board then 0 else math.clamp((FADE_GONE - dist) / (FADE_GONE - FADE_FULL), 0, 1)
+		local before = fade
 		if math.abs(target - fade) < 0.003 then
 			fade = target
 		else
@@ -392,9 +439,12 @@ local function setupChips()
 			g.Visible = show
 		end
 		if show then
-			g.GroupTransparency = 1 - fade
+			if fade ~= before or not shownBefore then
+				applyFade(fade)
+			end
 			layoutChips(board ~= nil and pageCount(board) >= 2)
 		end
+		shownBefore = show
 	end)
 end
 

@@ -6,7 +6,7 @@ local M = G.modules
 local UK = M["/home/user/Roblox/RinseCycle/StarterPlayer/StarterPlayerScripts/Client/UIKit.luau"]
 call("client", function() UK.CloseWindow() end)
 local board = CS:GetTagged("LeaderboardBoard")[1]
-p.Character.HumanoidRootPart.CFrame = board.CFrame * CFrame.new(0, -5, 15)
+p.Character.HumanoidRootPart.CFrame = board.CFrame * CFrame.new(0, -5, 10)
 local function size(w, h)
 	local probe = p.PlayerGui:FindFirstChild("UIKitProbeFull")
 	call("client", function()
