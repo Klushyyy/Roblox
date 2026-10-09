@@ -773,8 +773,8 @@ local function buyTool(index: number)
 end
 
 ----------------------------------------------------------------------------------------------------
--- Paged leaderboards: the arrows (tag "BoardArrow") and the "Next level" prompt flip this client's
--- view of the pages (Page1..PageN in the board's SurfaceGui). Nothing is sent to the server.
+-- Paged leaderboards: the arrows (tag "BoardArrow") flip this client's view of the pages (Page1..PageN in the
+-- board's SurfaceGui; BoardView.Flip, which the "Next page" chip uses too). Nothing is sent to the server.
 ----------------------------------------------------------------------------------------------------
 
 -- A board's SurfaceGui: on the part, or in PlayerGui once BoardView has made it scrollable.
@@ -793,30 +793,9 @@ local function boardGui(board: Instance?): SurfaceGui?
 end
 
 local function flipBoard(board: Instance, dir: number)
-	local gui = boardGui(board)
-	if not gui then
-		return
-	end
-	local pages = {}
-	local current = 1
-	for i = 1, 20 do
-		local page = gui:FindFirstChild("Page" .. i)
-		if not page or not page:IsA("GuiObject") then
-			break
-		end
-		pages[i] = page
-		if page.Visible then
-			current = i
-		end
-	end
-	if #pages < 2 then
-		return
-	end
-	local nextIndex = (current - 1 + dir) % #pages + 1
-	for i, page in pages do
-		page.Visible = i == nextIndex
-	end
-	UIKit.PlaySound("Click")
+	pcall(function()
+		(require(Client:WaitForChild("BoardView")) :: any).Flip(board, dir)
+	end)
 end
 
 local function addBoardArrow(inst: Instance)
@@ -862,10 +841,6 @@ end
 
 local function onPromptTriggered(prompt: ProximityPrompt, player: Player)
 	if player ~= LocalPlayer then
-		return
-	end
-	if prompt:GetAttribute("BoardNext") and prompt.Parent then
-		flipBoard(prompt.Parent, 1)
 		return
 	end
 	local windowName = prompt:GetAttribute("OpenWindow")

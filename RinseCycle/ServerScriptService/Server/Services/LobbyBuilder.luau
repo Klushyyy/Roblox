@@ -1435,15 +1435,7 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 		CollectionService:AddTag(arrow, "BoardArrow")
 		mk("ClickDetector", { MaxActivationDistance = 70 }, arrow)
 	end
-	local prompt = mk("ProximityPrompt", {
-		ActionText = "Next page",
-		ObjectText = titleText,
-		RequiresLineOfSight = false,
-		HoldDuration = 0,
-		MaxActivationDistance = 14,
-		KeyboardKeyCode = Enum.KeyCode.F,
-	}, boardPart) :: ProximityPrompt
-	prompt:SetAttribute("BoardNext", true)
+	-- (no proximity prompt: "Next page" and "Refresh" are two chips at the bottom of the player's screen, see BoardView)
 	return { Part = boardPart, Title = pages[1].Title, List = pages[1].List, Pages = pages }
 end
 

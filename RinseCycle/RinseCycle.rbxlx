@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.18.3"
+Config.Version = "2.18.4"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -25274,15 +25274,7 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 		CollectionService:AddTag(arrow, "BoardArrow")
 		mk("ClickDetector", { MaxActivationDistance = 70 }, arrow)
 	end
-	local prompt = mk("ProximityPrompt", {
-		ActionText = "Next page",
-		ObjectText = titleText,
-		RequiresLineOfSight = false,
-		HoldDuration = 0,
-		MaxActivationDistance = 14,
-		KeyboardKeyCode = Enum.KeyCode.F,
-	}, boardPart) :: ProximityPrompt
-	prompt:SetAttribute("BoardNext", true)
+	-- (no proximity prompt: "Next page" and "Refresh" are two chips at the bottom of the player's screen, see BoardView)
 	return { Part = boardPart, Title = pages[1].Title, List = pages[1].List, Pages = pages }
 end
 
@@ -34901,11 +34893,14 @@ return Autocomplete</ProtectedString></Properties></Item>
 	    ("#515  you  12,345"), from the player attribute "Lb_&lt;board&gt;&lt;page&gt;" = "&lt;rank&gt;|&lt;value&gt;".
 	    Rank 0 with a value means you're further down than the board looks (past #1000).
 	  * Your row in the top 100 is lit up too.
+	  * Near a board, "Next page" and "Refresh" chips fade in at the bottom of the screen (F / X on a keyboard, X / D-pad up on a
+	    controller, a tap on a phone) and fade out as you walk away.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local Client = script.Parent
@@ -35047,41 +35042,101 @@ local function setup(board: Instance)
 end
 
 ----------------------------------------------------------------------------------------------------
--- The Refresh chip: near a leaderboard, a small "Refresh" button at a fixed place on the screen redraws the boards, so you
--- can see yourself on them after a run. X on a keyboard, D-pad up on a controller, a tap on a phone. (It used to be a
--- second proximity prompt stacked under "Next page" and the two overlapped, worse the closer you zoomed; this has a place
--- of its own, away from the board.) LeaderboardService answers, at most once per 20 s per player.
+-- Paging: the pages of a board are Page1..PageN in its SurfaceGui, only one visible. This only changes this screen's view.
 ----------------------------------------------------------------------------------------------------
-local REFRESH_RANGE = 45 -- studs from a board
+local function boardGuiOf(board: Instance): SurfaceGui?
+	return board:FindFirstChildOfClass("SurfaceGui") or guis[board]
+end
+
+local function pageCount(board: Instance): number
+	local gui = boardGuiOf(board)
+	local n = 0
+	while gui and gui:FindFirstChild("Page" .. (n + 1)) do
+		n += 1
+	end
+	return n
+end
+
+-- Shows the next (dir 1) or previous (dir -1) page of a board. The arrows on the board and the "Next page" chip both use it.
+function BoardView.Flip(board: Instance, dir: number)
+	local gui = boardGuiOf(board)
+	if not gui then
+		return
+	end
+	local pages = {}
+	local current = 1
+	for i = 1, 20 do
+		local page = gui:FindFirstChild("Page" .. i)
+		if not page or not page:IsA("GuiObject") then
+			break
+		end
+		pages[i] = page
+		if page.Visible then
+			current = i
+		end
+	end
+	if #pages &lt; 2 then
+		return
+	end
+	local nextIndex = (current - 1 + dir) % #pages + 1
+	for i, page in pages do
+		page.Visible = i == nextIndex
+	end
+	UIKit.PlaySound("Click")
+end
+
+----------------------------------------------------------------------------------------------------
+-- The chips: near a leaderboard two small buttons, "Next page" and "Refresh", sit side by side at a fixed place at the bottom
+-- of the screen (no proximity prompts on the boards: they overlapped each other and the board). Next page: F on a keyboard,
+-- X on a controller; Refresh: X on a keyboard, D-pad up on a controller; a tap on a phone. They fade in as you walk toward a
+-- board and fade out as you walk away (all of the way in from FADE_FULL studs, gone at FADE_GONE). Refresh redraws the boards so
+-- you can see yourself on them after a run; LeaderboardService answers, at most once per 20 s per player.
+----------------------------------------------------------------------------------------------------
+local FADE_FULL = 28 -- studs from the nearest board: fully there up to here
+local FADE_GONE = 46 -- ... and gone from here (in between it fades)
+local USABLE = 0.35 -- a chip that is less there than this ignores presses
 local REFRESH_PAUSE = 3 -- this screen's own pause between two presses
-local chip: Frame? = nil
-local chipButton: TextButton? = nil
-local chipKey: TextLabel? = nil
+local ITEM_H = 66 -- a chip: the key hanging on the button's top edge (18) and the button (48)
+local BUTTON_H = 48
+local KEY_H = 24
+
+type Chip = { Frame: Frame, Button: TextButton, Badge: Frame, Key: TextLabel }
+local group: CanvasGroup? = nil
+local nextChip: Chip? = nil
+local refreshChip: Chip? = nil
+local fade = 0 -- how much of the chips shows: 0 (gone) to 1 (all of the way there)
+local nearest: BasePart? = nil -- the board "Next page" turns: the nearest one
 local lastPress = -math.huge
 
-local function nearBoard(): boolean
+-- The nearest leaderboard and how far away it is.
+local function nearestBoard(): (BasePart?, number)
 	local character = LocalPlayer.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not root or not root:IsA("BasePart") then
-		return false
+		return nil, math.huge
 	end
+	local best: BasePart? = nil
+	local bestDist = math.huge
 	for _, board in CollectionService:GetTagged("LeaderboardBoard") do
-		if board:IsA("BasePart") and (board.Position - root.Position).Magnitude &lt;= REFRESH_RANGE then
-			return true
+		if board:IsA("BasePart") then
+			local dist = (board.Position - root.Position).Magnitude
+			if dist &lt; bestDist then
+				best, bestDist = board, dist
+			end
 		end
 	end
-	return false
+	return best, bestDist
 end
 
 local function pressRefresh()
 	local now = os.clock()
-	if now - lastPress &lt; REFRESH_PAUSE then
+	if fade &lt; USABLE or now - lastPress &lt; REFRESH_PAUSE then
 		return
 	end
 	lastPress = now
 	UIKit.PlaySound("Click")
 	Remotes.Event("BoardRefresh"):FireServer()
-	local button = chipButton
+	local button = if refreshChip then refreshChip.Button else nil
 	if button then
 		button.Text = "Refreshing..."
 		task.delay(1.5, function()
@@ -35092,76 +35147,138 @@ local function pressRefresh()
 	end
 end
 
-local function placeChip()
-	local frame = chip
-	if frame then
-		local safe = UIKit.SafeInsets()
-		frame.Position = UDim2.new(0.5, 0, 1, -((if UIKit.IsTouch() then 104 else 84) + safe.Bottom))
+local function pressNext()
+	local board = nearest
+	if fade &lt; USABLE or not board then
+		return
 	end
+	BoardView.Flip(board, 1) -- (plays the click)
 end
 
-local function setupRefreshChip()
-	local _gui, root = UIKit.CreateScreen("BoardRefresh", 6)
+local function makeChip(parent: Instance, text: string, color: Color3, onClick: () -&gt; ()): Chip
 	local frame = Instance.new("Frame")
-	frame.Name = "RefreshChip"
-	frame.AnchorPoint = Vector2.new(0.5, 1)
-	frame.Size = UDim2.fromOffset(190, 52)
+	frame.Name = text
 	frame.BackgroundTransparency = 1
-	frame.Visible = false
-	frame.Parent = root
-	UIKit.PhoneBoost(frame, 1.25)
-	chip = frame
-	chipButton = UIKit.Button({
-		Text = "Refresh",
-		Color = UIKit.Theme.Colors.Accent,
-		Size = UDim2.fromOffset(190, 48),
-		Position = UDim2.fromOffset(0, 2),
+	frame.Size = UDim2.fromOffset(168, ITEM_H)
+	frame.Parent = parent
+	local button = UIKit.Button({
+		Text = text,
+		Color = color,
+		Size = UDim2.new(1, 0, 0, BUTTON_H),
+		Position = UDim2.fromOffset(0, ITEM_H - BUTTON_H),
 		Sound = false,
 		Parent = frame,
-		OnClick = pressRefresh,
+		OnClick = onClick,
 	})
-	-- the key to press, on the button's corner (not on a phone, where you tap it)
+	-- the key to press, on the button's top edge (not on a phone, where you tap it)
 	local badge = Instance.new("Frame")
 	badge.Name = "Key"
-	badge.AnchorPoint = Vector2.new(0, 0.5)
-	badge.Position = UDim2.new(0, -10, 0, 4)
-	badge.Size = UDim2.fromOffset(34, 30)
+	badge.AnchorPoint = Vector2.new(0.5, 0.5)
+	badge.Position = UDim2.new(0.5, 0, 0, ITEM_H - BUTTON_H - 5) -- (hangs over the button's top edge, clear of its text)
+	badge.Size = UDim2.fromOffset(34, KEY_H)
 	badge.BackgroundColor3 = UIKit.Theme.Colors.Ink
 	badge.BorderSizePixel = 0
 	badge.ZIndex = 20
 	badge.Parent = frame
 	UIKit.Corner(badge, 8)
 	UIKit.Stroke(badge, UIKit.Theme.Colors.Text, 2, 0.5)
-	chipKey = UIKit.Label({ Text = "X", TextSize = 18, Size = UDim2.fromScale(1, 1), ZIndex = 21, Parent = badge })
-	placeChip()
-	UIKit.LayoutChanged:Connect(placeChip)
+	local key = UIKit.Label({ Text = "", TextSize = 17, Size = UDim2.fromScale(1, 1), ZIndex = 21, Parent = badge })
+	return { Frame = frame, Button = button, Badge = badge, Key = key }
+end
 
-	-- Keys: X on a keyboard, D-pad up on a controller (Next page's own key there is X).
+local layoutKey = ""
+-- Sizes and places the chips for what is on show (two, or only Refresh when the board has one page) and for the device.
+local function layoutChips(withNext: boolean)
+	local g, nextC, refreshC = group, nextChip, refreshChip
+	if not g or not nextC or not refreshC then
+		return
+	end
+	local touch = UIKit.IsTouch()
+	local pad = UIKit.IsGamepad()
+	local key = string.format("%s|%s|%s", tostring(withNext), tostring(touch), tostring(pad))
+	if key == layoutKey then
+		return
+	end
+	layoutKey = key
+	local w = if touch then 136 else 168
+	local gap = if touch then 12 else 18
+	local count = if withNext then 2 else 1
+	g.Size = UDim2.fromOffset(w * count + gap * (count - 1), ITEM_H)
+	nextC.Frame.Visible = withNext
+	nextC.Frame.Size = UDim2.fromOffset(w, ITEM_H)
+	nextC.Frame.Position = UDim2.fromOffset(0, 0)
+	refreshC.Frame.Size = UDim2.fromOffset(w, ITEM_H)
+	refreshC.Frame.Position = UDim2.fromOffset(if withNext then w + gap else 0, 0)
+	for _, chipItem in { nextC, refreshC } do
+		chipItem.Badge.Visible = not touch or pad
+	end
+	nextC.Key.Text = if pad then "X" else "F"
+	nextC.Badge.Size = UDim2.fromOffset(34, KEY_H)
+	refreshC.Key.Text = if pad then "D-pad \u{2191}" else "X"
+	refreshC.Badge.Size = UDim2.fromOffset(if pad then 84 else 34, KEY_H)
+end
+
+local function placeChips()
+	local g = group
+	if g then
+		local safe = UIKit.SafeInsets()
+		g.Position = UDim2.new(0.5, 0, 1, -((if UIKit.IsTouch() then 102 else 82) + safe.Bottom))
+	end
+end
+
+local function setupChips()
+	local _gui, root = UIKit.CreateScreen("BoardChips", 6)
+	local g = Instance.new("CanvasGroup") -- (one group so everything fades together)
+	g.Name = "Chips"
+	g.AnchorPoint = Vector2.new(0.5, 1)
+	g.Size = UDim2.fromOffset(354, ITEM_H)
+	g.BackgroundTransparency = 1
+	g.GroupTransparency = 1
+	g.Visible = false
+	g.Parent = root
+	UIKit.PhoneBoost(g, 1.15)
+	group = g
+	nextChip = makeChip(g, "Next page", UIKit.Theme.Colors.Primary, pressNext)
+	refreshChip = makeChip(g, "Refresh", UIKit.Theme.Colors.Accent, pressRefresh)
+	layoutChips(true)
+	placeChips()
+	UIKit.LayoutChanged:Connect(function()
+		placeChips()
+		layoutKey = "" -- (the device may have changed)
+	end)
+
+	-- Keys: Next page is F on a keyboard / X on a controller; Refresh is X on a keyboard / D-pad up on a controller.
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
-		local shown = chip and chip.Visible
-		if processed or not shown then
+		if processed or fade &lt; USABLE then
 			return
 		end
-		if input.KeyCode == Enum.KeyCode.X or input.KeyCode == Enum.KeyCode.DPadUp then
+		local code = input.KeyCode
+		if code == Enum.KeyCode.X or code == Enum.KeyCode.DPadUp then
 			pressRefresh()
+		elseif code == Enum.KeyCode.F or code == Enum.KeyCode.ButtonX then
+			pressNext()
 		end
 	end)
 
-	task.spawn(function()
-		while true do
-			local away = ClientState.Run ~= nil or ClientState.TutorialStep ~= nil or ReplicatedStorage:GetAttribute("AbuseLive") == true or UIKit.IsWindowOpen()
-			local show = not away and nearBoard()
-			if chip and chip.Visible ~= show then
-				chip.Visible = show
-			end
-			if show and chipKey then
-				local badgeFrame = chipKey.Parent :: Frame
-				local pad = UIKit.IsGamepad()
-				badgeFrame.Visible = not UIKit.IsTouch() or pad
-				badgeFrame.Size = UDim2.fromOffset(if pad then 84 else 34, 30)
-				chipKey.Text = if pad then "D-pad \u{2191}" else "X"
-			end
-			task.wait(0.25)
+	-- The fade: toward 1 as you come up to a board, toward 0 as you walk off (or while a run, the tutorial, the show or a window
+	-- has the screen), eased so it is smooth rather than jumping.
+	RunService.RenderStepped:Connect(function(dt: number)
+		local board, dist = nearestBoard()
+		nearest = board
+		local away = ClientState.Run ~= nil or ClientState.TutorialStep ~= nil or ReplicatedStorage:GetAttribute("AbuseLive") == true or UIKit.IsWindowOpen()
+		local target = if away or not board then 0 else math.clamp((FADE_GONE - dist) / (FADE_GONE - FADE_FULL), 0, 1)
+		if math.abs(target - fade) &lt; 0.003 then
+			fade = target
+		else
+			fade += (target - fade) * (1 - math.exp(-dt * 10))
+		end
+		local show = fade &gt; 0.01
+		if g.Visible ~= show then
+			g.Visible = show
+		end
+		if show then
+			g.GroupTransparency = 1 - fade
+			layoutChips(board ~= nil and pageCount(board) &gt;= 2)
 		end
 	end)
 end
@@ -35171,7 +35288,7 @@ function BoardView.Init()
 		return
 	end
 	initialized = true
-	setupRefreshChip()
+	setupChips()
 	for _, board in CollectionService:GetTagged("LeaderboardBoard") do
 		task.spawn(setup, board)
 	end
@@ -39706,8 +39823,8 @@ local function buyTool(index: number)
 end
 
 ----------------------------------------------------------------------------------------------------
--- Paged leaderboards: the arrows (tag "BoardArrow") and the "Next level" prompt flip this client's
--- view of the pages (Page1..PageN in the board's SurfaceGui). Nothing is sent to the server.
+-- Paged leaderboards: the arrows (tag "BoardArrow") flip this client's view of the pages (Page1..PageN in the
+-- board's SurfaceGui; BoardView.Flip, which the "Next page" chip uses too). Nothing is sent to the server.
 ----------------------------------------------------------------------------------------------------
 
 -- A board's SurfaceGui: on the part, or in PlayerGui once BoardView has made it scrollable.
@@ -39726,30 +39843,9 @@ local function boardGui(board: Instance?): SurfaceGui?
 end
 
 local function flipBoard(board: Instance, dir: number)
-	local gui = boardGui(board)
-	if not gui then
-		return
-	end
-	local pages = {}
-	local current = 1
-	for i = 1, 20 do
-		local page = gui:FindFirstChild("Page" .. i)
-		if not page or not page:IsA("GuiObject") then
-			break
-		end
-		pages[i] = page
-		if page.Visible then
-			current = i
-		end
-	end
-	if #pages &lt; 2 then
-		return
-	end
-	local nextIndex = (current - 1 + dir) % #pages + 1
-	for i, page in pages do
-		page.Visible = i == nextIndex
-	end
-	UIKit.PlaySound("Click")
+	pcall(function()
+		(require(Client:WaitForChild("BoardView")) :: any).Flip(board, dir)
+	end)
 end
 
 local function addBoardArrow(inst: Instance)
@@ -39795,10 +39891,6 @@ end
 
 local function onPromptTriggered(prompt: ProximityPrompt, player: Player)
 	if player ~= LocalPlayer then
-		return
-	end
-	if prompt:GetAttribute("BoardNext") and prompt.Parent then
-		flipBoard(prompt.Parent, 1)
 		return
 	end
 	local windowName = prompt:GetAttribute("OpenWindow")
