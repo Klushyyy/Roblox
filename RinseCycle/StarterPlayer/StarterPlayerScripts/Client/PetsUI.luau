@@ -3,6 +3,7 @@
 -- the contract. Both windows rebuild their contents from ClientState.Meta whenever it changes and
 -- the relevant window is open, so a purchase/hatch/equip anywhere refreshes what's on screen.
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -1341,17 +1342,23 @@ function PetsUI._refreshEggButtons()
 
 	-- Locked eggs can't be clicked. Short of Bubbles, the button only looks grey: clicking it
 	-- opens the Bubbles shop (doHatch).
-	hatch1Button:SetAttribute("Disabled", locked)
-	hatch3Button:SetAttribute("Disabled", locked)
-	UIKit.SetButtonColor(hatch1Button, if eggAffordable(egg, 1, meta) then C.Good else C.Disabled)
-	UIKit.SetButtonColor(hatch3Button, if eggAffordable(egg, 3, meta) then C.Accent else C.Disabled)
-	hatch1Button.Text = "Hatch 1  (" .. Format.Commas(egg.Cost) .. " Bubbles)"
-	hatch3Button.Text = "Hatch 3  (" .. Format.Commas(egg.Cost * 3) .. " Bubbles)"
+	-- Roblox's policy: some players may not use paid random items (Bubbles can be bought with Robux), so no hatching.
+	local restricted = Players.LocalPlayer:GetAttribute("PaidRandomRestricted") == true
+	hatch1Button:SetAttribute("Disabled", locked or restricted)
+	hatch3Button:SetAttribute("Disabled", locked or restricted)
+	UIKit.SetButtonColor(hatch1Button, if not restricted and eggAffordable(egg, 1, meta) then C.Good else C.Disabled)
+	UIKit.SetButtonColor(hatch3Button, if not restricted and eggAffordable(egg, 3, meta) then C.Accent else C.Disabled)
+	hatch1Button.Text = if restricted then "Not available" else "Hatch 1  (" .. Format.Commas(egg.Cost) .. " Bubbles)"
+	hatch3Button.Text = if restricted then "Not available" else "Hatch 3  (" .. Format.Commas(egg.Cost * 3) .. " Bubbles)"
 end
 
 local function doHatch(count: number)
 	local eggId = currentEggId
 	if not eggId then
+		return
+	end
+	if Players.LocalPlayer:GetAttribute("PaidRandomRestricted") == true then
+		UIKit.Toast("Hatching eggs isn't available for your account.", "Info")
 		return
 	end
 	local egg = Config.GetEgg(eggId)

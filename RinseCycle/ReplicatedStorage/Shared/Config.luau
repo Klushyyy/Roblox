@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.19.1"
+Config.Version = "2.19.2"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -316,8 +316,9 @@ Config.Pets = {
 	AdminAbuse = { Name = "Banhammer Dragon", Rarity = "Legendary", PowerShare = 1.8, Capacity = 135, CoinBonus = 0.42, Model = "Dragon", Event = true, Limited = "Admin Abuse show", Colors = { Body = Color3.fromRGB(40, 36, 52), Accent = Color3.fromRGB(255, 70, 60) }, Shiny = true },
 }
 
--- Eggs cost Bubbles. Bubbles can never be bought with Robux, so eggs are not "paid random items";
--- the odds are still always shown before hatching. Chances must add up to 100.
+-- Eggs cost Bubbles. Bubbles CAN be bought with Robux (the Bubbles packs), so for Roblox's policy eggs are paid random
+-- items: a player it restricts (PolicyService ArePaidRandomItemsRestricted, see DataService.PaidRandomRestricted) cannot
+-- hatch. The odds are always shown before hatching. Chances must add up to 100.
 Config.Eggs = {
 	{
 		Id = "Bubble",

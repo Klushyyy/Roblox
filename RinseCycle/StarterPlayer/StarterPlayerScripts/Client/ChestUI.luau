@@ -450,6 +450,11 @@ function ChestUI.Open(count: number)
 		task.spawn(request, "Free")
 		return
 	end
+	-- Roblox's policy: some players may not use paid random items (the packs cost Robux). The free chest above stays.
+	if LocalPlayer:GetAttribute("PaidRandomRestricted") == true then
+		UIKit.Toast("Chest packs aren't available for your account.", "Info")
+		return
+	end
 	for _, pack in Config.ChestEvent.Packs do
 		if pack.Count == count then
 			local id = Config.EventProducts[pack.Key]

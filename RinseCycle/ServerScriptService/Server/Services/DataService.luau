@@ -2144,4 +2144,69 @@ function DataService.CanSave(player: Player): boolean
 	return session ~= nil and session.Profile ~= nil and session.CanSave and not session.Finalizing
 end
 
+----------------------------------------------------------------------------------------------------
+-- Roblox's policy for paid random items (PolicyService: ArePaidRandomItemsRestricted)
+----------------------------------------------------------------------------------------------------
+-- Some players (by country / age) may not use paid random item generators: anything random that costs Robux, or an
+-- in-game currency that can be bought with Robux. Here that is the rank roll (Gems), egg hatching (Bubbles) and the
+-- Treasure Chest packs (Robux). Each player is asked once when they join; DataService.PaidRandomRestricted(player) says
+-- the answer (it waits a moment if Roblox has not answered yet, and an unknown answer counts as restricted). The player
+-- attribute PaidRandomRestricted tells the screens, which grey those buttons out. For testing, set the attribute
+-- ForcePaidRandomRestricted on a player to true (it can only restrict more, and a player's own screen cannot set it).
+do
+	local restricted: { [Player]: boolean } = {}
+	local function publish(player: Player)
+		if player.Parent == Players then
+			-- (only a known "restricted" is published: until Roblox answers the screens do not grey anything out)
+			player:SetAttribute("PaidRandomRestricted", player:GetAttribute("ForcePaidRandomRestricted") == true or restricted[player] == true)
+		end
+	end
+	local function fetch(player: Player)
+		local answer: boolean? = nil
+		for attempt = 1, 4 do
+			local ok, info = pcall(function()
+				return game:GetService("PolicyService"):GetPolicyInfoForPlayerAsync(player)
+			end)
+			if ok and type(info) == "table" then
+				answer = info.ArePaidRandomItemsRestricted == true
+				break
+			end
+			if player.Parent ~= Players then
+				return
+			end
+			task.wait(attempt)
+		end
+		if answer == nil then
+			-- Roblox could not say. Studio has no policy to ask (play on); a live server is careful.
+			answer = not RunService:IsStudio()
+		end
+		restricted[player] = answer == true
+		publish(player)
+	end
+	function DataService.PaidRandomRestricted(player: Player): boolean
+		if player:GetAttribute("ForcePaidRandomRestricted") == true then
+			return true
+		end
+		local waited = 0
+		while restricted[player] == nil and waited < 8 and player.Parent == Players do
+			task.wait(0.1)
+			waited += 0.1
+		end
+		return restricted[player] ~= false
+	end
+	local function watch(player: Player)
+		player:GetAttributeChangedSignal("ForcePaidRandomRestricted"):Connect(function()
+			publish(player)
+		end)
+		task.spawn(fetch, player)
+	end
+	Players.PlayerAdded:Connect(watch)
+	for _, player in Players:GetPlayers() do
+		watch(player)
+	end
+	Players.PlayerRemoving:Connect(function(player)
+		restricted[player] = nil
+	end)
+end
+
 return DataService

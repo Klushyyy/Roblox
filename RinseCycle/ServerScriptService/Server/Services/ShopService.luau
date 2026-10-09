@@ -468,6 +468,11 @@ local function onMetaRequest(player: Player, action: any, value: any): Types.Req
 	if not DataService.Get(player) then
 		return fail(ERR_LOADING)
 	end
+	-- Random results that cost Robux, or Gems / Bubbles that can be bought with Robux: not for players Roblox's policy
+	-- restricts (DataService.PaidRandomRestricted). The screens grey these buttons out; this is the real check.
+	if (action == "RollRank" or action == "Hatch") and DataService.PaidRandomRestricted(player) then
+		return fail("Rolling and hatching aren't available for your account.")
+	end
 	-- Handlers don't yield today, but if one ever does, a second request must not interleave with it
 	-- (that is how double-spends happen).
 	if busy[player] then

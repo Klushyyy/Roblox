@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.19.1"
+Config.Version = "2.19.2"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -320,8 +320,9 @@ Config.Pets = {
 	AdminAbuse = { Name = "Banhammer Dragon", Rarity = "Legendary", PowerShare = 1.8, Capacity = 135, CoinBonus = 0.42, Model = "Dragon", Event = true, Limited = "Admin Abuse show", Colors = { Body = Color3.fromRGB(40, 36, 52), Accent = Color3.fromRGB(255, 70, 60) }, Shiny = true },
 }
 
--- Eggs cost Bubbles. Bubbles can never be bought with Robux, so eggs are not "paid random items";
--- the odds are still always shown before hatching. Chances must add up to 100.
+-- Eggs cost Bubbles. Bubbles CAN be bought with Robux (the Bubbles packs), so for Roblox's policy eggs are paid random
+-- items: a player it restricts (PolicyService ArePaidRandomItemsRestricted, see DataService.PaidRandomRestricted) cannot
+-- hatch. The odds are always shown before hatching. Chances must add up to 100.
 Config.Eggs = {
 	{
 		Id = "Bubble",
@@ -21502,6 +21503,71 @@ function DataService.CanSave(player: Player): boolean
 	return session ~= nil and session.Profile ~= nil and session.CanSave and not session.Finalizing
 end
 
+----------------------------------------------------------------------------------------------------
+-- Roblox's policy for paid random items (PolicyService: ArePaidRandomItemsRestricted)
+----------------------------------------------------------------------------------------------------
+-- Some players (by country / age) may not use paid random item generators: anything random that costs Robux, or an
+-- in-game currency that can be bought with Robux. Here that is the rank roll (Gems), egg hatching (Bubbles) and the
+-- Treasure Chest packs (Robux). Each player is asked once when they join; DataService.PaidRandomRestricted(player) says
+-- the answer (it waits a moment if Roblox has not answered yet, and an unknown answer counts as restricted). The player
+-- attribute PaidRandomRestricted tells the screens, which grey those buttons out. For testing, set the attribute
+-- ForcePaidRandomRestricted on a player to true (it can only restrict more, and a player's own screen cannot set it).
+do
+	local restricted: { [Player]: boolean } = {}
+	local function publish(player: Player)
+		if player.Parent == Players then
+			-- (only a known "restricted" is published: until Roblox answers the screens do not grey anything out)
+			player:SetAttribute("PaidRandomRestricted", player:GetAttribute("ForcePaidRandomRestricted") == true or restricted[player] == true)
+		end
+	end
+	local function fetch(player: Player)
+		local answer: boolean? = nil
+		for attempt = 1, 4 do
+			local ok, info = pcall(function()
+				return game:GetService("PolicyService"):GetPolicyInfoForPlayerAsync(player)
+			end)
+			if ok and type(info) == "table" then
+				answer = info.ArePaidRandomItemsRestricted == true
+				break
+			end
+			if player.Parent ~= Players then
+				return
+			end
+			task.wait(attempt)
+		end
+		if answer == nil then
+			-- Roblox could not say. Studio has no policy to ask (play on); a live server is careful.
+			answer = not RunService:IsStudio()
+		end
+		restricted[player] = answer == true
+		publish(player)
+	end
+	function DataService.PaidRandomRestricted(player: Player): boolean
+		if player:GetAttribute("ForcePaidRandomRestricted") == true then
+			return true
+		end
+		local waited = 0
+		while restricted[player] == nil and waited &lt; 8 and player.Parent == Players do
+			task.wait(0.1)
+			waited += 0.1
+		end
+		return restricted[player] ~= false
+	end
+	local function watch(player: Player)
+		player:GetAttributeChangedSignal("ForcePaidRandomRestricted"):Connect(function()
+			publish(player)
+		end)
+		task.spawn(fetch, player)
+	end
+	Players.PlayerAdded:Connect(watch)
+	for _, player in Players:GetPlayers() do
+		watch(player)
+	end
+	Players.PlayerRemoving:Connect(function(player)
+		restricted[player] = nil
+	end)
+end
+
 return DataService</ProtectedString></Properties></Item>
 <Item class="ModuleScript" referent="RBX00000018"><Properties><string name="Name">DishFactory</string><ProtectedString name="Source">-- DishFactory: builds one dish (plate/bowl/cup/glass/fork/knife/spoon/pan/pot) and covers a built
 -- dish in dirt spots that sit on its real, raycast-checked surfaces.
@@ -22761,6 +22827,9 @@ local function onRequest(player: Player, action: any, value: any): any
 		end
 		return { Ok = true, Rewards = EventService.Open(player, 1) }
 	elseif action == "Test" then
+		if DataService.PaidRandomRestricted(player) then
+			return { Ok = false, Error = "Chest packs aren't available for your account." }
+		end
 		-- A pack without a product Id: free in Studio, so the buttons can be tried.
 		for _, pack in Config.ChestEvent.Packs do
 			if pack.Count == value then
@@ -33864,6 +33933,11 @@ local function onMetaRequest(player: Player, action: any, value: any): Types.Req
 	if not DataService.Get(player) then
 		return fail(ERR_LOADING)
 	end
+	-- Random results that cost Robux, or Gems / Bubbles that can be bought with Robux: not for players Roblox's policy
+	-- restricts (DataService.PaidRandomRestricted). The screens grey these buttons out; this is the real check.
+	if (action == "RollRank" or action == "Hatch") and DataService.PaidRandomRestricted(player) then
+		return fail("Rolling and hatching aren't available for your account.")
+	end
 	-- Handlers don't yield today, but if one ever does, a second request must not interleave with it
 	-- (that is how double-spends happen).
 	if busy[player] then
@@ -36666,6 +36740,11 @@ function ChestUI.Open(count: number)
 	end
 	if count == 1 and freeLeft() &gt; 0 then
 		task.spawn(request, "Free")
+		return
+	end
+	-- Roblox's policy: some players may not use paid random items (the packs cost Robux). The free chest above stays.
+	if LocalPlayer:GetAttribute("PaidRandomRestricted") == true then
+		UIKit.Toast("Chest packs aren't available for your account.", "Info")
 		return
 	end
 	for _, pack in Config.ChestEvent.Packs do
@@ -47144,6 +47223,7 @@ return PetRenderer</ProtectedString></Properties></Item>
 -- the contract. Both windows rebuild their contents from ClientState.Meta whenever it changes and
 -- the relevant window is open, so a purchase/hatch/equip anywhere refreshes what's on screen.
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -48482,17 +48562,23 @@ function PetsUI._refreshEggButtons()
 
 	-- Locked eggs can't be clicked. Short of Bubbles, the button only looks grey: clicking it
 	-- opens the Bubbles shop (doHatch).
-	hatch1Button:SetAttribute("Disabled", locked)
-	hatch3Button:SetAttribute("Disabled", locked)
-	UIKit.SetButtonColor(hatch1Button, if eggAffordable(egg, 1, meta) then C.Good else C.Disabled)
-	UIKit.SetButtonColor(hatch3Button, if eggAffordable(egg, 3, meta) then C.Accent else C.Disabled)
-	hatch1Button.Text = "Hatch 1  (" .. Format.Commas(egg.Cost) .. " Bubbles)"
-	hatch3Button.Text = "Hatch 3  (" .. Format.Commas(egg.Cost * 3) .. " Bubbles)"
+	-- Roblox's policy: some players may not use paid random items (Bubbles can be bought with Robux), so no hatching.
+	local restricted = Players.LocalPlayer:GetAttribute("PaidRandomRestricted") == true
+	hatch1Button:SetAttribute("Disabled", locked or restricted)
+	hatch3Button:SetAttribute("Disabled", locked or restricted)
+	UIKit.SetButtonColor(hatch1Button, if not restricted and eggAffordable(egg, 1, meta) then C.Good else C.Disabled)
+	UIKit.SetButtonColor(hatch3Button, if not restricted and eggAffordable(egg, 3, meta) then C.Accent else C.Disabled)
+	hatch1Button.Text = if restricted then "Not available" else "Hatch 1  (" .. Format.Commas(egg.Cost) .. " Bubbles)"
+	hatch3Button.Text = if restricted then "Not available" else "Hatch 3  (" .. Format.Commas(egg.Cost * 3) .. " Bubbles)"
 end
 
 local function doHatch(count: number)
 	local eggId = currentEggId
 	if not eggId then
+		return
+	end
+	if Players.LocalPlayer:GetAttribute("PaidRandomRestricted") == true then
+		UIKit.Toast("Hatching eggs isn't available for your account.", "Info")
 		return
 	end
 	local egg = Config.GetEgg(eggId)
@@ -49688,6 +49774,7 @@ return PollUI</ProtectedString></Properties></Item>
 	no collection), so rolling again is a gamble; the button stays locked until the reel has landed.
 ]]
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -49786,7 +49873,9 @@ local function renderGems()
 	local gems = if meta then meta.Gems or 0 else 0
 	local luck = meta ~= nil and meta.Passes.DoubleLuck == true
 	gemsLabel.Text = string.format("You have %s Gems", UIKit.Commas(gems))
-	UIKit.SetDisabled(rollButton, rolling) -- short of gems, Roll opens the Gems shop instead
+	local restricted = Players.LocalPlayer:GetAttribute("PaidRandomRestricted") == true
+	UIKit.SetDisabled(rollButton, rolling or restricted) -- short of gems, Roll opens the Gems shop instead
+	rollButton.Text = if restricted then "ROLL NOT AVAILABLE" else string.format("ROLL  (%d Gems)", Config.RankRoll.Cost)
 	if luckActive then
 		luckActive.Visible = luck
 	end
@@ -50264,6 +50353,11 @@ local function finishPopup(ok: boolean)
 end
 
 local function roll_()
+	-- Roblox's policy: some players may not use paid random items (the server refuses too).
+	if Players.LocalPlayer:GetAttribute("PaidRandomRestricted") == true then
+		UIKit.Toast("Rolling ranks isn't available for your account.", "Info")
+		return
+	end
 	-- Not enough gems: straight to the Gems shop.
 	local metaNow = ClientState.Meta :: Types.MetaState?
 	if not rolling and (if metaNow then metaNow.Gems or 0 else 0) &lt; Config.RankRoll.Cost then

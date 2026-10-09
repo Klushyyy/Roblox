@@ -11,6 +11,7 @@
 	no collection), so rolling again is a gamble; the button stays locked until the reel has landed.
 ]]
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -109,7 +110,9 @@ local function renderGems()
 	local gems = if meta then meta.Gems or 0 else 0
 	local luck = meta ~= nil and meta.Passes.DoubleLuck == true
 	gemsLabel.Text = string.format("You have %s Gems", UIKit.Commas(gems))
-	UIKit.SetDisabled(rollButton, rolling) -- short of gems, Roll opens the Gems shop instead
+	local restricted = Players.LocalPlayer:GetAttribute("PaidRandomRestricted") == true
+	UIKit.SetDisabled(rollButton, rolling or restricted) -- short of gems, Roll opens the Gems shop instead
+	rollButton.Text = if restricted then "ROLL NOT AVAILABLE" else string.format("ROLL  (%d Gems)", Config.RankRoll.Cost)
 	if luckActive then
 		luckActive.Visible = luck
 	end
@@ -587,6 +590,11 @@ local function finishPopup(ok: boolean)
 end
 
 local function roll_()
+	-- Roblox's policy: some players may not use paid random items (the server refuses too).
+	if Players.LocalPlayer:GetAttribute("PaidRandomRestricted") == true then
+		UIKit.Toast("Rolling ranks isn't available for your account.", "Info")
+		return
+	end
 	-- Not enough gems: straight to the Gems shop.
 	local metaNow = ClientState.Meta :: Types.MetaState?
 	if not rolling and (if metaNow then metaNow.Gems or 0 else 0) < Config.RankRoll.Cost then
