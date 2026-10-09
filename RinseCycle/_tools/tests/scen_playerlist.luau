@@ -16,9 +16,9 @@ local function status(tag)
 	for _, d in (scroll and scroll:GetChildren() or {}) do
 		if d.Name == "Row" then rows += 1 end
 	end
-	out(string.format("%s: players %d, rows %d, panel visible %s, panel height %s, list height %s, right column y %s, reserve %s, roblox list off flag %s",
+	out(string.format("%s: players %d, rows %d, panel visible %s, panel height %s, list height %s, right column y %s, active %s, roblox list off flag %s",
 		tag, #G.Players:GetPlayers(), rows, tostring(list and list.Visible), tostring(list and list.Size.Y.Offset), tostring(scroll and scroll.Size.Y.Offset),
-		tostring(column and column.Position.Y.Offset), tostring(p:GetAttribute("PlayerListHeight")), tostring(p:GetAttribute("CustomPlayerList"))))
+		tostring(column and column.Position.Y.Offset), tostring(p:GetAttribute("PlayerListActive")) .. " colTop " .. tostring(p:GetAttribute("RightColumnTop")), tostring(p:GetAttribute("CustomPlayerList"))))
 end
 status("2 players")
 for i = 1, 8 do

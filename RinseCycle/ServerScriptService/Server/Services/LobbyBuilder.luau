@@ -1375,38 +1375,6 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 		return { Title = titleLbl, List = list }
 	end
 
-	-- A REFRESH plate under the board (between its legs), so anyone can redraw both leaderboards after a run to see
-	-- themselves on them. LeaderboardService answers its click and its prompt (a few seconds apart per player).
-	do
-		local plate = mkPart("Part", decor({
-			Name = "BoardRefresh",
-			Size = Vector3.new(9, 2.4, 0.6),
-			CFrame = boardPart.CFrame * CFrame.new(0, -boardPart.Size.Y / 2 - 1.4, 0.35),
-			Color = Color3.fromRGB(255, 205, 70),
-			Material = Enum.Material.SmoothPlastic,
-		}), boardPart)
-		plate.CanQuery = true -- (ClickDetectors need the mouse ray to hit the part)
-		plate.CanTouch = true
-		mkPart("Part", decor({ Name = "BoardRefreshTrim", Size = Vector3.new(9.8, 3.2, 0.4), CFrame = plate.CFrame * CFrame.new(0, 0, 0.2), Color = Color3.fromRGB(40, 90, 150), Material = Enum.Material.SmoothPlastic }), boardPart)
-		local plateGui = mk("SurfaceGui", { Name = "Sign", Face = Enum.NormalId.Front, CanvasSize = Vector2.new(360, 96), LightInfluence = 0 }, plate)
-		local plateText = mk("TextLabel", { Size = UDim2.fromScale(0.92, 0.8), Position = UDim2.fromScale(0.04, 0.1), BackgroundTransparency = 1, Text = "REFRESH", Font = Enum.Font.LuckiestGuy, TextScaled = true, TextColor3 = Color3.fromRGB(60, 40, 10) }, plateGui) :: TextLabel
-		mk("UIStroke", { Thickness = 2, Color = Color3.fromRGB(255, 245, 200) }, plateText)
-		mk("ClickDetector", { MaxActivationDistance = 70 }, plate)
-		plate:SetAttribute("BoardRefresh", true)
-		CollectionService:AddTag(plate, "BoardRefresh")
-		local refreshPrompt = mk("ProximityPrompt", {
-			ActionText = "Refresh",
-			ObjectText = titleText,
-			RequiresLineOfSight = false,
-			HoldDuration = 0,
-			MaxActivationDistance = 14,
-			KeyboardKeyCode = Enum.KeyCode.X,
-			GamepadKeyCode = Enum.KeyCode.ButtonY,
-			UIOffset = Vector2.new(0, 72), -- (stacked under the "Next page" prompt)
-		}, plate) :: ProximityPrompt
-		refreshPrompt:SetAttribute("BoardRefresh", true)
-	end
-
 	if not paged then
 		local only = page(1, gui)
 		return { Part = boardPart, Title = only.Title, List = only.List }

@@ -685,12 +685,18 @@ function HUD.Init()
 			centerY = math.min(centerY, canvas.Y - 300 - colH / 2)
 		end
 		centerY = math.max(centerY, inset + 80 + colH / 2)
-		-- The player list (PlayerListUI) is at most four rows tall, so a fixed space under it is kept clear (it used to be a row
-		-- per player in the server, which made the buttons jump about as people joined and left, even with the list shut).
-		local listH = tonumber(LocalPlayer:GetAttribute("PlayerListHeight")) or 0
-		if listH > 0 then
-			local below = inset + listH + 14 + colH / 2
-			centerY = math.max(centerY, math.min(below, canvas.Y - 12 - safe.Bottom - colH / 2))
+		-- The player list (PlayerListUI) sits in the gap above this column, as tall as the gap allows (at most four rows). The column
+		-- stays where it is and tells the list where its top edge is (RightColumnTop); only on a screen so short that even a
+		-- two-row list would not fit does the column move down (a fixed amount: nothing here depends on how many players there are).
+		local naturalTop = math.floor(centerY - colH / 2)
+		if LocalPlayer:GetAttribute("RightColumnTop") ~= naturalTop then
+			LocalPlayer:SetAttribute("RightColumnTop", naturalTop)
+		end
+		if LocalPlayer:GetAttribute("PlayerListActive") == true then
+			local needTop = inset + 6 + 82 + 8 -- (a two-row list: PlayerListUI.MIN_H)
+			if naturalTop < needTop then
+				centerY = math.min(centerY + (needTop - naturalTop), canvas.Y - 12 - safe.Bottom - colH / 2)
+			end
 		end
 		-- The side columns only keep half of the notch / rounded-corner inset: close to the edges on
 		-- phones, still clear of the notch itself.
@@ -739,7 +745,7 @@ function HUD.Init()
 	end
 	rightColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 	LocalPlayer:GetAttributeChangedSignal("BadgeStackHeight"):Connect(relayoutHud)
-	LocalPlayer:GetAttributeChangedSignal("PlayerListHeight"):Connect(relayoutHud)
+	LocalPlayer:GetAttributeChangedSignal("PlayerListActive"):Connect(relayoutHud)
 	leftColumn:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayoutHud)
 	moneyBlock:GetPropertyChangedSignal("Visible"):Connect(relayoutHud)
 

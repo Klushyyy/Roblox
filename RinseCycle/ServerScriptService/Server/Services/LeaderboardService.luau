@@ -842,7 +842,7 @@ end
 ----------------------------------------------------------------------------------------------------
 
 ----------------------------------------------------------------------------------------------------
--- Refresh (the REFRESH plate under each board): anyone can redraw both boards, e.g. after a run
+-- Refresh (the Refresh chip near a board): anyone can redraw both boards, e.g. after a run
 ----------------------------------------------------------------------------------------------------
 
 local REFRESH_PLAYER_COOLDOWN = 20 -- seconds between one player's refreshes
@@ -886,15 +886,9 @@ local function onRefreshRequest(player: Player)
 	end)
 end
 
-local function hookRefreshPlate(plate: Instance)
-	local detector = plate:FindFirstChildOfClass("ClickDetector")
-	if detector then
-		detector.MouseClick:Connect(onRefreshRequest)
-	end
-	local prompt = plate:FindFirstChildOfClass("ProximityPrompt")
-	if prompt then
-		prompt.Triggered:Connect(onRefreshRequest)
-	end
+-- (the Refresh chip on a player's own screen, BoardView, asks with the BoardRefresh remote)
+local function hookRefreshRemote()
+	Remotes.Event("BoardRefresh").OnServerEvent:Connect(onRefreshRequest)
 end
 
 function LeaderboardService.Init()
@@ -952,9 +946,7 @@ function LeaderboardService.Start()
 	end
 	drawTimes()
 	drawDishes()
-	for _, plate in CollectionService:GetTagged("BoardRefresh") do
-		hookRefreshPlate(plate)
-	end
+	hookRefreshRemote()
 
 	task.spawn(function()
 		-- Straight away: show what's already on the boards (reads only, in parallel per board).

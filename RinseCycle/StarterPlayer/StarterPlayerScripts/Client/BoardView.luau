@@ -12,6 +12,14 @@
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+
+local Client = script.Parent
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared:WaitForChild("Remotes"))
+local UIKit = require(Client:WaitForChild("UIKit"))
+local ClientState = require(Client:WaitForChild("ClientState"))
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -145,11 +153,132 @@ local function setup(board: Instance)
 	end)
 end
 
+----------------------------------------------------------------------------------------------------
+-- The Refresh chip: near a leaderboard, a small "Refresh" button at a fixed place on the screen redraws the boards, so you
+-- can see yourself on them after a run. X on a keyboard, D-pad up on a controller, a tap on a phone. (It used to be a
+-- second proximity prompt stacked under "Next page" and the two overlapped, worse the closer you zoomed; this has a place
+-- of its own, away from the board.) LeaderboardService answers, at most once per 20 s per player.
+----------------------------------------------------------------------------------------------------
+local REFRESH_RANGE = 45 -- studs from a board
+local REFRESH_PAUSE = 3 -- this screen's own pause between two presses
+local chip: Frame? = nil
+local chipButton: TextButton? = nil
+local chipKey: TextLabel? = nil
+local lastPress = -math.huge
+
+local function nearBoard(): boolean
+	local character = LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root or not root:IsA("BasePart") then
+		return false
+	end
+	for _, board in CollectionService:GetTagged("LeaderboardBoard") do
+		if board:IsA("BasePart") and (board.Position - root.Position).Magnitude <= REFRESH_RANGE then
+			return true
+		end
+	end
+	return false
+end
+
+local function pressRefresh()
+	local now = os.clock()
+	if now - lastPress < REFRESH_PAUSE then
+		return
+	end
+	lastPress = now
+	UIKit.PlaySound("Click")
+	Remotes.Event("BoardRefresh"):FireServer()
+	local button = chipButton
+	if button then
+		button.Text = "Refreshing..."
+		task.delay(1.5, function()
+			if button.Parent then
+				button.Text = "Refresh"
+			end
+		end)
+	end
+end
+
+local function placeChip()
+	local frame = chip
+	if frame then
+		local safe = UIKit.SafeInsets()
+		frame.Position = UDim2.new(0.5, 0, 1, -((if UIKit.IsTouch() then 104 else 84) + safe.Bottom))
+	end
+end
+
+local function setupRefreshChip()
+	local _gui, root = UIKit.CreateScreen("BoardRefresh", 6)
+	local frame = Instance.new("Frame")
+	frame.Name = "RefreshChip"
+	frame.AnchorPoint = Vector2.new(0.5, 1)
+	frame.Size = UDim2.fromOffset(190, 52)
+	frame.BackgroundTransparency = 1
+	frame.Visible = false
+	frame.Parent = root
+	UIKit.PhoneBoost(frame, 1.25)
+	chip = frame
+	chipButton = UIKit.Button({
+		Text = "Refresh",
+		Color = UIKit.Theme.Colors.Accent,
+		Size = UDim2.fromOffset(190, 48),
+		Position = UDim2.fromOffset(0, 2),
+		Sound = false,
+		Parent = frame,
+		OnClick = pressRefresh,
+	})
+	-- the key to press, on the button's corner (not on a phone, where you tap it)
+	local badge = Instance.new("Frame")
+	badge.Name = "Key"
+	badge.AnchorPoint = Vector2.new(0, 0.5)
+	badge.Position = UDim2.new(0, -10, 0, 4)
+	badge.Size = UDim2.fromOffset(34, 30)
+	badge.BackgroundColor3 = UIKit.Theme.Colors.Ink
+	badge.BorderSizePixel = 0
+	badge.ZIndex = 20
+	badge.Parent = frame
+	UIKit.Corner(badge, 8)
+	UIKit.Stroke(badge, UIKit.Theme.Colors.Text, 2, 0.5)
+	chipKey = UIKit.Label({ Text = "X", TextSize = 18, Size = UDim2.fromScale(1, 1), ZIndex = 21, Parent = badge })
+	placeChip()
+	UIKit.LayoutChanged:Connect(placeChip)
+
+	-- Keys: X on a keyboard, D-pad up on a controller (Next page's own key there is X).
+	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
+		local shown = chip and chip.Visible
+		if processed or not shown then
+			return
+		end
+		if input.KeyCode == Enum.KeyCode.X or input.KeyCode == Enum.KeyCode.DPadUp then
+			pressRefresh()
+		end
+	end)
+
+	task.spawn(function()
+		while true do
+			local away = ClientState.Run ~= nil or ClientState.TutorialStep ~= nil or ReplicatedStorage:GetAttribute("AbuseLive") == true or UIKit.IsWindowOpen()
+			local show = not away and nearBoard()
+			if chip and chip.Visible ~= show then
+				chip.Visible = show
+			end
+			if show and chipKey then
+				local badgeFrame = chipKey.Parent :: Frame
+				local pad = UIKit.IsGamepad()
+				badgeFrame.Visible = not UIKit.IsTouch() or pad
+				badgeFrame.Size = UDim2.fromOffset(if pad then 84 else 34, 30)
+				chipKey.Text = if pad then "D-pad \u{2191}" else "X"
+			end
+			task.wait(0.25)
+		end
+	end)
+end
+
 function BoardView.Init()
 	if initialized then
 		return
 	end
 	initialized = true
+	setupRefreshChip()
 	for _, board in CollectionService:GetTagged("LeaderboardBoard") do
 		task.spawn(setup, board)
 	end

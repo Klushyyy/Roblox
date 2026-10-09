@@ -34,37 +34,46 @@ local t = os.clock()
 local rows = LBS.ListBoard(1, 100)
 out(string.format("admin ListBoard rows=%d first=%s in %.3fs", #rows, rows[1] and rows[1].Name or "-", os.clock() - t))
 
--- The REFRESH plate under each board: anyone can press it (click, or the prompt) and redraw the boards; the same player has to
--- wait a few seconds before the next one.
+-- The Refresh chip: near a board a small "Refresh" button sits at a fixed place on the screen (key X, D-pad up on a controller,
+-- a tap on a phone); there is no plate or second prompt on the board any more. The same player has to wait between presses.
 local Remotes = M[R .. "ReplicatedStorage/Shared/Remotes.luau"]
 local toasts = {}
 G.getSignal(Remotes.Event("Notify"), "OnClientEvent"):Connect(function(t, k) table.insert(toasts, tostring(t) .. " [" .. tostring(k) .. "]") end)
-local plates = {}
+local leftover = 0
 for _, d in G.workspace:GetDescendants() do
-	if d.Name == "BoardRefresh" and d:IsA("BasePart") then
-		table.insert(plates, d)
-	end
+	if d.Name == "BoardRefresh" and d:IsA("BasePart") then leftover += 1 end
+	if d:IsA("ProximityPrompt") and d.ActionText == "Refresh" then leftover += 1 end
 end
-out("refresh plates under the boards: " .. #plates)
-local plate = plates[1]
-if plate then
-	local det = plate:FindFirstChildOfClass("ClickDetector")
-	local prompt = plate:FindFirstChildOfClass("ProximityPrompt")
-	out("plate has a click detector: " .. tostring(det ~= nil) .. ", a prompt: " .. tostring(prompt ~= nil) .. " (" .. tostring(prompt and prompt.ActionText) .. ", key " .. tostring(prompt and prompt.KeyboardKeyCode) .. ")")
-	if det then
-		call("server", function() G.getSignal(det, "MouseClick"):Fire(p) end)
-		pump(1, G.frame)
-		out("1st press: " .. tostring(toasts[#toasts]))
-		call("server", function() G.getSignal(det, "MouseClick"):Fire(p) end)
-		pump(1, G.frame)
-		out("2nd press right after: " .. tostring(toasts[#toasts]))
-	end
-	local other = plates[2]
-	local prompt2 = other and other:FindFirstChildOfClass("ProximityPrompt")
-	if prompt2 then
-		local n = #toasts
-		call("server", function() G.getSignal(prompt2, "Triggered"):Fire(G.victim) end)
-		pump(1, G.frame)
-		out("the other board's plate pressed by another player: nothing for us (their reply goes to their own screen): " .. tostring(#toasts == n))
-	end
+out("refresh plates / prompts left on the boards (should be 0): " .. leftover)
+local board = G.find(G.workspace, "Board")
+local UIS = game:GetService("UserInputService")
+local function chipGui() return G.find(p.PlayerGui, "RefreshChip") end
+local UK = M[R .. "StarterPlayer/StarterPlayerScripts/Client/UIKit.luau"]
+call("client", function() UK.CloseWindow() end) -- (a window that opened by itself, like the daily reward, hides the chip: it would cover it)
+p.Character.HumanoidRootPart.CFrame = CFrame.new(1000, 5, 1000)
+pump(1, G.frame)
+out("chip far from a board visible (false): " .. tostring(chipGui() and chipGui().Visible))
+p.Character.HumanoidRootPart.CFrame = board.CFrame * CFrame.new(0, -5, 15)
+pump(1, G.frame)
+local chip = chipGui()
+out("chip near a board visible (true): " .. tostring(chip and chip.Visible))
+local button
+for _, d in (chip and chip:GetDescendants() or {}) do
+	if d.ClassName == "TextButton" and d.Text == "Refresh" then button = d end
 end
+if button then
+	G.getSignal(button, "Activated"):Fire()
+	pump(1, G.frame)
+	out("tap on the chip: " .. tostring(toasts[#toasts]) .. "  button now reads: " .. tostring(button.Text))
+end
+-- X (and D-pad up) press it too, after the client's own short pause
+pump(4, G.frame)
+local n = #toasts
+call("client", function() G.getSignal(UIS, "InputBegan"):Fire({ UserInputType = Enum.UserInputType.Keyboard, KeyCode = Enum.KeyCode.X, UserInputState = Enum.UserInputState.Begin }, false) end)
+pump(1, G.frame)
+out("X key: " .. tostring(toasts[#toasts]) .. "  (new reply: " .. tostring(#toasts > n) .. ")")
+pump(4, G.frame)
+n = #toasts
+call("client", function() G.getSignal(UIS, "InputBegan"):Fire({ UserInputType = Enum.UserInputType.Gamepad1, KeyCode = Enum.KeyCode.DPadUp, UserInputState = Enum.UserInputState.Begin }, false) end)
+pump(1, G.frame)
+out("D-pad up: " .. tostring(toasts[#toasts]) .. "  (new reply: " .. tostring(#toasts > n) .. ")")

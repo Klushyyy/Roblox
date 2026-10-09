@@ -1,9 +1,10 @@
 --[[
 	PlayerListUI - the player list (Tab), replacing Roblox's own on a computer.
 
-	Roblox's list can't be resized by a game: it grows a row per player and covers whatever is under it. This one is always
-	at most FOUR rows tall; with more players it scrolls. The HUD keeps the buttons on the right below that fixed space, so
-	nothing moves when people join or leave (player attribute PlayerListHeight, set here).
+	Roblox's list can't be resized by a game: it grows a row per player and covers whatever is under it. This one is at most
+	FOUR rows tall and small, and it fits in the gap above the HUD's right-hand buttons (the HUD tells it where their top is,
+	player attribute RightColumnTop); with more players than rows it scrolls. Neither the list's room nor the buttons depend
+	on how many players there are, so nothing moves when people join or leave (this sets PlayerListActive for the HUD).
 
 	  * Columns: People, then the player's leaderstats (Bubbles, Dishes, Rebirths), sorted by Bubbles like Roblox's.
 	  * Open by default in the lobby; Tab or the X closes and opens it. In a run Tab belongs to the Upgrade Book, so the
@@ -26,13 +27,14 @@ local Colors = UIKit.Theme.Colors
 local Fonts = UIKit.Theme.Fonts
 local LocalPlayer = Players.LocalPlayer
 
-local VISIBLE_ROWS = 4
-local ROW_H = 40
-local HEAD_H = 28
-local PAD = 8
-local PANEL_W = 430
-local COL_W = 88 -- the three number columns
-local MAX_H = PAD + HEAD_H + ROW_H * VISIBLE_ROWS + PAD -- the most it is ever tall (what the HUD keeps clear)
+local MAX_ROWS = 4
+local MIN_ROWS = 2
+local ROW_H = 24
+local HEAD_H = 22
+local PAD = 6
+local PANEL_W = 360
+local COL_W = 72 -- the three number columns
+local MIN_H = PAD + HEAD_H + ROW_H * MIN_ROWS + PAD -- (the HUD makes room for at least this much)
 local STATS = { "Bubbles", "Dishes", "Rebirths" }
 
 local STAFF_COLORS = {
@@ -73,20 +75,20 @@ local function makeRow(player: Player)
 	UIKit.Corner(row, 6)
 	local name = UIKit.Label({
 		Text = "",
-		TextSize = 19,
+		TextSize = 15,
 		Font = Fonts.Body,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		RichText = true,
-		Size = UDim2.new(1, -(COL_W * #STATS + 18), 1, 0),
-		Position = UDim2.fromOffset(10, 0),
+		Size = UDim2.new(1, -(COL_W * #STATS + 14), 1, 0),
+		Position = UDim2.fromOffset(8, 0),
 		Parent = row,
 	})
 	local values = {}
 	for i = 1, #STATS do
 		values[i] = UIKit.Label({
 			Text = "0",
-			TextSize = 18,
+			TextSize = 15,
 			Font = Fonts.Body,
 			TextXAlignment = Enum.TextXAlignment.Right,
 			AnchorPoint = Vector2.new(1, 0),
@@ -117,6 +119,14 @@ local function nameText(player: Player): string
 		text = string.format('<font color="rgb(%d,%d,%d)">[%s]</font> %s', math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255), tag, text)
 	end
 	return text
+end
+
+-- How many rows fit in the gap above the HUD's right-hand buttons (at least two, at most four): only the screen decides this,
+-- never the number of players.
+function PlayerListUI.RowsFit(): number
+	local top = tonumber(LocalPlayer:GetAttribute("RightColumnTop")) or math.huge
+	local room = top - (UIKit.TopInset() + 6) - 8
+	return math.clamp(math.floor((room - PAD * 2 - HEAD_H) / ROW_H), MIN_ROWS, MAX_ROWS)
 end
 
 -- Brings the rows up to date: who is here, their numbers, the order (most Bubbles first), the panel's height.
@@ -154,7 +164,7 @@ local function refresh()
 		end
 	end
 	-- Room for four rows, never more: with fewer it is shorter, with more the list scrolls.
-	local visible = math.clamp(#list, 1, VISIBLE_ROWS)
+	local visible = math.clamp(#list, 1, PlayerListUI.RowsFit())
 	scroller.Size = UDim2.new(1, -(PAD * 2), 0, ROW_H * visible)
 	panel.Size = UDim2.fromOffset(PANEL_W, PAD + HEAD_H + ROW_H * visible + PAD)
 end
@@ -174,9 +184,8 @@ local function apply()
 	local active = computer and not away
 	-- Roblox's own list steps aside whenever this one is the list in use (HUD reads the attribute for the in-run case).
 	LocalPlayer:SetAttribute("CustomPlayerList", if computer then true else nil)
-	local reserve = if active then MAX_H else 0
-	if LocalPlayer:GetAttribute("PlayerListHeight") ~= reserve then
-		LocalPlayer:SetAttribute("PlayerListHeight", reserve)
+	if LocalPlayer:GetAttribute("PlayerListActive") ~= active then
+		LocalPlayer:SetAttribute("PlayerListActive", active)
 	end
 	if computer then
 		pcall(function()
@@ -208,7 +217,7 @@ function PlayerListUI.Init()
 	local card = Instance.new("Frame")
 	card.Name = "Panel"
 	card.AnchorPoint = Vector2.new(1, 0)
-	card.Size = UDim2.fromOffset(PANEL_W, MAX_H)
+	card.Size = UDim2.fromOffset(PANEL_W, MIN_H)
 	card.BackgroundColor3 = Color3.fromRGB(22, 28, 40)
 	card.BackgroundTransparency = 0.12
 	card.BorderSizePixel = 0
@@ -222,7 +231,7 @@ function PlayerListUI.Init()
 	close.Name = "Close"
 	close.Text = "X"
 	close.Font = Fonts.Body
-	close.TextSize = 18
+	close.TextSize = 14
 	close.TextColor3 = Colors.TextDim
 	close.BackgroundTransparency = 1
 	close.Size = UDim2.fromOffset(HEAD_H, HEAD_H)
@@ -233,7 +242,7 @@ function PlayerListUI.Init()
 
 	UIKit.Label({
 		Text = "People",
-		TextSize = 16,
+		TextSize = 13,
 		Font = Fonts.Body,
 		TextColor3 = Colors.TextDim,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -244,7 +253,7 @@ function PlayerListUI.Init()
 	for i, stat in STATS do
 		UIKit.Label({
 			Text = stat,
-			TextSize = 16,
+			TextSize = 13,
 			Font = Fonts.Body,
 			TextColor3 = Colors.TextDim,
 			TextXAlignment = Enum.TextXAlignment.Right,
@@ -260,7 +269,7 @@ function PlayerListUI.Init()
 	scroll.BackgroundTransparency = 1
 	scroll.BorderSizePixel = 0
 	scroll.Position = UDim2.fromOffset(PAD, PAD + HEAD_H)
-	scroll.Size = UDim2.new(1, -(PAD * 2), 0, ROW_H * VISIBLE_ROWS)
+	scroll.Size = UDim2.new(1, -(PAD * 2), 0, ROW_H * MIN_ROWS)
 	scroll.CanvasSize = UDim2.new()
 	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	scroll.ScrollingDirection = Enum.ScrollingDirection.Y
@@ -277,6 +286,7 @@ function PlayerListUI.Init()
 		place()
 		apply()
 	end)
+	LocalPlayer:GetAttributeChangedSignal("RightColumnTop"):Connect(refresh)
 
 	-- Tab opens and closes it (in the lobby; in a run Tab is the Upgrade Book)
 	UserInputService.InputBegan:Connect(function(input: InputObject, _processed: boolean)
