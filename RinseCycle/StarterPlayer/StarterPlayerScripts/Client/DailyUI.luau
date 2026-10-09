@@ -200,6 +200,13 @@ function DailyUI.Init()
 		if autoShown or not DailyUI.Ready() or ClientState.InRun() then
 			return
 		end
+		-- A brand-new player's first screen is the START CLEANING card (PartyUI), not a menu: the Daily window
+		-- waits until they have finished a dishwasher. (The Daily button is always there if they want it.)
+		local meta = ClientState.Meta :: any
+		local stats = meta and meta.Stats
+		if Config.FirstRun.Enabled and stats and (stats.Runs or 0) == 0 then
+			return
+		end
 		autoShown = true
 		task.delay(2.5, function()
 			if not UIKit.IsWindowOpen() and not ClientState.InRun() then
@@ -208,7 +215,7 @@ function DailyUI.Init()
 		end)
 	end
 	ClientState.Changed:Connect(function(kind)
-		if kind == "Meta" then
+		if kind == "Meta" or kind == "Run" then
 			maybeShow()
 			if UIKit.IsWindowOpen("Daily") then
 				render()

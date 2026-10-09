@@ -26,6 +26,7 @@ local Types = require(Shared:WaitForChild("Types"))
 local Client = script.Parent
 local ClientState = require(Client:WaitForChild("ClientState"))
 local UIKit = require(Client:WaitForChild("UIKit"))
+local RewardsUI = require(Client:WaitForChild("RewardsUI"))
 
 local Colors = UIKit.Theme.Colors
 
@@ -688,6 +689,284 @@ local function countdownLoop()
 	end
 end
 
+----------------------------------------------------------------------------------------------------
+-- New-player cards: START CLEANING (in the lobby) and the come-back card (after the first win)
+----------------------------------------------------------------------------------------------------
+
+local WELCOME_SIZE = Vector2.new(540, 188)
+local BACK_SIZE = Vector2.new(540, 214)
+
+local welcomeCard: Frame
+local welcomeScale: UIScale
+local welcomeCount: TextLabel
+local welcomeDismissed = false -- pressed "Look around first" (or opened a menu / walked to a pad): not again this visit
+local welcomeSent = false
+
+local backCard: Frame
+local backScale: UIScale
+local backNotify: TextButton
+local backShown = false
+
+local function promptCard(name: string, size: Vector2): (Frame, UIScale)
+	local card = panel(root, UDim2.fromOffset(size.X, size.Y))
+	card.Name = name
+	card.AnchorPoint = Vector2.new(0.5, 1)
+	card.Visible = false
+	card.ZIndex = 12
+	local scale = Instance.new("UIScale")
+	scale.Parent = card
+	return card, scale
+end
+
+-- Bottom middle: clear of the thumbstick (left), the jump button (right) and the HUD columns.
+local function layoutPromptCard(card: Frame, scale: UIScale, size: Vector2)
+	local canvas = UIKit.CanvasSize()
+	scale.Scale = math.clamp((canvas.X - 24) / size.X, 0.5, 1)
+	card.Position = UDim2.new(0.5, 0, 1, -(20 + UIKit.SafeInsets().Bottom))
+end
+
+local function startFromCard(how: string)
+	if welcomeSent then
+		return
+	end
+	welcomeSent = true
+	welcomeCard.Visible = false
+	sendPartyAction("QuickStart", how)
+	-- If the server turns it down (every pad busy ...) they are left in the lobby, as before.
+	task.delay(5, function()
+		if not ClientState.InParty() and not ClientState.InRun() then
+			welcomeSent = false
+			welcomeDismissed = true
+		end
+	end)
+end
+
+local function buildWelcomeCard()
+	welcomeCard, welcomeScale = promptCard("Welcome", WELCOME_SIZE)
+	UIKit.Label({
+		Text = "READY TO CLEAN?",
+		TextSize = 34,
+		Position = UDim2.fromOffset(10, 8),
+		Size = UDim2.new(1, -20, 0, 40),
+		Parent = welcomeCard,
+	})
+	UIKit.Label({
+		Text = "Your first dishwasher only takes a few minutes!",
+		TextSize = 21,
+		TextColor3 = Colors.TextDim,
+		Position = UDim2.fromOffset(10, 50),
+		Size = UDim2.new(1, -20, 0, 28),
+		Parent = welcomeCard,
+	})
+	UIKit.Button({
+		Text = "START CLEANING",
+		Color = Colors.Good,
+		TextSize = 28,
+		Size = UDim2.fromOffset(290, 62),
+		Position = UDim2.fromOffset(20, 86),
+		Parent = welcomeCard,
+		OnClick = function()
+			startFromCard("button")
+		end,
+	})
+	UIKit.Button({
+		Text = "Look around first",
+		Color = Colors.Disabled,
+		TextSize = 18,
+		Size = UDim2.fromOffset(200, 62),
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -20, 0, 86),
+		Parent = welcomeCard,
+		OnClick = function()
+			welcomeDismissed = true
+			welcomeCard.Visible = false
+			ClientState.Track("welcome.look")
+		end,
+	})
+	welcomeCount = UIKit.Label({
+		Text = "",
+		TextSize = 16,
+		TextColor3 = Colors.TextDim,
+		Position = UDim2.fromOffset(10, 156),
+		Size = UDim2.new(1, -20, 0, 22),
+		Parent = welcomeCard,
+	})
+end
+
+local function buildBackCard()
+	backCard, backScale = promptCard("ComeBack", BACK_SIZE)
+	UIKit.Label({
+		Text = "NICE CLEANING!",
+		TextSize = 34,
+		Position = UDim2.fromOffset(10, 8),
+		Size = UDim2.new(1, -20, 0, 40),
+		Parent = backCard,
+	})
+	UIKit.Label({
+		Text = "Your daily reward gets bigger every day you come back. Want Roblox to tell you when it is ready?",
+		TextSize = 20,
+		TextWrapped = true,
+		TextColor3 = Colors.TextDim,
+		Position = UDim2.fromOffset(20, 52),
+		Size = UDim2.new(1, -40, 0, 56),
+		Parent = backCard,
+	})
+	local row = Instance.new("Frame")
+	row.BackgroundTransparency = 1
+	row.Position = UDim2.fromOffset(0, 128)
+	row.Size = UDim2.new(1, 0, 0, 62)
+	row.Parent = backCard
+	local layout = listLayout(row, Enum.FillDirection.Horizontal, 14)
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	backNotify = UIKit.Button({
+		Text = "NOTIFY ME",
+		Color = Colors.Primary,
+		TextSize = 22,
+		Size = UDim2.fromOffset(160, 60),
+		LayoutOrder = 1,
+		Parent = row,
+		OnClick = function()
+			backCard.Visible = false
+			ClientState.Track("back.notify")
+			task.spawn(RewardsUI.PromptNotifications)
+		end,
+	})
+	UIKit.Button({
+		Text = "FREE GIFTS",
+		Color = Colors.Good,
+		TextSize = 22,
+		Size = UDim2.fromOffset(160, 60),
+		LayoutOrder = 2,
+		Parent = row,
+		OnClick = function()
+			backCard.Visible = false
+			ClientState.Track("back.gifts")
+			UIKit.OpenWindow("Free")
+		end,
+	})
+	UIKit.Button({
+		Text = "Later",
+		Color = Colors.Disabled,
+		TextSize = 20,
+		Size = UDim2.fromOffset(120, 60),
+		LayoutOrder = 3,
+		Parent = row,
+		OnClick = function()
+			backCard.Visible = false
+		end,
+	})
+end
+
+local function finishedRuns(): number?
+	local meta = ClientState.Meta :: any
+	local stats = meta and meta.Stats
+	return if stats then (stats.Runs or 0) else nil
+end
+
+-- True in a party's own run server (there is no lobby there, so no cards). The workspace attribute can arrive a moment
+-- after this script starts, so the teleport data we arrived with counts too (same test as Cutscene).
+local arrivedForARun: boolean? = nil
+local function inRunServer(): boolean
+	if workspace:GetAttribute("RunServer") then
+		return true
+	end
+	if arrivedForARun == nil then
+		local ok, data = pcall(function()
+			return game:GetService("TeleportService"):GetLocalPlayerTeleportData()
+		end)
+		arrivedForARun = ok and type(data) == "table" and (data :: any).Mode == "Run"
+	end
+	return arrivedForARun == true
+end
+
+-- Free in the lobby with nothing else going on.
+local function lobbyIdle(): boolean
+	local character = Players.LocalPlayer.Character
+	return character ~= nil
+		and not inRunServer()
+		and character:FindFirstChild("HumanoidRootPart") ~= nil
+		and not ClientState.InRun()
+		and not ClientState.InParty()
+		and ClientState.TutorialStep == nil
+		and ReplicatedStorage:GetAttribute("AbuseLive") ~= true
+		and Players.LocalPlayer:GetAttribute("Teleporting") ~= true
+		and not UIKit.IsWindowOpen()
+end
+
+-- Drives both cards: START CLEANING for someone with no finished run, the come-back card for someone with exactly one.
+local function newPlayerCardsLoop()
+	local STEP = 0.25
+	local welcomeIdle = 0
+	local backIdle = 0
+	local welcomeAt = 0
+	while true do
+		task.wait(STEP)
+		local runs = finishedRuns()
+		local idle = Config.FirstRun.Enabled and lobbyIdle()
+
+		-- START CLEANING
+		local welcomeWanted = idle and runs == 0 and not welcomeDismissed and not welcomeSent
+		if welcomeWanted then
+			welcomeIdle += STEP
+			if not welcomeCard.Visible and welcomeIdle >= Config.FirstRun.CardDelay then
+				layoutPromptCard(welcomeCard, welcomeScale, WELCOME_SIZE)
+				welcomeCard.Visible = true
+				welcomeAt = os.clock()
+				ClientState.Track("welcome.show")
+			end
+			if welcomeCard.Visible then
+				-- It only starts by itself for someone who has never been in a dishwasher (not after Leave).
+				local meta = ClientState.Meta :: any
+				local autoStart = if meta and (meta.RunsStarted or 0) == 0 then Config.FirstRun.AutoStart else 0
+				local left = autoStart - (os.clock() - welcomeAt)
+				if autoStart > 0 and left <= 0 then
+					startFromCard("auto")
+				else
+					welcomeCount.Text = if autoStart > 0 then string.format("Starts by itself in %d...", math.ceil(left)) else ""
+				end
+			end
+		else
+			welcomeIdle = 0
+			if welcomeCard.Visible then
+				-- A menu opened, or they walked to a pad themselves: they know what they are doing.
+				welcomeCard.Visible = false
+				if not welcomeSent then
+					welcomeDismissed = true
+				end
+			end
+		end
+
+		-- NICE CLEANING! (after the first win, once per visit). Once it is up it stays until a button is pressed, or until
+		-- something else needs the screen (a menu, a run ...).
+		local backEligible = idle and runs == 1 and not welcomeCard.Visible
+		if backEligible then
+			if not backShown then
+				backIdle += STEP
+				if backIdle >= Config.FirstRun.BackDelay then
+					backShown = true
+					task.spawn(function()
+						-- (asked off to the side: this call can take a moment and must never hold up the loop)
+						local okCan, can = pcall(function()
+							return game:GetService("ExperienceNotificationService"):CanPromptOptInAsync()
+						end)
+						backNotify.Visible = okCan and can == true
+						if lobbyIdle() then
+							layoutPromptCard(backCard, backScale, BACK_SIZE)
+							backCard.Visible = true
+							ClientState.Track("back.show")
+						end
+					end)
+				end
+			end
+		else
+			backIdle = 0
+			if backCard.Visible then
+				backCard.Visible = false
+			end
+		end
+	end
+end
+
 -- A brand-new player (no run finished, tutorial not done) gets a bouncing arrow over the nearest party pad
 -- until they start playing, so they know what to do. Nobody else ever sees it.
 local function padHintLoop()
@@ -784,6 +1063,8 @@ function PartyUI.Init()
 	root = r
 	buildCreateScreen()
 	buildWaitCard()
+	buildWelcomeCard()
+	buildBackCard()
 
 	UIKit.LayoutChanged:Connect(function()
 		if createScreen.Visible then
@@ -813,6 +1094,7 @@ function PartyUI.Init()
 	render()
 	task.spawn(countdownLoop)
 	task.spawn(padHintLoop)
+	task.spawn(newPlayerCardsLoop)
 end
 
 return PartyUI

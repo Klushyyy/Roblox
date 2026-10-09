@@ -940,8 +940,72 @@ end
 -- PartyAction (client requests)
 ----------------------------------------------------------------------------------------------------
 
+-- "START CLEANING" (the lobby card for a brand-new player): a party of one on the nearest free pad, dishwasher 1, going
+-- in a few seconds, so a first-timer never has to find a pad. Only for someone with no finished run (the server checks
+-- their data; the client only decides when to show the card). `how` is "button" or "auto" (the card started it itself).
+local function quickStart(player: Player, how: any)
+	if not Config.FirstRun.Enabled or not padsLoaded then
+		return
+	end
+	if memberOf[player] or pendingJoin[player] or launching[player] or player:GetAttribute("Teleporting") == true or isInRun(player) then
+		return
+	end
+	local profile = DataService.Get(player)
+	local stats = profile and profile.Stats
+	if not stats or stats.Runs > 0 or not Characters.IsAlive(player) then
+		return
+	end
+	local locked, why = Config.EventLockdown()
+	if locked then
+		notify(player, why, "Bad")
+		return
+	end
+	local root = Characters.GetRoot(player)
+	if not root then
+		return
+	end
+	local best: Pad? = nil
+	local bestDistance = math.huge
+	for _, pad in pads do
+		if pad.Party == nil and pad.Info.Zone.Parent then
+			local distance = (pad.Info.Zone.Position - root.Position).Magnitude
+			if distance < bestDistance then
+				best, bestDistance = pad, distance
+			end
+		end
+	end
+	if not best then
+		notify(player, "All the pads are busy. Try again in a moment!", "Bad")
+		return
+	end
+	mustLeave[player] = nil
+	createParty(best, player)
+	local party = best.Party
+	if not party or party.Dead then
+		return
+	end
+	party.Level = 1
+	party.LevelChosen = true
+	party.MaxPlayers = 1
+	party.Privacy = "Public"
+	party.Status = "Waiting"
+	party.EndsAt = Util.Now() + countdownFor(1)
+	DataService.Track(player, "welcome.go")
+	if how == "auto" then
+		DataService.Track(player, "welcome.auto")
+	end
+	DataService.Track(player, "pad.create", { Level = 1, Max = 1 })
+	markDirty(party)
+	refreshPad(best, true)
+	playPadSound(best, "Pop")
+end
+
 local function onPartyAction(player: Player, action: any, value: any)
 	if not allowAction(player) or type(action) ~= "string" then
+		return
+	end
+	if action == "QuickStart" then
+		quickStart(player, value)
 		return
 	end
 	local party = memberOf[player]

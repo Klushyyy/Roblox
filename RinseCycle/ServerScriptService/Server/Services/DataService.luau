@@ -771,6 +771,7 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		BoostUntil = profile.BoostUntil,
 		StayBoostReady = profile.StayBoostDay ~= os.date("!%Y-%m-%d"),
 		TutorialDone = profile.TutorialDone == true,
+		RunsStarted = if type(profile.An) == "table" and type(profile.An.Runs) == "number" then profile.An.Runs else 0, -- dishwashers they have ever entered (the START CLEANING card only starts by itself for 0)
 		PetsResting = profile.PetsResting,
 		PetIndex = table.clone(profile.PetIndex),
 		PetIndexPaid = table.clone(profile.PetIndexPaid),

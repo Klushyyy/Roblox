@@ -25,12 +25,13 @@ the same, it just records nothing.
 4. **Play it for real** (join the published game yourself, walk into a pad, buy an upgrade). Within a minute or two the
    Funnel page unlocks; the charts then take up to **24 hours** to fill.
 5. **Creator Hub > Creations > Rinse Cycle > Analytics > Funnels.** Roblox creates one tab per funnel name by itself
-   once events arrive (up to 10 funnels; this game uses 7). Use **Add funnel** if a tab is missing, and pick:
+   once events arrive (up to 10 funnels; this game uses 8). Use **Add funnel** if a tab is missing, and pick:
 
 | Funnel tab | What it is | Steps |
 |---|---|---|
 | **Onboarding** | once per player, new players only | joined > screen loaded > moved > walked into a pad > party launched > arrived > intro done > cleaned first spot > sold a tank > opened the Upgrade Book > finished the tutorial > cleared dishwasher 1 > back in the lobby > 2nd run > came back another visit |
 | **Run** | every attempt | pad > Create > launched > arrived > intro done > first spot > sold > 25% > 50% > 75% > cleared > lobby |
+| **First minutes** | every attempt (v2.20.0) | saw the START CLEANING card > started from it > arrived > first spot > 50% > cleared dishwasher 1 > saw the come-back card > came back for another visit |
 | **Tutorial** | every attempt | the five tips, the book, finished |
 | **Purchase** | every Robux prompt | prompt opened > bought |
 | **Daily** | reward waiting on join > window opened > claimed |

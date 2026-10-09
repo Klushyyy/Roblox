@@ -2649,7 +2649,7 @@ local function refreshBusy()
 		label.Size = UDim2.new(1, -20, 0, 36)
 		label.Position = UDim2.fromOffset(10, 14)
 		label.Parent = card
-		addStroke(label, Colors.Stroke, 2, 0)
+		addTextStroke(label, 24) -- (the outline of the letters; a plain stroke here drew a box around the whole label)
 		for i = 1, 3 do
 			local dot = Instance.new("Frame")
 			dot.AnchorPoint = Vector2.new(0.5, 0.5)

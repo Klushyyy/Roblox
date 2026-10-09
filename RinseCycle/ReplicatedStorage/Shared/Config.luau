@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.19.5"
+Config.Version = "2.20.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1416,6 +1416,21 @@ Config.Tutorial = {
 	Reward = { Bubbles = 300, Gems = 15 } :: { Bubbles: number?, Gems: number? },
 }
 
+-- The first few minutes. Most new players left in the lobby or in the first minutes of dishwasher 1 (average
+-- session 2.5 minutes, 1 in 4 cleared it), so a brand-new player (no finished run yet):
+--   * is offered a one-tap "START CLEANING" card in the lobby (no hunting for a party pad); it starts by itself
+--     after AutoStart seconds unless they press "Look around first",
+--   * gets a lighter first dishwasher: GrimeScale x the normal dirt (0.4 = about 4 minutes instead of 10), so the
+--     first win comes before they get bored. That run never improves their best time (leaderboards stay fair), and
+--   * sees a "come back tomorrow" card after the win (notifications + the Free gifts).
+Config.FirstRun = {
+	Enabled = true,
+	GrimeScale = 0.4, -- share of the normal dirt in a first dishwasher 1 (every member must be a first-timer)
+	CardDelay = 4, -- seconds after the lobby is ready before the START CLEANING card shows
+	AutoStart = 12, -- seconds the card waits before it starts the run by itself
+	BackDelay = 5, -- seconds after the first win (back in the lobby) before the come-back card shows
+}
+
 -- Roblox Premium members get a small thank-you (MarketService reads player.MembershipType; no Robux
 -- product is needed): more Bubbles from every run, and one small gift a day. Roblox also pays you
 -- Premium engagement money by itself for the time Premium members spend in the game.
@@ -1459,6 +1474,7 @@ Config.Analytics = {
 		"client.ready", "client.move", "perf.low", "perf.mid", "perf.high",
 		"tut.start", "tut.s2", "tut.s3", "tut.s4", "tut.book", "tut.s5", "tut.done", "tut.skipask", "tut.skip",
 		"event.sign", "event.rsvp", "stay.offer", "invite.open",
+		"welcome.show", "welcome.look", "back.show", "back.notify", "back.gifts",
 	},
 	ClientFamilies = { "ui.open", "buy.prompt", "tut.tour" },
 	-- { key, what it means }. Exact keys; the server also records the families further down.
@@ -1508,6 +1524,14 @@ Config.Analytics = {
 		{ "run.leave", "Left a run with the Leave button" },
 		{ "run.home", "Went back to the lobby after the results" },
 		{ "run.drop", "Closed the game in the middle of a run" },
+		{ "welcome.show", "Saw the START CLEANING card (new players)" },
+		{ "welcome.go", "Started their first dishwasher from the card" },
+		{ "welcome.auto", "...and it started by itself (they did not press)" },
+		{ "welcome.look", "Pressed Look around first" },
+		{ "run.easy", "Started the lighter first dishwasher" },
+		{ "back.show", "Saw the come-back card after their first win" },
+		{ "back.notify", "Pressed Notify me on the come-back card" },
+		{ "back.gifts", "Pressed Free gifts on the come-back card" },
 		{ "run.n2", "Started their 2nd run ever" },
 		{ "run.n5", "Started their 5th run ever" },
 		{ "run.n10", "Started their 10th run ever" },
@@ -1587,6 +1611,19 @@ Config.Analytics = {
 				{ "run.p75", "75 percent clean" },
 				{ "run.clear", "Cleared" },
 				{ "run.home", "Back in the lobby" },
+			},
+		},
+		{
+			Name = "First minutes",
+			Steps = {
+				{ "welcome.show", "Saw the START CLEANING card" },
+				{ "welcome.go", "Started from the card" },
+				{ "run.arrive", "Arrived in the dishwasher" },
+				{ "run.first", "Cleaned the first spot" },
+				{ "run.p50", "Half clean" },
+				{ "run.clear.1", "Cleared dishwasher 1" },
+				{ "back.show", "Saw the come-back card" },
+				{ "visit.back", "Came back for another visit" },
 			},
 		},
 		{

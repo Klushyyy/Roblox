@@ -101,6 +101,7 @@ type Run = {
 	StartedAt: number, -- Util.Now() (server time, so client timers agree)
 	ClockAt: number?, -- when the run clock started: the first player done with (or skipping) the cutscene
 	Phase: "Playing" | "Complete",
+	Easy: boolean?, -- the lighter first dishwasher (Config.FirstRun): its time never counts as a best time
 	Ended: boolean,
 	Marks: { [number]: boolean }, -- 25 / 50 / 75 % clean already reported (Analytics)
 	Total: number,
@@ -810,7 +811,10 @@ local function rewardRun(run: Run, members: { Player }, seconds: number, returnA
 			local share = pr.GrimeCleaned / total
 			local bubbles = level.Bubbles * (0.6 + 0.4 * math.min(1, share * n))
 
-			local ok, first, best, unlocked = safe(DataService.RecordClear, p, run.Level, seconds)
+			-- The lighter first dishwasher is quicker than a real one, so it must not set a best time (and a place on
+			-- the leaderboards): it counts as exactly par.
+			local recorded = if run.Easy then math.max(seconds, level.ParTime) else seconds
+			local ok, first, best, unlocked = safe(DataService.RecordClear, p, run.Level, recorded)
 			local firstClear = ok and first == true
 			if firstClear then
 				bubbles *= R.FirstClearMult
@@ -1099,6 +1103,22 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 	local n = #members
 	local grimeScale = math.min(R.PartyGrimeCap or 99, 1 + R.PartyGrimeScale * (n - 1))
 	local hpScale = if n <= 1 then 1 else math.max(1, n * (R.PartyWorkPerPlayer or 1) / grimeScale)
+	-- The very first dishwasher is lighter (Config.FirstRun): only dishwasher 1, and only when EVERY member has
+	-- never finished a run, so a veteran in the party never gets an easy one and nobody can farm it.
+	local easy = Config.FirstRun.Enabled and levelIndex == 1
+	if easy then
+		for _, p in members do
+			local profile = getProfile(p)
+			local runs = profile and profile.Stats and profile.Stats.Runs
+			if type(runs) ~= "number" or runs > 0 then
+				easy = false
+				break
+			end
+		end
+	end
+	if easy then
+		grimeScale *= Config.FirstRun.GrimeScale
+	end
 	local options = {
 		GrimeScale = grimeScale,
 		HpScale = hpScale,
@@ -1150,6 +1170,7 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 		MemberIds = {},
 		StartedAt = Util.Now(),
 		Phase = "Playing",
+		Easy = easy,
 		Ended = false,
 		Marks = {},
 		Total = 0,
@@ -1193,6 +1214,9 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 	runs[run.Id] = run
 	for i, p in stillHere do
 		joinRun(run, p, i)
+		if easy then
+			DataService.Track(p, "run.easy")
+		end
 	end
 	rebuildMemberIds(run)
 	pushAll(run)

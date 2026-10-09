@@ -1240,9 +1240,18 @@ end
 
 local function reportOnboarding(days: number): (string, { Row })
 	local docs = cohortDocs(days)
-	local rows = funnelRows(A.Funnels[1], function(key)
+	local function count(key: string): number
 		return total(docs, "f:" .. key)
-	end, string.format("New players who joined for the first time in the last %d day%s", days, if days == 1 then "" else "s"))
+	end
+	local rows = funnelRows(A.Funnels[1], count, string.format("New players who joined for the first time in the last %d day%s", days, if days == 1 then "" else "s"))
+	-- The first minutes (v2.20.0): the START CLEANING card, the lighter first dishwasher, the come-back card.
+	for _, funnel in A.Funnels do
+		if funnel.Name == "First minutes" then
+			for _, row in funnelRows(funnel, count, "The first minutes: the START CLEANING card, the first win, and coming back") do
+				table.insert(rows, row)
+			end
+		end
+	end
 	return "What new players do", rows
 end
 
