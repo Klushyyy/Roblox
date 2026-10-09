@@ -112,7 +112,7 @@ local function renderGems()
 	gemsLabel.Text = string.format("You have %s Gems", UIKit.Commas(gems))
 	local restricted = Players.LocalPlayer:GetAttribute("PaidRandomRestricted") == true
 	UIKit.SetDisabled(rollButton, rolling or restricted) -- short of gems, Roll opens the Gems shop instead
-	rollButton.Text = if restricted then "ROLL NOT AVAILABLE" else string.format("ROLL  (%d Gems)", Config.RankRoll.Cost)
+	rollButton.Text = if restricted then "ACCOUNT RESTRICTED" else string.format("ROLL  (%d Gems)", Config.RankRoll.Cost)
 	if luckActive then
 		luckActive.Visible = luck
 	end
@@ -592,7 +592,7 @@ end
 local function roll_()
 	-- Roblox's policy: some players may not use paid random items (the server refuses too).
 	if Players.LocalPlayer:GetAttribute("PaidRandomRestricted") == true then
-		UIKit.Toast("Rolling ranks isn't available for your account.", "Info")
+		UIKit.Toast("Your account is currently restricted from rolling ranks.", "Info")
 		return
 	end
 	-- Not enough gems: straight to the Gems shop.

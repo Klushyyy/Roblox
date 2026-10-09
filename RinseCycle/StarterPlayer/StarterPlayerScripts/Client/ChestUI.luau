@@ -452,7 +452,7 @@ function ChestUI.Open(count: number)
 	end
 	-- Roblox's policy: some players may not use paid random items (the packs cost Robux). The free chest above stays.
 	if LocalPlayer:GetAttribute("PaidRandomRestricted") == true then
-		UIKit.Toast("Chest packs aren't available for your account.", "Info")
+		UIKit.Toast("Your account is currently restricted from chest packs.", "Info")
 		return
 	end
 	for _, pack in Config.ChestEvent.Packs do

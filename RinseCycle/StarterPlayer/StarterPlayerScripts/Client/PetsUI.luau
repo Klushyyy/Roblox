@@ -1348,8 +1348,8 @@ function PetsUI._refreshEggButtons()
 	hatch3Button:SetAttribute("Disabled", locked or restricted)
 	UIKit.SetButtonColor(hatch1Button, if not restricted and eggAffordable(egg, 1, meta) then C.Good else C.Disabled)
 	UIKit.SetButtonColor(hatch3Button, if not restricted and eggAffordable(egg, 3, meta) then C.Accent else C.Disabled)
-	hatch1Button.Text = if restricted then "Not available" else "Hatch 1  (" .. Format.Commas(egg.Cost) .. " Bubbles)"
-	hatch3Button.Text = if restricted then "Not available" else "Hatch 3  (" .. Format.Commas(egg.Cost * 3) .. " Bubbles)"
+	hatch1Button.Text = if restricted then "Account restricted" else "Hatch 1  (" .. Format.Commas(egg.Cost) .. " Bubbles)"
+	hatch3Button.Text = if restricted then "Account restricted" else "Hatch 3  (" .. Format.Commas(egg.Cost * 3) .. " Bubbles)"
 end
 
 local function doHatch(count: number)
@@ -1358,7 +1358,7 @@ local function doHatch(count: number)
 		return
 	end
 	if Players.LocalPlayer:GetAttribute("PaidRandomRestricted") == true then
-		UIKit.Toast("Hatching eggs isn't available for your account.", "Info")
+		UIKit.Toast("Your account is currently restricted from hatching eggs.", "Info")
 		return
 	end
 	local egg = Config.GetEgg(eggId)

@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.19.4"
+Config.Version = "2.19.5"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1497,7 +1497,7 @@ Config.Analytics = {
 		{ "run.launch", "Party launched (teleport started)" },
 		{ "run.fail", "Run could not start (teleport failed)" },
 		{ "run.arrive", "Arrived in a dishwasher" },
-		{ "run.loaded", "Intro finished, clock started" },
+		{ "run.loaded", "Intro finished and clock started" },
 		{ "run.first", "Cleaned the first spot" },
 		{ "run.dish1", "Finished the first dish" },
 		{ "run.sell", "Sold a tank at the drain" },
@@ -1582,9 +1582,9 @@ Config.Analytics = {
 				{ "run.loaded", "Intro finished" },
 				{ "run.first", "First spot cleaned" },
 				{ "run.sell", "Sold a tank" },
-				{ "run.p25", "25% clean" },
-				{ "run.p50", "50% clean" },
-				{ "run.p75", "75% clean" },
+				{ "run.p25", "25 percent clean" },
+				{ "run.p50", "50 percent clean" },
+				{ "run.p75", "75 percent clean" },
 				{ "run.clear", "Cleared" },
 				{ "run.home", "Back in the lobby" },
 			},

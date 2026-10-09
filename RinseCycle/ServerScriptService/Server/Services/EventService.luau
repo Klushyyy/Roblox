@@ -124,7 +124,7 @@ local function onRequest(player: Player, action: any, value: any): any
 		return { Ok = true, Rewards = EventService.Open(player, 1) }
 	elseif action == "Test" then
 		if DataService.PaidRandomRestricted(player) then
-			return { Ok = false, Error = "Chest packs aren't available for your account." }
+			return { Ok = false, Error = "Your account is currently restricted from chest packs." }
 		end
 		-- A pack without a product Id: free in Studio, so the buttons can be tried.
 		for _, pack in Config.ChestEvent.Packs do
