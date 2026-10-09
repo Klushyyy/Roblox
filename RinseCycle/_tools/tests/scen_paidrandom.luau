@@ -9,7 +9,13 @@ local Remotes = M[R .. "ReplicatedStorage/Shared/Remotes.luau"]
 local UIKit = M[R .. "StarterPlayer/StarterPlayerScripts/Client/UIKit.luau"]
 local Config = M[R .. "ReplicatedStorage/Shared/Config.luau"]
 local p = G.player
+local RS = game:GetService("ReplicatedStorage")
 local prof = DS.Get(p)
+-- the Studio Test tab's "Restricted test" button (the admin command :paidtest on / off)
+local function paidtest(mode)
+	call("client", function() RS:FindFirstChild("AdminCommand"):FireServer("paidtest", "", mode) end)
+	pump(1, G.frame)
+end
 prof.Gems = 500
 prof.Bubbles = 5000
 DS.PushMeta(p)
@@ -28,8 +34,6 @@ local function find(root, className, text)
 end
 
 -- a player who is allowed: roll and hatch work
-p:SetAttribute("ForcePaidRandomRestricted", nil)
-prof.PaidRandomTest = nil
 if DS.PaidRandomRestricted(p) then
 	out("(the sim's policy says restricted: unrestricted checks are skipped)")
 else
@@ -41,8 +45,14 @@ end
 -- a restricted player
 prof.Gems, prof.Bubbles = 500, 5000
 local pets, ranks = #prof.Pets, #prof.Ranks
-p:SetAttribute("ForcePaidRandomRestricted", true)
-pump(1, G.frame)
+-- the Ranks window is OPEN when the test starts: its button must change by itself
+call("client", function() UIKit.OpenWindow("Ranks") end)
+pump(0.8, G.frame)
+local openBtn = find(p.PlayerGui, "TextButton", "ROLL")
+out("Ranks window open, before: [" .. tostring(openBtn and openBtn.Text) .. "]")
+paidtest("on")
+out("Ranks window open, after the test button: [" .. tostring(openBtn and openBtn.Text) .. "]")
+call("client", function() UIKit.CloseWindow() end)
 out("restricted: attribute=" .. tostring(p:GetAttribute("PaidRandomRestricted")) .. "  function=" .. tostring(DS.PaidRandomRestricted(p)))
 local rr = request("RollRank")
 local hh = request("Hatch", { Egg = "Bubble", Count = 1 })
@@ -69,6 +79,5 @@ pump(0.5, G.frame)
 out(string.format("clicking it hatched nothing: pets=%d bubbles=%d", #prof.Pets, prof.Bubbles))
 
 -- lifted again
-p:SetAttribute("ForcePaidRandomRestricted", nil)
-pump(1, G.frame)
-out("lifted: attribute=" .. tostring(p:GetAttribute("PaidRandomRestricted")))
+paidtest("off")
+out("lifted: attribute=" .. tostring(p:GetAttribute("PaidRandomRestricted")) .. "  roll button: [" .. tostring(openBtn and openBtn.Text) .. "]")

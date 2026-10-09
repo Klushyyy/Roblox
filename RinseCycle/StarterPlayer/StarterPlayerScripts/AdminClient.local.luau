@@ -1867,6 +1867,9 @@ end } } },
 		}
 	end } } },
 	{ Name = "abusedebug", Icon = "🐞", Label = "Giant debug", Desc = "Toggles a floating readout above the Admin Abuse giant (state, height, floor, feet) and prints it to the Output once a second. Use it to see where he sinks or stops.", Target = "none", Inputs = {} },
+	{ Name = "paidtest", Icon = "🎲", Label = "Restricted test", Desc = "Treats YOU as a player Roblox does not let use paid random items: rank rolls, egg hatching and chest packs go off and their buttons grey out. Run it again with Back to normal to undo.", Toggle = true, Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+		return { { Label = "Pretend I'm restricted", Value = "on" }, { Label = "Back to normal", Value = "off" } }
+	end } } },
 	{ Name = "privatelobby", Icon = "🔒", Label = "Private lobby", Desc = "Takes you to a lobby only you can enter (a private server of this game). Run it again to return to it, or make a fresh one. Published game only.", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		return {
 			{ Label = "Take me to my private lobby", Value = "join" },
@@ -1883,7 +1886,7 @@ local GROUPS = {
 	{ Name = "Server", Icon = "📢", Blurb = "Only THIS server. Message, Gift pass and Remove pass need a player.", Commands = { "announce", "msg", "givegamepass", "removegamepass", "poll", "countdown", "leaderboards" } },
 	{ Name = "Global", Icon = "🌍", Blurb = "EVERY server at once: everyone online sees it.", Commands = { "globalannounce", "globalpassdrop", "globalpoll", "globalcountdown", "cancelcountdown", "globalgive", "globalboost", "serverlist" } },
 	{ Name = "Staff", Icon = "🛡️", Blurb = "Staff ranks and what every admin did.", Commands = { "setadminrank", "stafflist", "cmdlogs", "playerlogs", "wipelogs" } },
-	{ Name = "Studio Test", Icon = "🧪", Blurb = "Testing tools for your own account, and the analytics reports.", Commands = { "daily", "badges", "finishrun", "unlockall", "analytics", "resetfirstrun", "clubreset", "notifytest" } },
+	{ Name = "Studio Test", Icon = "🧪", Blurb = "Testing tools for your own account, and the analytics reports.", Commands = { "daily", "badges", "finishrun", "unlockall", "analytics", "resetfirstrun", "clubreset", "notifytest", "paidtest" } },
 	{ Name = "Show Test", Icon = "🎆", Blurb = "Try the Admin Abuse show and its pieces.", Commands = { "abusefx", "abuselocal", "abuseshow", "abusedebug", "privatelobby" } },
 }
 local DURATIONS = { "1h", "6h", "24h", "3d", "7d", "30d" }

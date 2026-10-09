@@ -136,7 +136,7 @@ local ALL_COMMANDS = {
 -- enough" - a Developer or a Founder still gets nothing.
 -- Nothing is hidden behind Studio any more: every command belongs to a staff tier (below), and
 -- the owner-only ones (staff ranks, gifted passes, wiping the log) are only on the owner's list.
-local STUDIO_ONLY_COMMANDS = { "abuseshow", "abuselocal", "privatelobby", "abusefx", "abusedebug", "notifytest", "resetfirstrun", "clubreset" }
+local STUDIO_ONLY_COMMANDS = { "abuseshow", "abuselocal", "privatelobby", "abusefx", "abusedebug", "notifytest", "resetfirstrun", "clubreset", "paidtest" }
 
 -- Commands FOUNDER alone gets, on top of everything Developer has.
 --
@@ -9211,6 +9211,15 @@ do
 			sendFeedback(admin, "Your data is still loading.", true)
 		end
 		logCommand(admin, "clubreset", nil, "", admin.Name .. " reset their club waiting times")
+	end
+
+	-- :paidtest [on|off] (Studio Test tab): treats YOU as a player Roblox restricts from paid random items, to see what they
+	-- see: no rank rolls, no egg hatching, no chest packs, and the buttons greyed out. "off" puts it back.
+	Commands.paidtest = function(admin, text)
+		local on = string.lower(text:match("^%s*(%S*)") or "") == "on"
+		admin:SetAttribute("ForcePaidRandomRestricted", if on then true else nil)
+		sendFeedback(admin, if on then "You are now treated as a restricted player: rank rolls, egg hatching and chest packs are off for you. Use it again with 'Back to normal' to undo." else "Back to normal: rank rolls, egg hatching and chest packs work for you again.", false)
+		logCommand(admin, "paidtest", nil, if on then "on" else "off", admin.Name .. (if on then " pretended to be a restricted player" else " stopped pretending to be a restricted player"))
 	end
 
 	Commands.abusedebug = function(admin, _text)

@@ -659,6 +659,11 @@ function RanksUI.Init()
 		return
 	end
 	initialized = true
+	Players.LocalPlayer:GetAttributeChangedSignal("PaidRandomRestricted"):Connect(function()
+		if rollButton then
+			renderGems()
+		end
+	end)
 
 	local _gui, screenRoot = UIKit.CreateScreen("RanksUI", 10)
 	local _window, content = UIKit.Window({

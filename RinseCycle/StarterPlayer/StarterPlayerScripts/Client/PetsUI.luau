@@ -1855,6 +1855,11 @@ function PetsUI.Init()
 		return
 	end
 	initialized = true
+	Players.LocalPlayer:GetAttributeChangedSignal("PaidRandomRestricted"):Connect(function()
+		if hatch1Button then
+			PetsUI._refreshEggButtons()
+		end
+	end)
 
 	local _gui
 	_gui, root = UIKit.CreateScreen("PetsUI", 10)

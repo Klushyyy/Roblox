@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.19.2"
+Config.Version = "2.19.3"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1488,6 +1488,8 @@ Config.Analytics = {
 		{ "pad.join", "Joined someone else's party" },
 		{ "pad.leave", "Left a pad before it launched" },
 		{ "pad.timeout", "Stood in a pad without pressing Create" },
+		{ "policy.restricted", "Roblox says this player may not use paid random items" },
+		{ "policy.allowed", "Roblox says this player may use paid random items" },
 		{ "obby.finish", "Finished the lobby obby" },
 		{ "fun.duck", "Found a lobby duck" },
 		{ "fun.bubble", "Popped a lobby bubble" },

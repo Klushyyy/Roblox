@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.19.2"
+Config.Version = "2.19.3"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1492,6 +1492,8 @@ Config.Analytics = {
 		{ "pad.join", "Joined someone else's party" },
 		{ "pad.leave", "Left a pad before it launched" },
 		{ "pad.timeout", "Stood in a pad without pressing Create" },
+		{ "policy.restricted", "Roblox says this player may not use paid random items" },
+		{ "policy.allowed", "Roblox says this player may use paid random items" },
 		{ "obby.finish", "Finished the lobby obby" },
 		{ "fun.duck", "Found a lobby duck" },
 		{ "fun.bubble", "Popped a lobby bubble" },
@@ -4050,7 +4052,7 @@ local ALL_COMMANDS = {
 -- enough" - a Developer or a Founder still gets nothing.
 -- Nothing is hidden behind Studio any more: every command belongs to a staff tier (below), and
 -- the owner-only ones (staff ranks, gifted passes, wiping the log) are only on the owner's list.
-local STUDIO_ONLY_COMMANDS = { "abuseshow", "abuselocal", "privatelobby", "abusefx", "abusedebug", "notifytest", "resetfirstrun", "clubreset" }
+local STUDIO_ONLY_COMMANDS = { "abuseshow", "abuselocal", "privatelobby", "abusefx", "abusedebug", "notifytest", "resetfirstrun", "clubreset", "paidtest" }
 
 -- Commands FOUNDER alone gets, on top of everything Developer has.
 --
@@ -13127,6 +13129,15 @@ do
 		logCommand(admin, "clubreset", nil, "", admin.Name .. " reset their club waiting times")
 	end
 
+	-- :paidtest [on|off] (Studio Test tab): treats YOU as a player Roblox restricts from paid random items, to see what they
+	-- see: no rank rolls, no egg hatching, no chest packs, and the buttons greyed out. "off" puts it back.
+	Commands.paidtest = function(admin, text)
+		local on = string.lower(text:match("^%s*(%S*)") or "") == "on"
+		admin:SetAttribute("ForcePaidRandomRestricted", if on then true else nil)
+		sendFeedback(admin, if on then "You are now treated as a restricted player: rank rolls, egg hatching and chest packs are off for you. Use it again with 'Back to normal' to undo." else "Back to normal: rank rolls, egg hatching and chest packs work for you again.", false)
+		logCommand(admin, "paidtest", nil, if on then "on" else "off", admin.Name .. (if on then " pretended to be a restricted player" else " stopped pretending to be a restricted player"))
+	end
+
 	Commands.abusedebug = function(admin, _text)
 		giantDebug = not giantDebug
 		sendFeedback(admin, if giantDebug then "Giant debug is ON (readout above him, prints in Output)." else "Giant debug is off.", false)
@@ -21541,6 +21552,8 @@ do
 		end
 		restricted[player] = answer == true
 		publish(player)
+		-- (how many of your players Roblox restricts: Studio Test &gt; Analytics &gt; Features)
+		DataService.Track(player, if answer == true then "policy.restricted" else "policy.allowed")
 	end
 	function DataService.PaidRandomRestricted(player: Player): boolean
 		if player:GetAttribute("ForcePaidRandomRestricted") == true then
@@ -49075,6 +49088,11 @@ function PetsUI.Init()
 		return
 	end
 	initialized = true
+	Players.LocalPlayer:GetAttributeChangedSignal("PaidRandomRestricted"):Connect(function()
+		if hatch1Button then
+			PetsUI._refreshEggButtons()
+		end
+	end)
 
 	local _gui
 	_gui, root = UIKit.CreateScreen("PetsUI", 10)
@@ -50422,6 +50440,11 @@ function RanksUI.Init()
 		return
 	end
 	initialized = true
+	Players.LocalPlayer:GetAttributeChangedSignal("PaidRandomRestricted"):Connect(function()
+		if rollButton then
+			renderGems()
+		end
+	end)
 
 	local _gui, screenRoot = UIKit.CreateScreen("RanksUI", 10)
 	local _window, content = UIKit.Window({
@@ -60221,6 +60244,9 @@ end } } },
 		}
 	end } } },
 	{ Name = "abusedebug", Icon = "🐞", Label = "Giant debug", Desc = "Toggles a floating readout above the Admin Abuse giant (state, height, floor, feet) and prints it to the Output once a second. Use it to see where he sinks or stops.", Target = "none", Inputs = {} },
+	{ Name = "paidtest", Icon = "🎲", Label = "Restricted test", Desc = "Treats YOU as a player Roblox does not let use paid random items: rank rolls, egg hatching and chest packs go off and their buttons grey out. Run it again with Back to normal to undo.", Toggle = true, Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+		return { { Label = "Pretend I'm restricted", Value = "on" }, { Label = "Back to normal", Value = "off" } }
+	end } } },
 	{ Name = "privatelobby", Icon = "🔒", Label = "Private lobby", Desc = "Takes you to a lobby only you can enter (a private server of this game). Run it again to return to it, or make a fresh one. Published game only.", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		return {
 			{ Label = "Take me to my private lobby", Value = "join" },
@@ -60237,7 +60263,7 @@ local GROUPS = {
 	{ Name = "Server", Icon = "📢", Blurb = "Only THIS server. Message, Gift pass and Remove pass need a player.", Commands = { "announce", "msg", "givegamepass", "removegamepass", "poll", "countdown", "leaderboards" } },
 	{ Name = "Global", Icon = "🌍", Blurb = "EVERY server at once: everyone online sees it.", Commands = { "globalannounce", "globalpassdrop", "globalpoll", "globalcountdown", "cancelcountdown", "globalgive", "globalboost", "serverlist" } },
 	{ Name = "Staff", Icon = "🛡️", Blurb = "Staff ranks and what every admin did.", Commands = { "setadminrank", "stafflist", "cmdlogs", "playerlogs", "wipelogs" } },
-	{ Name = "Studio Test", Icon = "🧪", Blurb = "Testing tools for your own account, and the analytics reports.", Commands = { "daily", "badges", "finishrun", "unlockall", "analytics", "resetfirstrun", "clubreset", "notifytest" } },
+	{ Name = "Studio Test", Icon = "🧪", Blurb = "Testing tools for your own account, and the analytics reports.", Commands = { "daily", "badges", "finishrun", "unlockall", "analytics", "resetfirstrun", "clubreset", "notifytest", "paidtest" } },
 	{ Name = "Show Test", Icon = "🎆", Blurb = "Try the Admin Abuse show and its pieces.", Commands = { "abusefx", "abuselocal", "abuseshow", "abusedebug", "privatelobby" } },
 }
 local DURATIONS = { "1h", "6h", "24h", "3d", "7d", "30d" }

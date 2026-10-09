@@ -2182,6 +2182,8 @@ do
 		end
 		restricted[player] = answer == true
 		publish(player)
+		-- (how many of your players Roblox restricts: Studio Test > Analytics > Features)
+		DataService.Track(player, if answer == true then "policy.restricted" else "policy.allowed")
 	end
 	function DataService.PaidRandomRestricted(player: Player): boolean
 		if player:GetAttribute("ForcePaidRandomRestricted") == true then
