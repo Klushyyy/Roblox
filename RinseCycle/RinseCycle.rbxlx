@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.18.5"
+Config.Version = "2.18.6"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -8706,18 +8706,17 @@ function ServerList.Read()
 end
 
 -- The filters the server list cycles through (the arrows in the panel).
-ServerList.Filters = { "all", "lobby", "game", "level1", "level2", "level3" }
-local function levelLabel(level: number): string
+ServerList.Filters = { "all", "lobby", "level1", "level2", "level3" }
+local function levelName(level: number): string
 	local def = Config.Levels[level]
-	return string.format("Level %d - %s (Chapter %d)", level, if def then tostring(def.Name) else "?", level)
+	return if def then tostring(def.Name) else "?"
 end
-local function filterLabel(filter: string): string
+-- The tab for a filter (the buttons along the top of the list): All servers, Lobbies, Chapter 1, Chapter 2, Chapter 3.
+local function filterTab(filter: string): string
 	if filter == "lobby" then
-		return "Lobby servers"
-	elseif filter == "game" then
-		return "Game servers (all levels)"
+		return "Lobbies"
 	elseif string.sub(filter, 1, 5) == "level" then
-		return levelLabel(tonumber(string.sub(filter, 6)) or 1) .. " games"
+		return "Chapter " .. (tonumber(string.sub(filter, 6)) or 1)
 	end
 	return "All servers"
 end
@@ -8758,34 +8757,45 @@ function ServerList.Send(admin, filterIndex: number?)
 			continue
 		end
 		people += count
-		local category, label
+		local category, label, badge
 		if server.Run then
 			games += 1
 			local level = server.Level or 0
 			gameNumber[level + 1] = (gameNumber[level + 1] or 0) + 1
 			category = if level &gt;= 1 then "level" .. level else "game"
-			label = (if level &gt;= 1 then levelLabel(level) else "Game server") .. " - game #" .. gameNumber[level + 1]
+			label = (if level &gt;= 1 then levelName(level) else "Game server") .. "  -  game #" .. gameNumber[level + 1]
+			badge = if level &gt;= 1 then "CH " .. level else "GAME"
 		else
 			lobbies += 1
 			lobbyNumber += 1
 			category = "lobby"
 			label = "Lobby " .. lobbyNumber
+			badge = "LOBBY"
 		end
-		table.insert(entries, { Category = category, Server = server, Names = names, Follow = follow, Count = count, Label = label })
+		table.insert(entries, { Category = category, Server = server, Names = names, Follow = follow, Count = count, Label = label, Badge = badge })
 	end
 	local rows = {}
+	local counts = {} -- how many servers each tab holds
 	for _, entry in ipairs(entries) do
-		local show = filter == "all" or filter == entry.Category or (filter == "game" and string.sub(entry.Category, 1, 5) == "level") or (filter == "game" and entry.Category == "game")
-		if show then
+		counts["all"] = (counts["all"] or 0) + 1
+		counts[entry.Category] = (counts[entry.Category] or 0) + 1
+		if filter == "all" or filter == entry.Category then
 			local names = entry.Names
 			local shown = if #names == 0 then "(only you / hidden staff)" else table.concat(names, ", ", 1, math.min(#names, 8)) .. (if #names &gt; 8 then ", +" .. (#names - 8) .. " more" else "")
 			table.insert(rows, {
 				Id = entry.Follow,
 				JobId = entry.Server.JobId,
-				Line1 = string.format("%s%s  -  %d player%s  -  up %s", entry.Label, if entry.Server.Here then " (you are here)" else "", entry.Count, if entry.Count == 1 then "" else "s", upText(os.time() - (entry.Server.Started or os.time()))),
-				Line2 = shown,
+				-- the row is drawn as a card: a coloured badge (Kind says which colour), the name, the facts, the names
+				Kind = entry.Category,
+				Badge = entry.Badge,
+				Line1 = entry.Label .. (if entry.Server.Here then "   (you are here)" else ""),
+				Line2 = string.format("%d player%s  -  up %s   |   %s", entry.Count, if entry.Count == 1 then "" else "s", upText(os.time() - (entry.Server.Started or os.time())), shown),
 			})
 		end
+	end
+	local tabs = {}
+	for _, name in ipairs(ServerList.Filters) do
+		table.insert(tabs, string.format("%s (%d)", filterTab(name), counts[name] or 0))
 	end
 	local busiest, busiestCount = nil, 0
 	for _, entry in ipairs(entries) do
@@ -8793,8 +8803,8 @@ function ServerList.Send(admin, filterIndex: number?)
 			busiest, busiestCount = entry.Server.JobId, entry.Count
 		end
 	end
-	local title = string.format("%s (%d)   |   %d lobbies, %d game servers, %d players", filterLabel(filter), #rows, lobbies, games, people)
-	Remote.AdminServerList:FireClient(admin, title, rows, busiest, index, #ServerList.Filters)
+	local title = string.format("%d player%s on %d server%s", people, if people == 1 then "" else "s", lobbies + games, if lobbies + games == 1 then "" else "s")
+	Remote.AdminServerList:FireClient(admin, title, rows, busiest, index, #ServerList.Filters, tabs)
 end
 
 -- Teleports the admin into a server, invisible (they arrive hidden: nobody sees them join).
@@ -59778,7 +59788,7 @@ local COMMANDS: { Command } = ({
 	{ Name = "bring", Icon = "⬅️", Label = "Bring", Desc = "Teleports them to you.", Group = "Move", Target = "player" },
 	{ Name = "spectate", Icon = "👁️", Label = "Spectate", Desc = "Watch them. Stop from the bar at the bottom.", Group = "Move", Target = "player" },
 	{ Name = "controlplayer", Icon = "🎮", Label = "Control", Desc = "Move their character with your controls.", Group = "Move", Target = "player" },
-	{ Name = "serverlist", Icon = "🌍", Label = "All servers", Desc = "Every server of the game, sorted: Lobby 1, Lobby 2...; and game servers by level (Level 1 / Chapter 1, Level 2 / Chapter 2, Level 3 / Chapter 3) with who is in each and how long it has been up. Use the arrows to filter: All, Lobbies only, Game servers only, or one level. Join any of them (you arrive invisible).", Group = "Global", Target = "none" },
+	{ Name = "serverlist", Icon = "🌍", Label = "All servers", Desc = "Every server of the game, sorted: Lobby 1, Lobby 2...; and game servers by level (Chapter 1, 2, 3) with who is in each and how long it has been up. Tap a tab along the top to show All servers, Lobbies, or one chapter. Join any of them (you arrive invisible).", Group = "Global", Target = "none" },
 	{ Name = "badges", Icon = "🏅", Label = "Badges", Desc = "Checks all ten Roblox badges for that player against Roblox itself: earned? really owned? is the badge switched on? Anything they earned but don't have is given on the spot, or the reason it can't be is shown.", Group = "Game", Target = "player" },
 	{ Name = "analytics", Icon = "📈", Label = "Analytics", Desc = "Where players get stuck and leave. Pick a report (what new players do step by step, retention, where they were when they left, runs, features, money, devices and errors, the Admin Abuse show) and how many days back. The arrows flip between reports. Needs the game published for real numbers.", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 	return {
@@ -60420,7 +60430,7 @@ local function buildPanel(info: any)
 	overlay.Active = true
 	overlay.Parent = content
 	UIKit.Corner(overlay, 12)
-	local overlayTitle = UIKit.Label({ Text = "", TextSize = 24, TextXAlignment = Enum.TextXAlignment.Left, Size = UDim2.new(1, -440, 0, 44), Position = UDim2.fromOffset(150, 4), Parent = overlay })
+	local overlayTitle = UIKit.Label({ Text = "", TextSize = 24, TextScaled = true, TextWrapped = false, TextXAlignment = Enum.TextXAlignment.Left, Size = UDim2.new(1, -440, 0, 44), Position = UDim2.fromOffset(150, 4), Parent = overlay })
 	UIKit.Button({
 		Text = "Back",
 		Icon = "◀",
@@ -60482,6 +60492,22 @@ local function buildPanel(info: any)
 	headerButton.Visible = false
 	local listScroll = scroller(overlay, UDim2.new(1, -8, 1, -60), UDim2.fromOffset(4, 56))
 	listLayout(listScroll, 6)
+	-- A row of tabs under the header (the All servers list: All servers / Lobbies / Chapter 1 / 2 / 3): tap one to show only those.
+	local tabsRow = Instance.new("Frame")
+	tabsRow.Name = "Tabs"
+	tabsRow.BackgroundTransparency = 1
+	tabsRow.Size = UDim2.new(1, -8, 0, 44)
+	tabsRow.Position = UDim2.fromOffset(4, 52)
+	tabsRow.Visible = false
+	tabsRow.Parent = overlay
+	-- the colour of a row's badge, by the kind of server
+	local KIND_COLORS: { [string]: Color3 } = {
+		lobby = Colors.Good,
+		level1 = Colors.Primary,
+		level2 = Colors.Warning,
+		level3 = Colors.Accent,
+		game = Colors.TextDim,
+	}
 
 	local detail = Instance.new("Frame")
 	detail.Name = "Detail"
@@ -60519,8 +60545,22 @@ local function buildPanel(info: any)
 			local row = UIKit.Card({ Size = UDim2.new(1, -10, 0, 64), Color = Colors.PanelLight, Parent = listScroll })
 			row.LayoutOrder = i
 			local textRoom = if currentAction2 then -310 else -170
-			UIKit.Label({ Text = line1, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Size = UDim2.new(1, textRoom, 0, 26), Position = UDim2.fromOffset(14, 6), Parent = row })
-			UIKit.Label({ Text = line2, TextSize = 14, TextColor3 = Colors.TextDim, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Size = UDim2.new(1, textRoom, 0, 22), Position = UDim2.fromOffset(14, 34), Parent = row })
+			local left = 14
+			if type(entry.Badge) == "string" then
+				-- a coloured badge on the left (LOBBY, CH 2...): the kind of server at a glance
+				local badge = Instance.new("Frame")
+				badge.Name = "Badge"
+				badge.Size = UDim2.fromOffset(74, 44)
+				badge.Position = UDim2.fromOffset(12, 10)
+				badge.BackgroundColor3 = KIND_COLORS[tostring(entry.Kind)] or Colors.Primary
+				badge.BorderSizePixel = 0
+				badge.Parent = row
+				UIKit.Corner(badge, 10)
+				UIKit.Label({ Text = entry.Badge, TextSize = 18, TextScaled = true, TextWrapped = false, Size = UDim2.new(1, -8, 1, -4), Position = UDim2.fromOffset(4, 2), Parent = badge })
+				left = 96
+			end
+			UIKit.Label({ Text = line1, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Size = UDim2.new(1, textRoom - (left - 14), 0, 26), Position = UDim2.fromOffset(left, 6), Parent = row })
+			UIKit.Label({ Text = line2, TextSize = 14, TextColor3 = Colors.TextDim, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Size = UDim2.new(1, textRoom - (left - 14), 0, 22), Position = UDim2.fromOffset(left, 34), Parent = row })
 			if currentAction2 and currentOnAction2 then
 				local onAction2 = currentOnAction2
 				UIKit.Button({
@@ -60558,8 +60598,33 @@ local function buildPanel(info: any)
 	end
 	listSearch:GetPropertyChangedSignal("Text"):Connect(drawRows)
 
-	local function showList(title: string, rows: { Row }, action: string?, onAction: ((Row) -&gt; ())?, nav: { Prev: () -&gt; (), Next: () -&gt; () }?, extra: { Text: string, OnClick: () -&gt; () }?)
+	type Tabs = { Items: { string }, Selected: number, OnSelect: (number) -&gt; () }
+	local function showList(title: string, rows: { Row }, action: string?, onAction: ((Row) -&gt; ())?, nav: { Prev: () -&gt; (), Next: () -&gt; () }?, extra: { Text: string, OnClick: () -&gt; () }?, tabs: Tabs?)
 		listNav = nav
+		clear(tabsRow)
+		tabsRow.Visible = tabs ~= nil
+		listScroll.Position = if tabs then UDim2.fromOffset(4, 100) else UDim2.fromOffset(4, 56)
+		listScroll.Size = if tabs then UDim2.new(1, -8, 1, -104) else UDim2.new(1, -8, 1, -60)
+		if tabs then
+			local count = #tabs.Items
+			local buttons: { TextButton } = {}
+			for i, text in tabs.Items do
+				buttons[i] = UIKit.Button({
+					Text = text,
+					Color = if i == tabs.Selected then Colors.Primary else Colors.PanelLight,
+					Size = UDim2.new(1 / count, -6, 0, 44),
+					Position = UDim2.new((i - 1) / count, 3, 0, 0),
+					TextSize = 18,
+					Parent = tabsRow,
+					OnClick = function()
+						for j, other in buttons do
+							other.BackgroundColor3 = if j == i then Colors.Primary else Colors.PanelLight
+						end
+						tabs.OnSelect(i)
+					end,
+				})
+			end
+		end
 		navPrev.Visible = nav ~= nil
 		navNext.Visible = nav ~= nil
 		currentAction2 = nil
@@ -60795,8 +60860,9 @@ local function buildPanel(info: any)
 			})
 		end
 	end
-	-- All servers: one row per server (its players underneath) with a single Join (arrive invisible).
-	AdminServerList.OnClientEvent:Connect(function(title, entries, busiestJobId, filterIndex, filterCount)
+	-- All servers: one card per server (a badge, its name, how many are in it and for how long, who) with a single Join (arrive
+	-- invisible). Tabs along the top: All servers, Lobbies, Chapter 1, 2, 3 (the server sends their names and counts).
+	AdminServerList.OnClientEvent:Connect(function(title, entries, busiestJobId, filterIndex, filterCount, tabNames)
 		local extra = nil
 		if type(busiestJobId) == "string" then
 			extra = {
@@ -60806,19 +60872,31 @@ local function buildPanel(info: any)
 				end,
 			}
 		end
-		-- The arrows flip through the filters: All servers, Lobby servers, Game servers, Level 1, Level 2, Level 3.
 		local index = tonumber(filterIndex) or 1
 		local count = math.max(tonumber(filterCount) or 1, 1)
+		local items: { string } = {}
+		if type(tabNames) == "table" then
+			for _, name in tabNames do
+				table.insert(items, tostring(name))
+			end
+		end
+		local tabs = if #items &gt;= 2 then {
+			Items = items,
+			Selected = math.clamp(index, 1, #items),
+			OnSelect = function(i: number)
+				AdminServerAction:FireServer("List", tostring(i))
+			end,
+		} else nil
 		showList(tostring(title), entries, "Join", function(entry)
 			AdminServerAction:FireServer("Join", entry.JobId, entry.Id)
-		end, {
+		end, if tabs then nil else { -- (an older server without tabs: the arrows flip the filters)
 			Prev = function()
 				AdminServerAction:FireServer("List", tostring(((index - 2) % count) + 1))
 			end,
 			Next = function()
 				AdminServerAction:FireServer("List", tostring((index % count) + 1))
 			end,
-		}, extra)
+		}, extra, tabs)
 	end)
 
 	-- Analytics reports: the same list window, the arrows flip between the reports.

@@ -4793,18 +4793,17 @@ function ServerList.Read()
 end
 
 -- The filters the server list cycles through (the arrows in the panel).
-ServerList.Filters = { "all", "lobby", "game", "level1", "level2", "level3" }
-local function levelLabel(level: number): string
+ServerList.Filters = { "all", "lobby", "level1", "level2", "level3" }
+local function levelName(level: number): string
 	local def = Config.Levels[level]
-	return string.format("Level %d - %s (Chapter %d)", level, if def then tostring(def.Name) else "?", level)
+	return if def then tostring(def.Name) else "?"
 end
-local function filterLabel(filter: string): string
+-- The tab for a filter (the buttons along the top of the list): All servers, Lobbies, Chapter 1, Chapter 2, Chapter 3.
+local function filterTab(filter: string): string
 	if filter == "lobby" then
-		return "Lobby servers"
-	elseif filter == "game" then
-		return "Game servers (all levels)"
+		return "Lobbies"
 	elseif string.sub(filter, 1, 5) == "level" then
-		return levelLabel(tonumber(string.sub(filter, 6)) or 1) .. " games"
+		return "Chapter " .. (tonumber(string.sub(filter, 6)) or 1)
 	end
 	return "All servers"
 end
@@ -4845,34 +4844,45 @@ function ServerList.Send(admin, filterIndex: number?)
 			continue
 		end
 		people += count
-		local category, label
+		local category, label, badge
 		if server.Run then
 			games += 1
 			local level = server.Level or 0
 			gameNumber[level + 1] = (gameNumber[level + 1] or 0) + 1
 			category = if level >= 1 then "level" .. level else "game"
-			label = (if level >= 1 then levelLabel(level) else "Game server") .. " - game #" .. gameNumber[level + 1]
+			label = (if level >= 1 then levelName(level) else "Game server") .. "  -  game #" .. gameNumber[level + 1]
+			badge = if level >= 1 then "CH " .. level else "GAME"
 		else
 			lobbies += 1
 			lobbyNumber += 1
 			category = "lobby"
 			label = "Lobby " .. lobbyNumber
+			badge = "LOBBY"
 		end
-		table.insert(entries, { Category = category, Server = server, Names = names, Follow = follow, Count = count, Label = label })
+		table.insert(entries, { Category = category, Server = server, Names = names, Follow = follow, Count = count, Label = label, Badge = badge })
 	end
 	local rows = {}
+	local counts = {} -- how many servers each tab holds
 	for _, entry in ipairs(entries) do
-		local show = filter == "all" or filter == entry.Category or (filter == "game" and string.sub(entry.Category, 1, 5) == "level") or (filter == "game" and entry.Category == "game")
-		if show then
+		counts["all"] = (counts["all"] or 0) + 1
+		counts[entry.Category] = (counts[entry.Category] or 0) + 1
+		if filter == "all" or filter == entry.Category then
 			local names = entry.Names
 			local shown = if #names == 0 then "(only you / hidden staff)" else table.concat(names, ", ", 1, math.min(#names, 8)) .. (if #names > 8 then ", +" .. (#names - 8) .. " more" else "")
 			table.insert(rows, {
 				Id = entry.Follow,
 				JobId = entry.Server.JobId,
-				Line1 = string.format("%s%s  -  %d player%s  -  up %s", entry.Label, if entry.Server.Here then " (you are here)" else "", entry.Count, if entry.Count == 1 then "" else "s", upText(os.time() - (entry.Server.Started or os.time()))),
-				Line2 = shown,
+				-- the row is drawn as a card: a coloured badge (Kind says which colour), the name, the facts, the names
+				Kind = entry.Category,
+				Badge = entry.Badge,
+				Line1 = entry.Label .. (if entry.Server.Here then "   (you are here)" else ""),
+				Line2 = string.format("%d player%s  -  up %s   |   %s", entry.Count, if entry.Count == 1 then "" else "s", upText(os.time() - (entry.Server.Started or os.time())), shown),
 			})
 		end
+	end
+	local tabs = {}
+	for _, name in ipairs(ServerList.Filters) do
+		table.insert(tabs, string.format("%s (%d)", filterTab(name), counts[name] or 0))
 	end
 	local busiest, busiestCount = nil, 0
 	for _, entry in ipairs(entries) do
@@ -4880,8 +4890,8 @@ function ServerList.Send(admin, filterIndex: number?)
 			busiest, busiestCount = entry.Server.JobId, entry.Count
 		end
 	end
-	local title = string.format("%s (%d)   |   %d lobbies, %d game servers, %d players", filterLabel(filter), #rows, lobbies, games, people)
-	Remote.AdminServerList:FireClient(admin, title, rows, busiest, index, #ServerList.Filters)
+	local title = string.format("%d player%s on %d server%s", people, if people == 1 then "" else "s", lobbies + games, if lobbies + games == 1 then "" else "s")
+	Remote.AdminServerList:FireClient(admin, title, rows, busiest, index, #ServerList.Filters, tabs)
 end
 
 -- Teleports the admin into a server, invisible (they arrive hidden: nobody sees them join).
