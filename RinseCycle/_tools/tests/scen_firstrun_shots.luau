@@ -27,4 +27,12 @@ local function shot(tag, w, h)
 end
 shot("desktop", 1280, 720)
 shot("phone", 740, 360)
+-- the same card for someone who is with friends
+p:SetAttribute("FriendsHere", true)
+welcome.Visible = true
+pump(1, G.frame)
+size(1280, 720)
+G.dumpGui(welcome.Parent.Parent, OUT .. "welcome_friends_desktop.json")
+size(740, 360)
+G.dumpGui(welcome.Parent.Parent, OUT .. "welcome_friends_phone.json")
 out("dumped")

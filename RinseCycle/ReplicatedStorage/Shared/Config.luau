@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.20.0"
+Config.Version = "2.20.1"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1527,7 +1527,8 @@ Config.Analytics = {
 		{ "welcome.show", "Saw the START CLEANING card (new players)" },
 		{ "welcome.go", "Started their first dishwasher from the card" },
 		{ "welcome.auto", "...and it started by itself (they did not press)" },
-		{ "welcome.look", "Pressed Look around first" },
+		{ "welcome.friends", "Brand-new player who came with a friend / invite, or had a friend in the server" },
+		{ "welcome.look", "Chose to play with friends (or looked around) instead of the tutorial" },
 		{ "run.easy", "Started the lighter first dishwasher" },
 		{ "back.show", "Saw the come-back card after their first win" },
 		{ "back.notify", "Pressed Notify me on the come-back card" },

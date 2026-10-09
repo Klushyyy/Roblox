@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.20.0"
+Config.Version = "2.20.1"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -1531,7 +1531,8 @@ Config.Analytics = {
 		{ "welcome.show", "Saw the START CLEANING card (new players)" },
 		{ "welcome.go", "Started their first dishwasher from the card" },
 		{ "welcome.auto", "...and it started by itself (they did not press)" },
-		{ "welcome.look", "Pressed Look around first" },
+		{ "welcome.friends", "Brand-new player who came with a friend / invite, or had a friend in the server" },
+		{ "welcome.look", "Chose to play with friends (or looked around) instead of the tutorial" },
 		{ "run.easy", "Started the lighter first dishwasher" },
 		{ "back.show", "Saw the come-back card after their first win" },
 		{ "back.notify", "Pressed Notify me on the come-back card" },
@@ -29947,6 +29948,60 @@ end
 -- Players joining and leaving the server
 ----------------------------------------------------------------------------------------------------
 
+-- Player attribute FriendsHere (set once, never cleared for the visit): a brand-new player who came to be with someone
+-- (followed a friend in, or joined from an invite) or who has a Roblox friend in this server. The START CLEANING card
+-- never starts a run by itself for them (they may want to play with their friends) and offers "play with friends" first.
+local function markFriendsHere(player: Player)
+	if player.Parent == Players and player:GetAttribute("FriendsHere") ~= true then
+		player:SetAttribute("FriendsHere", true)
+		DataService.Track(player, "welcome.friends")
+	end
+end
+
+local function isNewcomer(player: Player): boolean
+	local profile = DataService.Get(player)
+	local stats = profile and profile.Stats
+	return stats ~= nil and stats.Runs == 0 and player:GetAttribute("FriendsHere") ~= true
+end
+
+-- Looks at one brand-new player: did they follow / get invited by someone, and is anybody here their friend?
+local function checkFriendsHere(player: Player)
+	local data: any = nil
+	pcall(function()
+		data = player:GetJoinData()
+	end)
+	if type(data) == "table" and ((tonumber(data.ReferredByPlayerId) or 0) &gt; 0 or (tonumber(data.LaunchData) or 0) &gt; 0) then
+		markFriendsHere(player)
+		return
+	end
+	for _, other in Players:GetPlayers() do
+		if player.Parent ~= Players or player:GetAttribute("FriendsHere") == true then
+			return
+		end
+		if other ~= player and other.Parent == Players then
+			local ok, result = pcall(player.IsFriendsWithAsync, player, other.UserId)
+			if ok and result == true then
+				markFriendsHere(player)
+				return
+			end
+		end
+	end
+end
+
+-- Someone joined: is any brand-new player already here their friend?
+local function checkNewArrival(arrival: Player)
+	for _, player in Players:GetPlayers() do
+		if player ~= arrival and isNewcomer(player) then
+			task.spawn(function()
+				local ok, result = pcall(player.IsFriendsWithAsync, player, arrival.UserId)
+				if ok and result == true and arrival.Parent == Players then
+					markFriendsHere(player)
+				end
+			end)
+		end
+	end
+end
+
 local function onPlayerRemoving(player: Player)
 	removeMember(player, "Gone")
 	unhookMember(player)
@@ -29966,6 +30021,9 @@ end
 -- A host whose profile finished loading after they made the party: default the level to their best
 -- dishwasher (unless they already picked one) and send the new HostUnlocked.
 local function onProfileLoaded(player: Player)
+	if isNewcomer(player) then
+		task.spawn(checkFriendsHere, player)
+	end
 	local party = memberOf[player]
 	if not party or party.Dead then
 		return
@@ -29993,6 +30051,7 @@ function PartyService.Init()
 
 	Players.PlayerAdded:Connect(function(player)
 		player:SetAttribute("InParty", false)
+		checkNewArrival(player)
 	end)
 	for _, player in Players:GetPlayers() do
 		if player:GetAttribute("InParty") == nil then
@@ -46793,6 +46852,10 @@ local BACK_SIZE = Vector2.new(540, 214)
 local welcomeCard: Frame
 local welcomeScale: UIScale
 local welcomeCount: TextLabel
+local welcomeTitle: TextLabel
+local welcomeSub: TextLabel
+local welcomeButtons: { Solo: { TextButton }, Friends: { TextButton } } = { Solo = {}, Friends = {} }
+local welcomeFriendsMode: boolean? = nil -- which wording is showing (nil = not drawn yet)
 local welcomeDismissed = false -- pressed "Look around first" (or opened a menu / walked to a pad): not again this visit
 local welcomeSent = false
 
@@ -46835,48 +46898,81 @@ local function startFromCard(how: string)
 	end)
 end
 
+-- The card offers the tutorial (a quick first dishwasher on your own). For someone who is with friends (the server sets
+-- the player attribute FriendsHere) it leads with "play with friends" instead and never starts anything by itself.
+local function setWelcomeMode(friends: boolean)
+	if welcomeFriendsMode == friends then
+		return
+	end
+	welcomeFriendsMode = friends
+	welcomeTitle.Text = if friends then "PLAYING WITH FRIENDS?" else "PLAY THE TUTORIAL?"
+	welcomeSub.Text = if friends then "Step on a pad together. The tutorial plays in a group too!" else "A quick first dishwasher on your own, just a few minutes!"
+	for _, button in welcomeButtons.Solo do
+		button.Visible = not friends
+	end
+	for _, button in welcomeButtons.Friends do
+		button.Visible = friends
+	end
+end
+
+-- "With friends" does not start anything: it hides the card and says how to team up.
+local function chooseFriends()
+	welcomeDismissed = true
+	welcomeCard.Visible = false
+	ClientState.Track("welcome.look")
+	UIKit.Toast("Step on a party pad and pick Public or Friends: your friends can walk in and join you.", "Info")
+end
+
 local function buildWelcomeCard()
 	welcomeCard, welcomeScale = promptCard("Welcome", WELCOME_SIZE)
-	UIKit.Label({
-		Text = "READY TO CLEAN?",
+	welcomeTitle = UIKit.Label({
+		Text = "",
 		TextSize = 34,
 		Position = UDim2.fromOffset(10, 8),
 		Size = UDim2.new(1, -20, 0, 40),
 		Parent = welcomeCard,
 	})
-	UIKit.Label({
-		Text = "Your first dishwasher only takes a few minutes!",
+	welcomeSub = UIKit.Label({
+		Text = "",
 		TextSize = 21,
+		TextScaled = true,
 		TextColor3 = Colors.TextDim,
-		Position = UDim2.fromOffset(10, 50),
-		Size = UDim2.new(1, -20, 0, 28),
+		Position = UDim2.fromOffset(20, 50),
+		Size = UDim2.new(1, -40, 0, 28),
 		Parent = welcomeCard,
 	})
-	UIKit.Button({
-		Text = "START CLEANING",
-		Color = Colors.Good,
-		TextSize = 28,
-		Size = UDim2.fromOffset(290, 62),
-		Position = UDim2.fromOffset(20, 86),
-		Parent = welcomeCard,
-		OnClick = function()
-			startFromCard("button")
-		end,
-	})
-	UIKit.Button({
-		Text = "Look around first",
-		Color = Colors.Disabled,
-		TextSize = 18,
-		Size = UDim2.fromOffset(200, 62),
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -20, 0, 86),
-		Parent = welcomeCard,
-		OnClick = function()
-			welcomeDismissed = true
-			welcomeCard.Visible = false
-			ClientState.Track("welcome.look")
-		end,
-	})
+	local function leftButton(text: string, color: Color3, onClick: () -&gt; ()): TextButton
+		return UIKit.Button({
+			Text = text,
+			Color = color,
+			TextSize = 24,
+			Size = UDim2.fromOffset(290, 62),
+			Position = UDim2.fromOffset(20, 86),
+			Visible = false,
+			Parent = welcomeCard,
+			OnClick = onClick,
+		})
+	end
+	local function rightButton(text: string, onClick: () -&gt; ()): TextButton
+		return UIKit.Button({
+			Text = text,
+			Color = Colors.Disabled,
+			TextSize = 18,
+			Size = UDim2.fromOffset(200, 62),
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -20, 0, 86),
+			Visible = false,
+			Parent = welcomeCard,
+			OnClick = onClick,
+		})
+	end
+	local function startSolo()
+		startFromCard("button")
+	end
+	table.insert(welcomeButtons.Solo, leftButton("START TUTORIAL", Colors.Good, startSolo))
+	table.insert(welcomeButtons.Solo, rightButton("With friends instead", chooseFriends))
+	table.insert(welcomeButtons.Friends, leftButton("PLAY WITH FRIENDS", Colors.Good, chooseFriends))
+	table.insert(welcomeButtons.Friends, rightButton("Tutorial on my own", startSolo))
 	welcomeCount = UIKit.Label({
 		Text = "",
 		TextSize = 16,
@@ -46885,6 +46981,7 @@ local function buildWelcomeCard()
 		Size = UDim2.new(1, -20, 0, 22),
 		Parent = welcomeCard,
 	})
+	setWelcomeMode(false)
 end
 
 local function buildBackCard()
@@ -47003,15 +47100,19 @@ local function newPlayerCardsLoop()
 		if welcomeWanted then
 			welcomeIdle += STEP
 			if not welcomeCard.Visible and welcomeIdle &gt;= Config.FirstRun.CardDelay then
+				setWelcomeMode(Players.LocalPlayer:GetAttribute("FriendsHere") == true)
 				layoutPromptCard(welcomeCard, welcomeScale, WELCOME_SIZE)
 				welcomeCard.Visible = true
 				welcomeAt = os.clock()
 				ClientState.Track("welcome.show")
 			end
 			if welcomeCard.Visible then
-				-- It only starts by itself for someone who has never been in a dishwasher (not after Leave).
+				local friends = Players.LocalPlayer:GetAttribute("FriendsHere") == true
+				setWelcomeMode(friends)
+				-- It only starts by itself for someone who has never been in a dishwasher (not after Leave) and who is
+				-- not with friends.
 				local meta = ClientState.Meta :: any
-				local autoStart = if meta and (meta.RunsStarted or 0) == 0 then Config.FirstRun.AutoStart else 0
+				local autoStart = if meta and (meta.RunsStarted or 0) == 0 and not friends then Config.FirstRun.AutoStart else 0
 				local left = autoStart - (os.clock() - welcomeAt)
 				if autoStart &gt; 0 and left &lt;= 0 then
 					startFromCard("auto")

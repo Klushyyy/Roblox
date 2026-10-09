@@ -1,5 +1,5 @@
--- The first minutes (v2.20.0), part 1: the server rules and the "Look around first" path.
---   A  the START CLEANING card shows for a brand-new player, and "Look around first" hides it for good (no auto start)
+-- The first minutes (v2.20.0), part 1: the server rules and the "With friends instead" path.
+--   A  the START CLEANING card shows for a brand-new player, and "With friends instead" hides it for good (no auto start)
 --   B  QuickStart (server): a party of one on a free pad, dishwasher 1, going in a few seconds
 --   C  the first dishwasher is lighter (about 40% of the normal dirt) and sets no best time (par exactly)
 --   D  QuickStart is refused for anyone with a finished run, in a party, or in a run
@@ -70,7 +70,7 @@ check("A", "the test player is a brand-new player", profile.Stats.Runs == 0 and 
 check("A", "the meta the client sees says no runs started", CS.Meta and CS.Meta.RunsStarted == 0, CS.Meta and CS.Meta.RunsStarted)
 
 ----------------------------------------------------------------------------------------------------
--- A: the card, and "Look around first"
+-- A: the card, and "With friends instead"
 ----------------------------------------------------------------------------------------------------
 local pad1 = LB.GetLobby().Pads[1]
 p.Character.HumanoidRootPart.CFrame = CFrame.new(pad1.Zone.Position + Vector3.new(60, 0, 40)) -- out in the lobby, away from every pad
@@ -79,9 +79,9 @@ local card = p.PlayerGui:FindFirstChild("Welcome", true)
 check("A", "the card is built", card ~= nil)
 -- (the sim has been running in the lobby for a while by now, so the delay is over and the card is up)
 check("A", "shown for a brand-new player in the lobby with nothing else open", card.Visible == true)
-local startBtn = findText(card, "START CLEANING")
-local lookBtn = findText(card, "Look around first")
-check("A", "it has the START CLEANING and Look around first buttons", startBtn ~= nil and lookBtn ~= nil)
+local startBtn = findText(card, "START TUTORIAL")
+local lookBtn = findText(card, "With friends instead")
+check("A", "it has the START TUTORIAL and With friends instead buttons", startBtn ~= nil and lookBtn ~= nil)
 local count = findText(card, "") -- the countdown label
 local sawCountdown = false
 for _, d in card:GetDescendants() do
@@ -90,12 +90,12 @@ end
 check("A", "it counts down to the automatic start", sawCountdown)
 press(lookBtn)
 pump(0.5, G.frame)
-check("A", "Look around first hides it", card.Visible == false)
+check("A", "With friends instead hides it", card.Visible == false)
 pump(Config.FirstRun.AutoStart + 8, G.frame)
 check("A", "...and it stays hidden (no automatic start)", card.Visible == false)
 check("A", "...nobody was sent into a party", p:GetAttribute("InParty") ~= true and CS.Party == nil)
 check("A", "...and no run was started", not RS.IsInRun(p))
-check("A", "Look around first never started anything", (tracked["welcome.go"] or 0) == 0)
+check("A", "With friends instead never started anything", (tracked["welcome.go"] or 0) == 0)
 
 ----------------------------------------------------------------------------------------------------
 -- B: QuickStart, server side

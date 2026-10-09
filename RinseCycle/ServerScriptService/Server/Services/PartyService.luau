@@ -1121,6 +1121,60 @@ end
 -- Players joining and leaving the server
 ----------------------------------------------------------------------------------------------------
 
+-- Player attribute FriendsHere (set once, never cleared for the visit): a brand-new player who came to be with someone
+-- (followed a friend in, or joined from an invite) or who has a Roblox friend in this server. The START CLEANING card
+-- never starts a run by itself for them (they may want to play with their friends) and offers "play with friends" first.
+local function markFriendsHere(player: Player)
+	if player.Parent == Players and player:GetAttribute("FriendsHere") ~= true then
+		player:SetAttribute("FriendsHere", true)
+		DataService.Track(player, "welcome.friends")
+	end
+end
+
+local function isNewcomer(player: Player): boolean
+	local profile = DataService.Get(player)
+	local stats = profile and profile.Stats
+	return stats ~= nil and stats.Runs == 0 and player:GetAttribute("FriendsHere") ~= true
+end
+
+-- Looks at one brand-new player: did they follow / get invited by someone, and is anybody here their friend?
+local function checkFriendsHere(player: Player)
+	local data: any = nil
+	pcall(function()
+		data = player:GetJoinData()
+	end)
+	if type(data) == "table" and ((tonumber(data.ReferredByPlayerId) or 0) > 0 or (tonumber(data.LaunchData) or 0) > 0) then
+		markFriendsHere(player)
+		return
+	end
+	for _, other in Players:GetPlayers() do
+		if player.Parent ~= Players or player:GetAttribute("FriendsHere") == true then
+			return
+		end
+		if other ~= player and other.Parent == Players then
+			local ok, result = pcall(player.IsFriendsWithAsync, player, other.UserId)
+			if ok and result == true then
+				markFriendsHere(player)
+				return
+			end
+		end
+	end
+end
+
+-- Someone joined: is any brand-new player already here their friend?
+local function checkNewArrival(arrival: Player)
+	for _, player in Players:GetPlayers() do
+		if player ~= arrival and isNewcomer(player) then
+			task.spawn(function()
+				local ok, result = pcall(player.IsFriendsWithAsync, player, arrival.UserId)
+				if ok and result == true and arrival.Parent == Players then
+					markFriendsHere(player)
+				end
+			end)
+		end
+	end
+end
+
 local function onPlayerRemoving(player: Player)
 	removeMember(player, "Gone")
 	unhookMember(player)
@@ -1140,6 +1194,9 @@ end
 -- A host whose profile finished loading after they made the party: default the level to their best
 -- dishwasher (unless they already picked one) and send the new HostUnlocked.
 local function onProfileLoaded(player: Player)
+	if isNewcomer(player) then
+		task.spawn(checkFriendsHere, player)
+	end
 	local party = memberOf[player]
 	if not party or party.Dead then
 		return
@@ -1167,6 +1224,7 @@ function PartyService.Init()
 
 	Players.PlayerAdded:Connect(function(player)
 		player:SetAttribute("InParty", false)
+		checkNewArrival(player)
 	end)
 	for _, player in Players:GetPlayers() do
 		if player:GetAttribute("InParty") == nil then
