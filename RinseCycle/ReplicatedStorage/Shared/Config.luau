@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.16.0"
+Config.Version = "2.17.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -52,6 +52,7 @@ Config.Round = {
 	MinClickInterval = 0.11, -- server ignores clicks faster than this (about 9 per second)
 	MaxScrubDt = 0.25, -- cap on the damage window of a single held scrub packet
 	ReachSlack = 6, -- extra studs the server allows over reach (latency)
+	TouchReachMult = 1.5, -- phones and tablets reach this much further with every tool (aiming with a finger is harder)
 	DrainRadius = 8,
 	PartyGrimeScale = 0.6, -- total grime = base * min(PartyGrimeCap, 1 + 0.6 * (players - 1))
 	PartyGrimeCap = 3.6, -- big parties (up to 8) share a fuller load rather than an endless one
@@ -521,6 +522,15 @@ Config.Sounds = {
 	Splash = { Id = "rbxassetid://9120585252", Volume = 0.5 },
 	Hatch = { Id = "rbxassetid://9113263649", Volume = 0.6 },
 	Error = { Id = "rbxassetid://9113649171", Volume = 0.4 },
+	-- The tools (SprayController). The same recordings as above, pitched and kept quiet so they sit under the music: a hiss for the
+	-- spray and the washer, a low rumble for the washer, a wet squish for the sponge, a soft "fwump" for each foam blob, a click
+	-- for the valve and for picking up another tool. (No new files to load; tune the Volume and the pitch in SprayController.)
+	Hiss = { Id = "rbxassetid://9120585252", Volume = 0.13 },
+	Rumble = { Id = "rbxassetid://9125409840", Volume = 0.16 },
+	Squish = { Id = "rbxassetid://9120585252", Volume = 0.12 },
+	Fwump = { Id = "rbxassetid://9113537815", Volume = 0.35 },
+	Valve = { Id = "rbxassetid://9119717523", Volume = 0.22 },
+	Equip = { Id = "rbxassetid://9119717523", Volume = 0.28 },
 	Fallback = { Id = "rbxasset://sounds/impact_water.mp3", Volume = 0.4 },
 }
 

@@ -484,6 +484,10 @@ local function computeStats(levelIndex: number, player: Player, pr: PlayerRun): 
 		stats.Power *= 2
 		stats.PetPower *= 2
 	end
+	-- Phones and tablets (their screen says so with MetaRequest "SetTouch"): every tool reaches further.
+	if player:GetAttribute("TouchReach") == true then
+		stats.Reach *= R.TouchReachMult or 1.5
+	end
 	return stats
 end
 

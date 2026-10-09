@@ -81,6 +81,75 @@ local RULES: { [string]: (any) -> boolean } = {
 }
 BadgeAwards.Rules = RULES
 
+----------------------------------------------------------------------------------------------------
+-- Talking to Roblox. Every call is wrapped; a badge only counts as given once the player really owns it.
+----------------------------------------------------------------------------------------------------
+
+local RETRY_AFTER = 300 -- seconds before a badge that could not be given is tried again
+local verified: { [Player]: { [string]: boolean } } = {}
+local verifying: { [Player]: boolean } = {}
+local warned: { [string]: boolean } = {}
+local infoCache: { [number]: { At: number, Enabled: boolean?, Name: string?, Error: string? } } = {}
+
+-- What Roblox knows about the badge (cached for five minutes): is it switched on, and does it exist for this experience?
+local function badgeInfo(id: number): { At: number, Enabled: boolean?, Name: string?, Error: string? }
+	local cached = infoCache[id]
+	if cached and os.clock() - cached.At < 300 then
+		return cached
+	end
+	local ok, result = pcall(function()
+		return BadgeService:GetBadgeInfoAsync(id)
+	end)
+	local record: any = { At = os.clock() }
+	if ok and type(result) == "table" then
+		record.Enabled = result.IsEnabled
+		record.Name = result.Name
+	else
+		record.Error = tostring(result)
+	end
+	infoCache[id] = record
+	return record
+end
+
+-- true / false when Roblox answered, nil (and the reason) when it could not be asked.
+local function owns(player: Player, id: number): (boolean?, string?)
+	local ok, result = pcall(function()
+		return BadgeService:UserHasBadgeAsync(player.UserId, id)
+	end)
+	if ok then
+		return result == true, nil
+	end
+	return nil, tostring(result)
+end
+
+-- Gives the badge (AwardBadgeAsync; the old AwardBadge only if this Roblox has no Async one) and checks the player
+-- really has it afterwards. Returns (has it now, why not).
+local function tryAward(player: Player, badge: any): (boolean, string?)
+	local info = badgeInfo(badge.Id)
+	if info.Enabled == false then
+		return false, "the badge is switched OFF on Roblox (Creator Hub > Badges > it > Enable)"
+	end
+	local okCall, result = pcall(function()
+		return (BadgeService :: any):AwardBadgeAsync(player.UserId, badge.Id)
+	end)
+	if not okCall and string.find(tostring(result), "valid member", 1, true) then
+		okCall, result = pcall(function()
+			return (BadgeService :: any):AwardBadge(player.UserId, badge.Id)
+		end)
+	end
+	local has, whyNot = owns(player, badge.Id)
+	if has == true then
+		return true, nil
+	end
+	if has == nil and okCall and result == true then
+		return true, nil -- (Roblox said it was given and could not be asked again)
+	end
+	if not okCall then
+		return false, tostring(result)
+	end
+	return false, whyNot or (if info.Error then "Roblox can't find this badge for this experience: " .. info.Error else "Roblox did not give it (is the badge made in THIS experience and switched on?)")
+end
+
 local function award(player: Player, badge: any)
 	local busy = awarding[player]
 	if not busy or busy[badge.Key] then
@@ -88,21 +157,53 @@ local function award(player: Player, badge: any)
 	end
 	busy[badge.Key] = true
 	task.spawn(function()
-		local ok, result = pcall(function()
-			return BadgeService:AwardBadge(player.UserId, badge.Id)
-		end)
+		local done, reason = tryAward(player, badge)
 		local profile = DataService.Get(player)
-		if ok and profile then
-			-- true = given now. false usually means they already had it: note it either way.
+		if done and profile then
 			profile.BadgesGot[badge.Key] = true
-		elseif not ok then
-			warn(string.format("[BadgeAwards] %s for %s: %s", badge.Key, player.Name, tostring(result)))
+		elseif not done then
+			local mark = tostring(player.UserId) .. ":" .. badge.Key
+			if not warned[mark] then
+				warned[mark] = true
+				warn(string.format("[BadgeAwards] could not give %s (%d) to %s: %s", badge.Key, badge.Id, player.Name, tostring(reason)))
+			end
 		end
-		task.wait(if ok then 0 else 60) -- a failed award is tried again a minute later
+		task.wait(if done then 0 else RETRY_AFTER) -- a badge that failed is tried again later
 		if awarding[player] then
 			awarding[player][badge.Key] = nil
 		end
 	end)
+end
+
+-- A badge the save says was given: once per visit, ask Roblox whether the player really has it. If not (an older version
+-- marked it given when it was not), the note is cleared and it is given again.
+local function verifyOne(player: Player, profile: any)
+	if verifying[player] then
+		return
+	end
+	local done = verified[player]
+	if not done then
+		return
+	end
+	for _, badge in Config.Badges do
+		local rule = RULES[badge.Key]
+		if type(badge.Id) == "number" and badge.Id > 0 and profile.BadgesGot[badge.Key] and not done[badge.Key] and rule then
+			local ok, earned = pcall(rule, profile)
+			if ok and earned then
+				verifying[player] = true
+				task.spawn(function()
+					local has = owns(player, badge.Id)
+					done[badge.Key] = true
+					if has == false and DataService.Get(player) == profile then
+						profile.BadgesGot[badge.Key] = nil
+						warn(string.format("[BadgeAwards] %s was marked given to %s but Roblox says they do not have it: giving it again", badge.Key, player.Name))
+					end
+					verifying[player] = nil
+				end)
+				return
+			end
+		end
+	end
 end
 
 function BadgeAwards.Check(player: Player)
@@ -119,6 +220,52 @@ function BadgeAwards.Check(player: Player)
 			end
 		end
 	end
+	verifyOne(player, profile)
+end
+
+-- For the admin command :badges: every badge, whether this player earned it, has the note, and really owns it on Roblox;
+-- an earned badge they do not own is given now. Returns rows { Line1, Line2 }.
+function BadgeAwards.Audit(player: Player): { { Line1: string, Line2: string } }
+	local rows = {}
+	local profile = DataService.Get(player)
+	if not profile or type(profile.BadgesGot) ~= "table" then
+		return { { Line1 = "Their save is still loading.", Line2 = "" } }
+	end
+	for _, badge in Config.Badges do
+		local rule = RULES[badge.Key]
+		local id = badge.Id
+		if type(id) ~= "number" or id <= 0 then
+			table.insert(rows, { Line1 = string.format("%s  -  NO ID", badge.Name), Line2 = "StoreIds > Badges > " .. badge.Key .. " has no badge ID yet" })
+			continue
+		end
+		local okRule, earned = pcall(rule, profile)
+		earned = okRule and earned == true
+		local info = badgeInfo(id)
+		local has, askError = owns(player, id)
+		local flag = profile.BadgesGot[badge.Key] == true
+		local verdict
+		if has == true then
+			verdict = "OK, they have it"
+			profile.BadgesGot[badge.Key] = true
+		elseif not earned then
+			verdict = "not earned yet"
+		else
+			local done, reason = tryAward(player, badge)
+			if done then
+				profile.BadgesGot[badge.Key] = true
+				verdict = "WAS MISSING: given just now"
+			else
+				profile.BadgesGot[badge.Key] = nil
+				verdict = "EARNED BUT NOT GIVEN: " .. tostring(reason)
+			end
+		end
+		local enabled = if info.Enabled == nil then (if info.Error then "unknown (" .. info.Error .. ")" else "unknown") else (if info.Enabled then "on" else "OFF")
+		table.insert(rows, {
+			Line1 = string.format("%s  -  %s", badge.Name, verdict),
+			Line2 = string.format("id %d  -  earned: %s  -  on Roblox: %s  -  save note: %s  -  badge: %s", id, if earned then "yes" else "no", if has == nil then "? (" .. tostring(askError) .. ")" else (if has then "yes" else "no"), if flag then "yes" else "no", enabled),
+		})
+	end
+	return rows
 end
 
 function BadgeAwards.Init()
@@ -128,12 +275,16 @@ function BadgeAwards.Init()
 	initialized = true
 	Players.PlayerAdded:Connect(function(player)
 		awarding[player] = {}
+		verified[player] = {}
 	end)
 	for _, player in Players:GetPlayers() do
 		awarding[player] = {}
+		verified[player] = {}
 	end
 	Players.PlayerRemoving:Connect(function(player)
 		awarding[player] = nil
+		verified[player] = nil
+		verifying[player] = nil
 	end)
 	DataService.ProfileLoaded:Connect(function(player)
 		task.defer(BadgeAwards.Check, player)

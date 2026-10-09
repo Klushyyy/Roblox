@@ -61,6 +61,33 @@ LB.HealHoles(1)
 pump(3, G.frame)
 print("holes healed")
 
+-- What a crater destroys takes its UI along: the party pad's "0/8" sign (on an invisible anchor that never falls), the
+-- Next Event zone the client watches, and the signs / prompts of anything that stands in it. All of it is back after the repair.
+local function uiCount(on: boolean): number
+	local n = 0
+	for _, d in lobby.Model:GetDescendants() do
+		if (d:IsA("BillboardGui") or d:IsA("SurfaceGui") or d:IsA("ProximityPrompt")) and d.Enabled == on then
+			n += 1
+		end
+	end
+	return n
+end
+local pad1 = lobby.Model:FindFirstChild("Pad1")
+local padGui = G.find(pad1, "PadGui")
+local zone = G.find(lobby.Model, "NextEventZone")
+local zoneBefore = zone and zone:GetAttribute("Broken")
+local offBefore = uiCount(false)
+local padPos = pad1.Zone.Position
+LB.OpenCrater(20, padPos.X, padPos.Z, 20)
+local ev = LB.Layout.Event
+LB.OpenCrater(21, ev.X, ev.Z, 20)
+pump(1, G.frame)
+print("pad sign enabled after crater (false):", padGui.Enabled, " event zone Broken (true):", zone and zone:GetAttribute("Broken"), " (was " .. tostring(zoneBefore) .. ")")
+print("UI switched off by the craters:", uiCount(false) - offBefore)
+LB.HealHoles(1)
+pump(3, G.frame)
+print("pad sign enabled after repair (true):", padGui.Enabled, " event zone Broken after repair (nil):", zone and zone:GetAttribute("Broken"), " UI off now:", uiCount(false) - offBefore)
+
 -- Punching the soap shop, the eggs and the pet stand: every prop near each target comes loose, and all return.
 local targets = LB.GetSmashTargets()
 local loose = 0

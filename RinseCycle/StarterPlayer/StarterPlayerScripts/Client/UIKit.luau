@@ -2152,6 +2152,18 @@ function UIKit.Tween(
 	return tween(inst, props, time, style, dir)
 end
 
+-- Fades a text label out together with its outline (a UIStroke does not follow TextTransparency, so the letters
+-- used to disappear and leave an empty outline behind).
+function UIKit.FadeText(label: TextLabel, time: number?)
+	local t = time or 0.4
+	tween(label, { TextTransparency = 1 }, t)
+	for _, child in label:GetDescendants() do
+		if child:IsA("UIStroke") then
+			tween(child, { Transparency = 1 }, t)
+		end
+	end
+end
+
 -- Quick 1 -> 1.15 -> 1 pop. Uses the gui's UIScale (or creates "BounceScale") and returns to
 -- whatever scale it had, so bouncing a scaled element is safe. Spamming it restarts the pop.
 function UIKit.Bounce(gui: GuiObject)

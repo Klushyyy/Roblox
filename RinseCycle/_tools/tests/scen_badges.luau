@@ -30,18 +30,18 @@ prof.Stats.DishesCleaned = 1000
 out("after progress: " .. rules())
 prof.Rebirths = 1
 out("after rebirth: " .. rules())
--- Awarding: only badges with an Id; noted in BadgesGot.
+-- Awarding: only badges with an Id (the first five get one here, the fifth is switched OFF on Roblox); noted in BadgesGot only
+-- once Roblox says the player really has it; never twice.
 for i, b in Config.Badges do
-	b.Id = if i <= 3 then 1000 + i else 0
+	b.Id = if i <= 5 then 1000 + i else 0
 end
-local awarded = {}
-local bs = game:GetService("BadgeService")
-bs.AwardBadge = function(_self, userId, id)
-	if userId == p.UserId then
-		table.insert(awarded, id)
-	end
-	return true
-end
+local B = G.badges
+B.awarded, B.owned = {}, {}
+B.off[1005] = true
+-- (Level 1 is already noted as given, as an older version did without Roblox ever giving it: the first check asks Roblox,
+-- finds the player does not own it, clears the note and gives it)
+prof.BadgesGot = { Level1 = true }
+local p1 = tostring(p.UserId)
 BA.Check(p)
 pump(1, G.frame)
 local got = {}
@@ -49,10 +49,28 @@ for k in prof.BadgesGot do
 	table.insert(got, k)
 end
 table.sort(got)
-out("awarded (ids set for first 3): " .. table.concat(got, " ") .. "  calls: " .. #awarded)
+out("awarded (ids for the first 5, the 5th switched off): " .. table.concat(got, " ") .. "  given on Roblox: " .. table.concat(B.awarded, ","))
 BA.Check(p)
 pump(1, G.frame)
-out("calls after a 2nd check (no repeats): " .. #awarded .. " " .. table.concat(awarded, ","))
+out("given after a 2nd check (no repeats): " .. #B.awarded)
+
+for _ = 1, 3 do
+	pump(1, G.frame)
+	BA.Check(p)
+end
+pump(1, G.frame)
+out(string.format("healing: Level1 was noted but not owned -> now owned on Roblox: %s, note: %s, given on Roblox: %s", tostring(B.owned[p1 .. ":1002"] == true), tostring(prof.BadgesGot.Level1), table.concat(B.awarded, ",")))
+
+-- The admin audit (:badges): one row per badge, and the earned one that is switched off says why.
+local rows = BA.Audit(p)
+local lines = {}
+for _, r in rows do
+	if r.Line1:find("EARNED BUT NOT GIVEN") or r.Line1:find("WAS MISSING") or r.Line1:find("NO ID") then
+		table.insert(lines, r.Line1 .. " / " .. r.Line2:sub(1, 60))
+	end
+end
+out("audit rows: " .. #rows .. " (one per badge: " .. #Config.Badges .. ")")
+out("audit problems: " .. table.concat(lines, " | "))
 -- Daily claim queues a notification (only with a message id).
 Config.DailyNotify.MessageId = "test-id"
 pcall(function()

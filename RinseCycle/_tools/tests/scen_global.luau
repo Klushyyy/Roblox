@@ -55,9 +55,48 @@ out("bad give: " .. tostring(last()))
 -- boost
 asMe("globalboost", "10", "")
 out(string.format("boost: %s | left %d s", tostring(last()), DS.Get(me).BoostUntil - os.time()))
--- pass drop
+-- pass drop: everyone gets a "Congrats" card with a VIEW button, which opens the winners (grouped by pass)
+local dropsSeen = {}
+G.getSignal(RSt:FindFirstChild("PassWinners"), "OnClientEvent"):Connect(function(kind, board) table.insert(dropsSeen, { kind = kind, board = board }) end)
 asMe("globalpassdrop", "2", "DoubleCoins")
 pump(1, G.frame)
 out("pass drop: " .. tostring(last()))
 out("banner: " .. tostring(banners[#banners]))
 out("me has DoubleCoins: " .. tostring(DS.GetPasses(me).DoubleCoins) .. ", other: " .. tostring(DS.Get(other) and DS.GetPasses(other).DoubleCoins))
+
+out("pass drop cards sent: " .. #dropsSeen .. (dropsSeen[1] and (" (" .. #dropsSeen[1].board .. " winners: " .. (function() local t = {} for _, w in dropsSeen[1].board do table.insert(t, w.Name .. "=" .. w.Pass) end return table.concat(t, ", ") end)() .. ")") or ""))
+local dropCard = G.find(me.PlayerGui, "PassDropCard")
+out("congrats card shown: " .. tostring(dropCard ~= nil))
+local function findButton(root, text)
+	for _, d in root:GetDescendants() do
+		if d.ClassName == "TextButton" and d.Text == text then return d end
+	end
+end
+if dropCard then
+	local texts = {}
+	for _, d in dropCard:GetDescendants() do
+		if d.ClassName == "TextLabel" and d.Text ~= "" then table.insert(texts, d.Text) end
+	end
+	out("card text: " .. table.concat(texts, " | "))
+	local view = findButton(dropCard, "VIEW")
+	out("VIEW button: " .. tostring(view ~= nil))
+	if view then
+		G.getSignal(view, "Activated"):Fire()
+		pump(0.6, G.frame)
+		local win = G.find(me.PlayerGui, "PassWinnersWindow")
+		out("winners window opened: " .. tostring(win ~= nil))
+		if win then
+			local rows = {}
+			for _, d in win:GetDescendants() do
+				if d.ClassName == "TextLabel" and d.Text ~= "" then table.insert(rows, d.Text) end
+			end
+			out("window text: " .. table.concat(rows, " | "))
+			local close = findButton(win, "CLOSE")
+			if close then
+				G.getSignal(close, "Activated"):Fire()
+				pump(0.3, G.frame)
+			end
+			out("window closed: " .. tostring(G.find(me.PlayerGui, "PassWinnersWindow") == nil))
+		end
+	end
+end

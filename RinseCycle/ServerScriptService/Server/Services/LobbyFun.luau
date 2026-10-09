@@ -52,7 +52,7 @@ local AVOID = {
 local Layout = LobbyBuilder.Layout
 local DUCK_SPOTS: { [string]: { Pos: Vector3, Yaw: number, Float: boolean? } } = {
 	Fountain = { Pos = Vector3.new(Layout.Fountain.X, FLOOR_Y + 2.4, Layout.Fountain.Z + 4.6), Yaw = 70, Float = true },
-	Doghouse = { Pos = Vector3.new(Layout.PetStand.X, 3, Layout.PetStand.Z + 3.6), Yaw = 0 },
+	Doghouse = { Pos = Vector3.new(Layout.PetStand.X + 3.6, 3, Layout.PetStand.Z), Yaw = 90 }, -- (the stand faces the middle, +X)
 	Sponge = { Pos = Vector3.new(-79, 6.7, 45), Yaw = 160 },
 	Board = { Pos = Vector3.new(Layout.DishesBoard.X + 8, FLOOR_Y, Layout.DishesBoard.Z - 14), Yaw = 200 },
 	Shakers = { Pos = Vector3.new(-44, 55.1, -101.5), Yaw = 130 }, -- on the building's roof, back corner

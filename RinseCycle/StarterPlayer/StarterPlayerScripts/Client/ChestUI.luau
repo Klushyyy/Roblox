@@ -685,6 +685,7 @@ function ChestUI.Init()
 			-- Inside the ring (flat distance from the chest), not just somewhere close by.
 			local radius = (model and tonumber(model:GetAttribute("ZoneRadius"))) or DEFAULT_ZONE
 			local isNear = pivot ~= nil
+				and not (model and model:GetAttribute("Broken") == true) -- (smashed by the show)
 				and rootPart ~= nil
 				and rootPart:IsA("BasePart")
 				and ClientState.Run == nil

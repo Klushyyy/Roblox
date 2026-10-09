@@ -30,6 +30,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Format = require(Shared:WaitForChild("Format"))
+local Remotes = require(Shared:WaitForChild("Remotes"))
 
 local LobbyBuilder = require(script.Parent:WaitForChild("LobbyBuilder"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
@@ -840,6 +841,62 @@ end
 -- Lifecycle
 ----------------------------------------------------------------------------------------------------
 
+----------------------------------------------------------------------------------------------------
+-- Refresh (the REFRESH plate under each board): anyone can redraw both boards, e.g. after a run
+----------------------------------------------------------------------------------------------------
+
+local REFRESH_PLAYER_COOLDOWN = 20 -- seconds between one player's refreshes
+local REFRESH_SERVER_COOLDOWN = 12 -- and between any two in this server (each one reads every board)
+local lastRefreshOf: { [Player]: number } = {}
+local lastRefreshAt = -1e9
+local refreshing = false
+
+-- Writes everyone's new best times / totals, reads every board again and redraws. Returns (ok, message for the player).
+function LeaderboardService.RefreshFor(player: Player): (boolean, string)
+	local now = os.clock()
+	local own = lastRefreshOf[player] or -1e9
+	if now - own < REFRESH_PLAYER_COOLDOWN then
+		return false, string.format("Wait %d seconds to refresh again.", math.ceil(REFRESH_PLAYER_COOLDOWN - (now - own)))
+	end
+	lastRefreshOf[player] = now
+	if refreshing or now - lastRefreshAt < REFRESH_SERVER_COOLDOWN then
+		pcall(publishRanks) -- (it was refreshed a moment ago: just make sure your own row is up to date)
+		return true, "The leaderboards were just refreshed!"
+	end
+	refreshing = true
+	lastRefreshAt = now
+	local offline = DataService.IsOffline() or not openStores()
+	local ok, err = pcall(if offline then refreshOffline else refreshOnline)
+	if not ok then
+		warn(string.format("[%s] LeaderboardService refresh failed: %s", Config.GameName, tostring(err)))
+	end
+	drawTimes()
+	drawDishes()
+	pcall(publishRanks)
+	refreshing = false
+	return ok, if ok then "Leaderboards refreshed!" else "Couldn't refresh the leaderboards. Try again in a minute."
+end
+
+local function onRefreshRequest(player: Player)
+	task.spawn(function()
+		local ok, text = LeaderboardService.RefreshFor(player)
+		if player.Parent == Players then
+			Remotes.Event("Notify"):FireClient(player, text, if ok then "Good" else "Info")
+		end
+	end)
+end
+
+local function hookRefreshPlate(plate: Instance)
+	local detector = plate:FindFirstChildOfClass("ClickDetector")
+	if detector then
+		detector.MouseClick:Connect(onRefreshRequest)
+	end
+	local prompt = plate:FindFirstChildOfClass("ProximityPrompt")
+	if prompt then
+		prompt.Triggered:Connect(onRefreshRequest)
+	end
+end
+
 function LeaderboardService.Init()
 	for i = 1, levelCount do
 		timesTop[i] = {}
@@ -858,6 +915,7 @@ function LeaderboardService.Init()
 	Players.PlayerRemoving:Connect(function(player)
 		resets[player.UserId] = nil
 		resetsLoaded[player.UserId] = nil
+		lastRefreshOf[player] = nil
 	end)
 	-- Another server reset someone: re-read their resets and forget what we wrote for them.
 	task.spawn(function()
@@ -894,6 +952,9 @@ function LeaderboardService.Start()
 	end
 	drawTimes()
 	drawDishes()
+	for _, plate in CollectionService:GetTagged("BoardRefresh") do
+		hookRefreshPlate(plate)
+	end
 
 	task.spawn(function()
 		-- Straight away: show what's already on the boards (reads only, in parallel per board).

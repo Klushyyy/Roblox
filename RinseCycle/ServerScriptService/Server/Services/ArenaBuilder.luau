@@ -1281,13 +1281,16 @@ local function buildYard(b: Builder)
 		end
 		cyl(b, "PizzaBoxLogo", 0.4, 26, x, benchY + 5.2 * n + 2.7, z, Color3.fromRGB(205, 45, 40), Enum.Material.SmoothPlastic, scenery)
 	end
-	pizza(-150, 24, true)
-	pizza(-270, 62, false)
-	boxStack(-355, 14, 5)
-	pizza(160, 46, false)
-	pizza(285, 16, true)
-	boxStack(350, 70, 4)
-	boxStack(-100, 80, 3)
+	-- (Where they stand: each side of the sink is a counter 358 long and 170 deep. A pizza board is 88 across and a box
+-- stack up to about 92 across (the boxes are turned a little), so three fit along a side with room between them; there
+-- used to be seven, which overlapped (a stack of boxes sunk into a pizza). Every prop keeps at least 10 studs from the
+-- next and from the counter's edge; the check is _tools/tests/overlapcheck.py.)
+boxStack(-114, 4, 5)
+pizza(-250, 44, true)
+pizza(-362, -4, false)
+boxStack(114, 6, 4)
+pizza(240, 14, true)
+boxStack(366, 30, 3)
 
 	-- The house behind the yard: two storeys, a gabled roof, a porch and flower beds.
 	local hz0, hz1 = 520, 740
@@ -2001,7 +2004,19 @@ local KIND_SLOTS: { [string]: () -> { Slot } } = {
 		return grid(GLASS_X, GLASS_Z, TOP_RACK_Y)
 	end,
 	Goblet = function()
-		return grid(GLASS_X, GLASS_Z, TOP_RACK_Y)
+		-- A goblet's cup is nearly as wide as the columns are apart (12), so they first take every other column, the second row
+		-- shifted along (24 apart in a row, 18 corner to corner), and only the remaining ones fill the gaps.
+		local slots, rest = {}, {}
+		for zi, z in GLASS_Z do
+			for xi, x in GLASS_X do
+				local slot = { x = x, y = TOP_RACK_Y, z = z }
+				table.insert(if (xi + zi) % 2 == 0 then slots else rest, slot)
+			end
+		end
+		for _, slot in rest do
+			table.insert(slots, slot)
+		end
+		return slots
 	end,
 	Pan = function()
 		return listSlots(PAN_SLOTS)
@@ -2022,10 +2037,16 @@ local KIND_SLOTS: { [string]: () -> { Slot } } = {
 	-- the cutlery basket's spare slots from the far end.
 	Board = traySlots,
 	Cutter = function()
-		local all = grid(BASKET_X, BASKET_Z, BOTTOM_RACK_Y + 0.6)
+		-- A cutter's wheel is 8 across and the basket's columns are 5 apart, so two in neighbouring columns of one row
+		-- overlapped. They take every other column (10 apart; the next row is shifted along), from the far end.
 		local slots = {}
-		for i = #all, 1, -1 do
-			table.insert(slots, all[i])
+		local row = 0
+		for k = #BASKET_Z, 1, -1 do
+			local xs = if row % 2 == 0 then { BASKET_X[4], BASKET_X[2] } else { BASKET_X[3], BASKET_X[1] }
+			for _, x in xs do
+				table.insert(slots, { x = x, y = BOTTOM_RACK_Y + 0.6, z = BASKET_Z[k] })
+			end
+			row += 1
 		end
 		return slots
 	end,
@@ -2042,13 +2063,16 @@ local function dishFrame(origin: CFrame, kind: string, slot: Slot, rng: Random):
 		local r = DishFactory.Size("Bowl").Diameter / 2
 		local lift = r * (1 - math.cos(BOWL_TILT)) + 0.2
 		return footprint(origin, slot.x, slot.y + lift, slot.z) * CFrame.Angles(BOWL_TILT, 0, 0)
+	elseif kind == "Pot" then
+		-- (the handles point front and back, not whichever way the dice said: sideways they stuck out into the pan beside it)
+		return footprint(origin, slot.x, slot.y, slot.z, toDoor) * CFrame.Angles(0, math.pi / 2, 0)
 	elseif kind == "Pan" then
 		local r = DishFactory.Size("Pan").Diameter / 2
 		local lift = r * math.sin(PAN_TILT) + 0.2
 		-- Spin about the pan's own axis so the handle points up and back, away from the pots.
 		return footprint(origin, slot.x, slot.y + lift, slot.z) * CFrame.Angles(PAN_TILT, 0, 0) * CFrame.Angles(0, math.pi / 2, 0)
 	elseif kind == "Fork" or kind == "Knife" or kind == "Spoon" or kind == "Cutter" then
-		return footprint(origin, slot.x, slot.y, slot.z, toDoor) * CFrame.Angles(0, math.rad(rng:NextNumber(-20, 20)), math.rad(rng:NextNumber(-6, 6)))
+		return footprint(origin, slot.x, slot.y, slot.z, toDoor) * CFrame.Angles(0, math.rad(rng:NextNumber(-12, 12)), math.rad(rng:NextNumber(-6, 6))) -- (turned a little, not enough for neighbouring ones to cross)
 	end
 	return footprint(origin, slot.x, slot.y, slot.z, toDoor) * CFrame.Angles(0, rng:NextNumber() * math.pi * 2, 0)
 end

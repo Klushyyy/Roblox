@@ -16,6 +16,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
@@ -95,6 +96,10 @@ local washerVertical = false
 local turnButton: TextButton? = nil
 local turnHint: TextLabel? = nil
 local currentMode = "Scrub"
+-- Tool sounds: what is making a noise now ("Spray" / "Line" while that jet is on), when its next hiss is due, and which tool was held last.
+local toolSoundKind: string? = nil
+local nextHissAt = 0
+local lastToolIndex = 0
 
 -- Touch-only UI.
 local touchGui: ScreenGui? = nil
@@ -112,6 +117,7 @@ local characterConns: { RBXScriptConnection } = {}
 local function resetPerRunState()
 	clickCount = 0
 	lastSendAt = 0
+	lastToolIndex = 0
 end
 
 local function findHandPart(character: Model): BasePart?
@@ -528,6 +534,7 @@ end
 ----------------------------------------------------------------------------------------------------
 
 local function hideVisuals()
+	toolSoundKind = nil -- (the jet is off: no hiss)
 	if ring then
 		ring.Transparency = 1
 	end
@@ -612,7 +619,15 @@ end
 
 local function sendScrub(hitPosition: Vector3, holding: boolean, pitchJitter: number, extra: { [string]: any }?)
 	ScrubEvent:FireServer(hitPosition, holding, extra)
-	UIKit.PlaySound("Scrub", 0.9 + pitchJitter * 0.25)
+	-- (the water tools have their own sounds: the hiss of the jet, the foam blob's "fwump")
+	local run = ClientState.Run :: Types.RunState?
+	local stats = run and run.Stats
+	if not stats or (stats.Mode or "Scrub") == "Scrub" then
+		UIKit.PlaySound("Scrub", (if stats and stats.ToolIndex > 1 then 1.05 else 0.9) + pitchJitter * 0.25)
+		if stats and stats.ToolIndex > 1 and pitchJitter > 0.55 then
+			UIKit.PlaySound("Squish", 1.9 + pitchJitter * 0.6) -- (a wet sponge squelches now and then)
+		end
+	end
 	if splashEmitter then
 		splashEmitter:Emit(SPLASH_EMIT_COUNT)
 	end
@@ -652,6 +667,12 @@ local function onHeartbeat(dt: number)
 
 	local pressed = mouseHeld or r2Held or touchHeld
 	local stats = run.Stats
+	if stats.ToolIndex ~= lastToolIndex then
+		if lastToolIndex ~= 0 then
+			UIKit.PlaySound("Equip", 0.9 + math.random() * 0.15) -- (picking up another tool)
+		end
+		lastToolIndex = stats.ToolIndex
+	end
 
 	if not result then
 		hideVisuals()
@@ -728,6 +749,8 @@ local function onHeartbeat(dt: number)
 				lastFoamAt = now
 				local from = if handAttachment then handAttachment.WorldPosition else (root :: BasePart).Position
 				launchFoam(from, hitPos, toolColor)
+				UIKit.PlaySound("Fwump", 0.5 + math.random() * 0.12) -- (a soft "fwump" out of the cannon; the splat's own sound comes with the splat)
+				UIKit.PlaySound("Hiss", 1.1 + math.random() * 0.2)
 				sendScrub(hitPos, true, math.random(), { Normal = normal })
 			end
 		elseif now - lastSendAt >= Config.Round.ScrubSendInterval then
@@ -753,6 +776,26 @@ local function onHeartbeat(dt: number)
 	-- splashing where it lands.
 	local jetting = sending and mode == "Line"
 	local spraying = sending and mode == "Spray"
+	-- The sound of the jet: a click when the valve opens and shuts, and a quiet hiss all the while it is on (the washer's is
+	-- faster and has a low rumble under it). It stops the moment the jet does (also when you look away or the tank is full).
+	local jetKind: string? = if jetting then "Line" elseif spraying then "Spray" else nil
+	if jetKind ~= toolSoundKind then
+		if toolSoundKind then
+			UIKit.PlaySound("Valve", 0.8)
+		end
+		if jetKind then
+			UIKit.PlaySound("Valve", 1.3)
+			nextHissAt = 0
+		end
+		toolSoundKind = jetKind
+	end
+	if jetKind and now >= nextHissAt then
+		nextHissAt = now + (if jetKind == "Line" then 0.11 else 0.2)
+		UIKit.PlaySound("Hiss", (if jetKind == "Line" then 2.5 else 1.9) + math.random() * 0.3 - 0.15)
+		if jetKind == "Line" and math.random() < 0.5 then
+			UIKit.PlaySound("Rumble", 0.5 + math.random() * 0.1)
+		end
+	end
 	if handPart then
 		ensureWater(handPart)
 	end
@@ -838,6 +881,93 @@ function SprayController.ToggleWasher()
 	updateTouchUIVisibility()
 end
 
+-- Touch: a finger that lands ON dirt or a dish scrubs, and is kept away from the camera (it used to scrub AND turn the
+-- view, so the dish moved under the finger). A finger anywhere else (the floor, a wall) still turns the camera, and the
+-- thumbstick / buttons are untouched. On a phone the run is always seen in first person.
+local SCRUB_ACTION = "RinseScrubTouch"
+local casBound = false
+local lockedFirstPerson = false
+
+-- The thumbstick's corner (the lower left of the screen): a finger that lands here is for WALKING and never sprays. On a phone
+-- the thumb that walks used to spray whatever the view showed under it, which in first person is nearly always a dish: with
+-- the foam cannon you fired blobs the whole time you walked. The rest of the screen (and the top left) still sprays.
+local MOVE_ZONE_X, MOVE_ZONE_Y = 0.45, 0.4 -- (fractions of the screen: from the left edge, and from the top)
+local function inMoveZone(position: Vector3): boolean
+	local camera = workspace.CurrentCamera
+	local size = if camera then camera.ViewportSize else Vector2.new(1, 1)
+	return position.X < size.X * MOVE_ZONE_X and position.Y > size.Y * MOVE_ZONE_Y
+end
+
+local function touchStartsOnDirt(input: InputObject): boolean
+	if inMoveZone(input.Position) then
+		return false
+	end
+	local camera = workspace.CurrentCamera
+	if not camera or not arenaModel or not arenaModel.Parent then
+		return false
+	end
+	raycastParams.FilterDescendantsInstances = aimTargets(arenaModel :: Model)
+	local ray = camera:ScreenPointToRay(input.Position.X, input.Position.Y)
+	return workspace:Raycast(ray.Origin, ray.Direction.Unit * MAX_AIM_DISTANCE, raycastParams) ~= nil
+end
+
+local function onScrubTouch(_name: string, state: Enum.UserInputState, input: InputObject): Enum.ContextActionResult
+	if not active or not UIKit.IsTouch() or UIKit.IsGamepad() then
+		return Enum.ContextActionResult.Pass
+	end
+	if state == Enum.UserInputState.Begin then
+		if touchInput == nil and touchStartsOnDirt(input) then
+			touchInput = input
+			touchHeld = true
+			onPressBegan()
+			return Enum.ContextActionResult.Sink
+		end
+		return Enum.ContextActionResult.Pass
+	end
+	if input == touchInput then
+		if state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
+			touchInput = nil
+			touchHeld = false
+		end
+		return Enum.ContextActionResult.Sink
+	end
+	return Enum.ContextActionResult.Pass
+end
+
+-- First person while a run is on and the screen is a touch screen; back to the normal camera afterwards.
+local function applyCameraMode()
+	local want = active and UIKit.IsTouch() and not UIKit.IsGamepad()
+	if want and not lockedFirstPerson then
+		lockedFirstPerson = true
+		pcall(function()
+			LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+		end)
+	elseif not want and lockedFirstPerson then
+		lockedFirstPerson = false
+		pcall(function()
+			LocalPlayer.CameraMode = Enum.CameraMode.Classic
+		end)
+	end
+end
+
+-- Tells the server this is a touch screen (tools reach further: Config.Round.TouchReachMult).
+local reportedTouch: boolean? = nil
+local reportingTouch = false
+local function reportTouch()
+	local touch = UIKit.IsTouch() and not UIKit.IsGamepad()
+	if touch == reportedTouch or reportingTouch then
+		return
+	end
+	reportingTouch = true
+	task.spawn(function()
+		local ok, result = pcall(ClientState.MetaRequest, "SetTouch", touch)
+		if ok and result and (result :: any).Ok then
+			reportedTouch = touch
+		end
+		reportingTouch = false
+	end)
+end
+
 local function onInputBegan(input: InputObject, processed: boolean)
 	if processed then
 		return
@@ -849,9 +979,9 @@ local function onInputBegan(input: InputObject, processed: boolean)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		mouseHeld = true
 		onPressBegan()
-	elseif input.UserInputType == Enum.UserInputType.Touch and active and touchInput == nil then
-		-- A finger on the world (not on a button or the thumbstick): spray right there, and keep
-		-- spraying wherever it moves until it lifts.
+	elseif input.UserInputType == Enum.UserInputType.Touch and active and touchInput == nil and not casBound and not inMoveZone(input.Position) then
+		-- (only if the touch action could not be bound) A finger on the world (not on a button or the thumbstick): spray
+		-- right there, and keep spraying wherever it moves until it lifts.
 		touchInput = input
 		touchHeld = true
 		onPressBegan()
@@ -914,6 +1044,8 @@ local function refreshActive()
 		cleanupForRunEnd()
 	end
 	updateTouchUIVisibility()
+	applyCameraMode()
+	reportTouch()
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -939,7 +1071,14 @@ function SprayController.Init()
 
 	UserInputService.InputBegan:Connect(onInputBegan)
 	UserInputService.InputEnded:Connect(onInputEnded)
-	UIKit.LayoutChanged:Connect(updateTouchUIVisibility)
+	UIKit.LayoutChanged:Connect(function()
+		updateTouchUIVisibility()
+		applyCameraMode()
+		reportTouch()
+	end)
+	casBound = pcall(function()
+		ContextActionService:BindActionAtPriority(SCRUB_ACTION, onScrubTouch, false, Enum.ContextActionPriority.High.Value, Enum.UserInputType.Touch)
+	end)
 
 	if LocalPlayer.Character then
 		onCharacterAdded(LocalPlayer.Character)

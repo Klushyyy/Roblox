@@ -402,11 +402,17 @@ local function clubNoticeSeen(player: Player, _value: any): Types.RequestResult
 end
 
 -- Menu requests that are bookkeeping rather than something the player chose.
-local UNTRACKED: { [string]: boolean } = { ClubNoticeSeen = true, SawEpisode = true }
+local UNTRACKED: { [string]: boolean } = { ClubNoticeSeen = true, SawEpisode = true, SetTouch = true }
 
 local HANDLERS: { [string]: (Player, any) -> Types.RequestResult } = {
 	TutorialDone = tutorialDone,
 	ClubNoticeSeen = clubNoticeSeen,
+	-- The player's screen is a touch screen (value true) or not: tools reach Config.Round.TouchReachMult times as far on touch.
+	SetTouch = function(player: Player, value: any): Types.RequestResult
+		player:SetAttribute("TouchReach", value == true)
+		RoundService.RefreshStats(player)
+		return { Ok = true }
+	end,
 	ClaimDaily = claimDaily,
 	ClaimStayBoost = claimStayBoost,
 	SetPetsResting = setPetsResting,

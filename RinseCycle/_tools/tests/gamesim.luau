@@ -844,11 +844,35 @@ end
 rawget(service("ContentProvider"), "__p").PreloadAsync = function() end
 rawget(service("SoundService"), "__p").PlayLocalSound = function() end
 rawget(service("SocialService"), "__p").PromptRsvpToEventAsync = function() end
-rawget(service("BadgeService"), "__p").AwardBadge = function()
+-- BadgeService: remembers what was given (G.badges.awarded), what each player owns (owned["userId:badgeId"]) and which badges are
+-- switched off (off[badgeId]), so the badge tests can follow the real checks.
+local badgeState = { awarded = {}, owned = {}, off = {}, calls = 0 }
+rawget(service("BadgeService"), "__p").AwardBadgeAsync = function(_self, userId, id)
+	badgeState.calls += 1
+	if badgeState.off[id] then
+		return false
+	end
+	table.insert(badgeState.awarded, id)
+	badgeState.owned[tostring(userId) .. ":" .. tostring(id)] = true
 	return true
 end
-rawget(service("BadgeService"), "__p").UserHasBadgeAsync = function()
-	return false
+rawget(service("BadgeService"), "__p").AwardBadge = rawget(service("BadgeService"), "__p").AwardBadgeAsync
+rawget(service("BadgeService"), "__p").UserHasBadgeAsync = function(_self, userId, id)
+	return badgeState.owned[tostring(userId) .. ":" .. tostring(id)] == true
+end
+rawget(service("BadgeService"), "__p").GetBadgeInfoAsync = function(_self, id)
+	return { Id = id, Name = "Badge " .. tostring(id), IsEnabled = not badgeState.off[id] }
+end
+-- ContextActionService: remembers what is bound, so a test can send a finger through the bound action (G.cas[name](name, state, input)).
+local boundActions = {}
+rawget(service("ContextActionService"), "__p").BindActionAtPriority = function(_self, name, fn)
+	boundActions[name] = fn
+end
+rawget(service("ContextActionService"), "__p").BindAction = function(_self, name, fn)
+	boundActions[name] = fn
+end
+rawget(service("ContextActionService"), "__p").UnbindAction = function(_self, name)
+	boundActions[name] = nil
 end
 rawget(UIS, "__p").IsGamepadButtonDown = function()
 	return false
@@ -1400,7 +1424,7 @@ for _, g in methods.GetChildren(playerGui) do
 	table.insert(names, g.Name)
 end
 out("PlayerGui: " .. table.concat(names, ", "))
-_G.GAME = { modules = modulesCache, player = player, victim = victim, playerGui = playerGui, frame = frame, find = function(r, n) return methods.FindFirstChild(r, n, true) end, methods = methods, getSignal = getSignal, ReplicatedStorage = ReplicatedStorage, workspace = workspace, Players = Players }
+_G.GAME = { badges = badgeState, cas = boundActions, modules = modulesCache, player = player, victim = victim, playerGui = playerGui, frame = frame, find = function(r, n) return methods.FindFirstChild(r, n, true) end, methods = methods, getSignal = getSignal, ReplicatedStorage = ReplicatedStorage, workspace = workspace, Players = Players }
 do
 	local okDump, dumpFn = pcall(require, "./guidump")
 	if okDump then

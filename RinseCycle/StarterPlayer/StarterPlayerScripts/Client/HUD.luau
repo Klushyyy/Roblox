@@ -244,8 +244,8 @@ function HUD.Init()
 		UIKit.ToggleWindow("Clubs")
 	end)
 	-- The Treasure Chest event (only while it runs), with a "FREE" tag while a free chest waits.
-	-- It (and E) takes you to the chest in the lobby, where the opening happens.
-	local eventButton = sideButton("@Chest", "Event", Colors.Coin, "", "", function()
+	-- It (and H) takes you to the chest in the lobby, where the opening happens.
+	local eventButton = sideButton("@Chest", "Event", Colors.Coin, "H", "", function()
 		(require(script.Parent:WaitForChild("ChestUI")) :: any).GoToChest()
 	end)
 	local freeTag = Instance.new("Frame")
@@ -797,13 +797,20 @@ function HUD.Init()
 		banner.Visible = true
 		bannerTitle.TextTransparency = 0
 		bannerSubtitle.TextTransparency = 0
+		for _, label in { bannerTitle, bannerSubtitle } do
+			for _, child in label:GetDescendants() do
+				if child:IsA("UIStroke") then
+					child.Transparency = 0 -- (the outline fades with the text, see UIKit.FadeText)
+				end
+			end
+		end
 		UIKit.Bounce(banner)
 		task.delay(2.5, function()
 			if token ~= bannerToken then
 				return
 			end
-			UIKit.Tween(bannerTitle, { TextTransparency = 1 }, 0.4)
-			UIKit.Tween(bannerSubtitle, { TextTransparency = 1 }, 0.4)
+			UIKit.FadeText(bannerTitle, 0.4)
+			UIKit.FadeText(bannerSubtitle, 0.4)
 			task.delay(0.45, function()
 				if token == bannerToken then
 					banner.Visible = false
@@ -1477,6 +1484,9 @@ function HUD.Init()
 		elseif key == Enum.KeyCode.T and not inRun then
 			-- (In a run T turns the pressure washer: SprayController.)
 			UIKit.ToggleWindow("Trade")
+		elseif key == Enum.KeyCode.H and not inRun and eventButton.Visible then
+			-- (the Event button's key: takes you to the Treasure Chest while the event runs)
+			(require(script.Parent:WaitForChild("ChestUI")) :: any).GoToChest()
 		elseif inRun and (key == Enum.KeyCode.DPadLeft or key == Enum.KeyCode.DPadRight) then
 			local run = ClientState.Run :: Types.RunState?
 			if run and run.OwnedTools then

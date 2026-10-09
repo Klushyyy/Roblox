@@ -116,7 +116,7 @@ local ALL_COMMANDS = {
 	"viewpets", "givepet",
 	"fly", "noclip", "giant",
 	"leaderboards", "globalannounce", "joinserver", "bringserver", "serverlist",
-	"globalpoll", "analytics",
+	"globalpoll", "analytics", "badges",
 }
 
 -- =====================================================================
@@ -3718,6 +3718,33 @@ Remote.AdminCommand.OnServerEvent:Connect(function(admin, commandName, targetNam
 		return
 	end
 
+	-- :badges [player] - checks every Roblox badge for that player against Roblox itself (earned? really owned? is the
+	-- badge on?) and gives any they earned but do not have, with the reason when it can't.
+	if commandName == "badges" then
+		local target = requireTarget(":badges [player]")
+		if not target then return end
+		task.spawn(function()
+			local module = GameServices:FindFirstChild("BadgeAwards")
+			local okLoad, BadgeAwards = false, nil
+			if module and module:IsA("ModuleScript") then
+				okLoad, BadgeAwards = pcall(require, module)
+			end
+			if not okLoad or type(BadgeAwards) ~= "table" or type(BadgeAwards.Audit) ~= "function" then
+				sendFeedback(admin, "BadgeAwards isn't installed", true)
+				return
+			end
+			local built, rows = pcall(BadgeAwards.Audit, target)
+			if not built then
+				sendFeedback(admin, "The badge check failed: " .. tostring(rows), true)
+				return
+			end
+			Remote.AdminReport:FireClient(admin, "Badges - " .. target.Name, rows, 0, 0, 0)
+		end)
+		sendFeedback(admin, "Checking " .. target.Name .. "'s badges with Roblox...", false)
+		logCommand(admin, "badges", target.Name, nil, admin.Name .. " checked " .. target.Name .. "'s badges")
+		return
+	end
+
 	-- :analytics [report] [days] - where players get stuck and leave (Analytics.luau; see ANALYTICS.md).
 	if commandName == "analytics" then
 		local index, days = extraText:match("^%s*(%d*)%s*(%d*)")
@@ -4958,6 +4985,9 @@ Remote.GlobalPollVote.Parent = ReplicatedStorage
 Remote.GlobalCountdown = Instance.new("RemoteEvent") -- S->C ("Set", name, endsAt, liveMinutes) / ("Clear")
 Remote.GlobalCountdown.Name = "GlobalCountdown"
 Remote.GlobalCountdown.Parent = ReplicatedStorage
+Remote.PassWinners = Instance.new("RemoteEvent") -- S->C ("Drop", { { Id, Name, Pass }... }): the pass drop's "Congrats" card + winners list
+Remote.PassWinners.Name = "PassWinners"
+Remote.PassWinners.Parent = ReplicatedStorage
 do
 	local TextService = game:GetService("TextService")
 	local Format = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Format"))
@@ -5173,18 +5203,54 @@ do
 	-- :globalpassdrop [winners] [pass key | random]: that many random players (across every
 	-- server) win a game pass
 	-- (or 100 Gems instead if they already own it).
+	-- A drop travels as several small messages (MessagingService allows about 1 KB each: 25 winners with their names do not fit
+	-- in one). Each server grants its own players' passes as the parts arrive and shows the "Congrats" card once all of them
+	-- have (or after a few seconds, with whoever has).
+	local PASS_DROP_CHUNK = 8
+	local passDrops = {} -- [dropId] = { Board = {...}, Got = 0, Shown = false }
+	local function showPassDrop(id)
+		local drop = passDrops[id]
+		if not drop or drop.Shown then
+			return
+		end
+		drop.Shown = true
+		-- Everyone gets the card (a banner with a View button), except during the Admin Abuse show, whose speech box and pill say it.
+		if ReplicatedStorage:GetAttribute("AbuseLive") ~= true and #drop.Board > 0 then
+			for _, plr in ipairs(Players:GetPlayers()) do
+				Remote.PassWinners:FireClient(plr, "Drop", drop.Board)
+			end
+		end
+		task.delay(30, function()
+			passDrops[id] = nil
+		end)
+	end
 	handlers.PassDrop = function(d)
 		if type(d.W) ~= "table" then
 			return
 		end
+		local id = if type(d.Id) == "string" then d.Id else tostring(os.clock())
+		local drop = passDrops[id]
+		if not drop then
+			drop = { Board = {}, Got = 0, Shown = false }
+			passDrops[id] = drop
+			task.delay(6, showPassDrop, id)
+		end
+		drop.Got += 1
+		-- (what the card lists: every winner of the drop, from every server, with the pass they won)
 		for _, w in ipairs(d.W) do
-			local plr = Players:GetPlayerByUserId(tonumber(w.u) or 0)
+			local pass = Config.GetPass(tostring(w.p))
+			local userId = tonumber(w.u) or 0
+			local plr = Players:GetPlayerByUserId(userId)
+			table.insert(drop.Board, {
+				Id = userId,
+				Name = string.sub(tostring(w.n or (plr and plr.Name) or "A player"), 1, 24),
+				Pass = if pass then pass.Name else tostring(w.p),
+			})
 			if plr then
 				local passes = DataService.GetPasses and DataService.GetPasses(plr) or {}
 				local function has(key)
 					return passes[key] == true or plr:GetAttribute(gamepassAttribute(key)) == true
 				end
-				local pass = Config.GetPass(tostring(w.p))
 				if pass and has(pass.Key) then
 					pass = nil -- they already own it: Gems instead (below)
 				end
@@ -5197,8 +5263,8 @@ do
 				end
 			end
 		end
-		if type(d.Text) == "string" then
-			bannerAll(d.Text)
+		if drop.Got >= math.max(1, tonumber(d.Parts) or 1) then
+			showPassDrop(id)
 		end
 	end
 	Commands.globalpassdrop = function(admin, text)
@@ -5236,12 +5302,19 @@ do
 		for _ = 1, math.min(count, #pool) do
 			local pick = table.remove(pool, math.random(1, #pool))
 			local key = if chosen then chosen.Key else Config.GamePasses[math.random(1, #Config.GamePasses)].Key
-			table.insert(winners, { u = pick.UserId, p = key })
+			table.insert(winners, { u = pick.UserId, p = key, n = pick.Name })
 			table.insert(names, pick.Name)
 		end
 		local shown = table.concat(names, ", ", 1, math.min(#names, 3)) .. (if #names > 3 then string.format(" and %d more", #names - 3) else "")
-		local banner = string.format("Pass drop! %s won %s!", shown, if chosen then chosen.Name else "a game pass")
-		local ok = publish({ Kind = "PassDrop", W = winners, Text = banner })
+		local dropId = game.JobId .. ":" .. tostring(os.clock())
+		local parts = math.ceil(#winners / PASS_DROP_CHUNK)
+		local ok = true
+		for i = 1, parts do
+			local slice = { table.unpack(winners, (i - 1) * PASS_DROP_CHUNK + 1, math.min(#winners, i * PASS_DROP_CHUNK)) }
+			if not publish({ Kind = "PassDrop", Id = dropId, Part = i, Parts = parts, W = slice }) then
+				ok = false
+			end
+		end
 		sendFeedback(admin, string.format("%d winner(s): %s%s", #winners, shown, if ok then "" else " (this server only)"), false)
 		logCommand(admin, "globalpassdrop", nil, if chosen then chosen.Name else "random", admin.Name .. " ran a pass drop: " .. shown)
 	end
@@ -6485,6 +6558,7 @@ do
 				local SPEED = 26
 				local grabs: { any } = {}
 				local caught: { [Player]: boolean } = {}
+				local freeAt: { [Player]: number } = {} -- when somebody who was let go (or taken up) can be caught again
 				local shipPos = start
 				local target = 2
 				local last = os.clock()
@@ -6513,7 +6587,7 @@ do
 						for _, plr in Players:GetPlayers() do
 							local ch = plr.Character
 							local root = ch and ch:FindFirstChild("HumanoidRootPart") :: BasePart?
-							if root and not caught[plr] and root.Position.Y > ROOM_FLOOR + 20 and root.Position.Y < SHIP_Y - 20 and Vector3.new(root.Position.X - shipPos.X, 0, root.Position.Z - shipPos.Z).Magnitude < BEAM_R then
+							if root and not caught[plr] and now >= (freeAt[plr] or 0) and root.Position.Y > ROOM_FLOOR + 20 and root.Position.Y < SHIP_Y - 20 and Vector3.new(root.Position.X - shipPos.X, 0, root.Position.Z - shipPos.Z).Magnitude < BEAM_R then
 								local g = catchPlayer(plr)
 								if g then
 									caught[plr] = true
@@ -6529,12 +6603,16 @@ do
 						end
 						if not g.Root.Parent or g.Hum.Health <= 0 then
 							g.Done = true
+							caught[g.Plr] = nil
+							freeAt[g.Plr] = now + 2
 							releasePlayer(g, nil)
 							continue
 						end
 						if g.Root.Position.Y >= drawn.Y - 14 then
-							-- touched the top of the ship: straight back to the spawn
+							-- touched the top of the ship: straight back to the spawn (the beam can take them again later)
 							g.Done = true
+							caught[g.Plr] = nil
+							freeAt[g.Plr] = now + 3
 							harmlessBlast(drawn, 16)
 							Remote.AbuseBoom:FireAllClients(1.2, drawn)
 							releasePlayer(g, Vector3.zero)
@@ -7871,6 +7949,7 @@ do
 		local SIT_X, SIT_Z, SIT_TOP, SIT_LIFT = 0, -168, -43, 1.0 -- the chair; how far the hips sit above the seat (x scale)
 		local MOVE_TIME = 1.8 -- (sitting down / standing up: he lowers into the chair, no leap)
 		local lookYaw, nextLook, nextIdle = 0, 0, 0
+		local aimDir: Vector3? = nil -- (chair show) which way he is turning to aim; his facing eases toward it
 		local moveT0, moveFromPos, moveFromY = 0, pos, rootY
 		giantSit = function()
 			if state ~= "walk" then
@@ -7910,9 +7989,9 @@ do
 			end
 			commandText(":stand")
 		end
-		-- The chair show: he walks round to the north side, leaps onto the chair at the end of the table, slams his
-		-- hand down on the Fastest Clean board, then punches off the soap shop, every egg and the pet stand, one at a
-		-- time, and gets up again. (Each smash unanchors what is there and flings it the way the fist went.)
+		-- The chair show: he walks round to the north side, sits on the chair at the end of the table and, without leaving
+		-- it, shoots the Fastest Clean board, the soap shop, the pet stand and every egg, one at a time, from where he
+		-- sits, then gets up again. (Each hit unanchors what is there and flings it the way the shot went.)
 		local function impactAt(target: Vector3, radius: number, strong: boolean)
 			Remote.AbuseBoom:FireAllClients(if strong then 3 else 2.2, target)
 			harmlessBlast(target + Vector3.new(0, 10, 0), radius * 1.6)
@@ -7926,42 +8005,64 @@ do
 			TweenService:Create(puff, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(size, size, size), Transparency = 1 }):Play()
 			Debris:AddItem(puff, 0.45)
 		end
-		-- One real strike. First he leans in over the table and scoots toward the target (a seated giant's arm does not
-		-- reach the far side of the table), then the arm is raised and comes down so the fist lands ON the target (the angle
-		-- is worked out from the shoulder to the target, allowing for the lean); a small white burst goes off at the fist.
-		local function whack(rightHand: boolean, target: Vector3, seat: Vector3, puffSize: number): Vector3
+		-- One shot. He stays on the chair (no leaning in, no scooting off it: the things he hits are far across the table now).
+		-- He turns to the target, the arm on that side goes up toward it (the angle is worked out from the shoulder to the
+		-- target), a glowing ball swells in his hand, and it is shot at the target. Returns when the shot arrives; the hit
+		-- itself (the smash and the shake) is done by the caller. Any trouble with the arm or the effects is skipped, never
+		-- left to stop the show.
+		local function shoot(rightHand: boolean, target: Vector3, color: Color3, big: boolean)
+			leanTarget, shiftTarget = 0, Vector3.zero
 			local armPart = model:FindFirstChild(if rightHand then "RightUpperArm" else "LeftUpperArm") :: BasePart?
 			local handPart = model:FindFirstChild(if rightHand then "RightHand" else "LeftHand") :: BasePart?
-			local flat = Vector3.new(target.X - seat.X, 0, target.Z - seat.Z)
-			local reach = 2.35 * scaleNow
-			local torso = 1.5 * scaleNow
-			local needed = flat.Magnitude - reach * 0.85
-			if needed > 0 then
-				local shiftDist = math.min(needed * 0.45, 38)
-				leanTarget = -math.asin(math.clamp((needed - shiftDist) / torso, 0, 0.92))
-				shiftTarget = flat.Unit * shiftDist
-			else
-				leanTarget, shiftTarget = 0, Vector3.zero
-			end
-			task.wait(0.65)
-			local angle = 100
-			if armPart then
-				local v = target + Vector3.new(0, 3, 0) - armPart.Position
-				local world = math.deg(math.atan2(Vector3.new(v.X, 0, v.Z).Magnitude, -v.Y))
-				angle = math.clamp(world + math.deg(-leanNow), 20, 175) -- (leaning forward tilts the arm's own frame)
-			end
-			local windup = math.min(angle + 55, 125)
-			local name = if rightHand then "whackR" else "whackL"
-			local frames = if rightHand
-				then { { 0, ID }, { 0.25, Rx(windup) }, { 0.38, Rx(angle) }, { 0.7, Rx(angle) }, { 1.0, ID } }
-				else { { 0, ID, ID }, { 0.25, nil, Rx(windup) }, { 0.38, nil, Rx(angle) }, { 0.7, nil, Rx(angle) }, { 1.0, nil, ID } }
-			makeAnim(name, frames, false)
-			playAnim(name)
-			task.wait(0.38)
-			local point = if handPart then handPart.Position else target
-			puffAt(point, puffSize)
-			Remote.AbuseBoom:FireAllClients(1.4, point)
-			return point
+			local aimAt = target + Vector3.new(0, 4, 0)
+			pcall(function()
+				-- the arm: 0 = hanging down, 90 = level and forward (it is aimed along the target's direction, since he faces it)
+				local angle = 90
+				if armPart then
+					local v = aimAt - armPart.Position
+					angle = math.clamp(math.deg(math.atan2(Vector3.new(v.X, 0, v.Z).Magnitude, -v.Y)), 45, 150)
+				end
+				local name = if rightHand then "shootR" else "shootL"
+				local frames = if rightHand
+					then { { 0, ID }, { 0.35, Rx(angle) }, { 1.6, Rx(angle) }, { 2.1, ID } }
+					else { { 0, ID, ID }, { 0.35, nil, Rx(angle) }, { 1.6, nil, Rx(angle) }, { 2.1, nil, ID } }
+				makeAnim(name, frames, false)
+				playAnim(name)
+			end)
+			task.wait(0.45)
+			local from = if handPart then handPart.Position else Vector3.new(pos.X, rootY, pos.Z) + facing * scaleNow * 2
+			local toward = (aimAt - from).Unit
+			local muzzle = from + toward * scaleNow * 0.9
+			-- the charge: a ball that swells in the hand
+			local ball: Part? = nil
+			pcall(function()
+				local b = neonPart(Vector3.new(1, 1, 1), color, Enum.PartType.Ball)
+				b.Position = muzzle
+				b.Parent = workspace
+				ball = b
+				local size = scaleNow * (if big then 1.5 else 1.0)
+				TweenService:Create(b, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = Vector3.new(size, size, size) }):Play()
+			end)
+			task.wait(0.55)
+			-- the shot: the ball flies to the target with a thin beam behind it, and a flash at the hand
+			local travel = math.clamp((aimAt - muzzle).Magnitude / 320, 0.35, 0.9)
+			pcall(function()
+				puffAt(muzzle, scaleNow * 1.2)
+				Remote.AbuseBoom:FireAllClients(1.2, muzzle)
+				local len = (aimAt - muzzle).Magnitude
+				local beam = neonPart(Vector3.new(scaleNow * 0.12, scaleNow * 0.12, len), color)
+				beam.CFrame = CFrame.lookAt(muzzle, aimAt) * CFrame.new(0, 0, -len / 2)
+				beam.Transparency = 0.3
+				beam.Parent = workspace
+				TweenService:Create(beam, TweenInfo.new(travel + 0.3), { Transparency = 1 }):Play()
+				Debris:AddItem(beam, travel + 0.5)
+				local b = ball
+				if b then
+					TweenService:Create(b, TweenInfo.new(travel, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = aimAt }):Play()
+					Debris:AddItem(b, travel + 0.1)
+				end
+			end)
+			task.wait(travel)
 		end
 		giantChairShow = function()
 			if chairShowBusy then
@@ -7998,24 +8099,24 @@ do
 					local function turnTo(target: Vector3)
 						local flat = Vector3.new(target.X - seat.X, 0, target.Z - seat.Z)
 						if flat.Magnitude > 1 then
-							facing = flat.Unit
+							aimDir = flat.Unit
 						end
 					end
-					-- ONE hit for each thing, one after the other: the Fastest Clean board (right fist), then the soap
-					-- shop, every egg and the pet stand (the fist on their side), each broken by its own hit
+					-- ONE shot for each thing, one after the other: the Fastest Clean board, then the soap shop, the pet stand
+					-- and every egg (shot with the hand on their side), each broken by its own hit
 					local board = LobbyBuilder.Layout.TimesBoard
 					local list = { { Name = "Fastest Clean board", Pos = board, Radius = 22 } }
 					for _, t in LobbyBuilder.GetSmashTargets() do
 						table.insert(list, t)
 					end
-					for _, t in list do
+					for i, t in list do
 						if not alive() then
 							break
 						end
 						turnTo(t.Pos)
-						task.wait(0.3)
+						task.wait(0.8) -- (he turns in his seat to face it)
 						local right = t.Pos.X < seat.X -- (facing +Z, his right hand is the -X side)
-						whack(right, t.Pos, seat, if t.Name == "Fastest Clean board" then 28 else 20)
+						shoot(right, t.Pos, PALETTE[(i - 1) % #PALETTE + 1], t.Name == "Fastest Clean board")
 						if not alive() then
 							break
 						end
@@ -8033,14 +8134,15 @@ do
 					leanTarget, shiftTarget = 0, Vector3.zero
 					if alive() then
 						task.wait(0.8)
-						facing = Vector3.new(0, 0, 1)
-						task.wait(0.3)
+						aimDir = Vector3.new(0, 0, 1)
+						task.wait(0.8)
 						if giantStand then
 							giantStand()
 						end
 					end
 				end
 				leanTarget, shiftTarget = 0, Vector3.zero
+				aimDir = nil
 				chairShowBusy = false
 			end)
 		end
@@ -8325,6 +8427,12 @@ do
 				-- few seconds raises an arm)
 				rootY = SIT_TOP + SIT_LIFT * scaleNow + math.sin(now * 1.3) * scaleNow * 0.04
 				leapHeight = 0
+				if chairShowBusy and aimDir then
+					facing = facing:Lerp(aimDir, math.clamp(dt * 4, 0, 1))
+					if facing.Magnitude > 1e-3 then
+						facing = facing.Unit
+					end
+				end
 				if not chairShowBusy then
 					if now >= nextLook then
 						nextLook = now + 2.2 + math.random() * 3

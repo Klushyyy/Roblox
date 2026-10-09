@@ -33,3 +33,38 @@ end
 local t = os.clock()
 local rows = LBS.ListBoard(1, 100)
 out(string.format("admin ListBoard rows=%d first=%s in %.3fs", #rows, rows[1] and rows[1].Name or "-", os.clock() - t))
+
+-- The REFRESH plate under each board: anyone can press it (click, or the prompt) and redraw the boards; the same player has to
+-- wait a few seconds before the next one.
+local Remotes = M[R .. "ReplicatedStorage/Shared/Remotes.luau"]
+local toasts = {}
+G.getSignal(Remotes.Event("Notify"), "OnClientEvent"):Connect(function(t, k) table.insert(toasts, tostring(t) .. " [" .. tostring(k) .. "]") end)
+local plates = {}
+for _, d in G.workspace:GetDescendants() do
+	if d.Name == "BoardRefresh" and d:IsA("BasePart") then
+		table.insert(plates, d)
+	end
+end
+out("refresh plates under the boards: " .. #plates)
+local plate = plates[1]
+if plate then
+	local det = plate:FindFirstChildOfClass("ClickDetector")
+	local prompt = plate:FindFirstChildOfClass("ProximityPrompt")
+	out("plate has a click detector: " .. tostring(det ~= nil) .. ", a prompt: " .. tostring(prompt ~= nil) .. " (" .. tostring(prompt and prompt.ActionText) .. ", key " .. tostring(prompt and prompt.KeyboardKeyCode) .. ")")
+	if det then
+		call("server", function() G.getSignal(det, "MouseClick"):Fire(p) end)
+		pump(1, G.frame)
+		out("1st press: " .. tostring(toasts[#toasts]))
+		call("server", function() G.getSignal(det, "MouseClick"):Fire(p) end)
+		pump(1, G.frame)
+		out("2nd press right after: " .. tostring(toasts[#toasts]))
+	end
+	local other = plates[2]
+	local prompt2 = other and other:FindFirstChildOfClass("ProximityPrompt")
+	if prompt2 then
+		local n = #toasts
+		call("server", function() G.getSignal(prompt2, "Triggered"):Fire(G.victim) end)
+		pump(1, G.frame)
+		out("the other board's plate pressed by another player: nothing for us (their reply goes to their own screen): " .. tostring(#toasts == n))
+	end
+end

@@ -23,18 +23,41 @@ end
 local root = p.Character.HumanoidRootPart
 root.CFrame = CFrame.new(dirt.Position + Vector3.new(0, 2, 4))
 local cam = G.workspace.CurrentCamera
-cam.CFrame = CFrame.lookAt(dirt.Position + Vector3.new(0, 4, 4), dirt.Position)
+-- (the camera hangs over the dirt looking straight down: every finger position gives the same ray in this stand-in)
+cam.CFrame = CFrame.new(dirt.Position + Vector3.new(0, 6, 0)) * CFrame.Angles(-math.pi / 2, 0, 0)
+out("camera looks " .. tostring(cam.CFrame.LookVector))
 local hp0 = dirt:GetAttribute("HP")
 pump(1, G.frame)
 local sprayBtn = G.find(p.PlayerGui, "SprayButton")
 out("phase=" .. tostring(CS.Run and CS.Run.Phase) .. " spray button visible=" .. tostring(sprayBtn and sprayBtn.Visible) .. " hp before=" .. tostring(hp0))
-local finger = { UserInputType = Enum.UserInputType.Touch, KeyCode = Enum.KeyCode.Unknown, Position = Vector3.new(640, 360, 0), UserInputState = Enum.UserInputState.Begin }
-call("client", function() G.getSignal(UIS, "InputBegan"):Fire(finger, false) end)
-pump(3, G.frame)
-local hp1 = dirt.Parent and dirt:GetAttribute("HP") or 0
-call("client", function() G.getSignal(UIS, "InputEnded"):Fire(finger, false) end)
-pump(1, G.frame)
-local hp2 = dirt.Parent and dirt:GetAttribute("HP") or 0
-pump(2, G.frame)
-local hp3 = dirt.Parent and dirt:GetAttribute("HP") or 0
-out(string.format("held 3s: hp %s -> %s; after lifting: %s -> %s (should stay)", tostring(hp0), tostring(hp1), tostring(hp2), tostring(hp3)))
+local act = G.cas["RinseScrubTouch"]
+out("touch action bound: " .. tostring(act ~= nil) .. "  viewport: " .. tostring(cam.ViewportSize))
+local function touch(x, y)
+	return { UserInputType = Enum.UserInputType.Touch, KeyCode = Enum.KeyCode.Unknown, Position = Vector3.new(x, y, 0), UserInputState = Enum.UserInputState.Begin }
+end
+-- (the game moves the camera every frame, so it is put over the dirt again right before each finger lands)
+local function down(f)
+	return call("client", function()
+		cam.CFrame = CFrame.new(dirt.Position + Vector3.new(0, 6, 0)) * CFrame.Angles(-math.pi / 2, 0, 0)
+		return act("RinseScrubTouch", Enum.UserInputState.Begin, f)
+	end)
+end
+local function up(f)
+	f.UserInputState = Enum.UserInputState.End
+	return call("client", function() return act("RinseScrubTouch", Enum.UserInputState.End, f) end)
+end
+-- a finger on the dirt in the middle of the view sprays and is kept from turning the camera (the action sinks it, and so
+-- does its lifting)
+local finger = touch(640, 300)
+out("finger on the dirt: Begin -> " .. tostring(down(finger)) .. " (Sink), End -> " .. tostring(up(finger)) .. " (Sink)")
+-- The walking thumb (the thumbstick's corner, lower left) never sprays, even with dirt right under it in the view, and is
+-- passed on untouched so the thumbstick can walk; the same spot on the right side of the screen does spray.
+local walker = touch(140, 600)
+out("walking thumb in the thumbstick corner: " .. tostring(down(walker)) .. " (Pass)")
+up(walker)
+local aimer = touch(900, 600)
+out("finger on the right side, low: " .. tostring(down(aimer)) .. " (Sink)")
+up(aimer)
+local upperLeft = touch(140, 150)
+out("finger on the upper left: " .. tostring(down(upperLeft)) .. " (Sink)")
+up(upperLeft)

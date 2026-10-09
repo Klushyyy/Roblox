@@ -179,6 +179,26 @@ local function upright(x: number, y: number, z: number): CFrame
 	return at(x, y, z) * CFrame.Angles(0, 0, math.rad(90))
 end
 
+-- Builds something with `build` (written facing +Z, toward the spawn), then turns every part of it by `degrees` around the
+-- vertical axis through plaza point (x, z), so it can face another way: the stalls in the two wings face the middle of the
+-- plaza (the left wing +90 degrees, the right wing -90). Nothing the builder makes is left out: parts, signs and prompts are
+-- all turned with it, and the builder needs to know nothing about it.
+local function turned(parent: Instance, x: number, z: number, degrees: number, build: (Instance) -> ())
+	local scratch = Instance.new("Folder")
+	build(scratch)
+	local pivot = at(x, 0, z)
+	local turn = pivot * CFrame.Angles(0, math.rad(degrees), 0) * pivot:Inverse()
+	for _, d in scratch:GetDescendants() do
+		if d:IsA("BasePart") then
+			d.CFrame = turn * d.CFrame
+		end
+	end
+	for _, child in scratch:GetChildren() do
+		child.Parent = parent
+	end
+	scratch:Destroy()
+end
+
 local function decor(props: { [string]: any }): { [string]: any }
 	props.CanCollide = false
 	props.CastShadow = if props.CastShadow == nil then true else props.CastShadow
@@ -1353,6 +1373,38 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 		return { Title = titleLbl, List = list }
 	end
 
+	-- A REFRESH plate under the board (between its legs), so anyone can redraw both leaderboards after a run to see
+	-- themselves on them. LeaderboardService answers its click and its prompt (a few seconds apart per player).
+	do
+		local plate = mkPart("Part", decor({
+			Name = "BoardRefresh",
+			Size = Vector3.new(9, 2.4, 0.6),
+			CFrame = boardPart.CFrame * CFrame.new(0, -boardPart.Size.Y / 2 - 1.4, 0.35),
+			Color = Color3.fromRGB(255, 205, 70),
+			Material = Enum.Material.SmoothPlastic,
+		}), boardPart)
+		plate.CanQuery = true -- (ClickDetectors need the mouse ray to hit the part)
+		plate.CanTouch = true
+		mkPart("Part", decor({ Name = "BoardRefreshTrim", Size = Vector3.new(9.8, 3.2, 0.4), CFrame = plate.CFrame * CFrame.new(0, 0, 0.2), Color = Color3.fromRGB(40, 90, 150), Material = Enum.Material.SmoothPlastic }), boardPart)
+		local plateGui = mk("SurfaceGui", { Name = "Sign", Face = Enum.NormalId.Front, CanvasSize = Vector2.new(360, 96), LightInfluence = 0 }, plate)
+		local plateText = mk("TextLabel", { Size = UDim2.fromScale(0.92, 0.8), Position = UDim2.fromScale(0.04, 0.1), BackgroundTransparency = 1, Text = "REFRESH", Font = Enum.Font.LuckiestGuy, TextScaled = true, TextColor3 = Color3.fromRGB(60, 40, 10) }, plateGui) :: TextLabel
+		mk("UIStroke", { Thickness = 2, Color = Color3.fromRGB(255, 245, 200) }, plateText)
+		mk("ClickDetector", { MaxActivationDistance = 70 }, plate)
+		plate:SetAttribute("BoardRefresh", true)
+		CollectionService:AddTag(plate, "BoardRefresh")
+		local refreshPrompt = mk("ProximityPrompt", {
+			ActionText = "Refresh",
+			ObjectText = titleText,
+			RequiresLineOfSight = false,
+			HoldDuration = 0,
+			MaxActivationDistance = 14,
+			KeyboardKeyCode = Enum.KeyCode.X,
+			GamepadKeyCode = Enum.KeyCode.ButtonY,
+			UIOffset = Vector2.new(0, 72), -- (stacked under the "Next page" prompt)
+		}, plate) :: ProximityPrompt
+		refreshPrompt:SetAttribute("BoardRefresh", true)
+	end
+
 	if not paged then
 		local only = page(1, gui)
 		return { Part = boardPart, Title = only.Title, List = only.List }
@@ -1832,7 +1884,7 @@ local function buildEventZone(parent: Instance)
 	end
 	-- (the sign: three short lines, each scaled to fit with a margin, so nothing is cut off at the edges)
 	local banner = mkPart("Part", { Name = "EventBanner", Size = Vector3.new(14, 5, 0.4), CFrame = at(x, FLOOR_Y + 9.2, z - 6.5), Color = Color3.fromRGB(70, 40, 120), Material = LOW }, parent)
-	local gui = mk("SurfaceGui", { Name = "Sign", Face = Enum.NormalId.Back, CanvasSize = Vector2.new(700, 250), LightInfluence = 0 }, banner) -- faces the spawn (+Z)
+	local gui = mk("SurfaceGui", { Name = "Sign", Face = Enum.NormalId.Back, CanvasSize = Vector2.new(700, 250), LightInfluence = 0 }, banner) -- built facing +Z; the whole sign is turned to face the middle of the plaza
 	local function signLine(name: string, y: number, h: number, text: string, color: Color3): TextLabel
 		local label = mk("TextLabel", { Name = name, Position = UDim2.fromScale(0.06, y), Size = UDim2.fromScale(0.88, h), BackgroundTransparency = 1, Text = text, Font = Enum.Font.LuckiestGuy, TextScaled = true, TextWrapped = false, TextColor3 = color }, gui) :: TextLabel
 		mk("UIStroke", { Thickness = 2, Color = Color3.fromRGB(12, 30, 60) }, label)
@@ -2142,21 +2194,23 @@ local function constructObby(parent: Instance): { Model: Model, Parts: { BasePar
 	local function ring(name: string, d: number, h: number, yBottom: number, color: Color3, material: Enum.Material?)
 		return mkPart("Part", decor({ Name = name, Shape = Enum.PartType.Cylinder, Size = Vector3.new(h, d, d), CFrame = upright(CX, finishTop + yBottom + h / 2, CZ), Color = color, Material = material or Enum.Material.Metal }), model)
 	end
-	ring("TrophyFoot", 7, 1.0, 0, Color3.fromRGB(110, 72, 44), LOW)
-	ring("TrophyPlinth", 4.8, 1.2, 1.0, gold)
-	ring("TrophyStem", 1.5, 3.4, 2.2, gold)
+	-- (every ring overlaps the one under it by a hair, and the dark inside sits above the rim, so no two faces share a plane:
+	-- before, the rim and the inside had the same top height and flickered against each other)
+	ring("TrophyFoot", 7, 1.0, 0.02, Color3.fromRGB(110, 72, 44), LOW)
+	ring("TrophyPlinth", 4.8, 1.26, 0.96, gold)
+	ring("TrophyStem", 1.5, 3.46, 2.14, gold)
 	mkPart("Part", decor({ Name = "TrophyKnob", Shape = Enum.PartType.Ball, Size = Vector3.new(2.6, 2.6, 2.6), CFrame = at(CX, finishTop + 3.9, CZ), Color = gold, Material = Enum.Material.Metal }), model)
-	ring("TrophyCup1", 3.6, 1.2, 5.6, gold)
-	ring("TrophyCup2", 4.8, 1.3, 6.8, gold)
-	ring("TrophyCup3", 5.8, 1.4, 8.1, goldLight)
-	ring("TrophyCup4", 6.5, 1.6, 9.5, goldLight)
-	ring("TrophyRim", 6.9, 0.45, 11.1, Color3.fromRGB(255, 244, 190))
-	ring("TrophyInside", 6.0, 0.1, 11.45, Color3.fromRGB(90, 50, 20), Enum.Material.SmoothPlastic)
+	ring("TrophyCup1", 3.6, 1.26, 5.54, gold)
+	ring("TrophyCup2", 4.8, 1.36, 6.74, gold)
+	ring("TrophyCup3", 5.8, 1.46, 8.04, goldLight)
+	ring("TrophyCup4", 6.5, 1.66, 9.44, goldLight)
+	ring("TrophyRim", 6.9, 0.51, 11.04, Color3.fromRGB(255, 244, 190))
+	ring("TrophyInside", 6.0, 0.16, 11.5, Color3.fromRGB(90, 50, 20), Enum.Material.SmoothPlastic)
 	for _, side in { -1, 1 } do
 		-- a handle: out, up and back in (three bars)
 		local hx = side * 4.1
 		mkPart("Part", decor({ Name = "TrophyHandle", Size = Vector3.new(1.4, 0.6, 0.6), CFrame = at(CX + hx * 0.92, finishTop + 10.6, CZ), Color = gold, Material = Enum.Material.Metal }), model)
-		mkPart("Part", decor({ Name = "TrophyHandle", Size = Vector3.new(0.6, 2.6, 0.6), CFrame = at(CX + hx * 1.12, finishTop + 9.4, CZ), Color = gold, Material = Enum.Material.Metal }), model)
+		mkPart("Part", decor({ Name = "TrophyHandle", Size = Vector3.new(0.6, 2.6, 0.5), CFrame = at(CX + hx * 1.12, finishTop + 9.4, CZ), Color = gold, Material = Enum.Material.Metal }), model)
 		mkPart("Part", decor({ Name = "TrophyHandle", Size = Vector3.new(1.4, 0.6, 0.6), CFrame = at(CX + hx * 0.92, finishTop + 8.2, CZ), Color = gold, Material = Enum.Material.Metal }), model)
 	end
 	local star = mkPart("Part", decor({ Name = "TrophyStar", Size = Vector3.new(2.2, 2.2, 2.2), CFrame = at(CX, finishTop + 14.2, CZ) * CFrame.Angles(math.rad(45), 0, math.rad(45)), Color = goldLight, Material = Enum.Material.Neon, CastShadow = false }), model)
@@ -2715,6 +2769,40 @@ local function cutDisc(index: number, holeX: number, holeZ: number, R: number, n
 				end
 			end
 		end
+		-- The UI of everything that is destroyed goes with it: floating labels ("0/8" over a party pad, "SOAP SHOP"), signs and
+		-- prompts of whatever stands in the hole (also those hung on invisible anchor parts, which never fall), and the two
+		-- zones the client watches (the Next Event ring and the chest), which stop offering their windows. HealHoles turns it all
+		-- back on when the table is mended.
+		local reach = R + 4
+		local function inHole(part: BasePart): boolean
+			local dx, dz = part.Position.X - cx, part.Position.Z - cz
+			local y = part.Position.Y - ORIGIN.Y
+			return math.sqrt(dx * dx + dz * dz) < reach and y > -1 and y < 70
+		end
+		for _, d in model:GetDescendants() do
+			if (d:IsA("BillboardGui") or d:IsA("SurfaceGui") or d:IsA("ProximityPrompt")) and (d :: any).Enabled and not d:IsDescendantOf(folder) then
+				local anchorPart = (if d:IsA("BillboardGui") then d.Adornee else nil) or d.Parent
+				if anchorPart and anchorPart:IsA("BasePart") and inHole(anchorPart) then
+					table.insert(holeUi, d)
+					;(d :: any).Enabled = false
+				end
+			end
+		end
+		local holeFlags: { Instance } = {}
+		;(rec :: any).Flags = holeFlags
+		for _, zone in CollectionService:GetTagged("NextEventZone") do
+			if zone:IsA("BasePart") and inHole(zone) then
+				zone:SetAttribute("Broken", true)
+				table.insert(holeFlags, zone)
+			end
+		end
+		for _, chest in CollectionService:GetTagged("EventChest") do
+			local root = if chest:IsA("Model") then chest.PrimaryPart else nil
+			if root and inHole(root) then
+				chest:SetAttribute("Broken", true)
+				table.insert(holeFlags, chest)
+			end
+		end
 		for _, prop in rec.Props do
 			task.delay(rng:NextNumber(0.1, 0.9), function()
 				prop.Part.Anchored = false
@@ -2797,9 +2885,6 @@ local function healRec(index: number, rec: HoleRec, total: number)
 				end
 			end
 		end
-		for _, inst in ((rec :: any).Ui or {}) :: { Instance } do
-			(inst :: any).Enabled = true
-		end
 		local folder = rec.Pieces[1]
 		for _, crack in rec.Cracks do
 			TweenService:Create(crack, TweenInfo.new(total * 0.6), { Transparency = 1 }):Play()
@@ -2849,6 +2934,13 @@ local function healRec(index: number, rec: HoleRec, total: number)
 				prop.Part.AssemblyAngularVelocity = Vector3.zero
 				prop.Part.CFrame = prop.CF
 				prop.Part.CanCollide = prop.Collide
+			end
+			-- (their signs and prompts come back with them, not before)
+			for _, inst in ((rec :: any).Ui or {}) :: { Instance } do
+				(inst :: any).Enabled = true
+			end
+			for _, inst in ((rec :: any).Flags or {}) :: { Instance } do
+				inst:SetAttribute("Broken", nil)
 			end
 		end)
 		-- Finally the original parts go back (they are exactly what the pieces looked like).
@@ -3400,6 +3492,11 @@ function LobbyBuilder.HardReset(): number
 		end
 	end
 	snapshotOn = {}
+	for _, tag in { "NextEventZone", "EventChest" } do
+		for _, inst in CollectionService:GetTagged(tag) do
+			inst:SetAttribute("Broken", nil)
+		end
+	end
 	sweepStrays()
 	return fixed
 end
@@ -3475,8 +3572,9 @@ function LobbyBuilder.Build(): Lobby
 	buildPadGantry(model)
 	buildDishwasherBuilding(model)
 	buildEggHatchery(model)
-	buildSoapShop(model)
-	buildPetStand(model)
+	-- (the stalls in the wings face the middle of the plaza, not the spawn)
+	turned(model, Layout.Shop.X, Layout.Shop.Z, 90, buildSoapShop)
+	turned(model, Layout.PetStand.X, Layout.PetStand.Z, 90, buildPetStand)
 	buildRoofLadder(model)
 
 	-- Leaderboards either side of the dishwasher, turned toward the walkway; How to Play beside the
@@ -3488,7 +3586,7 @@ function LobbyBuilder.Build(): Lobby
 	buildRankShrine(model)
 	buildRebirthFountain(model)
 	buildTreasureChest(model)
-	buildEventZone(model)
+	turned(model, Layout.Event.X, Layout.Event.Z, -90, buildEventZone)
 	buildPathDressing(model)
 	buildDecorations(model)
 	setupLighting()

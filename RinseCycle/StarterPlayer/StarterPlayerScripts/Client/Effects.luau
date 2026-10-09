@@ -82,7 +82,7 @@ local function billboardNumber(position: Vector3, text: string, color: Color3, r
 	table.insert(floaters, anchor)
 	local goalOffset = gui.StudsOffset + Vector3.new(0, rise or FLOATER_RISE, 0)
 	UIKit.Tween(gui, { StudsOffset = goalOffset }, FLOATER_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-	UIKit.Tween(label, { TextTransparency = 1 }, FLOATER_TIME * 0.8)
+	UIKit.FadeText(label, FLOATER_TIME * 0.8) -- (letters and outline together)
 	task.delay(FLOATER_TIME + 0.05, function()
 		local i = table.find(floaters, anchor)
 		if i then

@@ -214,7 +214,7 @@ function EventZone.Init()
 			local isInside = false
 			if rootPart and rootPart:IsA("BasePart") then
 				for _, zone in CollectionService:GetTagged("NextEventZone") do
-					if zone:IsA("BasePart") and inside(zone, rootPart.Position) then
+					if zone:IsA("BasePart") and zone:GetAttribute("Broken") ~= true and inside(zone, rootPart.Position) then -- (Broken: smashed by the show)
 						isInside = true
 						break
 					end

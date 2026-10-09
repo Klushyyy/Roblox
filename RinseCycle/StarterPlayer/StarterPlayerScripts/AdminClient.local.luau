@@ -96,6 +96,7 @@ local AdminStaffAction = laterRemote("AdminStaffAction")
 local AdminServerList = laterRemote("AdminServerList")
 local AdminServerAction = laterRemote("AdminServerAction")
 local AdminReport = laterRemote("AdminReport")
+local PassWinners = laterRemote("PassWinners")
 
 ----------------------------------------------------------------------------------------------------
 -- Small helpers
@@ -305,6 +306,228 @@ AdminAnnouncement.OnClientEvent:Connect(function(message: string)
 			banner:Destroy()
 		end)
 	end)
+end)
+
+-- Pass drop ("Congrats to those who won a gamepass!"): a card across the top with a View button that opens the list of who
+-- won which pass. Sent to everyone by :globalpassdrop and by the Admin Abuse prize (AdminServer "PassWinners").
+local winnersWindow: Frame? = nil
+local function openWinners(board: { any })
+	if winnersWindow then
+		winnersWindow:Destroy()
+	end
+	local dim = Instance.new("Frame")
+	dim.Name = "PassWinnersWindow"
+	dim.Size = UDim2.fromScale(1, 1)
+	dim.BackgroundColor3 = Colors.Ink
+	dim.BackgroundTransparency = 0.45
+	dim.BorderSizePixel = 0
+	dim.Active = true
+	dim.ZIndex = 50
+	dim.Parent = statusRoot
+	winnersWindow = dim
+	local card = UIKit.Card({
+		Size = UDim2.fromOffset(600, 470),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Color = Colors.Panel,
+		Parent = dim,
+	})
+	UIKit.Stroke(card, Colors.Ink, 4)
+	-- (never wider or taller than the screen: a portrait phone's canvas is only about 720 wide)
+	local PHONE_BOOST = 1.2
+	UIKit.PhoneBoost(card, PHONE_BOOST) -- (drawn a little bigger on a phone, where the 20 px text would be tiny)
+	local function fit()
+		local canvas = UIKit.CanvasSize()
+		local boost = if UIKit.IsTouch() and canvas.Y <= 800 then PHONE_BOOST else 1
+		card.Size = UDim2.fromOffset(math.min(600, (canvas.X - 24) / boost), math.min(470, (canvas.Y - 24) / boost))
+	end
+	fit()
+	local fitConn = UIKit.LayoutChanged:Connect(fit)
+	dim.Destroying:Connect(function()
+		fitConn:Disconnect()
+		if winnersWindow == dim then
+			winnersWindow = nil
+		end
+	end)
+	local mine = false
+	for _, w in board do
+		if w.Id == player.UserId then
+			mine = true
+		end
+	end
+	UIKit.Label({
+		Text = "Gamepass winners",
+		TextSize = 32,
+		TextScaled = true,
+		TextColor3 = Colors.Coin,
+		Size = UDim2.new(1, -40, 0, 44),
+		Position = UDim2.fromOffset(20, 14),
+		Parent = card,
+	})
+	UIKit.Label({
+		Text = string.format("%d winner%s%s", #board, if #board == 1 then "" else "s", if mine then " - and you are one of them!" else ""),
+		TextSize = 20,
+		TextScaled = true,
+		TextColor3 = if mine then Colors.Good else Colors.TextDim,
+		Size = UDim2.new(1, -40, 0, 28),
+		Position = UDim2.fromOffset(20, 60),
+		Parent = card,
+	})
+	local list = scroller(card, UDim2.new(1, -40, 1, -184), UDim2.fromOffset(20, 96))
+	listLayout(list, 6)
+	-- grouped by pass, in the order each pass first came up
+	local order, groups = {}, {}
+	for _, w in board do
+		local group = groups[w.Pass]
+		if not group then
+			group = {}
+			groups[w.Pass] = group
+			table.insert(order, w.Pass)
+		end
+		table.insert(group, w)
+	end
+	local row = 0
+	for _, passName in order do
+		local group = groups[passName]
+		row += 1
+		UIKit.Label({
+			Text = string.format("%s  (%d)", passName, #group),
+			TextSize = 22,
+			TextColor3 = Colors.Coin,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Size = UDim2.new(1, -10, 0, 30),
+			LayoutOrder = row,
+			Parent = list,
+		})
+		for _, w in group do
+			row += 1
+			local you = w.Id == player.UserId
+			local line = UIKit.Card({ Size = UDim2.new(1, -10, 0, 38), Color = if you then Colors.PrimaryDark else Colors.PanelDark, LayoutOrder = row, Parent = list })
+			UIKit.Label({
+				Text = tostring(w.Name) .. (if you then "  (you)" else ""),
+				TextSize = 20,
+				Font = Fonts.Body,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+				Size = UDim2.new(1, -28, 1, 0),
+				Position = UDim2.fromOffset(14, 0),
+				Parent = line,
+			})
+		end
+	end
+	UIKit.Button({
+		Text = "CLOSE",
+		Color = Colors.Primary,
+		Size = UDim2.fromOffset(200, 54),
+		Position = UDim2.new(0.5, 0, 1, -16),
+		AnchorPoint = Vector2.new(0.5, 1),
+		Parent = card,
+		OnClick = function()
+			dim:Destroy()
+		end,
+	})
+end
+
+local passDropToken = 0
+PassWinners.OnClientEvent:Connect(function(kind: any, board: any)
+	if kind ~= "Drop" or type(board) ~= "table" or #board == 0 then
+		return
+	end
+	passDropToken += 1
+	local token = passDropToken
+	local old = statusRoot:FindFirstChild("PassDropCard")
+	if old then
+		old:Destroy()
+	end
+	local mine = false
+	local names = {}
+	for _, w in board do
+		if w.Id == player.UserId then
+			mine = true
+		end
+		table.insert(names, tostring(w.Name))
+	end
+	local card = UIKit.Card({
+		Size = UDim2.fromOffset(760, 156),
+		Position = UDim2.new(0.5, 0, 0, -200),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Color = Colors.Panel,
+		Parent = statusRoot,
+	})
+	card.Name = "PassDropCard"
+	UIKit.Stroke(card, Colors.Coin, 4)
+	local PHONE_BOOST = 1.2
+	UIKit.PhoneBoost(card, PHONE_BOOST)
+	local function fit()
+		local canvas = UIKit.CanvasSize()
+		local boost = if UIKit.IsTouch() and canvas.Y <= 800 then PHONE_BOOST else 1
+		card.Size = UDim2.fromOffset(math.min(760, (canvas.X - 24) / boost), 156)
+	end
+	fit()
+	local fitConn = UIKit.LayoutChanged:Connect(fit)
+	card.Destroying:Connect(function()
+		fitConn:Disconnect()
+	end)
+	UIKit.Label({
+		Text = "GAMEPASS GIVEAWAY",
+		TextSize = 18,
+		TextColor3 = Colors.Coin,
+		Size = UDim2.new(1, 0, 0, 24),
+		Position = UDim2.fromOffset(0, 8),
+		Parent = card,
+	})
+	UIKit.Label({
+		Text = "Congrats to those who won a gamepass!",
+		TextSize = 30,
+		TextScaled = true,
+		Size = UDim2.new(1, -40, 0, 40),
+		Position = UDim2.fromOffset(20, 34),
+		Parent = card,
+	})
+	local shown = table.concat(names, ", ", 1, math.min(#names, 3)) .. (if #names > 3 then string.format(" and %d more", #names - 3) else "")
+	UIKit.Label({
+		Text = if mine then "That includes YOU: " .. shown else shown,
+		TextSize = 20,
+		TextScaled = true,
+		TextColor3 = if mine then Colors.Good else Colors.TextDim,
+		Size = UDim2.new(1, -40, 0, 26),
+		Position = UDim2.fromOffset(20, 76),
+		Parent = card,
+	})
+	local function dismiss()
+		if token ~= passDropToken or not card.Parent then
+			return
+		end
+		passDropToken += 1 -- (the 25-second timer below is now stale)
+		TweenService:Create(card, TweenInfo.new(0.3), { Position = UDim2.new(0.5, 0, 0, -200) }):Play()
+		task.delay(0.35, function()
+			card:Destroy()
+		end)
+	end
+	UIKit.Button({
+		Text = "VIEW",
+		Color = Colors.Primary,
+		Size = UDim2.fromOffset(150, 42),
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(0.5, -6, 1, -8),
+		Parent = card,
+		OnClick = function()
+			openWinners(board)
+			dismiss()
+		end,
+	})
+	UIKit.Button({
+		Text = "CLOSE",
+		Color = Colors.PanelLight,
+		Size = UDim2.fromOffset(150, 42),
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0.5, 6, 1, -8),
+		Parent = card,
+		OnClick = dismiss,
+	})
+	UIKit.PlaySound("Click")
+	TweenService:Create(card, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Position = UDim2.new(0.5, 0, 0, UIKit.TopInset() + 12) }):Play()
+	task.delay(25, dismiss)
 end)
 
 -- Status chips under the top bar.
@@ -1428,6 +1651,7 @@ local COMMANDS: { Command } = ({
 	{ Name = "spectate", Icon = "👁️", Label = "Spectate", Desc = "Watch them. Stop from the bar at the bottom.", Group = "Move", Target = "player" },
 	{ Name = "controlplayer", Icon = "🎮", Label = "Control", Desc = "Move their character with your controls.", Group = "Move", Target = "player" },
 	{ Name = "serverlist", Icon = "🌍", Label = "All servers", Desc = "Every server of the game, sorted: Lobby 1, Lobby 2...; and game servers by level (Level 1 / Chapter 1, Level 2 / Chapter 2, Level 3 / Chapter 3) with who is in each and how long it has been up. Use the arrows to filter: All, Lobbies only, Game servers only, or one level. Join any of them (you arrive invisible).", Group = "Global", Target = "none" },
+	{ Name = "badges", Icon = "🏅", Label = "Badges", Desc = "Checks all ten Roblox badges for that player against Roblox itself: earned? really owned? is the badge switched on? Anything they earned but don't have is given on the spot, or the reason it can't be is shown.", Group = "Game", Target = "player" },
 	{ Name = "analytics", Icon = "📈", Label = "Analytics", Desc = "Where players get stuck and leave. Pick a report (what new players do step by step, retention, where they were when they left, runs, features, money, devices and errors, the Admin Abuse show) and how many days back. The arrows flip between reports. Needs the game published for real numbers.", Group = "Global", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 	return {
 		{ Label = "Overview", Value = "1" },
@@ -2474,7 +2698,8 @@ local function buildPanel(info: any)
 		local shown = tonumber(index) or 1
 		local total = math.max(tonumber(count) or 1, 1)
 		local back = tonumber(days) or 7
-		showList(tostring(title), entries, nil, nil, {
+		-- (count 0 = a plain list with no arrows, like the badge check)
+		showList(tostring(title), entries, nil, nil, if (tonumber(count) or 1) <= 0 then nil else {
 			Prev = function()
 				AdminServerAction:FireServer("Report", string.format("%d:%d", ((shown - 2) % total) + 1, back))
 			end,
