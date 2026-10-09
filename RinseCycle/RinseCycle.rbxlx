@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.19.0"
+Config.Version = "2.19.1"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -60141,9 +60141,9 @@ local GROUPS = {
 	{ Name = "Move", Icon = "🧭", Blurb = "Teleport, watch and control players; size and speed.", Commands = { "goto", "bring", "spectate", "controlplayer", "giant", "speed", "joinserver", "bringserver" } },
 	{ Name = "Game", Icon = "🧼", Blurb = "Change a player's progress: pick a command, type a number.", Commands = { "setbubbles", "setcoins", "setgems", "setrebirths", "setdishes", "setrank", "givepet", "viewpets" } },
 	{ Name = "Server", Icon = "📢", Blurb = "Only THIS server. Message, Gift pass and Remove pass need a player.", Commands = { "announce", "msg", "givegamepass", "removegamepass", "poll", "countdown", "leaderboards" } },
-	{ Name = "Global", Icon = "🌍", Blurb = "EVERY server at once: everyone online sees it.", Commands = { "globalannounce", "globalpassdrop", "globalpoll", "globalcountdown", "cancelcountdown", "globalgive", "globalboost", "serverlist", "analytics" } },
+	{ Name = "Global", Icon = "🌍", Blurb = "EVERY server at once: everyone online sees it.", Commands = { "globalannounce", "globalpassdrop", "globalpoll", "globalcountdown", "cancelcountdown", "globalgive", "globalboost", "serverlist" } },
 	{ Name = "Staff", Icon = "🛡️", Blurb = "Staff ranks and what every admin did.", Commands = { "setadminrank", "stafflist", "cmdlogs", "playerlogs", "wipelogs" } },
-	{ Name = "Studio Test", Icon = "🧪", Blurb = "Testing tools for your own account.", Commands = { "daily", "badges", "finishrun", "unlockall", "resetfirstrun", "clubreset", "notifytest", "promote", "demote" } },
+	{ Name = "Studio Test", Icon = "🧪", Blurb = "Testing tools for your own account, and the analytics reports.", Commands = { "daily", "badges", "finishrun", "unlockall", "analytics", "resetfirstrun", "clubreset", "notifytest" } },
 	{ Name = "Show Test", Icon = "🎆", Blurb = "Try the Admin Abuse show and its pieces.", Commands = { "abusefx", "abuselocal", "abuseshow", "abusedebug", "privatelobby" } },
 }
 local DURATIONS = { "1h", "6h", "24h", "3d", "7d", "30d" }

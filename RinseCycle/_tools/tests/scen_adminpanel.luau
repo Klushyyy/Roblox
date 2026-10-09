@@ -43,11 +43,13 @@ for _, btn in groups:GetChildren() do
 end
 out("tabs: " .. tabsFound)
 local missing, twice = {}, {}
-for name in listed do if not seen[name] then table.insert(missing, name) end end
+local TYPED_ONLY = { promote = true, demote = true } -- (no button: Set rank does the same; typing :promote / :demote still works)
+for name in listed do if not seen[name] and not TYPED_ONLY[name] then table.insert(missing, name) end end
 for name, n in seen do if n > 1 then table.insert(twice, name) end end
 table.sort(missing)
 out("listed by the server but on no tab: " .. (#missing == 0 and "none" or table.concat(missing, ", ")))
 out("on more than one tab: " .. (#twice == 0 and "none" or table.concat(twice, ", ")))
+out("analytics is on the Studio Test tab, not Global: " .. tostring(seen.analytics == 1))
 out("unfreeze / givecoins listed: " .. tostring(listed.unfreeze == true or listed.givecoins == true))
 -- a command with two inputs (the form must hold them): Global > Global poll, and a player command with the player picked
 for _, btn in groups:GetChildren() do

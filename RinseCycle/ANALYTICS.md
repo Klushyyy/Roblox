@@ -51,7 +51,7 @@ names, 20 economy transaction types, and 120 + 20 x players events a minute (the
 
 ## Reading the in-game report
 
-Admin panel > **Global > Analytics** (or the command `:analytics`). One **tab per report** along the top (Overview, New
+Admin panel > **Studio Test > Analytics** (or the command `:analytics`). One **tab per report** along the top (Overview, New
 players, Coming back, Leaving, Runs, Features, Money, Devices, Show) and a button that cycles **Today / 7 days / 30 days**.
 Every report starts with a plain-language heading and a coloured **summary card** that says what the numbers mean (green =
 fine, orange = look at it, red = a problem); then each line has a bar and a big number on the right.
