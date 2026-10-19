@@ -532,6 +532,22 @@ end
 
 -- Small cards (the show's vote, power-up and prize cards, the speech box) are drawn a bit bigger on phones, where
 -- their 16-20 px text would otherwise be about 9 px on the real screen. The card grows from its AnchorPoint.
+-- Turns the camera (yaw only, the pitch stays) to look at `position`. First person has no "behind the character" to fall back
+-- on after a teleport, so whoever puts the player somewhere new points the view at what they are there for.
+function UIKit.FaceTowards(position: Vector3)
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	local from = camera.CFrame.Position
+	local flat = Vector3.new(position.X - from.X, 0, position.Z - from.Z)
+	if flat.Magnitude < 0.5 then
+		return
+	end
+	local pitch = camera.CFrame.LookVector.Y
+	camera.CFrame = CFrame.lookAt(from, from + flat.Unit * math.sqrt(math.max(0, 1 - pitch * pitch)) + Vector3.new(0, pitch, 0))
+end
+
 function UIKit.PhoneBoost(frame: GuiObject, factor: number?)
 	local boost = Instance.new("UIScale")
 	boost.Name = "PhoneBoost"
@@ -550,6 +566,25 @@ function UIKit.SafeInsets(): { Left: number, Right: number, Bottom: number }
 	ensureInit()
 	return { Left = safePx.X / scale, Right = safePx.Y / scale, Bottom = safePx.Z / scale }
 end
+
+-- Screens that are on show all the time, with buttons the player only presses by choice (the HUD, the toasts...). Every OTHER
+-- screen's buttons are Modal: in first person Roblox lets go of the locked mouse while a Modal button is visible, so every
+-- window, pop-up card and confirm box frees the cursor by itself (see SprayController, first person).
+local PASSIVE_SCREENS: { [string]: boolean } = {
+	HUD = true,
+	Spray = true,
+	BoardChips = true,
+	PlayerList = true,
+	BoostBadges = true,
+	EventCountdown = true,
+	UIKitToasts = true,
+	AdminStatus = true,
+	AbuseTimer = true,
+	AbuseTalk = true,
+	AbuseFx = true,
+	Cutscene = true,
+	Tutorial = true, -- (its Skip button is always up; the spotlight and the skip confirm free the mouse through SprayController)
+}
 
 function UIKit.CreateScreen(name: string, displayOrder: number?): (ScreenGui, Frame)
 	ensureInit()
@@ -578,6 +613,14 @@ function UIKit.CreateScreen(name: string, displayOrder: number?): (ScreenGui, Fr
 	uiScale.Scale = scale
 	uiScale.Parent = root
 	root.Parent = gui
+
+	if not PASSIVE_SCREENS[gui.Name] then
+		gui.DescendantAdded:Connect(function(d: Instance)
+			if d:IsA("GuiButton") then
+				d.Modal = true
+			end
+		end)
+	end
 
 	local entry: Screen = { Gui = gui, Root = root, Scale = uiScale }
 	table.insert(screens, entry)

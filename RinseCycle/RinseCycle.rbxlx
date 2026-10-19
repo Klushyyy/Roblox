@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.21.0"
+Config.Version = "2.22.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -57,6 +57,7 @@ Config.Round = {
 	MaxScrubDt = 0.25, -- cap on the damage window of a single held scrub packet
 	ReachSlack = 6, -- extra studs the server allows over reach (latency)
 	TouchReachMult = 1.5, -- phones and tablets reach this much further with every tool (aiming with a finger is harder)
+	UpReachScale = 0.4, -- aiming UP only counts this much of the climb toward reach, so the top of a tall plate is in reach from the rack (first person can't hover overhead)
 	DrainRadius = 8,
 	PartyGrimeScale = 0.6, -- total grime = base * min(PartyGrimeCap, 1 + 0.6 * (players - 1))
 	PartyGrimeCap = 3.6, -- big parties (up to 8) share a fuller load rather than an endless one
@@ -546,6 +547,14 @@ Config.Sounds = {
 ----------------------------------------------------------------------------------------------------
 
 -- Round to 2 significant figures so prices look clean (1234 -&gt; 1200, 56 -&gt; 56).
+-- How far `to` is from `from` for reaching purposes: sideways and downwards count in full, upwards only
+-- Config.Round.UpReachScale of it. The server's reach check and the client's "in reach" ring both use it.
+function Config.ReachDistance(from: Vector3, to: Vector3): number
+	local d = to - from
+	local up = if d.Y &gt; 0 then d.Y * Config.Round.UpReachScale else d.Y
+	return math.sqrt(d.X * d.X + d.Z * d.Z + up * up)
+end
+
 function Config.Round2(n: number): number
 	if n &lt; 100 then
 		return math.floor(n + 0.5)
@@ -32814,7 +32823,7 @@ local function onScrub(player: Player, aim: any, holding: any, extra: any)
 	local stats = pr.Stats
 	local mode = stats.Mode or "Scrub"
 	local extent = if mode == "Line" then (stats.LineLength or 5) / 2 else stats.Radius
-	if (aim - root.Position).Magnitude &gt; stats.Reach + extent + R.ReachSlack then
+	if Config.ReachDistance(root.Position, aim) &gt; stats.Reach + extent + R.ReachSlack then
 		return
 	end
 	local info = if type(extra) == "table" then extra else {}
@@ -39216,7 +39225,7 @@ return ClubsUI</ProtectedString></Properties></Item>
 
 	  * When your party launches, the screen goes black before the server teleports you, so the
 	    teleport is never seen.
-	  * When the run starts, the camera is put back on your character in the dishwasher and the
+	  * When the run starts, the camera is put back on your character in the dishwasher (turned toward the dishes: the run is in first person) and the
 	    screen fades in. Reporting "Loaded" starts the run clock.
 	  * Leaving / returning to the lobby uses the same cover.
 	  * While the server is teleporting us (player attribute "Teleporting"), the cover never lifts
@@ -39280,6 +39289,35 @@ local function tweenBlack(to: number, seconds: number)
 	task.wait(seconds)
 end
 
+-- First person has no "behind the character": turn the view toward the dishes (a teleport leaves it facing wherever it was).
+local function faceDishes()
+	local dishes: Instance? = nil
+	for _ = 1, 12 do -- (the room may still be streaming in behind the black: give it up to a second)
+		local arena = ClientState.GetArena()
+		dishes = arena and arena:FindFirstChild("Dishes")
+		if dishes and #dishes:GetChildren() &gt; 0 then
+			break
+		end
+		task.wait(0.1)
+	end
+	if not dishes then
+		return
+	end
+	local sum, n = Vector3.zero, 0
+	for _, dish in dishes:GetChildren() do
+		if dish:IsA("Model") then
+			sum += dish:GetPivot().Position
+			n += 1
+		elseif dish:IsA("BasePart") then
+			sum += dish.Position
+			n += 1
+		end
+	end
+	if n &gt; 0 then
+		UIKit.FaceTowards(sum / n)
+	end
+end
+
 -- The run has started: make sure the camera is on us in the dishwasher, then fade in.
 local function play(_levelIndex: number)
 	if playing then
@@ -39305,6 +39343,7 @@ local function play(_levelIndex: number)
 		if humanoid then
 			camera.CameraSubject = humanoid
 		end
+		faceDishes()
 	end
 	reportLoaded()
 	tweenBlack(1, FADE)
@@ -41101,7 +41140,9 @@ local function keepVisible()
 		return
 	end
 	local head = character and character:FindFirstChild("Head")
-	local firstPerson = head ~= nil and head:IsA("BasePart") and (camera.CFrame.Position - head.Position).Magnitude &lt;= 1.5
+	-- (first person: the camera is locked there in a run, or it is simply sitting inside the head)
+	local firstPerson = LocalPlayer.CameraMode == Enum.CameraMode.LockFirstPerson
+		or (head ~= nil and head:IsA("BasePart") and (camera.CFrame.Position - head.Position).Magnitude &lt;= 1.5)
 	-- Everyone's name tag follows the admin invisibility flag, so it comes straight back when
 	-- they turn visible again (and after a respawn); yours also hides in first person.
 	for _, player in Players:GetPlayers() do
@@ -52653,7 +52694,8 @@ end
 return ShopUI</ProtectedString></Properties></Item>
 <Item class="ModuleScript" referent="RBX00000047"><Properties><string name="Name">SprayController</string><ProtectedString name="Source">-- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
--- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
+-- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in. (First person is
+-- on for the whole run, see applyCameraMode.)
 -- Aim comes from the mouse on PC, the finger on touch (tap / hold the dirt), or the screen centre
 -- (with a crosshair) on gamepad, cast
 -- as a ray Include-filtered to just the arena Model. One Heartbeat connection drives everything so
@@ -52760,6 +52802,7 @@ local touchGui: ScreenGui? = nil
 local touchRoot: Frame? = nil
 local sprayButton: TextButton? = nil
 local crosshair: Frame? = nil
+local mouseFree = false -- first person: the mouse is let go of (a window is open...), so the middle dot is hidden
 
 local characterConns: { RBXScriptConnection } = {}
 
@@ -53168,7 +53211,8 @@ local function updateTouchUIVisibility()
 	local gamepad = UIKit.IsGamepad()
 	-- Touch sprays wherever you tap, so there's no SPRAY button and no centre dot.
 	sprayButton.Visible = false
-	crosshair.Visible = active and gamepad
+	-- (the middle dot is where first person sprays; it hides while the mouse is free to click things)
+	crosshair.Visible = active and not touch and not mouseFree
 	local line = active and currentMode == "Line"
 	if turnButton then
 		turnButton.Visible = line and touch
@@ -53335,7 +53379,7 @@ local function onHeartbeat(dt: number)
 
 	local hitPart = result.Instance
 	local hitPos = result.Position
-	local distance = (hitPos - (root :: BasePart).Position).Magnitude
+	local distance = Config.ReachDistance((root :: BasePart).Position, hitPos)
 	local inReach = distance &lt;= stats.Reach
 	local toolColor = (Config.Tools[stats.ToolIndex] or Config.Tools[1]).Color
 
@@ -53513,7 +53557,7 @@ local function onPressBegan()
 	if not result then
 		return
 	end
-	local distance = (result.Position - (root :: BasePart).Position).Magnitude
+	local distance = Config.ReachDistance((root :: BasePart).Position, result.Position)
 	if distance &gt; run.Stats.Reach or (run.Tank &gt;= run.TankMax and not ClientState.AutoDrain()) then
 		return
 	end
@@ -53593,19 +53637,151 @@ local function onScrubTouch(_name: string, state: Enum.UserInputState, input: In
 	return Enum.ContextActionResult.Pass
 end
 
--- First person while a run is on and the screen is a touch screen; back to the normal camera afterwards.
+--[[
+	First person, in a run only (the lobby keeps the normal camera), on every device.
+	  * Player.CameraMode is LockFirstPerson while a run is on and back to Classic after it. An admin watching or
+	    controlling someone else (the camera's subject is not our own character) keeps the normal view.
+	  * The mouse is locked to the middle of the screen (the crosshair is where you spray). It is let go of while a
+	    window is open (Upgrades with Tab / Q, Shop, Pets...), on the results screen, while a pop-up card is up (every
+	    UIKit button outside the always-on screens is "Modal", which is what lets Roblox free the mouse), and while
+	    Left Alt or Left Ctrl is held. Touch has no mouse, so nothing changes there.
+]]
+local FREE_KEYS = { Enum.KeyCode.LeftAlt, Enum.KeyCode.RightAlt, Enum.KeyCode.LeftControl, Enum.KeyCode.RightControl }
+local FP_STEP = "RinseFirstPerson"
+local fpModal: TextButton? = nil -- invisible Modal button: while it is visible Roblox lets the mouse go
+local toldAboutMouse = false
+
+local function modalOpen(): boolean
+	local ok, value = pcall(function()
+		return (UserInputService :: any).ModalEnabled
+	end)
+	return ok and value == true
+end
+
+-- A named thing inside one of the always-on screens is on show (looked up once, then remembered).
+local watched: { [string]: GuiObject? } = {}
+local function shown(screen: string, name: string): boolean
+	local key = screen .. "/" .. name
+	local found = watched[key]
+	if not found or not found.Parent then
+		local gui = LocalPlayer:FindFirstChild("PlayerGui")
+		local holder = gui and gui:FindFirstChild(screen)
+		local item = holder and holder:FindFirstChild(name, true)
+		found = if item and item:IsA("GuiObject") then item else nil
+		watched[key] = found
+	end
+	return found ~= nil and found.Visible
+end
+
+-- True when the player needs a cursor right now.
+local function wantsMouse(): boolean
+	if UIKit.IsWindowOpen() then
+		return true
+	end
+	-- (the tutorial's spotlight: its hole is where you click; its Next button; and its "skip it?" box)
+	if ClientState.TutorialStep ~= nil and (shown("Tutorial", "DimTop") or shown("Tutorial", "Next") or shown("Tutorial", "SkipConfirm")) then
+		return true
+	end
+	local run = ClientState.Run :: Types.RunState?
+	if run and run.Phase == "Complete" then
+		return true
+	end
+	for _, key in FREE_KEYS do
+		if UserInputService:IsKeyDown(key) then
+			return true
+		end
+	end
+	return false
+end
+
+local function ensureFirstPersonGui()
+	if fpModal and fpModal.Parent then
+		return
+	end
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "FirstPersonMouse"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.DisplayOrder = 1
+	local button = Instance.new("TextButton")
+	button.Name = "ModalMouse"
+	button.Text = ""
+	button.Modal = true
+	button.Active = false
+	button.AnchorPoint = Vector2.new(1, 1)
+	button.Position = UDim2.fromScale(1, 1)
+	button.Size = UDim2.fromOffset(1, 1)
+	button.BackgroundTransparency = 1
+	button.BorderSizePixel = 0
+	button.Visible = false
+	button.Parent = gui
+	gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	fpModal = button
+end
+
+-- After the camera's own update every frame while first person is on: let the mouse go or lock it again.
+local function firstPersonStep()
+	local touch = UIKit.IsTouch() and not UIKit.IsGamepad()
+	if touch then
+		return
+	end
+	local free = wantsMouse() or modalOpen()
+	if fpModal then
+		fpModal.Visible = free
+	end
+	if free then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+	elseif mouseFree then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+	end
+	if free ~= mouseFree then
+		mouseFree = free
+		updateTouchUIVisibility()
+	end
+end
+
 local function applyCameraMode()
-	local want = active and UIKit.IsTouch() and not UIKit.IsGamepad()
+	local camera = workspace.CurrentCamera
+	local character = LocalPlayer.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local subject = camera and camera.CameraSubject
+	-- (no subject yet while respawning; someone else's humanoid while an admin watches them)
+	local own = subject == nil or subject == humanoid
+	local want = ClientState.Run ~= nil and own
 	if want and not lockedFirstPerson then
 		lockedFirstPerson = true
+		ensureFirstPersonGui()
+		-- (a keyboard player is told once how to get the mouse back)
+		if not toldAboutMouse and not UIKit.IsTouch() and not UIKit.IsGamepad() then
+			toldAboutMouse = true
+			task.delay(4, function()
+				if lockedFirstPerson and ClientState.TutorialStep == nil then
+					UIKit.Toast("Hold ALT to use your mouse", "Info")
+				end
+			end)
+		end
 		pcall(function()
 			LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
 		end)
+		RunService:BindToRenderStep(FP_STEP, Enum.RenderPriority.Camera.Value + 1, firstPersonStep)
 	elseif not want and lockedFirstPerson then
 		lockedFirstPerson = false
 		pcall(function()
+			RunService:UnbindFromRenderStep(FP_STEP)
+		end)
+		if fpModal then
+			fpModal.Visible = false
+		end
+		if mouseFree or not UIKit.IsTouch() then
+			pcall(function()
+				UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+			end)
+		end
+		mouseFree = false
+		pcall(function()
 			LocalPlayer.CameraMode = Enum.CameraMode.Classic
 		end)
+		updateTouchUIVisibility()
 	end
 end
 
@@ -53730,6 +53906,13 @@ function SprayController.Init()
 
 	UserInputService.InputBegan:Connect(onInputBegan)
 	UserInputService.InputEnded:Connect(onInputEnded)
+	-- (first person follows the camera's subject: an admin starting or stopping watching someone switches it)
+	task.spawn(function()
+		while true do
+			applyCameraMode()
+			task.wait(0.25)
+		end
+	end)
 	UIKit.LayoutChanged:Connect(function()
 		updateTouchUIVisibility()
 		applyCameraMode()
@@ -56157,6 +56340,22 @@ end
 
 -- Small cards (the show's vote, power-up and prize cards, the speech box) are drawn a bit bigger on phones, where
 -- their 16-20 px text would otherwise be about 9 px on the real screen. The card grows from its AnchorPoint.
+-- Turns the camera (yaw only, the pitch stays) to look at `position`. First person has no "behind the character" to fall back
+-- on after a teleport, so whoever puts the player somewhere new points the view at what they are there for.
+function UIKit.FaceTowards(position: Vector3)
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	local from = camera.CFrame.Position
+	local flat = Vector3.new(position.X - from.X, 0, position.Z - from.Z)
+	if flat.Magnitude &lt; 0.5 then
+		return
+	end
+	local pitch = camera.CFrame.LookVector.Y
+	camera.CFrame = CFrame.lookAt(from, from + flat.Unit * math.sqrt(math.max(0, 1 - pitch * pitch)) + Vector3.new(0, pitch, 0))
+end
+
 function UIKit.PhoneBoost(frame: GuiObject, factor: number?)
 	local boost = Instance.new("UIScale")
 	boost.Name = "PhoneBoost"
@@ -56175,6 +56374,25 @@ function UIKit.SafeInsets(): { Left: number, Right: number, Bottom: number }
 	ensureInit()
 	return { Left = safePx.X / scale, Right = safePx.Y / scale, Bottom = safePx.Z / scale }
 end
+
+-- Screens that are on show all the time, with buttons the player only presses by choice (the HUD, the toasts...). Every OTHER
+-- screen's buttons are Modal: in first person Roblox lets go of the locked mouse while a Modal button is visible, so every
+-- window, pop-up card and confirm box frees the cursor by itself (see SprayController, first person).
+local PASSIVE_SCREENS: { [string]: boolean } = {
+	HUD = true,
+	Spray = true,
+	BoardChips = true,
+	PlayerList = true,
+	BoostBadges = true,
+	EventCountdown = true,
+	UIKitToasts = true,
+	AdminStatus = true,
+	AbuseTimer = true,
+	AbuseTalk = true,
+	AbuseFx = true,
+	Cutscene = true,
+	Tutorial = true, -- (its Skip button is always up; the spotlight and the skip confirm free the mouse through SprayController)
+}
 
 function UIKit.CreateScreen(name: string, displayOrder: number?): (ScreenGui, Frame)
 	ensureInit()
@@ -56203,6 +56421,14 @@ function UIKit.CreateScreen(name: string, displayOrder: number?): (ScreenGui, Fr
 	uiScale.Scale = scale
 	uiScale.Parent = root
 	root.Parent = gui
+
+	if not PASSIVE_SCREENS[gui.Name] then
+		gui.DescendantAdded:Connect(function(d: Instance)
+			if d:IsA("GuiButton") then
+				d.Modal = true
+			end
+		end)
+	end
 
 	local entry: Screen = { Gui = gui, Root = root, Scale = uiScale }
 	table.insert(screens, entry)

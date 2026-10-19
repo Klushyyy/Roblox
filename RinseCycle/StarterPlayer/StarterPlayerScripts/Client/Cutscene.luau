@@ -4,7 +4,7 @@
 
 	  * When your party launches, the screen goes black before the server teleports you, so the
 	    teleport is never seen.
-	  * When the run starts, the camera is put back on your character in the dishwasher and the
+	  * When the run starts, the camera is put back on your character in the dishwasher (turned toward the dishes: the run is in first person) and the
 	    screen fades in. Reporting "Loaded" starts the run clock.
 	  * Leaving / returning to the lobby uses the same cover.
 	  * While the server is teleporting us (player attribute "Teleporting"), the cover never lifts
@@ -68,6 +68,35 @@ local function tweenBlack(to: number, seconds: number)
 	task.wait(seconds)
 end
 
+-- First person has no "behind the character": turn the view toward the dishes (a teleport leaves it facing wherever it was).
+local function faceDishes()
+	local dishes: Instance? = nil
+	for _ = 1, 12 do -- (the room may still be streaming in behind the black: give it up to a second)
+		local arena = ClientState.GetArena()
+		dishes = arena and arena:FindFirstChild("Dishes")
+		if dishes and #dishes:GetChildren() > 0 then
+			break
+		end
+		task.wait(0.1)
+	end
+	if not dishes then
+		return
+	end
+	local sum, n = Vector3.zero, 0
+	for _, dish in dishes:GetChildren() do
+		if dish:IsA("Model") then
+			sum += dish:GetPivot().Position
+			n += 1
+		elseif dish:IsA("BasePart") then
+			sum += dish.Position
+			n += 1
+		end
+	end
+	if n > 0 then
+		UIKit.FaceTowards(sum / n)
+	end
+end
+
 -- The run has started: make sure the camera is on us in the dishwasher, then fade in.
 local function play(_levelIndex: number)
 	if playing then
@@ -93,6 +122,7 @@ local function play(_levelIndex: number)
 		if humanoid then
 			camera.CameraSubject = humanoid
 		end
+		faceDishes()
 	end
 	reportLoaded()
 	tweenBlack(1, FADE)

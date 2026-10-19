@@ -727,6 +727,27 @@ InstMT.__newindex = function(self, key, value)
 			end
 			table.insert(rawget(value, "__children"), self)
 			getSignal(value, "ChildAdded"):Fire(self)
+			-- DescendantAdded: fired on every ancestor that is listening, for the new thing and everything under it
+			local listeners = {}
+			local anc = value
+			while anc do
+				local sigs = rawget(anc, "__signals")
+				if sigs and sigs.DescendantAdded then
+					table.insert(listeners, anc)
+				end
+				anc = rawget(anc, "__p").Parent
+			end
+			if #listeners > 0 then
+				local function announce(inst)
+					for _, a in listeners do
+						getSignal(a, "DescendantAdded"):Fire(inst)
+					end
+					for _, c in table.clone(rawget(inst, "__children")) do
+						announce(c)
+					end
+				end
+				announce(self)
+			end
 		end
 		return
 	end
@@ -877,8 +898,8 @@ end
 rawget(UIS, "__p").IsGamepadButtonDown = function()
 	return false
 end
-rawget(UIS, "__p").IsKeyDown = function()
-	return false
+rawget(UIS, "__p").IsKeyDown = function(_, key)
+	return _G.__keysDown ~= nil and _G.__keysDown[tostring(key)] == true -- (a scenario holds a key with G.holdKey(key, true))
 end
 rawget(UIS, "__p").GetMouseLocation = function()
 	return Vector2.new(0, 0)
@@ -1380,6 +1401,11 @@ rawget(RunService, "__p").BindToRenderStep = function(_, name, _, fn)
 	_G.__renderSteps = _G.__renderSteps or {}
 	_G.__renderSteps[name] = fn
 end
+rawget(RunService, "__p").UnbindFromRenderStep = function(_, name)
+	if _G.__renderSteps then
+		_G.__renderSteps[name] = nil
+	end
+end
 
 local function runScript(path, parent, name, side)
 	local sc = newInstance(if side == "client" then "LocalScript" else "Script", name)
@@ -1424,7 +1450,7 @@ for _, g in methods.GetChildren(playerGui) do
 	table.insert(names, g.Name)
 end
 out("PlayerGui: " .. table.concat(names, ", "))
-_G.GAME = { badges = badgeState, cas = boundActions, modules = modulesCache, player = player, victim = victim, playerGui = playerGui, frame = frame, find = function(r, n) return methods.FindFirstChild(r, n, true) end, methods = methods, getSignal = getSignal, ReplicatedStorage = ReplicatedStorage, workspace = workspace, Players = Players }
+_G.GAME = { badges = badgeState, cas = boundActions, modules = modulesCache, player = player, victim = victim, playerGui = playerGui, frame = frame, holdKey = function(key, down) _G.__keysDown = _G.__keysDown or {}; _G.__keysDown[tostring(key)] = if down then true else nil end, find = function(r, n) return methods.FindFirstChild(r, n, true) end, methods = methods, getSignal = getSignal, ReplicatedStorage = ReplicatedStorage, workspace = workspace, Players = Players }
 do
 	local okDump, dumpFn = pcall(require, "./guidump")
 	if okDump then

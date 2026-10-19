@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.21.0"
+Config.Version = "2.22.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -53,6 +53,7 @@ Config.Round = {
 	MaxScrubDt = 0.25, -- cap on the damage window of a single held scrub packet
 	ReachSlack = 6, -- extra studs the server allows over reach (latency)
 	TouchReachMult = 1.5, -- phones and tablets reach this much further with every tool (aiming with a finger is harder)
+	UpReachScale = 0.4, -- aiming UP only counts this much of the climb toward reach, so the top of a tall plate is in reach from the rack (first person can't hover overhead)
 	DrainRadius = 8,
 	PartyGrimeScale = 0.6, -- total grime = base * min(PartyGrimeCap, 1 + 0.6 * (players - 1))
 	PartyGrimeCap = 3.6, -- big parties (up to 8) share a fuller load rather than an endless one
@@ -542,6 +543,14 @@ Config.Sounds = {
 ----------------------------------------------------------------------------------------------------
 
 -- Round to 2 significant figures so prices look clean (1234 -> 1200, 56 -> 56).
+-- How far `to` is from `from` for reaching purposes: sideways and downwards count in full, upwards only
+-- Config.Round.UpReachScale of it. The server's reach check and the client's "in reach" ring both use it.
+function Config.ReachDistance(from: Vector3, to: Vector3): number
+	local d = to - from
+	local up = if d.Y > 0 then d.Y * Config.Round.UpReachScale else d.Y
+	return math.sqrt(d.X * d.X + d.Z * d.Z + up * up)
+end
+
 function Config.Round2(n: number): number
 	if n < 100 then
 		return math.floor(n + 0.5)

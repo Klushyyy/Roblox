@@ -1,6 +1,7 @@
 -- SprayController: aiming, spray input, spray visuals, and sending Scrub to the server.
 --
--- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in.
+-- Active only while ClientState.Run.Phase == "Playing" and the run's arena has replicated in. (First person is
+-- on for the whole run, see applyCameraMode.)
 -- Aim comes from the mouse on PC, the finger on touch (tap / hold the dirt), or the screen centre
 -- (with a crosshair) on gamepad, cast
 -- as a ray Include-filtered to just the arena Model. One Heartbeat connection drives everything so
@@ -107,6 +108,7 @@ local touchGui: ScreenGui? = nil
 local touchRoot: Frame? = nil
 local sprayButton: TextButton? = nil
 local crosshair: Frame? = nil
+local mouseFree = false -- first person: the mouse is let go of (a window is open...), so the middle dot is hidden
 
 local characterConns: { RBXScriptConnection } = {}
 
@@ -515,7 +517,8 @@ local function updateTouchUIVisibility()
 	local gamepad = UIKit.IsGamepad()
 	-- Touch sprays wherever you tap, so there's no SPRAY button and no centre dot.
 	sprayButton.Visible = false
-	crosshair.Visible = active and gamepad
+	-- (the middle dot is where first person sprays; it hides while the mouse is free to click things)
+	crosshair.Visible = active and not touch and not mouseFree
 	local line = active and currentMode == "Line"
 	if turnButton then
 		turnButton.Visible = line and touch
@@ -682,7 +685,7 @@ local function onHeartbeat(dt: number)
 
 	local hitPart = result.Instance
 	local hitPos = result.Position
-	local distance = (hitPos - (root :: BasePart).Position).Magnitude
+	local distance = Config.ReachDistance((root :: BasePart).Position, hitPos)
 	local inReach = distance <= stats.Reach
 	local toolColor = (Config.Tools[stats.ToolIndex] or Config.Tools[1]).Color
 
@@ -860,7 +863,7 @@ local function onPressBegan()
 	if not result then
 		return
 	end
-	local distance = (result.Position - (root :: BasePart).Position).Magnitude
+	local distance = Config.ReachDistance((root :: BasePart).Position, result.Position)
 	if distance > run.Stats.Reach or (run.Tank >= run.TankMax and not ClientState.AutoDrain()) then
 		return
 	end
@@ -940,19 +943,151 @@ local function onScrubTouch(_name: string, state: Enum.UserInputState, input: In
 	return Enum.ContextActionResult.Pass
 end
 
--- First person while a run is on and the screen is a touch screen; back to the normal camera afterwards.
+--[[
+	First person, in a run only (the lobby keeps the normal camera), on every device.
+	  * Player.CameraMode is LockFirstPerson while a run is on and back to Classic after it. An admin watching or
+	    controlling someone else (the camera's subject is not our own character) keeps the normal view.
+	  * The mouse is locked to the middle of the screen (the crosshair is where you spray). It is let go of while a
+	    window is open (Upgrades with Tab / Q, Shop, Pets...), on the results screen, while a pop-up card is up (every
+	    UIKit button outside the always-on screens is "Modal", which is what lets Roblox free the mouse), and while
+	    Left Alt or Left Ctrl is held. Touch has no mouse, so nothing changes there.
+]]
+local FREE_KEYS = { Enum.KeyCode.LeftAlt, Enum.KeyCode.RightAlt, Enum.KeyCode.LeftControl, Enum.KeyCode.RightControl }
+local FP_STEP = "RinseFirstPerson"
+local fpModal: TextButton? = nil -- invisible Modal button: while it is visible Roblox lets the mouse go
+local toldAboutMouse = false
+
+local function modalOpen(): boolean
+	local ok, value = pcall(function()
+		return (UserInputService :: any).ModalEnabled
+	end)
+	return ok and value == true
+end
+
+-- A named thing inside one of the always-on screens is on show (looked up once, then remembered).
+local watched: { [string]: GuiObject? } = {}
+local function shown(screen: string, name: string): boolean
+	local key = screen .. "/" .. name
+	local found = watched[key]
+	if not found or not found.Parent then
+		local gui = LocalPlayer:FindFirstChild("PlayerGui")
+		local holder = gui and gui:FindFirstChild(screen)
+		local item = holder and holder:FindFirstChild(name, true)
+		found = if item and item:IsA("GuiObject") then item else nil
+		watched[key] = found
+	end
+	return found ~= nil and found.Visible
+end
+
+-- True when the player needs a cursor right now.
+local function wantsMouse(): boolean
+	if UIKit.IsWindowOpen() then
+		return true
+	end
+	-- (the tutorial's spotlight: its hole is where you click; its Next button; and its "skip it?" box)
+	if ClientState.TutorialStep ~= nil and (shown("Tutorial", "DimTop") or shown("Tutorial", "Next") or shown("Tutorial", "SkipConfirm")) then
+		return true
+	end
+	local run = ClientState.Run :: Types.RunState?
+	if run and run.Phase == "Complete" then
+		return true
+	end
+	for _, key in FREE_KEYS do
+		if UserInputService:IsKeyDown(key) then
+			return true
+		end
+	end
+	return false
+end
+
+local function ensureFirstPersonGui()
+	if fpModal and fpModal.Parent then
+		return
+	end
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "FirstPersonMouse"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.DisplayOrder = 1
+	local button = Instance.new("TextButton")
+	button.Name = "ModalMouse"
+	button.Text = ""
+	button.Modal = true
+	button.Active = false
+	button.AnchorPoint = Vector2.new(1, 1)
+	button.Position = UDim2.fromScale(1, 1)
+	button.Size = UDim2.fromOffset(1, 1)
+	button.BackgroundTransparency = 1
+	button.BorderSizePixel = 0
+	button.Visible = false
+	button.Parent = gui
+	gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	fpModal = button
+end
+
+-- After the camera's own update every frame while first person is on: let the mouse go or lock it again.
+local function firstPersonStep()
+	local touch = UIKit.IsTouch() and not UIKit.IsGamepad()
+	if touch then
+		return
+	end
+	local free = wantsMouse() or modalOpen()
+	if fpModal then
+		fpModal.Visible = free
+	end
+	if free then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+	elseif mouseFree then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+	end
+	if free ~= mouseFree then
+		mouseFree = free
+		updateTouchUIVisibility()
+	end
+end
+
 local function applyCameraMode()
-	local want = active and UIKit.IsTouch() and not UIKit.IsGamepad()
+	local camera = workspace.CurrentCamera
+	local character = LocalPlayer.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local subject = camera and camera.CameraSubject
+	-- (no subject yet while respawning; someone else's humanoid while an admin watches them)
+	local own = subject == nil or subject == humanoid
+	local want = ClientState.Run ~= nil and own
 	if want and not lockedFirstPerson then
 		lockedFirstPerson = true
+		ensureFirstPersonGui()
+		-- (a keyboard player is told once how to get the mouse back)
+		if not toldAboutMouse and not UIKit.IsTouch() and not UIKit.IsGamepad() then
+			toldAboutMouse = true
+			task.delay(4, function()
+				if lockedFirstPerson and ClientState.TutorialStep == nil then
+					UIKit.Toast("Hold ALT to use your mouse", "Info")
+				end
+			end)
+		end
 		pcall(function()
 			LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
 		end)
+		RunService:BindToRenderStep(FP_STEP, Enum.RenderPriority.Camera.Value + 1, firstPersonStep)
 	elseif not want and lockedFirstPerson then
 		lockedFirstPerson = false
 		pcall(function()
+			RunService:UnbindFromRenderStep(FP_STEP)
+		end)
+		if fpModal then
+			fpModal.Visible = false
+		end
+		if mouseFree or not UIKit.IsTouch() then
+			pcall(function()
+				UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+			end)
+		end
+		mouseFree = false
+		pcall(function()
 			LocalPlayer.CameraMode = Enum.CameraMode.Classic
 		end)
+		updateTouchUIVisibility()
 	end
 end
 
@@ -1077,6 +1212,13 @@ function SprayController.Init()
 
 	UserInputService.InputBegan:Connect(onInputBegan)
 	UserInputService.InputEnded:Connect(onInputEnded)
+	-- (first person follows the camera's subject: an admin starting or stopping watching someone switches it)
+	task.spawn(function()
+		while true do
+			applyCameraMode()
+			task.wait(0.25)
+		end
+	end)
 	UIKit.LayoutChanged:Connect(function()
 		updateTouchUIVisibility()
 		applyCameraMode()

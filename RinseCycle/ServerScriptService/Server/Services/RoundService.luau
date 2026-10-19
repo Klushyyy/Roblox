@@ -1490,7 +1490,7 @@ local function onScrub(player: Player, aim: any, holding: any, extra: any)
 	local stats = pr.Stats
 	local mode = stats.Mode or "Scrub"
 	local extent = if mode == "Line" then (stats.LineLength or 5) / 2 else stats.Radius
-	if (aim - root.Position).Magnitude > stats.Reach + extent + R.ReachSlack then
+	if Config.ReachDistance(root.Position, aim) > stats.Reach + extent + R.ReachSlack then
 		return
 	end
 	local info = if type(extra) == "table" then extra else {}

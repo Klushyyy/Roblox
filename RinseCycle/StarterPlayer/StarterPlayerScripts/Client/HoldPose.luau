@@ -63,7 +63,9 @@ local function keepVisible()
 		return
 	end
 	local head = character and character:FindFirstChild("Head")
-	local firstPerson = head ~= nil and head:IsA("BasePart") and (camera.CFrame.Position - head.Position).Magnitude <= 1.5
+	-- (first person: the camera is locked there in a run, or it is simply sitting inside the head)
+	local firstPerson = LocalPlayer.CameraMode == Enum.CameraMode.LockFirstPerson
+		or (head ~= nil and head:IsA("BasePart") and (camera.CFrame.Position - head.Position).Magnitude <= 1.5)
 	-- Everyone's name tag follows the admin invisibility flag, so it comes straight back when
 	-- they turn visible again (and after a respawn); yours also hides in first person.
 	for _, player in Players:GetPlayers() do
