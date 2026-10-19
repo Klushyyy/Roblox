@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.20.1"
+Config.Version = "2.21.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -101,7 +101,9 @@ Config.Upgrades = {
 --   Line  - a long, thin blade of water (LineLength x LineWidth, turned with the camera): sweep it
 --           across the dirt; anything in the line goes fast.
 --   Foam  - fires foam blobs (one per FoamInterval) that splat and keep cleaning everything in
---           FoamRadius for FoamSeconds, at Power * FoamShare per second.
+--           FoamRadius for FoamSeconds, at Power * FoamShare per second. It is a machine gun: each Power upgrade
+--           multiplies the interval by FoamSpeedUp (down to FoamMinInterval), and up to FoamMaxSplats blobs
+--           can be cleaning at once, so firing faster really does clean faster (v2.21.0).
 -- Tier decides which dirt it cleans at full speed (dirt with MinTool above the Tier cleans at
 -- Round.UnderTierMult). Radius and Power multiply the (per-tool) upgraded base stats; for Line the
 -- Size upgrade makes the line longer, for Foam the splats bigger. Reach is in studs.
@@ -110,7 +112,7 @@ Config.Tools = {
 	{ Id = "Sponge", Name = "Sponge", Icon = "🧽", Mode = "Scrub", Tier = 1, Cost = 60, Radius = 1.4, Power = 2.2, Reach = 12, UpgradeMult = 1.5, Color = Color3.fromRGB(255, 221, 87), Desc = "Soft and quick. Scrub up close." },
 	{ Id = "Nozzle", Name = "Spray Nozzle", Icon = "🚿", Mode = "Spray", PassKey = "ToolNozzle", Tier = 2, Cost = 350, Radius = 1.5, Power = 3.2, Reach = 34, UpgradeMult = 3, Color = Color3.fromRGB(90, 200, 255), Desc = "A water stream: clean from far away." },
 	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Mode = "Line", PassKey = "ToolWasher", Tier = 3, Cost = 700, Radius = 1.0, Power = 22, Reach = 26, UpgradeMult = 5, LineLength = 3.5, LineWidth = 0.9, Color = Color3.fromRGB(60, 140, 255), Desc = "A long thin blast: sweep it across and dirt melts away." },
-	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Mode = "Foam", PassKey = "ToolCannon", Tier = 3, Cost = 1500, Radius = 1.8, Power = 4.5, Reach = 40, UpgradeMult = 8, FoamInterval = 0.4, FoamSeconds = 2.5, FoamShare = 0.6, Color = Color3.fromRGB(200, 150, 255), Desc = "Shoots foam blobs that keep cleaning where they land." },
+	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Mode = "Foam", PassKey = "ToolCannon", Tier = 3, Cost = 1500, Radius = 1.8, Power = 4.5, Reach = 40, UpgradeMult = 8, FoamInterval = 0.28, FoamSeconds = 1.4, FoamShare = 0.6, FoamSpeedUp = 0.86, FoamMinInterval = 0.12, FoamMaxSplats = 10, Color = Color3.fromRGB(200, 150, 255), Desc = "Hold to blast foam that keeps cleaning where it lands. Every Power upgrade makes it fire faster." },
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -819,9 +821,10 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 		-- Line: length grows with the Size upgrade (Radius), width is fixed.
 		LineLength = if mode == "Line" then radius * (tool.LineLength or 3.5) else nil,
 		LineWidth = if mode == "Line" then tool.LineWidth or 0.9 else nil,
-		FoamInterval = if mode == "Foam" then tool.FoamInterval or 0.4 else nil,
-		FoamSeconds = if mode == "Foam" then tool.FoamSeconds or 2.5 else nil,
+		FoamInterval = if mode == "Foam" then math.max(tool.FoamMinInterval or 0.12, (tool.FoamInterval or 0.28) * (tool.FoamSpeedUp or 0.86) ^ (upgrades.ScrubPower or 0)) else nil,
+		FoamSeconds = if mode == "Foam" then tool.FoamSeconds or 1.4 else nil,
 		FoamShare = if mode == "Foam" then tool.FoamShare or 0.6 else nil,
+		FoamMaxSplats = if mode == "Foam" then tool.FoamMaxSplats or 10 else nil,
 		WalkSpeed = b.WalkSpeed + b.WalkSpeedPerLevel * (upgrades.Sneakers or 0) + (fx.Speed or 0),
 		Hold = true, -- holding always scrubs (the old "Hold to Scrub" upgrade confused new players)
 		CoinMult = coinMult,
@@ -1397,6 +1400,23 @@ function Config.EventLockdown(now: number?): (boolean, string)
 	return false, ""
 end
 
+-- True from the moment the Admin Abuse event starts until Chapter 4 really exists as a playable dishwasher (a 4th
+-- entry in Config.Levels): the show ends on "stay tuned for chapter four", so finishing the LAST chapter no longer means
+-- "you finished all the chapters": the finale card and the Rebirth notice say "Chapter N cleared, Chapter 4 is coming".
+-- When Chapter 4 is added to Config.Levels the finale simply moves to it (it always belongs to the last level).
+function Config.ChapterFourAnnounced(now: number?): boolean
+	if #Config.Levels >= 4 then
+		return false
+	end
+	local t = now or os.time()
+	for _, e in Config.UpcomingEvents do
+		if e.Key == "AdminAbuse" then
+			return t >= e.Starts
+		end
+	end
+	return false
+end
+
 function Config.NextEvent(now: number?): any
 	local t = now or os.time()
 	local best = nil
@@ -1512,6 +1532,7 @@ Config.Analytics = {
 		{ "fun.bubble", "Popped a lobby bubble" },
 		{ "run.launch", "Party launched (teleport started)" },
 		{ "run.fail", "Run could not start (teleport failed)" },
+		{ "run.misplaced", "Found at the lobby spawn in the middle of a run and put back in the dishwasher" },
 		{ "run.arrive", "Arrived in a dishwasher" },
 		{ "run.loaded", "Intro finished and clock started" },
 		{ "run.first", "Cleaned the first spot" },

@@ -53,6 +53,7 @@ export type RunStats = {
 	FoamInterval: number?, -- Foam only
 	FoamSeconds: number?,
 	FoamShare: number?,
+	FoamMaxSplats: number?, -- Foam only: blobs that can be cleaning at once
 }
 
 export type ResultRow = {

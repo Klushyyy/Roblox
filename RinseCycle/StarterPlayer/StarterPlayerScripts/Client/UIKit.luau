@@ -1522,9 +1522,16 @@ local function backTarget(): { Name: string, Arg: any }?
 	return if openName then backOf[openName] else nil
 end
 
+-- A screen that must not be covered (the Create Party screen) sets this: it answers true to refuse opening window `name`.
+UIKit.OpenGuard = nil :: ((name: string) -> boolean)?
+
 function UIKit.OpenWindow(name: string, arg: any?)
 	ensureInit()
 	if type(name) ~= "string" then
+		return
+	end
+	local guard = UIKit.OpenGuard
+	if guard and guard(name) then
 		return
 	end
 	if backOf[name] then

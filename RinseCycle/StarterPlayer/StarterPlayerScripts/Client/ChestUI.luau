@@ -245,6 +245,12 @@ local function setLid(open: boolean)
 end
 
 function ChestUI.GoToChest()
+	-- Standing in a party pad (making a party, or waiting for it): this would carry you out of the pad, and the pad
+	-- would carry you straight back. The Event button and H do nothing there.
+	if ClientState.InParty() then
+		UIKit.Toast("You're on a party pad. Leave it first, then you can go to the chest.", "Info")
+		return
+	end
 	local pivot = chestPivot()
 	local character = LocalPlayer.Character
 	if not pivot or not character or ClientState.Run ~= nil then

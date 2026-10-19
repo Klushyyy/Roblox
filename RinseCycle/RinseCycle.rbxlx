@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.20.1"
+Config.Version = "2.21.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -105,7 +105,9 @@ Config.Upgrades = {
 --   Line  - a long, thin blade of water (LineLength x LineWidth, turned with the camera): sweep it
 --           across the dirt; anything in the line goes fast.
 --   Foam  - fires foam blobs (one per FoamInterval) that splat and keep cleaning everything in
---           FoamRadius for FoamSeconds, at Power * FoamShare per second.
+--           FoamRadius for FoamSeconds, at Power * FoamShare per second. It is a machine gun: each Power upgrade
+--           multiplies the interval by FoamSpeedUp (down to FoamMinInterval), and up to FoamMaxSplats blobs
+--           can be cleaning at once, so firing faster really does clean faster (v2.21.0).
 -- Tier decides which dirt it cleans at full speed (dirt with MinTool above the Tier cleans at
 -- Round.UnderTierMult). Radius and Power multiply the (per-tool) upgraded base stats; for Line the
 -- Size upgrade makes the line longer, for Foam the splats bigger. Reach is in studs.
@@ -114,7 +116,7 @@ Config.Tools = {
 	{ Id = "Sponge", Name = "Sponge", Icon = "🧽", Mode = "Scrub", Tier = 1, Cost = 60, Radius = 1.4, Power = 2.2, Reach = 12, UpgradeMult = 1.5, Color = Color3.fromRGB(255, 221, 87), Desc = "Soft and quick. Scrub up close." },
 	{ Id = "Nozzle", Name = "Spray Nozzle", Icon = "🚿", Mode = "Spray", PassKey = "ToolNozzle", Tier = 2, Cost = 350, Radius = 1.5, Power = 3.2, Reach = 34, UpgradeMult = 3, Color = Color3.fromRGB(90, 200, 255), Desc = "A water stream: clean from far away." },
 	{ Id = "Washer", Name = "Pressure Washer", Icon = "💦", Mode = "Line", PassKey = "ToolWasher", Tier = 3, Cost = 700, Radius = 1.0, Power = 22, Reach = 26, UpgradeMult = 5, LineLength = 3.5, LineWidth = 0.9, Color = Color3.fromRGB(60, 140, 255), Desc = "A long thin blast: sweep it across and dirt melts away." },
-	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Mode = "Foam", PassKey = "ToolCannon", Tier = 3, Cost = 1500, Radius = 1.8, Power = 4.5, Reach = 40, UpgradeMult = 8, FoamInterval = 0.4, FoamSeconds = 2.5, FoamShare = 0.6, Color = Color3.fromRGB(200, 150, 255), Desc = "Shoots foam blobs that keep cleaning where they land." },
+	{ Id = "Cannon", Name = "Foam Cannon", Icon = "🌊", Mode = "Foam", PassKey = "ToolCannon", Tier = 3, Cost = 1500, Radius = 1.8, Power = 4.5, Reach = 40, UpgradeMult = 8, FoamInterval = 0.28, FoamSeconds = 1.4, FoamShare = 0.6, FoamSpeedUp = 0.86, FoamMinInterval = 0.12, FoamMaxSplats = 10, Color = Color3.fromRGB(200, 150, 255), Desc = "Hold to blast foam that keeps cleaning where it lands. Every Power upgrade makes it fire faster." },
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -823,9 +825,10 @@ function Config.GetRunStats(levelIndex: number, upgrades, toolIndex: number, per
 		-- Line: length grows with the Size upgrade (Radius), width is fixed.
 		LineLength = if mode == "Line" then radius * (tool.LineLength or 3.5) else nil,
 		LineWidth = if mode == "Line" then tool.LineWidth or 0.9 else nil,
-		FoamInterval = if mode == "Foam" then tool.FoamInterval or 0.4 else nil,
-		FoamSeconds = if mode == "Foam" then tool.FoamSeconds or 2.5 else nil,
+		FoamInterval = if mode == "Foam" then math.max(tool.FoamMinInterval or 0.12, (tool.FoamInterval or 0.28) * (tool.FoamSpeedUp or 0.86) ^ (upgrades.ScrubPower or 0)) else nil,
+		FoamSeconds = if mode == "Foam" then tool.FoamSeconds or 1.4 else nil,
 		FoamShare = if mode == "Foam" then tool.FoamShare or 0.6 else nil,
+		FoamMaxSplats = if mode == "Foam" then tool.FoamMaxSplats or 10 else nil,
 		WalkSpeed = b.WalkSpeed + b.WalkSpeedPerLevel * (upgrades.Sneakers or 0) + (fx.Speed or 0),
 		Hold = true, -- holding always scrubs (the old "Hold to Scrub" upgrade confused new players)
 		CoinMult = coinMult,
@@ -1401,6 +1404,23 @@ function Config.EventLockdown(now: number?): (boolean, string)
 	return false, ""
 end
 
+-- True from the moment the Admin Abuse event starts until Chapter 4 really exists as a playable dishwasher (a 4th
+-- entry in Config.Levels): the show ends on "stay tuned for chapter four", so finishing the LAST chapter no longer means
+-- "you finished all the chapters": the finale card and the Rebirth notice say "Chapter N cleared, Chapter 4 is coming".
+-- When Chapter 4 is added to Config.Levels the finale simply moves to it (it always belongs to the last level).
+function Config.ChapterFourAnnounced(now: number?): boolean
+	if #Config.Levels &gt;= 4 then
+		return false
+	end
+	local t = now or os.time()
+	for _, e in Config.UpcomingEvents do
+		if e.Key == "AdminAbuse" then
+			return t &gt;= e.Starts
+		end
+	end
+	return false
+end
+
 function Config.NextEvent(now: number?): any
 	local t = now or os.time()
 	local best = nil
@@ -1516,6 +1536,7 @@ Config.Analytics = {
 		{ "fun.bubble", "Popped a lobby bubble" },
 		{ "run.launch", "Party launched (teleport started)" },
 		{ "run.fail", "Run could not start (teleport failed)" },
+		{ "run.misplaced", "Found at the lobby spawn in the middle of a run and put back in the dishwasher" },
 		{ "run.arrive", "Arrived in a dishwasher" },
 		{ "run.loaded", "Intro finished and clock started" },
 		{ "run.first", "Cleaned the first spot" },
@@ -3663,6 +3684,7 @@ export type RunStats = {
 	FoamInterval: number?, -- Foam only
 	FoamSeconds: number?,
 	FoamShare: number?,
+	FoamMaxSplats: number?, -- Foam only: blobs that can be cleaning at once
 }
 
 export type ResultRow = {
@@ -9587,6 +9609,7 @@ do
 	local nukeQuietUntil = 0 -- while the nuke counts down and goes off nothing else happens
 	local timeSkip = 0 -- seconds the show has jumped ahead (the pet hunt ended early)
 	local showEnded: { [string]: boolean } = {} -- shows (by start time) that have been put away: they do not run again
+	local showRan: { [string]: boolean } = {} -- shows (by start time) that really started in THIS server (see the end of the show)
 	-- Jumps the show ahead `seconds` (and drops the script steps in the seconds it skips, so none of them fires late).
 	local skipScript: (number) -&gt; () = function() end
 
@@ -12920,6 +12943,7 @@ do
 				local wasHeat = heat
 				heat = t &gt;= Show.HeatAt and not fadingOut
 				if once("live" .. tag) then
+					showRan[tag] = true
 					ReplicatedStorage:SetAttribute("AbuseLive", true)
 					LobbyBuilder.Snapshot() -- (the lobby as it is now: the end of the show puts back anything the effects left changed)
 					LobbyBuilder.SetBarriers(true) -- no invisible walls for the whole show
@@ -13044,7 +13068,13 @@ do
 				if once("end" .. tag) then
 					showEnded[tag] = true
 					local wasLocal = localShow
-					resetShow()
+					-- Only a server that RAN the show puts it away. Every server that starts after the show's date (every new lobby and
+					-- every party's run server) also gets here, with nothing to put away: its "put the lobby back" check used to send
+					-- everyone below the lobby floor to the lobby spawn, and the dishwashers are 2,500 studs below it, so players
+					-- were thrown out of their own run a moment after arriving.
+					if showRan[tag] then
+						resetShow()
+					end
 					localShow = false
 					local isTest = realStarts ~= nil and e.Starts ~= realStarts
 					if not isTest or RunService:IsStudio() then
@@ -21492,7 +21522,10 @@ function DataService.RecordClear(player: Player, levelIndex: number, seconds: nu
 	if levelIndex == #Config.Levels and not profile.RebirthReady then
 		profile.RebirthReady = true
 		-- A few seconds later, so it lands after the results screen.
-		task.delay(6, queueNotice, session, "Every level is clean! Visit the Rebirth Fountain in the lobby to Rebirth.", "Good")
+		local message = if Config.ChapterFourAnnounced()
+			then string.format("Chapter %d is clean! Chapter 4 is coming soon. Visit the Rebirth Fountain in the lobby to Rebirth while you wait.", levelIndex)
+			else "Every level is clean! Visit the Rebirth Fountain in the lobby to Rebirth."
+		task.delay(6, queueNotice, session, message, "Good")
 	end
 
 	-- Unlocks and best times are the progress players care most about: write them soon.
@@ -21731,11 +21764,21 @@ end
 
 -- A part whose local X axis is `axisWorld` (used for Shape = Cylinder, where X is the axis).
 local function axisCFrame(pos: Vector3, axisWorld: Vector3, hintWorld: Vector3): CFrame
-	local ok, cf = pcall(CFrame.fromMatrix, pos, axisWorld.Unit, hintWorld.Unit)
+	-- The hint is made PERPENDICULAR to the axis first (CFrame.fromMatrix does not do that for us: with a hint that
+	-- leans on the axis it builds a skewed frame). The ring of points that checks a dirt spot sits on the dish (`fits`)
+	-- is laid out in this frame, so on a surface tilted away from straight up / straight sideways (the leaning bowls
+	-- at 50 degrees and pans at 55) the check always failed: those dishes got no dirt at all.
+	local axis = axisWorld.Unit
+	local across = hintWorld - axis * hintWorld:Dot(axis)
+	if across.Magnitude &lt; 1e-3 then
+		local other = if math.abs(axis.Y) &lt; 0.9 then Vector3.new(0, 1, 0) else Vector3.new(1, 0, 0)
+		across = other - axis * other:Dot(axis)
+	end
+	local ok, cf = pcall(CFrame.fromMatrix, pos, axis, across.Unit)
 	if ok and cf == cf then
 		return cf
 	end
-	return CFrame.fromMatrix(pos, axisWorld.Unit, Vector3.new(0, 1, 0))
+	return CFrame.fromMatrix(pos, axis, Vector3.new(0, 1, 0))
 end
 
 -- The anchor rotated so a Cylinder's axis (X) points along the anchor's Up.
@@ -21949,8 +21992,11 @@ local function buildPan(anchor: CFrame, theme, _rng: Random)
 	else
 		table.insert(parts, newPart(Enum.PartType.Cylinder, Vector3.new(s.Depth, s.Diameter, s.Diameter), upright(anchor, s.Depth / 2), DARK_STEEL, Enum.Material.Metal))
 	end
-	-- Outside of the pan in the theme metal colour, cooking surface darker.
-	table.insert(parts, decor(newPart(Enum.PartType.Cylinder, Vector3.new(0.3, s.Diameter + 0.2, s.Diameter + 0.2), upright(anchor, 0.15), theme.Metal, Enum.Material.Metal)))
+	-- Outside of the pan in the theme metal colour, cooking surface darker. The base disc sits 0.06 BELOW the pan (y from
+	-- -0.06 to 0.24, inside the 0.8 thick floor): when it started at exactly y = 0 its bottom face was in the same plane as the
+	-- pan's own bottom and the two flickered (z-fighting) on the underside of every pan, which the Royal Banquet's back
+	-- pans show off because they lean toward the player.
+	table.insert(parts, decor(newPart(Enum.PartType.Cylinder, Vector3.new(0.3, s.Diameter + 0.2, s.Diameter + 0.2), upright(anchor, 0.09), theme.Metal, Enum.Material.Metal)))
 	local h0 = localPos(anchor, r - 0.5, s.Depth * 0.8, 0)
 	local h1 = localPos(anchor, r + 12, s.Depth * 1.6, 0)
 	table.insert(parts, bar(h0, h1, 1.3, anchor.UpVector, HANDLE_BLACK))
@@ -25577,7 +25623,10 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 		local arrow = mkPart("Part", {
 			Name = "BoardArrow",
 			Size = Vector3.new(btn / pxPerStud + 0.3, btn / pxPerStud + 0.3, 0.3),
-			CFrame = boardPart.CFrame * CFrame.new(cx / pxPerStud - w / 2, h / 2 - cy / pxPerStud, -0.7),
+			-- (On a part's FRONT face the picture's x runs along the part's -X axis: the viewer's right is -X. The old
+			-- cx / pxPerStud - w / 2 put every click zone on the opposite side, so the arrow drawn on the right turned
+			-- the page BACK: Family Dinner, then Royal Banquet, then Pizza Party.)
+			CFrame = boardPart.CFrame * CFrame.new(w / 2 - cx / pxPerStud, h / 2 - cy / pxPerStud, -0.7),
 			Transparency = 1,
 			CanCollide = false,
 			CanQuery = true, -- ClickDetectors need the mouse ray to hit the part
@@ -27523,7 +27572,8 @@ end
 local function sweepStrays()
 	for _, player in Players:GetPlayers() do
 		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
-		if root then
+		-- (never someone playing a dishwasher: the arenas are built far below the lobby floor, which is "out of bounds" here)
+		if root and player:GetAttribute("InRun") ~= true then
 			local p = root.Position - ORIGIN
 			local inObbyBox = p.X &gt; OBBY_BOX.X0 and p.X &lt; OBBY_BOX.X1 and p.Z &gt; OBBY_BOX.Z0 and p.Z &lt; OBBY_BOX.Z1
 			if not (inObbyBox and obbyOpen) and (math.abs(p.X) &gt; PLAZA_X + FENCE_MARGIN or p.Z &lt; PLAZA_Z0 - FENCE_MARGIN or p.Z &gt; PLAZA_Z1 + FENCE_MARGIN or p.Y &lt; -20) then
@@ -27656,7 +27706,7 @@ function LobbyBuilder.SetRescue(on: boolean)
 		clock = 0
 		for _, player in Players:GetPlayers() do
 			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
-			if root then
+			if root and player:GetAttribute("InRun") ~= true then
 				local p = root.Position - ORIGIN
 				local inObbyBox = p.X &gt; OBBY_BOX.X0 and p.X &lt; OBBY_BOX.X1 and p.Z &gt; OBBY_BOX.Z0 and p.Z &lt; OBBY_BOX.Z1
 				local inRoom = math.abs(p.X) &lt; ROOM_X and p.Z &gt; ROOM_Z0 and p.Z &lt; ROOM_Z1
@@ -29198,6 +29248,11 @@ end
 
 local function refreshPad(pad: Pad, pulse: boolean?)
 	local party = pad.Party
+	-- (clients read this: the new-player arrow only ever points at a pad nobody is using)
+	local zone = pad.Info.Zone
+	if zone and zone.Parent and zone:GetAttribute("Taken") ~= (party ~= nil) then
+		zone:SetAttribute("Taken", party ~= nil)
+	end
 	local gui = pad.Info.Gui
 	if gui then
 		if party then
@@ -29414,7 +29469,7 @@ local function createParty(pad: Pad, host: Player)
 		Members = {},
 		MaxPlayers = MAX_PLAYERS,
 		Privacy = "Public",
-		Level = unlockedOf(host), -- default to their best dishwasher
+		Level = 1, -- the Create screen always starts on Chapter 1 (it used to jump to their best chapter, e.g. 3, which was rarely the one they wanted)
 		LevelChosen = false,
 		EndsAt = Util.Now() + PICK_SECONDS, -- replaced by the real countdown when they press Create
 		Status = "Picking",
@@ -30029,7 +30084,7 @@ local function onProfileLoaded(player: Player)
 		return
 	end
 	if party.Host == player and not party.LevelChosen and party.Status ~= "Launching" then
-		party.Level = unlockedOf(player)
+		party.Level = 1 -- (Chapter 1, whatever they have unlocked; they pick another on the Create screen)
 	end
 	markDirty(party)
 	refreshPad(party.Pad)
@@ -31356,6 +31411,7 @@ type PlayerRun = {
 	Results: Types.RunResults?,
 	DishesDone: number, -- dishes this player finished (Analytics)
 	Sold: boolean, -- sold a tank at least once (Analytics)
+	StrayAt: number?, -- os.clock() since when their character has been found up in the lobby instead of in the dishwasher
 }
 
 type Run = {
@@ -31407,7 +31463,7 @@ local HOLD_MIN_INTERVAL = R.ScrubSendInterval * 0.4
 local HP_EPSILON = 1e-3
 local FOAM_TICK = 0.2
 local MAX_SPLATS_PER_PLAYER = 4
-local REQUESTS_PER_SECOND = 10
+local REQUESTS_PER_SECOND = 14 -- (the Foam Cannon at full speed fires about 9 times a second)
 local LEFT_GAME = "PlayerRemoving" -- internal RemoveFromRun reason: skip everything client-facing
 local EMPTY: { [string]: any } = table.freeze({})
 
@@ -31773,6 +31829,9 @@ local function recomputeStats(run: Run, player: Player, pr: PlayerRun)
 end
 
 local function sendTankFull(player: Player, pr: PlayerRun)
+	if getPasses(player).AutoDrain then
+		return -- (Auto Drain: it sells by itself, it is never "full")
+	end
 	local now = os.clock()
 	if now - pr.LastFullFX &lt; TANK_FULL_FX_COOLDOWN then
 		return
@@ -32763,13 +32822,18 @@ local function onScrub(player: Player, aim: any, holding: any, extra: any)
 	-- 3. Foam: one blob per FoamInterval; the splat does the cleaning over time (foamStep).
 	local now = os.clock()
 	if mode == "Foam" then
-		if now - pr.LastScrubAt &lt; (stats.FoamInterval or 0.4) * 0.9 then
+		if now - pr.LastScrubAt &lt; (stats.FoamInterval or 0.28) * 0.9 then
 			return
 		end
 		pr.LastScrubAt = now
 		if pr.Tank &gt;= stats.TankMax then
-			sendTankFull(player, pr)
-			return
+			if getPasses(player).AutoDrain then
+				sell(run, player, pr)
+				stats = pr.Stats
+			else
+				sendTankFull(player, pr)
+				return
+			end
 		end
 		local mine = 0
 		local oldest: number? = nil
@@ -32779,10 +32843,10 @@ local function onScrub(player: Player, aim: any, holding: any, extra: any)
 				oldest = oldest or i
 			end
 		end
-		if mine &gt;= MAX_SPLATS_PER_PLAYER and oldest then
+		if mine &gt;= (stats.FoamMaxSplats or MAX_SPLATS_PER_PLAYER) and oldest then
 			table.remove(run.Splats, oldest)
 		end
-		local seconds = stats.FoamSeconds or 2.5
+		local seconds = stats.FoamSeconds or 1.4
 		table.insert(run.Splats, {
 			Player = player,
 			Position = aim,
@@ -32816,10 +32880,15 @@ local function onScrub(player: Player, aim: any, holding: any, extra: any)
 	end
 	pr.LastScrubAt = now
 
-	-- 5. Tank full: nothing to do but remind them.
+	-- 5. Tank full: nothing to do but remind them (Auto Drain owners sell on the spot and carry on).
 	if pr.Tank &gt;= stats.TankMax then
-		sendTankFull(player, pr)
-		return
+		if getPasses(player).AutoDrain then
+			sell(run, player, pr)
+			stats = pr.Stats
+		else
+			sendTankFull(player, pr)
+			return
+		end
 	end
 
 	local amount = stats.Power * seconds
@@ -33014,6 +33083,19 @@ local function watchdogStep()
 				local root = Characters.GetRoot(player)
 				if root and root.Position.Y &lt; run.KillY then
 					Characters.Teleport(player, randomSpawn(run))
+				end
+				-- Found up in the lobby (the dishwashers are built 2,500 studs below it) for more than a second and a half while
+				-- the server believes they are playing: something moved them out (v2.21.0: an end-of-show cleanup did, in every
+				-- run server). Put them back on their dishwasher's door, and count it so it shows in Analytics (run.misplaced).
+				if root and root.Position.Y &gt; run.Arena.Origin.Position.Y + 1500 and player:GetAttribute("Teleporting") ~= true then
+					pr.StrayAt = pr.StrayAt or now
+					if now - pr.StrayAt &gt;= 1.5 then
+						pr.StrayAt = nil
+						DataService.Track(player, "run.misplaced")
+						Characters.Teleport(player, randomSpawn(run))
+					end
+				else
+					pr.StrayAt = nil
 				end
 				-- Re-attach the tool in hand after a respawn (a new character has none).
 				local character = player.Character
@@ -36752,6 +36834,12 @@ local function setLid(open: boolean)
 end
 
 function ChestUI.GoToChest()
+	-- Standing in a party pad (making a party, or waiting for it): this would carry you out of the pad, and the pad
+	-- would carry you straight back. The Event button and H do nothing there.
+	if ClientState.InParty() then
+		UIKit.Toast("You're on a party pad. Leave it first, then you can go to the chest.", "Info")
+		return
+	end
 	local pivot = chestPivot()
 	local character = LocalPlayer.Character
 	if not pivot or not character or ClientState.Run ~= nil then
@@ -37460,6 +37548,13 @@ end
 
 function ClientState.InParty(): boolean
 	return ClientState.Party ~= nil
+end
+
+-- True for an owner of the Auto Drain pass: their tank empties by itself the moment it fills, so it is "infinity" and
+-- never "full" (no TANK FULL toast, sound, glow or drain arrow anywhere).
+function ClientState.AutoDrain(): boolean
+	local meta = ClientState.Meta :: any
+	return meta ~= nil and type(meta.Passes) == "table" and meta.Passes.AutoDrain == true
 end
 
 -- The dishwasher model the local player is playing in, if it has replicated.
@@ -39908,6 +40003,9 @@ local function onSold(data: any)
 end
 
 local function onTankFull()
+	if ClientState.AutoDrain() then
+		return -- (Auto Drain: it sells by itself, it is never "full")
+	end
 	UIKit.PlaySound("Error")
 end
 
@@ -40204,7 +40302,7 @@ local function updateDrainGuide()
 	local character = LocalPlayer.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 
-	local wantsGuide = run ~= nil and run.Phase == "Playing" and root ~= nil and run.TankMax &gt; 0 and (run.Tank / run.TankMax) &gt;= DRAIN_FULL_FRACTION
+	local wantsGuide = run ~= nil and run.Phase == "Playing" and root ~= nil and run.TankMax &gt; 0 and (run.Tank / run.TankMax) &gt;= DRAIN_FULL_FRACTION and not ClientState.AutoDrain()
 
 	if not wantsGuide then
 		if drainBeam then
@@ -42048,7 +42146,7 @@ function HUD.Init()
 	UIKit.Stroke(finale, Colors.Ink, 3)
 	finale.Parent = resultsFrame
 	UIKit.Label({ Text = "🏆", TextSize = 56, Stroke = false, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 8), Size = UDim2.fromOffset(80, 64), ZIndex = 17, Parent = finale })
-	UIKit.Label({
+	local finaleTitle = UIKit.Label({
 		Text = "CONGRATS! YOU FINISHED ALL THE CURRENT CHAPTERS!",
 		TextSize = 28,
 		TextScaled = true,
@@ -42057,9 +42155,10 @@ function HUD.Init()
 		ZIndex = 17,
 		Parent = finale,
 	})
-	UIKit.Label({
+	local finaleSub = UIKit.Label({
 		Text = "New chapters are coming soon.",
 		TextSize = 20,
+		TextScaled = true,
 		Size = UDim2.new(1, -30, 0, 26),
 		Position = UDim2.new(0, 15, 0, 114),
 		ZIndex = 17,
@@ -42122,6 +42221,16 @@ function HUD.Init()
 			UIKit.Tween(resultsBubblesNV, { Value = results.Bubbles }, 0.8)
 		end
 		local lastChapter = run.Level == #Config.Levels
+		-- Once Admin Abuse has started, Chapter 4 is announced: this is not "all the chapters" any more.
+		if lastChapter then
+			if Config.ChapterFourAnnounced() then
+				finaleTitle.Text = string.format("CONGRATS! CHAPTER %d CLEARED!", run.Level)
+				finaleSub.Text = "Chapter 4 is coming soon! Turn on notifications so you don't miss it."
+			else
+				finaleTitle.Text = "CONGRATS! YOU FINISHED ALL THE CURRENT CHAPTERS!"
+				finaleSub.Text = "New chapters are coming soon."
+			end
+		end
 		if finale.Visible ~= lastChapter then
 			finale.Visible = lastChapter
 			headerRow.Visible = not lastChapter
@@ -42396,11 +42505,12 @@ function HUD.Init()
 		if playing and run then
 			local level = Config.GetLevel(run.Level)
 			levelLabel.Text = tostring(level.Name)
-			local full = run.Tank &gt;= run.TankMax and run.TankMax &gt; 0
+			local infinite = ClientState.AutoDrain()
+			local full = run.Tank &gt;= run.TankMax and run.TankMax &gt; 0 and not infinite
 			setTankFull(full)
 			tankBar.Set(
 				if run.TankMax &gt; 0 then run.Tank / run.TankMax else 0,
-				if full then "FULL! Sell at the drain" else string.format("%s / %s", UIKit.Short(run.Tank), UIKit.Short(run.TankMax))
+				if infinite then "Infinity tank" elseif full then "FULL! Sell at the drain" else string.format("%s / %s", UIKit.Short(run.Tank), UIKit.Short(run.TankMax))
 			)
 			updateProgress()
 		else
@@ -47094,9 +47204,20 @@ local function newPlayerCardsLoop()
 		task.wait(STEP)
 		local runs = finishedRuns()
 		local idle = Config.FirstRun.Enabled and lobbyIdle()
+		local meta = ClientState.Meta :: any
+		local tutorialDone = meta ~= nil and meta.TutorialDone == true
+		-- (a staff "Reset first run", or anyone who has played, starts the cards afresh)
+		-- Also once a run has started: whoever comes back from it (Leave) is offered the tutorial afresh.
+		if runs ~= nil and (runs ~= 0 or tutorialDone or ClientState.InRun()) then
+			welcomeDismissed, welcomeSent = false, false
+		end
+		if runs ~= nil and runs ~= 1 then
+			backShown = false
+		end
 
-		-- START CLEANING
-		local welcomeWanted = idle and runs == 0 and not welcomeDismissed and not welcomeSent
+		-- The tutorial card: only for someone who still has the tutorial to do (it plays in their first dishwasher; a
+		-- player who already finished or skipped it has nothing to be offered).
+		local welcomeWanted = idle and runs == 0 and not tutorialDone and not welcomeDismissed and not welcomeSent
 		if welcomeWanted then
 			welcomeIdle += STEP
 			if not welcomeCard.Visible and welcomeIdle &gt;= Config.FirstRun.CardDelay then
@@ -47111,7 +47232,6 @@ local function newPlayerCardsLoop()
 				setWelcomeMode(friends)
 				-- It only starts by itself for someone who has never been in a dishwasher (not after Leave) and who is
 				-- not with friends.
-				local meta = ClientState.Meta :: any
 				local autoStart = if meta and (meta.RunsStarted or 0) == 0 and not friends then Config.FirstRun.AutoStart else 0
 				local left = autoStart - (os.clock() - welcomeAt)
 				if autoStart &gt; 0 and left &lt;= 0 then
@@ -47225,7 +47345,8 @@ local function padHintLoop()
 				local bestDistance = math.huge
 				for _, pad in lobby:GetChildren() do
 					local zone = pad:IsA("Model") and string.sub(pad.Name, 1, 3) == "Pad" and pad:FindFirstChild("Zone")
-					if zone and zone:IsA("BasePart") then
+					-- (a pad somebody is using never gets the arrow; with every pad taken there is no arrow at all)
+					if zone and zone:IsA("BasePart") and zone:GetAttribute("Taken") ~= true then
 						local distance = (zone.Position - root.Position).Magnitude
 						if distance &lt; bestDistance then
 							best, bestDistance = zone, distance
@@ -47260,6 +47381,16 @@ function PartyUI.Init()
 	buildWaitCard()
 	buildWelcomeCard()
 	buildBackCard()
+
+	-- While the Create Party screen is up no other window opens (the shop or the pets behind it did nothing useful; the
+	-- way out is BACK or CREATE). In the waiting card state every window works as before.
+	UIKit.OpenGuard = function(_name: string): boolean
+		if createScreen.Visible then
+			UIKit.Toast("Press BACK first to close the Create Party screen.", "Info")
+			return true
+		end
+		return false
+	end
 
 	UIKit.LayoutChanged:Connect(function()
 		if createScreen.Visible then
@@ -52613,6 +52744,7 @@ local sprayAttachment: Attachment? = nil
 local sprayDrops: ParticleEmitter? = nil
 local waterSplash: ParticleEmitter? = nil
 local lastFoamAt = 0
+local lastFoamSoundAt = 0
 -- Pressure Washer: the line runs across (false) or up and down (true). T / D-pad up / touch button.
 local washerVertical = false
 local turnButton: TextButton? = nil
@@ -53258,7 +53390,7 @@ local function onHeartbeat(dt: number)
 		hintBillboard.Enabled = false
 	end
 
-	local tankFull = run.Tank &gt;= run.TankMax
+	local tankFull = run.Tank &gt;= run.TankMax and not ClientState.AutoDrain() -- (Auto Drain empties it by itself: never "full")
 	local canSend = pressed and inReach and not tankFull
 
 	local now = os.clock()
@@ -53267,12 +53399,17 @@ local function onHeartbeat(dt: number)
 	if canSend then
 		if mode == "Foam" then
 			-- One blob per FoamInterval while held.
-			if now - lastFoamAt &gt;= (stats.FoamInterval or 0.4) then
+			if now - lastFoamAt &gt;= (stats.FoamInterval or 0.28) then
 				lastFoamAt = now
 				local from = if handAttachment then handAttachment.WorldPosition else (root :: BasePart).Position
 				launchFoam(from, hitPos, toolColor)
-				UIKit.PlaySound("Fwump", 0.5 + math.random() * 0.12) -- (a soft "fwump" out of the cannon; the splat's own sound comes with the splat)
-				UIKit.PlaySound("Hiss", 1.1 + math.random() * 0.2)
+				-- (a soft "fwump" out of the cannon; the splat's own sound comes with the splat. At full speed the cannon fires
+				-- nine times a second: the sound is thinned out so it stays a soft patter, not a buzz)
+				if now - lastFoamSoundAt &gt;= 0.14 then
+					lastFoamSoundAt = now
+					UIKit.PlaySound("Fwump", 0.5 + math.random() * 0.12)
+					UIKit.PlaySound("Hiss", 1.1 + math.random() * 0.2)
+				end
 				sendScrub(hitPos, true, math.random(), { Normal = normal })
 			end
 		elseif now - lastSendAt &gt;= Config.Round.ScrubSendInterval then
@@ -53377,7 +53514,7 @@ local function onPressBegan()
 		return
 	end
 	local distance = (result.Position - (root :: BasePart).Position).Magnitude
-	if distance &gt; run.Stats.Reach or run.Tank &gt;= run.TankMax then
+	if distance &gt; run.Stats.Reach or (run.Tank &gt;= run.TankMax and not ClientState.AutoDrain()) then
 		return
 	end
 
@@ -55057,23 +55194,16 @@ function Tutorial.Init()
 	----------------------------------------------------------------------------------------------
 	-- The camera turning to look at something (on the spot: it never moves to a new place).
 	----------------------------------------------------------------------------------------------
+	-- A pan can NOT be skipped (it used to hand the camera straight back on any click, tap or key, and the player is
+	-- usually holding the scrub button or the walk keys when the drain pan starts, so the camera turned and snapped back
+	-- at once: it looked like a glitch). It is short (about 3 seconds) and only ends by itself, or if the player dies.
 	local panning = false
-	local panSkip = false -- the player clicked / tapped / pressed a key: hand the camera back now
 	local panCancel: (() -&gt; ())? = nil
 	local function cancelPan()
 		if panCancel then
 			panCancel()
 		end
 	end
-	UserInputService.InputBegan:Connect(function(input)
-		if not panning then
-			return
-		end
-		local t = input.UserInputType
-		if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch or t == Enum.UserInputType.Keyboard or t == Enum.UserInputType.Gamepad1 then
-			panSkip = true
-		end
-	end)
 	-- Turns the camera to `target`, holds for `hold` seconds, turns back; `onDone` runs after. False if it couldn't.
 	local function panTo(target: Vector3, hold: number, onDone: (() -&gt; ())?): boolean
 		local camera = workspace.CurrentCamera
@@ -55082,7 +55212,7 @@ function Tutorial.Init()
 		if panning or not camera or not hrp or camera.CameraType == Enum.CameraType.Scriptable then
 			return false
 		end
-		panning, panSkip = true, false
+		panning = true
 		local startCF = camera.CFrame
 		local startRoot = hrp.Position
 		local previousType = camera.CameraType
@@ -55115,14 +55245,12 @@ function Tutorial.Init()
 			if phase == "go" then
 				local a = math.clamp((now - phaseAt) / PAN_TRAVEL, 0, 1)
 				camera.CFrame = followCF:Lerp(focusCF, ease(a))
-				if panSkip then
-					phase, phaseAt, from = "back", now, camera.CFrame
-				elseif a &gt;= 1 then
+				if a &gt;= 1 then
 					phase, phaseAt = "hold", now
 				end
 			elseif phase == "hold" then
 				camera.CFrame = focusCF
-				if panSkip or now - phaseAt &gt;= hold then
+				if now - phaseAt &gt;= hold then
 					phase, phaseAt, from = "back", now, focusCF
 				end
 			else
@@ -55407,9 +55535,11 @@ function Tutorial.Init()
 				setSpot(nil)
 				if not panned[1] then
 					local center = dishesCenter(run)
-					panned[1] = true
 					if center then
-						panTo(center, 1.6)
+						-- (only counts once the camera really turned: it can be refused, e.g. while another script holds it)
+						panned[1] = panTo(center, 1.6)
+					else
+						panned[1] = true
 					end
 				end
 				if panning then
@@ -55419,8 +55549,8 @@ function Tutorial.Init()
 					showHint(1, if padMode() then "Hold the right trigger (RT) on a dirty dish to scrub it clean!" elseif touchMode() then "Press and hold on a dirty dish to scrub it clean!" else "Hold the mouse button on a dirty dish to scrub it clean!")
 					pointAt(nearestDish(run))
 				end
-				if (run.Cleaned or 0) &gt;= 1 then
-					cancelPan()
+				-- (the next tip waits for the pan to finish: it is never cut short)
+				if (run.Cleaned or 0) &gt;= 1 and not panning then
 					clearPointer()
 					setStep(2)
 				end
@@ -55431,9 +55561,10 @@ function Tutorial.Init()
 				end
 			elseif step == 3 then
 				if not panned[3] then
-					panned[3] = true
 					if run.DrainPosition then
-						panTo(run.DrainPosition, 1.4)
+						panned[3] = panTo(run.DrainPosition, 1.4)
+					else
+						panned[3] = true
 					end
 				end
 				if panning then
@@ -55443,8 +55574,7 @@ function Tutorial.Init()
 				end
 				pointAt(nil, run.DrainPosition)
 				-- (every run starts with a few coins, so "has coins" means nothing: the coins have to go UP)
-				if (run.Coins or 0) &gt; coinsBaseline then
-					cancelPan()
+				if (run.Coins or 0) &gt; coinsBaseline and not panning then
 					clearPointer()
 					setStep(4)
 				end
@@ -57017,9 +57147,16 @@ local function backTarget(): { Name: string, Arg: any }?
 	return if openName then backOf[openName] else nil
 end
 
+-- A screen that must not be covered (the Create Party screen) sets this: it answers true to refuse opening window `name`.
+UIKit.OpenGuard = nil :: ((name: string) -&gt; boolean)?
+
 function UIKit.OpenWindow(name: string, arg: any?)
 	ensureInit()
 	if type(name) ~= "string" then
+		return
+	end
+	local guard = UIKit.OpenGuard
+	if guard and guard(name) then
 		return
 	end
 	if backOf[name] then
@@ -58311,6 +58448,11 @@ end
 
 local function upgradeCard(parent: Instance, def: any, run: Types.RunState, order: number): Frame
 	local level = ((run.Upgrades :: any)[def.Id] :: number?) or 0
+	-- Auto Drain owners have an infinity bag: nothing left to upgrade on the Tank card.
+	local infinity = def.Id == "TankSize" and ClientState.AutoDrain()
+	if infinity then
+		level = def.Max
+	end
 	local card = tile(parent, UDim2.new(0.5, -6, 0, 140), UDim2.new(), Color3.fromRGB(255, 252, 240))
 	card.Name = def.Id
 	card.LayoutOrder = order
@@ -58326,7 +58468,7 @@ local function upgradeCard(parent: Instance, def: any, run: Types.RunState, orde
 		Parent = card,
 	})
 	ink({
-		Text = string.format("Lv %d/%d  •  %s", level, def.Max, if def.PerTool then "this tool" else "all tools"),
+		Text = if infinity then "Infinity  •  all tools" else string.format("Lv %d/%d  •  %s", level, def.Max, if def.PerTool then "this tool" else "all tools"),
 		TextSize = 15,
 		TextColor3 = INK_DIM,
 		Position = UDim2.fromOffset(52, 28),
@@ -58356,7 +58498,9 @@ local function upgradeCard(parent: Instance, def: any, run: Types.RunState, orde
 
 	local spec = PREVIEW[def.Id]
 	local previewText = def.Desc
-	if spec then
+	if infinity then
+		previewText = "Infinity bag unlocked"
+	elseif spec then
 		local now = spec.Get(run.Stats)
 		if level &lt; def.Max then
 			previewText = string.format("%s %s → %s%s", spec.Label, fmtNum(now), fmtNum(spec.Get(previewStats(run, def.Id))), spec.Suffix or "")
@@ -58374,9 +58518,9 @@ local function upgradeCard(parent: Instance, def: any, run: Types.RunState, orde
 		Parent = card,
 	})
 
-	local cost = Config.UpgradeCost(def.Id, level, run.Level, run.ToolIndex)
+	local cost = if infinity then nil else Config.UpgradeCost(def.Id, level, run.Level, run.ToolIndex)
 	UIKit.Button({
-		Text = if cost then UIKit.Short(cost) .. " coins" else "MAX",
+		Text = if infinity then "UNLOCKED" elseif cost then UIKit.Short(cost) .. " coins" else "MAX",
 		Size = UDim2.new(1, -20, 0, 42),
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -8),
@@ -58417,7 +58561,7 @@ local function renderLeft(run: Types.RunState)
 			"Power %s/s   %s   Reach %s",
 			fmtNum(s.Power),
 			if s.Mode == "Line" then "Line " .. fmtNum(s.LineLength or 0)
-				elseif s.Mode == "Foam" then "Splat " .. fmtNum(s.Radius)
+				elseif s.Mode == "Foam" then string.format("Splat %s, %s shots/s", fmtNum(s.Radius), fmtNum(1 / math.max(0.05, s.FoamInterval or 0.28)))
 				else "Size " .. fmtNum(s.Radius),
 			fmtNum(s.Reach)
 		),

@@ -1424,7 +1424,10 @@ local function buildBoard(parent: Instance, x: number, z: number, titleText: str
 		local arrow = mkPart("Part", {
 			Name = "BoardArrow",
 			Size = Vector3.new(btn / pxPerStud + 0.3, btn / pxPerStud + 0.3, 0.3),
-			CFrame = boardPart.CFrame * CFrame.new(cx / pxPerStud - w / 2, h / 2 - cy / pxPerStud, -0.7),
+			-- (On a part's FRONT face the picture's x runs along the part's -X axis: the viewer's right is -X. The old
+			-- cx / pxPerStud - w / 2 put every click zone on the opposite side, so the arrow drawn on the right turned
+			-- the page BACK: Family Dinner, then Royal Banquet, then Pizza Party.)
+			CFrame = boardPart.CFrame * CFrame.new(w / 2 - cx / pxPerStud, h / 2 - cy / pxPerStud, -0.7),
 			Transparency = 1,
 			CanCollide = false,
 			CanQuery = true, -- ClickDetectors need the mouse ray to hit the part
@@ -3370,7 +3373,8 @@ end
 local function sweepStrays()
 	for _, player in Players:GetPlayers() do
 		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
-		if root then
+		-- (never someone playing a dishwasher: the arenas are built far below the lobby floor, which is "out of bounds" here)
+		if root and player:GetAttribute("InRun") ~= true then
 			local p = root.Position - ORIGIN
 			local inObbyBox = p.X > OBBY_BOX.X0 and p.X < OBBY_BOX.X1 and p.Z > OBBY_BOX.Z0 and p.Z < OBBY_BOX.Z1
 			if not (inObbyBox and obbyOpen) and (math.abs(p.X) > PLAZA_X + FENCE_MARGIN or p.Z < PLAZA_Z0 - FENCE_MARGIN or p.Z > PLAZA_Z1 + FENCE_MARGIN or p.Y < -20) then
@@ -3503,7 +3507,7 @@ function LobbyBuilder.SetRescue(on: boolean)
 		clock = 0
 		for _, player in Players:GetPlayers() do
 			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
-			if root then
+			if root and player:GetAttribute("InRun") ~= true then
 				local p = root.Position - ORIGIN
 				local inObbyBox = p.X > OBBY_BOX.X0 and p.X < OBBY_BOX.X1 and p.Z > OBBY_BOX.Z0 and p.Z < OBBY_BOX.Z1
 				local inRoom = math.abs(p.X) < ROOM_X and p.Z > ROOM_Z0 and p.Z < ROOM_Z1

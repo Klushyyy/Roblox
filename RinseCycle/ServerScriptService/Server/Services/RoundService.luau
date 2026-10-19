@@ -87,6 +87,7 @@ type PlayerRun = {
 	Results: Types.RunResults?,
 	DishesDone: number, -- dishes this player finished (Analytics)
 	Sold: boolean, -- sold a tank at least once (Analytics)
+	StrayAt: number?, -- os.clock() since when their character has been found up in the lobby instead of in the dishwasher
 }
 
 type Run = {
@@ -138,7 +139,7 @@ local HOLD_MIN_INTERVAL = R.ScrubSendInterval * 0.4
 local HP_EPSILON = 1e-3
 local FOAM_TICK = 0.2
 local MAX_SPLATS_PER_PLAYER = 4
-local REQUESTS_PER_SECOND = 10
+local REQUESTS_PER_SECOND = 14 -- (the Foam Cannon at full speed fires about 9 times a second)
 local LEFT_GAME = "PlayerRemoving" -- internal RemoveFromRun reason: skip everything client-facing
 local EMPTY: { [string]: any } = table.freeze({})
 
@@ -504,6 +505,9 @@ local function recomputeStats(run: Run, player: Player, pr: PlayerRun)
 end
 
 local function sendTankFull(player: Player, pr: PlayerRun)
+	if getPasses(player).AutoDrain then
+		return -- (Auto Drain: it sells by itself, it is never "full")
+	end
 	local now = os.clock()
 	if now - pr.LastFullFX < TANK_FULL_FX_COOLDOWN then
 		return
@@ -1494,13 +1498,18 @@ local function onScrub(player: Player, aim: any, holding: any, extra: any)
 	-- 3. Foam: one blob per FoamInterval; the splat does the cleaning over time (foamStep).
 	local now = os.clock()
 	if mode == "Foam" then
-		if now - pr.LastScrubAt < (stats.FoamInterval or 0.4) * 0.9 then
+		if now - pr.LastScrubAt < (stats.FoamInterval or 0.28) * 0.9 then
 			return
 		end
 		pr.LastScrubAt = now
 		if pr.Tank >= stats.TankMax then
-			sendTankFull(player, pr)
-			return
+			if getPasses(player).AutoDrain then
+				sell(run, player, pr)
+				stats = pr.Stats
+			else
+				sendTankFull(player, pr)
+				return
+			end
 		end
 		local mine = 0
 		local oldest: number? = nil
@@ -1510,10 +1519,10 @@ local function onScrub(player: Player, aim: any, holding: any, extra: any)
 				oldest = oldest or i
 			end
 		end
-		if mine >= MAX_SPLATS_PER_PLAYER and oldest then
+		if mine >= (stats.FoamMaxSplats or MAX_SPLATS_PER_PLAYER) and oldest then
 			table.remove(run.Splats, oldest)
 		end
-		local seconds = stats.FoamSeconds or 2.5
+		local seconds = stats.FoamSeconds or 1.4
 		table.insert(run.Splats, {
 			Player = player,
 			Position = aim,
@@ -1547,10 +1556,15 @@ local function onScrub(player: Player, aim: any, holding: any, extra: any)
 	end
 	pr.LastScrubAt = now
 
-	-- 5. Tank full: nothing to do but remind them.
+	-- 5. Tank full: nothing to do but remind them (Auto Drain owners sell on the spot and carry on).
 	if pr.Tank >= stats.TankMax then
-		sendTankFull(player, pr)
-		return
+		if getPasses(player).AutoDrain then
+			sell(run, player, pr)
+			stats = pr.Stats
+		else
+			sendTankFull(player, pr)
+			return
+		end
 	end
 
 	local amount = stats.Power * seconds
@@ -1745,6 +1759,19 @@ local function watchdogStep()
 				local root = Characters.GetRoot(player)
 				if root and root.Position.Y < run.KillY then
 					Characters.Teleport(player, randomSpawn(run))
+				end
+				-- Found up in the lobby (the dishwashers are built 2,500 studs below it) for more than a second and a half while
+				-- the server believes they are playing: something moved them out (v2.21.0: an end-of-show cleanup did, in every
+				-- run server). Put them back on their dishwasher's door, and count it so it shows in Analytics (run.misplaced).
+				if root and root.Position.Y > run.Arena.Origin.Position.Y + 1500 and player:GetAttribute("Teleporting") ~= true then
+					pr.StrayAt = pr.StrayAt or now
+					if now - pr.StrayAt >= 1.5 then
+						pr.StrayAt = nil
+						DataService.Track(player, "run.misplaced")
+						Characters.Teleport(player, randomSpawn(run))
+					end
+				else
+					pr.StrayAt = nil
 				end
 				-- Re-attach the tool in hand after a respawn (a new character has none).
 				local character = player.Character

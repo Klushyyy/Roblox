@@ -403,23 +403,16 @@ function Tutorial.Init()
 	----------------------------------------------------------------------------------------------
 	-- The camera turning to look at something (on the spot: it never moves to a new place).
 	----------------------------------------------------------------------------------------------
+	-- A pan can NOT be skipped (it used to hand the camera straight back on any click, tap or key, and the player is
+	-- usually holding the scrub button or the walk keys when the drain pan starts, so the camera turned and snapped back
+	-- at once: it looked like a glitch). It is short (about 3 seconds) and only ends by itself, or if the player dies.
 	local panning = false
-	local panSkip = false -- the player clicked / tapped / pressed a key: hand the camera back now
 	local panCancel: (() -> ())? = nil
 	local function cancelPan()
 		if panCancel then
 			panCancel()
 		end
 	end
-	UserInputService.InputBegan:Connect(function(input)
-		if not panning then
-			return
-		end
-		local t = input.UserInputType
-		if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch or t == Enum.UserInputType.Keyboard or t == Enum.UserInputType.Gamepad1 then
-			panSkip = true
-		end
-	end)
 	-- Turns the camera to `target`, holds for `hold` seconds, turns back; `onDone` runs after. False if it couldn't.
 	local function panTo(target: Vector3, hold: number, onDone: (() -> ())?): boolean
 		local camera = workspace.CurrentCamera
@@ -428,7 +421,7 @@ function Tutorial.Init()
 		if panning or not camera or not hrp or camera.CameraType == Enum.CameraType.Scriptable then
 			return false
 		end
-		panning, panSkip = true, false
+		panning = true
 		local startCF = camera.CFrame
 		local startRoot = hrp.Position
 		local previousType = camera.CameraType
@@ -461,14 +454,12 @@ function Tutorial.Init()
 			if phase == "go" then
 				local a = math.clamp((now - phaseAt) / PAN_TRAVEL, 0, 1)
 				camera.CFrame = followCF:Lerp(focusCF, ease(a))
-				if panSkip then
-					phase, phaseAt, from = "back", now, camera.CFrame
-				elseif a >= 1 then
+				if a >= 1 then
 					phase, phaseAt = "hold", now
 				end
 			elseif phase == "hold" then
 				camera.CFrame = focusCF
-				if panSkip or now - phaseAt >= hold then
+				if now - phaseAt >= hold then
 					phase, phaseAt, from = "back", now, focusCF
 				end
 			else
@@ -753,9 +744,11 @@ function Tutorial.Init()
 				setSpot(nil)
 				if not panned[1] then
 					local center = dishesCenter(run)
-					panned[1] = true
 					if center then
-						panTo(center, 1.6)
+						-- (only counts once the camera really turned: it can be refused, e.g. while another script holds it)
+						panned[1] = panTo(center, 1.6)
+					else
+						panned[1] = true
 					end
 				end
 				if panning then
@@ -765,8 +758,8 @@ function Tutorial.Init()
 					showHint(1, if padMode() then "Hold the right trigger (RT) on a dirty dish to scrub it clean!" elseif touchMode() then "Press and hold on a dirty dish to scrub it clean!" else "Hold the mouse button on a dirty dish to scrub it clean!")
 					pointAt(nearestDish(run))
 				end
-				if (run.Cleaned or 0) >= 1 then
-					cancelPan()
+				-- (the next tip waits for the pan to finish: it is never cut short)
+				if (run.Cleaned or 0) >= 1 and not panning then
 					clearPointer()
 					setStep(2)
 				end
@@ -777,9 +770,10 @@ function Tutorial.Init()
 				end
 			elseif step == 3 then
 				if not panned[3] then
-					panned[3] = true
 					if run.DrainPosition then
-						panTo(run.DrainPosition, 1.4)
+						panned[3] = panTo(run.DrainPosition, 1.4)
+					else
+						panned[3] = true
 					end
 				end
 				if panning then
@@ -789,8 +783,7 @@ function Tutorial.Init()
 				end
 				pointAt(nil, run.DrainPosition)
 				-- (every run starts with a few coins, so "has coins" means nothing: the coins have to go UP)
-				if (run.Coins or 0) > coinsBaseline then
-					cancelPan()
+				if (run.Coins or 0) > coinsBaseline and not panning then
 					clearPointer()
 					setStep(4)
 				end

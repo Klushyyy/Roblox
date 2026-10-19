@@ -105,3 +105,5 @@ before analytics": they appear in the daily numbers but not in the sign-up funne
 Players with Roblox Premium get +10% Bubbles in runs (a "Premium +10%" chip under the HUD) and a small daily gift
 (150 Bubbles + 3 Gems, once per UTC day, with a popup). Tune it in `Config.Premium`. Roblox also pays you
 Premium-engagement money automatically for time Premium members spend in your game; no set-up needed.
+
+**run.misplaced** (v2.21.0): a player was found at the lobby spawn in the middle of a run and put back in the dishwasher. It should be 0; if it is not, something is still moving players out of runs (Studio Test > Analytics > Features lists it).

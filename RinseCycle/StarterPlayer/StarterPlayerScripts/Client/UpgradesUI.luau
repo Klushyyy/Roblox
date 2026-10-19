@@ -118,6 +118,11 @@ end
 
 local function upgradeCard(parent: Instance, def: any, run: Types.RunState, order: number): Frame
 	local level = ((run.Upgrades :: any)[def.Id] :: number?) or 0
+	-- Auto Drain owners have an infinity bag: nothing left to upgrade on the Tank card.
+	local infinity = def.Id == "TankSize" and ClientState.AutoDrain()
+	if infinity then
+		level = def.Max
+	end
 	local card = tile(parent, UDim2.new(0.5, -6, 0, 140), UDim2.new(), Color3.fromRGB(255, 252, 240))
 	card.Name = def.Id
 	card.LayoutOrder = order
@@ -133,7 +138,7 @@ local function upgradeCard(parent: Instance, def: any, run: Types.RunState, orde
 		Parent = card,
 	})
 	ink({
-		Text = string.format("Lv %d/%d  •  %s", level, def.Max, if def.PerTool then "this tool" else "all tools"),
+		Text = if infinity then "Infinity  •  all tools" else string.format("Lv %d/%d  •  %s", level, def.Max, if def.PerTool then "this tool" else "all tools"),
 		TextSize = 15,
 		TextColor3 = INK_DIM,
 		Position = UDim2.fromOffset(52, 28),
@@ -163,7 +168,9 @@ local function upgradeCard(parent: Instance, def: any, run: Types.RunState, orde
 
 	local spec = PREVIEW[def.Id]
 	local previewText = def.Desc
-	if spec then
+	if infinity then
+		previewText = "Infinity bag unlocked"
+	elseif spec then
 		local now = spec.Get(run.Stats)
 		if level < def.Max then
 			previewText = string.format("%s %s → %s%s", spec.Label, fmtNum(now), fmtNum(spec.Get(previewStats(run, def.Id))), spec.Suffix or "")
@@ -181,9 +188,9 @@ local function upgradeCard(parent: Instance, def: any, run: Types.RunState, orde
 		Parent = card,
 	})
 
-	local cost = Config.UpgradeCost(def.Id, level, run.Level, run.ToolIndex)
+	local cost = if infinity then nil else Config.UpgradeCost(def.Id, level, run.Level, run.ToolIndex)
 	UIKit.Button({
-		Text = if cost then UIKit.Short(cost) .. " coins" else "MAX",
+		Text = if infinity then "UNLOCKED" elseif cost then UIKit.Short(cost) .. " coins" else "MAX",
 		Size = UDim2.new(1, -20, 0, 42),
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -8),
@@ -224,7 +231,7 @@ local function renderLeft(run: Types.RunState)
 			"Power %s/s   %s   Reach %s",
 			fmtNum(s.Power),
 			if s.Mode == "Line" then "Line " .. fmtNum(s.LineLength or 0)
-				elseif s.Mode == "Foam" then "Splat " .. fmtNum(s.Radius)
+				elseif s.Mode == "Foam" then string.format("Splat %s, %s shots/s", fmtNum(s.Radius), fmtNum(1 / math.max(0.05, s.FoamInterval or 0.28)))
 				else "Size " .. fmtNum(s.Radius),
 			fmtNum(s.Reach)
 		),

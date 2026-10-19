@@ -998,7 +998,7 @@ function HUD.Init()
 	UIKit.Stroke(finale, Colors.Ink, 3)
 	finale.Parent = resultsFrame
 	UIKit.Label({ Text = "🏆", TextSize = 56, Stroke = false, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 8), Size = UDim2.fromOffset(80, 64), ZIndex = 17, Parent = finale })
-	UIKit.Label({
+	local finaleTitle = UIKit.Label({
 		Text = "CONGRATS! YOU FINISHED ALL THE CURRENT CHAPTERS!",
 		TextSize = 28,
 		TextScaled = true,
@@ -1007,9 +1007,10 @@ function HUD.Init()
 		ZIndex = 17,
 		Parent = finale,
 	})
-	UIKit.Label({
+	local finaleSub = UIKit.Label({
 		Text = "New chapters are coming soon.",
 		TextSize = 20,
+		TextScaled = true,
 		Size = UDim2.new(1, -30, 0, 26),
 		Position = UDim2.new(0, 15, 0, 114),
 		ZIndex = 17,
@@ -1072,6 +1073,16 @@ function HUD.Init()
 			UIKit.Tween(resultsBubblesNV, { Value = results.Bubbles }, 0.8)
 		end
 		local lastChapter = run.Level == #Config.Levels
+		-- Once Admin Abuse has started, Chapter 4 is announced: this is not "all the chapters" any more.
+		if lastChapter then
+			if Config.ChapterFourAnnounced() then
+				finaleTitle.Text = string.format("CONGRATS! CHAPTER %d CLEARED!", run.Level)
+				finaleSub.Text = "Chapter 4 is coming soon! Turn on notifications so you don't miss it."
+			else
+				finaleTitle.Text = "CONGRATS! YOU FINISHED ALL THE CURRENT CHAPTERS!"
+				finaleSub.Text = "New chapters are coming soon."
+			end
+		end
 		if finale.Visible ~= lastChapter then
 			finale.Visible = lastChapter
 			headerRow.Visible = not lastChapter
@@ -1346,11 +1357,12 @@ function HUD.Init()
 		if playing and run then
 			local level = Config.GetLevel(run.Level)
 			levelLabel.Text = tostring(level.Name)
-			local full = run.Tank >= run.TankMax and run.TankMax > 0
+			local infinite = ClientState.AutoDrain()
+			local full = run.Tank >= run.TankMax and run.TankMax > 0 and not infinite
 			setTankFull(full)
 			tankBar.Set(
 				if run.TankMax > 0 then run.Tank / run.TankMax else 0,
-				if full then "FULL! Sell at the drain" else string.format("%s / %s", UIKit.Short(run.Tank), UIKit.Short(run.TankMax))
+				if infinite then "Infinity tank" elseif full then "FULL! Sell at the drain" else string.format("%s / %s", UIKit.Short(run.Tank), UIKit.Short(run.TankMax))
 			)
 			updateProgress()
 		else

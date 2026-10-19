@@ -941,9 +941,20 @@ local function newPlayerCardsLoop()
 		task.wait(STEP)
 		local runs = finishedRuns()
 		local idle = Config.FirstRun.Enabled and lobbyIdle()
+		local meta = ClientState.Meta :: any
+		local tutorialDone = meta ~= nil and meta.TutorialDone == true
+		-- (a staff "Reset first run", or anyone who has played, starts the cards afresh)
+		-- Also once a run has started: whoever comes back from it (Leave) is offered the tutorial afresh.
+		if runs ~= nil and (runs ~= 0 or tutorialDone or ClientState.InRun()) then
+			welcomeDismissed, welcomeSent = false, false
+		end
+		if runs ~= nil and runs ~= 1 then
+			backShown = false
+		end
 
-		-- START CLEANING
-		local welcomeWanted = idle and runs == 0 and not welcomeDismissed and not welcomeSent
+		-- The tutorial card: only for someone who still has the tutorial to do (it plays in their first dishwasher; a
+		-- player who already finished or skipped it has nothing to be offered).
+		local welcomeWanted = idle and runs == 0 and not tutorialDone and not welcomeDismissed and not welcomeSent
 		if welcomeWanted then
 			welcomeIdle += STEP
 			if not welcomeCard.Visible and welcomeIdle >= Config.FirstRun.CardDelay then
@@ -958,7 +969,6 @@ local function newPlayerCardsLoop()
 				setWelcomeMode(friends)
 				-- It only starts by itself for someone who has never been in a dishwasher (not after Leave) and who is
 				-- not with friends.
-				local meta = ClientState.Meta :: any
 				local autoStart = if meta and (meta.RunsStarted or 0) == 0 and not friends then Config.FirstRun.AutoStart else 0
 				local left = autoStart - (os.clock() - welcomeAt)
 				if autoStart > 0 and left <= 0 then
@@ -1072,7 +1082,8 @@ local function padHintLoop()
 				local bestDistance = math.huge
 				for _, pad in lobby:GetChildren() do
 					local zone = pad:IsA("Model") and string.sub(pad.Name, 1, 3) == "Pad" and pad:FindFirstChild("Zone")
-					if zone and zone:IsA("BasePart") then
+					-- (a pad somebody is using never gets the arrow; with every pad taken there is no arrow at all)
+					if zone and zone:IsA("BasePart") and zone:GetAttribute("Taken") ~= true then
 						local distance = (zone.Position - root.Position).Magnitude
 						if distance < bestDistance then
 							best, bestDistance = zone, distance
@@ -1107,6 +1118,16 @@ function PartyUI.Init()
 	buildWaitCard()
 	buildWelcomeCard()
 	buildBackCard()
+
+	-- While the Create Party screen is up no other window opens (the shop or the pets behind it did nothing useful; the
+	-- way out is BACK or CREATE). In the waiting card state every window works as before.
+	UIKit.OpenGuard = function(_name: string): boolean
+		if createScreen.Visible then
+			UIKit.Toast("Press BACK first to close the Create Party screen.", "Info")
+			return true
+		end
+		return false
+	end
 
 	UIKit.LayoutChanged:Connect(function()
 		if createScreen.Visible then

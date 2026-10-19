@@ -371,6 +371,11 @@ end
 
 local function refreshPad(pad: Pad, pulse: boolean?)
 	local party = pad.Party
+	-- (clients read this: the new-player arrow only ever points at a pad nobody is using)
+	local zone = pad.Info.Zone
+	if zone and zone.Parent and zone:GetAttribute("Taken") ~= (party ~= nil) then
+		zone:SetAttribute("Taken", party ~= nil)
+	end
 	local gui = pad.Info.Gui
 	if gui then
 		if party then
@@ -587,7 +592,7 @@ local function createParty(pad: Pad, host: Player)
 		Members = {},
 		MaxPlayers = MAX_PLAYERS,
 		Privacy = "Public",
-		Level = unlockedOf(host), -- default to their best dishwasher
+		Level = 1, -- the Create screen always starts on Chapter 1 (it used to jump to their best chapter, e.g. 3, which was rarely the one they wanted)
 		LevelChosen = false,
 		EndsAt = Util.Now() + PICK_SECONDS, -- replaced by the real countdown when they press Create
 		Status = "Picking",
@@ -1202,7 +1207,7 @@ local function onProfileLoaded(player: Player)
 		return
 	end
 	if party.Host == player and not party.LevelChosen and party.Status ~= "Launching" then
-		party.Level = unlockedOf(player)
+		party.Level = 1 -- (Chapter 1, whatever they have unlocked; they pick another on the Create screen)
 	end
 	markDirty(party)
 	refreshPad(party.Pad)

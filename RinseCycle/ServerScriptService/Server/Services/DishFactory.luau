@@ -91,11 +91,21 @@ end
 
 -- A part whose local X axis is `axisWorld` (used for Shape = Cylinder, where X is the axis).
 local function axisCFrame(pos: Vector3, axisWorld: Vector3, hintWorld: Vector3): CFrame
-	local ok, cf = pcall(CFrame.fromMatrix, pos, axisWorld.Unit, hintWorld.Unit)
+	-- The hint is made PERPENDICULAR to the axis first (CFrame.fromMatrix does not do that for us: with a hint that
+	-- leans on the axis it builds a skewed frame). The ring of points that checks a dirt spot sits on the dish (`fits`)
+	-- is laid out in this frame, so on a surface tilted away from straight up / straight sideways (the leaning bowls
+	-- at 50 degrees and pans at 55) the check always failed: those dishes got no dirt at all.
+	local axis = axisWorld.Unit
+	local across = hintWorld - axis * hintWorld:Dot(axis)
+	if across.Magnitude < 1e-3 then
+		local other = if math.abs(axis.Y) < 0.9 then Vector3.new(0, 1, 0) else Vector3.new(1, 0, 0)
+		across = other - axis * other:Dot(axis)
+	end
+	local ok, cf = pcall(CFrame.fromMatrix, pos, axis, across.Unit)
 	if ok and cf == cf then
 		return cf
 	end
-	return CFrame.fromMatrix(pos, axisWorld.Unit, Vector3.new(0, 1, 0))
+	return CFrame.fromMatrix(pos, axis, Vector3.new(0, 1, 0))
 end
 
 -- The anchor rotated so a Cylinder's axis (X) points along the anchor's Up.
@@ -309,8 +319,11 @@ local function buildPan(anchor: CFrame, theme, _rng: Random)
 	else
 		table.insert(parts, newPart(Enum.PartType.Cylinder, Vector3.new(s.Depth, s.Diameter, s.Diameter), upright(anchor, s.Depth / 2), DARK_STEEL, Enum.Material.Metal))
 	end
-	-- Outside of the pan in the theme metal colour, cooking surface darker.
-	table.insert(parts, decor(newPart(Enum.PartType.Cylinder, Vector3.new(0.3, s.Diameter + 0.2, s.Diameter + 0.2), upright(anchor, 0.15), theme.Metal, Enum.Material.Metal)))
+	-- Outside of the pan in the theme metal colour, cooking surface darker. The base disc sits 0.06 BELOW the pan (y from
+	-- -0.06 to 0.24, inside the 0.8 thick floor): when it started at exactly y = 0 its bottom face was in the same plane as the
+	-- pan's own bottom and the two flickered (z-fighting) on the underside of every pan, which the Royal Banquet's back
+	-- pans show off because they lean toward the player.
+	table.insert(parts, decor(newPart(Enum.PartType.Cylinder, Vector3.new(0.3, s.Diameter + 0.2, s.Diameter + 0.2), upright(anchor, 0.09), theme.Metal, Enum.Material.Metal)))
 	local h0 = localPos(anchor, r - 0.5, s.Depth * 0.8, 0)
 	local h1 = localPos(anchor, r + 12, s.Depth * 1.6, 0)
 	table.insert(parts, bar(h0, h1, 1.3, anchor.UpVector, HANDLE_BLACK))

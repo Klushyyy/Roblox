@@ -91,6 +91,7 @@ local sprayAttachment: Attachment? = nil
 local sprayDrops: ParticleEmitter? = nil
 local waterSplash: ParticleEmitter? = nil
 local lastFoamAt = 0
+local lastFoamSoundAt = 0
 -- Pressure Washer: the line runs across (false) or up and down (true). T / D-pad up / touch button.
 local washerVertical = false
 local turnButton: TextButton? = nil
@@ -736,7 +737,7 @@ local function onHeartbeat(dt: number)
 		hintBillboard.Enabled = false
 	end
 
-	local tankFull = run.Tank >= run.TankMax
+	local tankFull = run.Tank >= run.TankMax and not ClientState.AutoDrain() -- (Auto Drain empties it by itself: never "full")
 	local canSend = pressed and inReach and not tankFull
 
 	local now = os.clock()
@@ -745,12 +746,17 @@ local function onHeartbeat(dt: number)
 	if canSend then
 		if mode == "Foam" then
 			-- One blob per FoamInterval while held.
-			if now - lastFoamAt >= (stats.FoamInterval or 0.4) then
+			if now - lastFoamAt >= (stats.FoamInterval or 0.28) then
 				lastFoamAt = now
 				local from = if handAttachment then handAttachment.WorldPosition else (root :: BasePart).Position
 				launchFoam(from, hitPos, toolColor)
-				UIKit.PlaySound("Fwump", 0.5 + math.random() * 0.12) -- (a soft "fwump" out of the cannon; the splat's own sound comes with the splat)
-				UIKit.PlaySound("Hiss", 1.1 + math.random() * 0.2)
+				-- (a soft "fwump" out of the cannon; the splat's own sound comes with the splat. At full speed the cannon fires
+				-- nine times a second: the sound is thinned out so it stays a soft patter, not a buzz)
+				if now - lastFoamSoundAt >= 0.14 then
+					lastFoamSoundAt = now
+					UIKit.PlaySound("Fwump", 0.5 + math.random() * 0.12)
+					UIKit.PlaySound("Hiss", 1.1 + math.random() * 0.2)
+				end
 				sendScrub(hitPos, true, math.random(), { Normal = normal })
 			end
 		elseif now - lastSendAt >= Config.Round.ScrubSendInterval then
@@ -855,7 +861,7 @@ local function onPressBegan()
 		return
 	end
 	local distance = (result.Position - (root :: BasePart).Position).Magnitude
-	if distance > run.Stats.Reach or run.Tank >= run.TankMax then
+	if distance > run.Stats.Reach or (run.Tank >= run.TankMax and not ClientState.AutoDrain()) then
 		return
 	end
 

@@ -305,6 +305,9 @@ local function onSold(data: any)
 end
 
 local function onTankFull()
+	if ClientState.AutoDrain() then
+		return -- (Auto Drain: it sells by itself, it is never "full")
+	end
 	UIKit.PlaySound("Error")
 end
 
@@ -601,7 +604,7 @@ local function updateDrainGuide()
 	local character = LocalPlayer.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 
-	local wantsGuide = run ~= nil and run.Phase == "Playing" and root ~= nil and run.TankMax > 0 and (run.Tank / run.TankMax) >= DRAIN_FULL_FRACTION
+	local wantsGuide = run ~= nil and run.Phase == "Playing" and root ~= nil and run.TankMax > 0 and (run.Tank / run.TankMax) >= DRAIN_FULL_FRACTION and not ClientState.AutoDrain()
 
 	if not wantsGuide then
 		if drainBeam then

@@ -5631,6 +5631,7 @@ do
 	local nukeQuietUntil = 0 -- while the nuke counts down and goes off nothing else happens
 	local timeSkip = 0 -- seconds the show has jumped ahead (the pet hunt ended early)
 	local showEnded: { [string]: boolean } = {} -- shows (by start time) that have been put away: they do not run again
+	local showRan: { [string]: boolean } = {} -- shows (by start time) that really started in THIS server (see the end of the show)
 	-- Jumps the show ahead `seconds` (and drops the script steps in the seconds it skips, so none of them fires late).
 	local skipScript: (number) -> () = function() end
 
@@ -8964,6 +8965,7 @@ do
 				local wasHeat = heat
 				heat = t >= Show.HeatAt and not fadingOut
 				if once("live" .. tag) then
+					showRan[tag] = true
 					ReplicatedStorage:SetAttribute("AbuseLive", true)
 					LobbyBuilder.Snapshot() -- (the lobby as it is now: the end of the show puts back anything the effects left changed)
 					LobbyBuilder.SetBarriers(true) -- no invisible walls for the whole show
@@ -9088,7 +9090,13 @@ do
 				if once("end" .. tag) then
 					showEnded[tag] = true
 					local wasLocal = localShow
-					resetShow()
+					-- Only a server that RAN the show puts it away. Every server that starts after the show's date (every new lobby and
+					-- every party's run server) also gets here, with nothing to put away: its "put the lobby back" check used to send
+					-- everyone below the lobby floor to the lobby spawn, and the dishwashers are 2,500 studs below it, so players
+					-- were thrown out of their own run a moment after arriving.
+					if showRan[tag] then
+						resetShow()
+					end
 					localShow = false
 					local isTest = realStarts ~= nil and e.Starts ~= realStarts
 					if not isTest or RunService:IsStudio() then

@@ -139,6 +139,13 @@ function ClientState.InParty(): boolean
 	return ClientState.Party ~= nil
 end
 
+-- True for an owner of the Auto Drain pass: their tank empties by itself the moment it fills, so it is "infinity" and
+-- never "full" (no TANK FULL toast, sound, glow or drain arrow anywhere).
+function ClientState.AutoDrain(): boolean
+	local meta = ClientState.Meta :: any
+	return meta ~= nil and type(meta.Passes) == "table" and meta.Passes.AutoDrain == true
+end
+
 -- The dishwasher model the local player is playing in, if it has replicated.
 function ClientState.GetArena(): Model?
 	local run = ClientState.Run
