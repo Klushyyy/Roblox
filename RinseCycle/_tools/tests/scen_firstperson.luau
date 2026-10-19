@@ -122,10 +122,18 @@ endRun()
 check(CS.Run and CS.Run.Phase == "Complete", "results are up (" .. tostring(CS.Run and CS.Run.Phase) .. ")")
 check(p.CameraMode == Enum.CameraMode.LockFirstPerson, "still first person on the results screen")
 check(modalUp() and UIS.MouseBehavior == Enum.MouseBehavior.Default, "mouse is free on the results screen")
-backToLobby()
+call("client", function() return rf:InvokeServer("ReturnToLobby") end)
+local sawHeld = false
+for _ = 1, 60 do
+	pump(0.05, G.frame)
+	if p.CameraMinZoomDistance == 12.5 then sawHeld = true end
+end
+pump(1, G.frame)
 check(CS.Run == nil, "back in the lobby")
 check(p.CameraMode == Enum.CameraMode.Classic, "lobby camera mode is Classic again (" .. tostring(p.CameraMode) .. ")")
 check(not modalUp() and not dot(), "no button and no dot in the lobby again")
+check(sawHeld, "the lobby camera is pulled back out of first person's zoom (the minimum zoom was held at 12.5 for a moment)")
+check(p.CameraMinZoomDistance ~= 12.5, "...and the old minimum zoom came back (" .. tostring(p.CameraMinZoomDistance) .. ")")
 check(UIS.MouseBehavior == Enum.MouseBehavior.Default, "mouse is free in the lobby")
 
 out("-- watching someone else keeps the normal camera")
@@ -198,6 +206,7 @@ check(not tryScrub(dirt.Position + Vector3.new(0, -70, 3)), "dirt 70 studs overh
 backToLobby()
 
 out("-- every level: dirt is in reach (bare Hands, " .. 12 .. " studs) from the rack beneath it")
+DS.SetChapterPreview(true) -- (Chapter 4 is shut until its event)
 for level = 1, #Config.Levels do
 	call("server", RS.StartRound, { p }, level)
 	pump(1, G.frame)
@@ -222,6 +231,7 @@ for level = 1, #Config.Levels do
 	backToLobby()
 end
 
+DS.SetChapterPreview(nil)
 out("-- phones")
 UIS.TouchEnabled = true
 UIS.KeyboardEnabled = false

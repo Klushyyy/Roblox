@@ -11,7 +11,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.22.0"
+Config.Version = "2.23.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -142,6 +142,13 @@ Config.GrimeTypes = {
 	TruffleGunk = { Name = "Truffle Gunk", HP = 10, Units = 3, Color = Color3.fromRGB(70, 60, 50), Material = Enum.Material.Mud, Size = { 1.4, 2.4 }, Shape = "Blob", MinTool = 1 },
 	CaviarSmear = { Name = "Caviar Smear", HP = 8, Units = 3, Color = Color3.fromRGB(25, 25, 35), Material = Enum.Material.Pebble, Size = { 1.2, 2.0 }, Shape = "Crumbs", MinTool = 1 },
 	AncientGravy = { Name = "Ancient Gravy", HP = 22, Units = 6, Color = Color3.fromRGB(90, 110, 50), Material = Enum.Material.Mud, Size = { 1.6, 2.6 }, Shape = "Streak", MinTool = 2 },
+
+	-- Chapter 4 (Cosmic Cafeteria)
+	AlienGoo = { Name = "Alien Goo", HP = 14, Units = 4, Color = Color3.fromRGB(96, 230, 120), Material = Enum.Material.Mud, Size = { 1.5, 2.5 }, Shape = "Blob", MinTool = 1 },
+	StarJelly = { Name = "Star Jelly", HP = 10, Units = 3, Color = Color3.fromRGB(255, 120, 205), Material = Enum.Material.Glass, Size = { 1.3, 2.2 }, Shape = "Blob", MinTool = 1 },
+	MoonCheese = { Name = "Moon Cheese", HP = 16, Units = 4, Color = Color3.fromRGB(238, 232, 168), Material = Enum.Material.Sand, Size = { 1.4, 2.4 }, Shape = "Crumbs", MinTool = 1 },
+	NebulaSludge = { Name = "Nebula Sludge", HP = 24, Units = 6, Color = Color3.fromRGB(150, 84, 224), Material = Enum.Material.Mud, Size = { 1.6, 2.6 }, Shape = "Streak", MinTool = 2 },
+	CometCrust = { Name = "Comet Crust", HP = 30, Units = 7, Color = Color3.fromRGB(58, 52, 74), Material = Enum.Material.Slate, Size = { 1.1, 1.9 }, Shape = "Crumbs", MinTool = 2 },
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -251,6 +258,43 @@ Config.Levels = {
 			Metal = Color3.fromRGB(230, 190, 90),
 			Tray = Color3.fromRGB(235, 195, 85),
 			Light = Color3.fromRGB(255, 225, 160),
+		},
+	},
+	{
+		Id = 4,
+		Name = "Cosmic Cafeteria",
+		Subtitle = "Alien goo, comet crust and a mess that is out of this world.",
+		Icon = "🚀",
+		Place = "Space Station",
+		-- Opens when this Roblox event (Config.UpcomingEvents) starts: see Config.LevelOpen. Until then it is a locked
+		-- "Chapter 4" card and everything else in the game behaves as if there were three chapters.
+		OpensWith = "Chapter4",
+		Toughness = 9,
+		Mult = 64,
+		ParTime = 2520,
+		Bubbles = 1900,
+		GoldenChance = 0.045,
+		Dishes = { Plate = 14, Tray = 8, Bowl = 10, Cup = 8, Glass = 4, Fork = 6, Knife = 6, Spoon = 5, Pan = 2, Pot = 2, Board = 0, Cutter = 2, Goblet = 8 },
+		Spots = { Plate = 7, Tray = 12, Bowl = 7, Cup = 5, Glass = 4, Fork = 3, Knife = 3, Spoon = 3, Pan = 15, Pot = 17, Board = 9, Cutter = 3, Goblet = 4 },
+		Grime = {
+			{ Type = "AlienGoo", Weight = 28 },
+			{ Type = "StarJelly", Weight = 22 },
+			{ Type = "MoonCheese", Weight = 20 },
+			{ Type = "NebulaSludge", Weight = 18 },
+			{ Type = "CometCrust", Weight = 12 },
+		},
+		Theme = {
+			Tub = Color3.fromRGB(60, 66, 84),
+			Rack = Color3.fromRGB(200, 210, 225),
+			Accent = Color3.fromRGB(110, 90, 255),
+			Plate = Color3.fromRGB(235, 238, 255),
+			PlateRim = Color3.fromRGB(110, 90, 255),
+			Bowl = Color3.fromRGB(150, 235, 230),
+			Cup = Color3.fromRGB(255, 120, 200),
+			Glass = Color3.fromRGB(190, 230, 255),
+			Metal = Color3.fromRGB(180, 190, 210),
+			Tray = Color3.fromRGB(120, 130, 160),
+			Light = Color3.fromRGB(170, 200, 255),
 		},
 	},
 }
@@ -562,6 +606,45 @@ end
 
 function Config.GetLevel(levelIndex: number)
 	return Config.Levels[levelIndex] or Config.Levels[1]
+end
+
+-- Can dishwasher `i` be played right now? A level with OpensWith (the key of an entry in Config.UpcomingEvents) opens the moment
+-- that event starts, and stays shut while the event has no date (Soon). The server works the answer out from ITS clock, publishes
+-- the number of open levels as the ReplicatedStorage attribute "OpenLevels" (DataService), and everyone else reads that, so a
+-- player's own clock can't open or hide a chapter. Pass `now` to ask about a given time instead (the server does).
+function Config.LevelOpen(i: number, now: number?): boolean
+	local def = Config.Levels[i] :: any
+	if not def then
+		return false
+	end
+	if not def.OpensWith then
+		return true
+	end
+	if now == nil then
+		local published = game:GetService("ReplicatedStorage"):GetAttribute("OpenLevels")
+		if type(published) == "number" then
+			return i <= published
+		end
+	end
+	for _, e in Config.UpcomingEvents do
+		if e.Key == def.OpensWith then
+			return e.Soon ~= true and (now or Config.Now()) >= e.Starts
+		end
+	end
+	return false
+end
+
+-- How many dishwashers are open (they open in order: 3 until Chapter 4's event starts, then 4).
+function Config.OpenLevels(now: number?): number
+	local n = 0
+	for i = 1, #Config.Levels do
+		if Config.LevelOpen(i, now) then
+			n = i
+		else
+			break
+		end
+	end
+	return n
 end
 
 function Config.GetUpgrade(upgradeId: string)
@@ -1414,8 +1497,8 @@ end
 -- "you finished all the chapters": the finale card and the Rebirth notice say "Chapter N cleared, Chapter 4 is coming".
 -- When Chapter 4 is added to Config.Levels the finale simply moves to it (it always belongs to the last level).
 function Config.ChapterFourAnnounced(now: number?): boolean
-	if #Config.Levels >= 4 then
-		return false
+	if Config.LevelOpen(4, now) then
+		return false -- (it is here: the finale belongs to the last open chapter)
 	end
 	local t = now or os.time()
 	for _, e in Config.UpcomingEvents do
@@ -1542,6 +1625,7 @@ Config.Analytics = {
 		{ "run.launch", "Party launched (teleport started)" },
 		{ "run.fail", "Run could not start (teleport failed)" },
 		{ "run.misplaced", "Found at the lobby spawn in the middle of a run and put back in the dishwasher" },
+		{ "chapter.open", "Was online when a new chapter opened" },
 		{ "run.arrive", "Arrived in a dishwasher" },
 		{ "run.loaded", "Intro finished and clock started" },
 		{ "run.first", "Cleaned the first spot" },
@@ -1744,6 +1828,7 @@ Config.Badges = {
 	{ Key = "Level1", Id = 0, Name = "Family Dinner Cleared", Desc = "Clean every dish in level 1." },
 	{ Key = "Level2", Id = 0, Name = "Pizza Party Cleared", Desc = "Clean every dish in level 2." },
 	{ Key = "Level3", Id = 0, Name = "Royal Banquet Cleared", Desc = "Clean every dish in level 3." },
+	{ Key = "Level4", Id = 0, Name = "Cosmic Cafeteria Cleared", Desc = "Clean every dish in level 4." },
 	{ Key = "FirstPet", Id = 0, Name = "New Best Friend", Desc = "Hatch your first pet." },
 	{ Key = "GoldenPet", Id = 0, Name = "Golden Touch", Desc = "Merge a Golden pet." },
 	{ Key = "Rebirth", Id = 0, Name = "Born Again", Desc = "Rebirth for the first time." },

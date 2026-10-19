@@ -367,7 +367,7 @@ local function startRun()
 		return
 	end
 	-- Never deeper than anyone in the party has unlocked.
-	local level = math.clamp((plan :: Plan).Level, 1, math.min(best, #Config.Levels))
+	local level = math.clamp((plan :: Plan).Level, 1, math.max(1, math.min(best, Config.OpenLevels())))
 	local ok, result, err = pcall(RoundService.StartRound, ready, level)
 	if not ok or result ~= true then
 		warn("[RunServers] couldn't start the run: " .. tostring(if ok then err else result))

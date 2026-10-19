@@ -13,6 +13,8 @@
 	  3 Royal Banquet - the king on his throne, the queen and nobles feasting and toasting, a
 	    servant carrying the roast from the fire, a juggling jester who does cartwheels and guards
 	    on duty.
+	  4 Cosmic Cafeteria - an astronaut and an alien share noodles at the crew table while a
+	    cleaning robot washes up at the sink beside the dishwasher.
 
 	Everything is a pure function of time: the routines loop (every level has one loop length and
 	every character's plan fills it exactly), and the loop clock is the server's clock, so everyone
@@ -565,6 +567,59 @@ LOOKS.Jester = {
 			a:piece("Head", Vector3.new(0.32, 1.2, 0.32), CFrame.new(sd * 0.72, 0.8, 0.05) * CFrame.Angles(0, 0, -sd * 0.9), if sd < 0 then rgb(250, 200, 40) else rgb(220, 40, 60), Enum.Material.Fabric)
 			a:piece("Head", Vector3.new(0.3, 0.3, 0.3), CFrame.new(sd * 1.22, 1.1, 0.05), rgb(250, 220, 90), Enum.Material.Metal, "Ball")
 		end
+	end,
+}
+
+LOOKS.Astronaut = {
+	Shirt = rgb(240, 242, 250), Pants = rgb(226, 230, 242), Shoes = rgb(120, 130, 165), ShirtMat = Enum.Material.Fabric,
+	Build = function(a)
+		hairShort(rgb(70, 46, 30))(a)
+		-- a bubble helmet, pushed up over the head, on a metal neck ring
+		local helmet = a:piece("Head", Vector3.new(1.62, 1.62, 1.62), CFrame.new(0, 0.12, 0.0), rgb(210, 235, 255), Enum.Material.Glass, "Ball")
+		helmet.Transparency = 0.72
+		a:piece("Head", Vector3.new(0.3, 1.5, 1.5), CFrame.new(0, -0.62, 0.05) * CFrame.Angles(0, 0, PI / 2), rgb(190, 196, 214), Enum.Material.Metal, "Cylinder")
+		-- chest box with lights, an orange stripe round each arm, a mission patch
+		a:piece("Torso", Vector3.new(1.0, 0.7, 0.12), CFrame.new(0, 0.3, -0.55), rgb(70, 78, 100), Enum.Material.Metal)
+		for i, c in { rgb(90, 230, 255), rgb(255, 120, 200), rgb(110, 240, 140) } do
+			a:piece("Torso", Vector3.new(0.18, 0.18, 0.06), CFrame.new(-0.3 + (i - 1) * 0.3, 0.32, -0.62), c, Enum.Material.Neon)
+		end
+		a:piece("Torso", Vector3.new(2.04, 0.16, 1.04), CFrame.new(0, -0.82, 0), rgb(255, 150, 60), Enum.Material.Fabric)
+		for _, side in { "L", "R" } do
+			a:piece("Arm" .. side, Vector3.new(1.04, 0.16, 1.04), CFrame.new(0, -0.2, 0), rgb(255, 150, 60), Enum.Material.Fabric)
+		end
+	end,
+}
+LOOKS.Alien = {
+	Skin = rgb(120, 220, 130), Shirt = rgb(150, 100, 235), Pants = rgb(62, 58, 100), Shoes = rgb(255, 120, 200), Sleeves = "short", ShirtMat = Enum.Material.Fabric,
+	Build = function(a)
+		-- a taller dome of a head, two antennae with glowing tips, a belt with a glowing buckle
+		a:piece("Head", Vector3.new(1.5, 1.0, 1.4), CFrame.new(0, 0.36, 0.04), rgb(120, 220, 130), nil, "Sphere")
+		for _, sd in { -1, 1 } do
+			a:piece("Head", Vector3.new(0.1, 0.9, 0.1), CFrame.new(sd * 0.32, 1.0, 0) * CFrame.Angles(0, 0, -sd * 0.4), rgb(96, 190, 108))
+			a:piece("Head", Vector3.new(0.3, 0.3, 0.3), CFrame.new(sd * 0.6, 1.5, 0), rgb(255, 120, 200), Enum.Material.Neon, "Ball")
+		end
+		belt(a, rgb(40, 34, 70), rgb(90, 230, 255))
+		collar(a, rgb(190, 150, 255))
+	end,
+}
+LOOKS.Robot = {
+	Skin = rgb(176, 186, 205), Shirt = rgb(120, 132, 164), Sleeve = rgb(150, 160, 188), Pants = rgb(96, 104, 132), Shoes = rgb(58, 62, 80),
+	ShirtMat = Enum.Material.Metal, PantsMat = Enum.Material.Metal,
+	Build = function(a)
+		-- a dark faceplate with a glowing visor strip (it covers the face), an antenna, a lit chest panel and round "ears"
+		a:piece("Head", Vector3.new(1.34, 0.96, 0.12), CFrame.new(0, 0.02, -0.62), rgb(22, 28, 46), Enum.Material.Metal)
+		a:piece("Head", Vector3.new(1.18, 0.2, 0.06), CFrame.new(0, 0.12, -0.7), rgb(90, 230, 255), Enum.Material.Neon)
+		a:piece("Head", Vector3.new(0.5, 0.06, 0.06), CFrame.new(0, -0.22, -0.7), rgb(255, 120, 200), Enum.Material.Neon)
+		a:piece("Head", Vector3.new(0.08, 0.5, 0.08), CFrame.new(0, 0.78, 0), rgb(130, 140, 165), Enum.Material.Metal)
+		a:piece("Head", Vector3.new(0.24, 0.24, 0.24), CFrame.new(0, 1.08, 0), rgb(255, 120, 200), Enum.Material.Neon, "Ball")
+		for _, sd in { -1, 1 } do
+			a:piece("Head", Vector3.new(0.2, 0.46, 0.46), CFrame.new(sd * 0.68, 0.02, 0.02) * CFrame.Angles(0, 0, PI / 2), rgb(120, 132, 164), Enum.Material.Metal, "Cylinder")
+		end
+		a:piece("Torso", Vector3.new(1.2, 0.8, 0.1), CFrame.new(0, 0.3, -0.54), rgb(34, 40, 62), Enum.Material.Metal)
+		for i = 0, 2 do
+			a:piece("Torso", Vector3.new(0.26, 0.26, 0.06), CFrame.new(-0.34 + i * 0.34, 0.3, -0.6), if i == 1 then rgb(255, 120, 200) else rgb(90, 230, 255), Enum.Material.Neon)
+		end
+		belt(a, rgb(60, 66, 90), rgb(90, 230, 255))
 	end,
 }
 
@@ -2345,7 +2400,98 @@ local function buildCastle(scene: any)
 	table.insert(scene.Plans, pb)
 end
 
-local BUILDERS = { buildFamily, buildPizzeria, buildCastle }
+-- Level 4: Cosmic Cafeteria ------------------------------------------------------------------------
+-- The crew table has its own chairs (the room's are hidden: too small for these two), the astronaut on the far side facing the dishwasher and
+-- the alien across from him. They share noodles and a drink; the cleaning robot washes up at the sink under the viewport, right beside the dishwasher.
+local function buildSpace(scene: any)
+	scene.Period = 60
+	scene.Hide = { "TablePlate", "ChairSeat", "ChairBack", "ChairLeg" }
+	local function place(name: string, kind: string, x: number, z: number, phi: number)
+		scene:prop(name, kind)
+		scene:place(name, 0, 60, rootCF(x, z, phi))
+	end
+	place("FurnChairAstro", "FurnChair", -80, -455, 0)
+	place("FurnChairAlien", "FurnChair", 0, -205, PI)
+	local astroSeat = seat(-80, -452, 0, 98)
+	local alienSeat = seat(0, -210, PI, 98)
+	local function atSeat(st: any, right: number, fwd: number, up: number?): CFrame
+		local cf = rootCF(st.X, st.Z, st.Phi) * CFrame.new(right, 0, -fwd)
+		return CFrame.new(cf.X, TOP + (up or 0), cf.Z) * cf.Rotation
+	end
+	for i, st in { astroSeat, alienSeat } do
+		scene:prop("Meal" .. i, "Spaghetti")
+		scene:place("Meal" .. i, 0, 60, atSeat(st, -4, 76))
+		scene:prop("Fork" .. i, "Fork")
+		scene:place("Fork" .. i, 0, 60, atSeat(st, 34, 72, 1) * CFrame.Angles(0, 0.2, 0))
+	end
+	local glassHold = { "R", off = CFrame.new(0, -9, 0) }
+
+	-- The astronaut: eats, tells a story, raises a glass, stretches.
+	local astro = scene:actor("Astronaut", "Astronaut")
+	local pa = newPlan(astro, 0, 0, 0)
+	seated(pa, astroSeat)
+	scene:prop("AstroGlass", "Glass")
+	scene:place("AstroGlass", 0, 60, atSeat(astroSeat, 30, 64))
+	pa:still(9, P.eat, { Fork1 = FORK_HOLD })
+	pa:still(6, P.talkTo(0.9))
+	pa:still(5, P.drink, { AstroGlass = glassHold })
+	pa:still(8, P.eat, { Fork1 = FORK_HOLD })
+	pa:still(4, P.wave)
+	pa:still(4, P.laugh)
+	pa:still(9, P.eat, { Fork1 = FORK_HOLD })
+	pa:still(4, P.stretch)
+	pa:still(5, P.talkTo(-0.8))
+	pa:finish(60, P.rest)
+	table.insert(scene.Plans, pa)
+
+	-- The alien: eats noodles, laughs at the story, claps, waves and laughs again.
+	local alien = scene:actor("Alien", "Alien")
+	local pl = newPlan(alien, 0, 0, 0)
+	seated(pl, alienSeat)
+	scene:prop("AlienGlass", "Glass")
+	scene:place("AlienGlass", 0, 60, atSeat(alienSeat, 30, 64))
+	pl:still(8, P.eat, { Fork2 = FORK_HOLD })
+	pl:still(4, P.laugh)
+	pl:still(5, P.drink, { AlienGlass = glassHold })
+	pl:still(6, P.talkTo(-0.9))
+	pl:still(4, P.clap)
+	pl:still(8, P.eat, { Fork2 = FORK_HOLD })
+	pl:still(4, P.wave)
+	pl:still(2, P.laugh)
+	pl:still(4, P.wave)
+	pl:still(5, P.talkTo(0.7))
+	pl:finish(60, P.eat)
+	pl.Steps[#pl.Steps].Hold = { Fork2 = FORK_HOLD }
+	table.insert(scene.Plans, pl)
+
+	-- The robot: washes up at the sink (a plate in the suds), now and then waves at the dishwasher.
+	local robot = scene:actor("Robot", "Robot")
+	local pr = newPlan(robot, -150, -102, 0)
+	scene:prop("WashPlate", "WashPlate")
+	local plate = { WashPlate = { "Lhand", off = CFrame.new(0, -4, -6) * CFrame.Angles(0, 0, PI / 2) } }
+	local function wash(u: number, ctx: any): Pose
+		local s = ctx.Actor.S
+		local c = math.sin(u * 5)
+		local d = math.cos(u * 5)
+		local out = (rootCF(ctx.X, ctx.Z, ctx.Phi)).RightVector
+		return {
+			lean = 0.3,
+			head = { pitch = -0.4, yaw = math.sin(u * 0.6) * 0.1 },
+			armL = { at = local3(ctx, -0.05 * s + c * 6, 176, 1.7 * s), pole = (ctx.Origin.Rotation * -out) + Vector3.new(0, -0.3, 0) },
+			armR = { at = local3(ctx, 0.35 * s + c * 12, 178 + d * 5, 1.65 * s + d * 8), pole = (ctx.Origin.Rotation * out) + Vector3.new(0, -0.3, 0) },
+		}
+	end
+	pr:still(13, wash, plate)
+	pr:still(4, P.wave)
+	pr:still(13, wash, plate)
+	pr:still(3, P.laugh)
+	pr:still(12, wash, plate)
+	pr:still(4, P.stretch)
+	pr:finish(60, P.rest)
+	table.insert(scene.Plans, pr)
+end
+
+local BUILDERS = { buildFamily, buildPizzeria, buildCastle, buildSpace }
 
 function LevelNPCs.Build(levelIndex: number, origin: CFrame, parent: Instance): any
 	local self = newScene(origin, parent)
@@ -2357,10 +2503,10 @@ end
 -- A test lineup of every look in a few poses (for screenshots).
 function LevelNPCs.Lineup(origin: CFrame, parent: Instance): any
 	local self = newScene(origin, parent)
-	local names = { "Dad", "Mum", "Kid", "Grandpa", "Chef", "Waiter", "Guest1", "Guest2", "King", "Queen", "Noble1", "Servant", "Guard", "Jester" }
+	local names = { "Dad", "Mum", "Kid", "Grandpa", "Chef", "Waiter", "Guest1", "Guest2", "King", "Queen", "Noble1", "Servant", "Guard", "Jester", "Astronaut", "Alien", "Robot" }
 	for i, n in names do
 		local a = self:actor(n, n)
-		local x = (i - 7.5) * 150
+		local x = (i - 9) * 150
 		local plan = newPlan(a, x, 0, 0)
 		plan:still(10, P.idle)
 		plan:finish(10, P.idle)

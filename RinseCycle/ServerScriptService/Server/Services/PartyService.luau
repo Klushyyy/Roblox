@@ -182,7 +182,7 @@ local function unlockedOf(player: Player): number
 	if type(unlocked) ~= "number" or unlocked ~= unlocked then
 		return 1
 	end
-	return math.clamp(math.floor(unlocked), 1, #Config.Levels)
+	return math.clamp(math.floor(unlocked), 1, math.max(1, Config.OpenLevels())) -- (a chapter whose event hasn't started is shut)
 end
 
 local function isInteger(value: any): boolean

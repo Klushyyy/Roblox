@@ -107,7 +107,7 @@ local function bestTime(levelIndex: number): number?
 	return if t and t > 0 then t else nil
 end
 
-local LEVEL_EMOJI = { "🍝", "🍕", "👑" } -- one per level, on its card
+local LEVEL_EMOJI = { "🍝", "🍕", "👑", "🚀" } -- one per level, on its card
 
 -- "Map thumbnail" art for a dishwasher: a gradient in its theme colours, the level's emoji big on a
 -- soft glow, and a few bubbles. Built from UI only (no uploaded images).
@@ -206,7 +206,11 @@ local function renderLevelList()
 		end
 	end
 	local maxUnlocked = unlocked()
+	local openCount = Config.OpenLevels() -- (a chapter whose event hasn't started is not a card: just the "coming soon" one below)
 	for i, level in Config.Levels do
+		if i > openCount then
+			break
+		end
 		local locked = i > maxUnlocked
 		local selected = i == selLevel
 		local card = Instance.new("TextButton")
@@ -264,8 +268,11 @@ local function renderLevelList()
 			renderCreate()
 		end)
 	end
-	-- The next chapter, still being written.
-	local n = #Config.Levels + 1
+	-- The next chapter, still being written (gone once every chapter is open).
+	local n = openCount + 1
+	if n > #Config.Levels then
+		return
+	end
 	local soon = Instance.new("TextButton")
 	soon.Name = "ComingSoon"
 	soon.LayoutOrder = n
@@ -1140,6 +1147,13 @@ function PartyUI.Init()
 
 	ClientState.Changed:Connect(function(kind)
 		if kind == "Party" or (kind == "Meta" and createScreen.Visible) then
+			render()
+		end
+	end)
+
+	-- A chapter opening (its event started) while the Create screen is up: its card replaces the "coming soon" one.
+	ReplicatedStorage:GetAttributeChangedSignal("OpenLevels"):Connect(function()
+		if createScreen.Visible then
 			render()
 		end
 	end)

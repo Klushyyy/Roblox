@@ -136,7 +136,7 @@ local ALL_COMMANDS = {
 -- enough" - a Developer or a Founder still gets nothing.
 -- Nothing is hidden behind Studio any more: every command belongs to a staff tier (below), and
 -- the owner-only ones (staff ranks, gifted passes, wiping the log) are only on the owner's list.
-local STUDIO_ONLY_COMMANDS = { "abuseshow", "abuselocal", "privatelobby", "abusefx", "abusedebug", "notifytest", "resetfirstrun", "clubreset", "paidtest" }
+local STUDIO_ONLY_COMMANDS = { "abuseshow", "abuselocal", "privatelobby", "abusefx", "abusedebug", "notifytest", "resetfirstrun", "clubreset", "paidtest", "chapter4" }
 
 -- Commands FOUNDER alone gets, on top of everything Developer has.
 --
@@ -4805,12 +4805,12 @@ function ServerList.Read()
 end
 
 -- The filters the server list cycles through (the arrows in the panel).
-ServerList.Filters = { "all", "lobby", "level1", "level2", "level3" }
+ServerList.Filters = { "all", "lobby", "level1", "level2", "level3", "level4" }
 local function levelName(level: number): string
 	local def = Config.Levels[level]
 	return if def then tostring(def.Name) else "?"
 end
--- The tab for a filter (the buttons along the top of the list): All servers, Lobbies, Chapter 1, Chapter 2, Chapter 3.
+-- The tab for a filter (the buttons along the top of the list): All servers, Lobbies, Chapter 1, Chapter 2, Chapter 3, Chapter 4.
 local function filterTab(filter: string): string
 	if filter == "lobby" then
 		return "Lobbies"
@@ -9228,6 +9228,17 @@ do
 		admin:SetAttribute("ForcePaidRandomRestricted", if on then true else nil)
 		sendFeedback(admin, if on then "You are now treated as a restricted player: rank rolls, egg hatching and chest packs are off for you. Use it again with 'Back to normal' to undo." else "Back to normal: rank rolls, egg hatching and chest packs work for you again.", false)
 		logCommand(admin, "paidtest", nil, if on then "on" else "off", admin.Name .. (if on then " pretended to be a restricted player" else " stopped pretending to be a restricted player"))
+	end
+
+	-- :chapter4 [on|off|reset] (Show Test tab, Studio only): opens Chapter 4 on this server before its event time, shuts it, or goes
+	-- back to the event's real start. Nothing is saved; the next server starts from the real time again.
+	Commands.chapter4 = function(admin, text)
+		local arg = string.lower(text:match("^%s*(%S*)") or "")
+		local value: boolean? = if arg == "on" then true elseif arg == "off" then false else nil
+		DataService.SetChapterPreview(value)
+		local open = Config.OpenLevels(Config.Now())
+		sendFeedback(admin, if value == true then "Chapter 4 is open on this server." elseif value == false then "Chapter 4 is shut on this server (even if its time has come)." else string.format("Back to the real time: %d chapters are open.", open), false)
+		logCommand(admin, "chapter4", nil, arg, admin.Name .. " set the Chapter 4 preview to " .. (if arg == "" then "reset" else arg))
 	end
 
 	Commands.abusedebug = function(admin, _text)

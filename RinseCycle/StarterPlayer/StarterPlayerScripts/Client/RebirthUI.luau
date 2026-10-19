@@ -50,7 +50,7 @@ local function render()
 		pct(rb.BubblesPer * (rebirths + 1)),
 		Config.RebirthGems(rebirths + 1)
 	)
-	local last = Config.Levels[#Config.Levels]
+	local last = Config.Levels[math.max(1, Config.OpenLevels())]
 	local levelDone = meta ~= nil and meta.RebirthReady == true
 	reqLevel.Text = string.format("%s  Clean %s", if levelDone then "Done:" else "To do:", last.Name)
 	reqLevel.TextColor3 = if levelDone then Colors.Good else Colors.Text

@@ -4,6 +4,7 @@ local R = "/home/user/Roblox/RinseCycle/"
 local RS = M[R .. "ServerScriptService/Server/Services/RoundService.luau"]
 local Config = M[R .. "ReplicatedStorage/Shared/Config.luau"]
 local p = G.player
+M[R .. "ServerScriptService/Server/Services/DataService.luau"].SetChapterPreview(true) -- (Chapter 4 is shut until its event: open it for this check)
 
 local function boxOf(model)
 	-- world bounds of every part of a dish (rotated parts included)

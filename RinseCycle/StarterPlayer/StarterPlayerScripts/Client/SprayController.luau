@@ -956,6 +956,8 @@ local FREE_KEYS = { Enum.KeyCode.LeftAlt, Enum.KeyCode.RightAlt, Enum.KeyCode.Le
 local FP_STEP = "RinseFirstPerson"
 local fpModal: TextButton? = nil -- invisible Modal button: while it is visible Roblox lets the mouse go
 local toldAboutMouse = false
+local LOBBY_ZOOM = 12.5 -- (Roblox's usual camera distance)
+local baseMinZoom = (tonumber(LocalPlayer.CameraMinZoomDistance) or 0.5) -- (how close the lobby camera may zoom in: Main sets 0.5)
 
 local function modalOpen(): boolean
 	local ok, value = pcall(function()
@@ -1086,6 +1088,16 @@ local function applyCameraMode()
 		mouseFree = false
 		pcall(function()
 			LocalPlayer.CameraMode = Enum.CameraMode.Classic
+		end)
+		-- (first person leaves the zoom at 0.5 and Classic keeps it, so without this the lobby would stay zoomed all the way in:
+		-- hold the minimum zoom at the usual 12.5 for a moment, which pulls the camera back out, then give the old minimum back)
+		pcall(function()
+			LocalPlayer.CameraMinZoomDistance = LOBBY_ZOOM
+			task.delay(0.4, function()
+				pcall(function()
+					LocalPlayer.CameraMinZoomDistance = baseMinZoom
+				end)
+			end)
 		end)
 		updateTouchUIVisibility()
 	end

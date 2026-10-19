@@ -107,3 +107,6 @@ Players with Roblox Premium get +10% Bubbles in runs (a "Premium +10%" chip unde
 Premium-engagement money automatically for time Premium members spend in your game; no set-up needed.
 
 **run.misplaced** (v2.21.0): a player was found at the lobby spawn in the middle of a run and put back in the dishwasher. It should be 0; if it is not, something is still moving players out of runs (Studio Test > Analytics > Features lists it).
+
+**chapter.open** (v2.23.0): you were online when a new chapter opened (Chapter 4 at its event time). One count per player per chapter, so on the day it is the number of players who were in the game at that moment.
+

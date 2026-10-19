@@ -595,7 +595,8 @@ local function sanitizeProfile(profile: Profile, player: Player)
 				unlocked = math.max(unlocked, math.min(i + 1, #Config.Levels))
 			end
 		end
-		if (times[#Config.Levels] or 0) > 0 then
+		-- (the last chapter that is OPEN: Chapter 4 only counts once its event has started)
+		if (times[Config.OpenLevels()] or 0) > 0 then
 			p.RebirthReady = true
 		end
 	end
@@ -757,7 +758,7 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		Equipped = equipped,
 		PetSlots = Config.PetSlots(profile.Perks, slotPasses(player)),
 		MaxPets = Config.PetRules.MaxInventory,
-		Unlocked = profile.Unlocked,
+		Unlocked = math.min(profile.Unlocked, Config.OpenLevels()), -- (a chapter whose event hasn't started stays shut)
 		BestTimes = table.clone(profile.BestTimes),
 		Rebirths = profile.Rebirths,
 		RebirthReady = profile.RebirthReady,
@@ -1655,14 +1656,15 @@ function DataService.LevelsBeaten(profile: any): number
 	if not profile then
 		return 0
 	end
-	if (profile.Rebirths or 0) > 0 then
-		return #Config.Levels
-	end
 	local best = 0
 	for i = 1, #Config.Levels do
 		if (tonumber(profile.BestTimes and profile.BestTimes[i]) or 0) > 0 then
 			best = i
 		end
+	end
+	if (profile.Rebirths or 0) > 0 then
+		-- (a rebirth meant every chapter there was: the first three, before Chapter 4 existed)
+		best = math.max(best, math.min(3, #Config.Levels))
 	end
 	return best
 end
@@ -1924,7 +1926,7 @@ function DataService.Rebirth(player: Player): (boolean, string?)
 		return false, "Your data is still loading."
 	end
 	if not profile.RebirthReady then
-		local last = Config.Levels[#Config.Levels]
+		local last = Config.Levels[math.max(1, Config.OpenLevels())]
 		return false, string.format("Clean %s %s first!", last.Icon, last.Name)
 	end
 	local cost = Config.RebirthCost(profile.Rebirths)
@@ -2066,11 +2068,14 @@ function DataService.RecordClear(player: Player, levelIndex: number, seconds: nu
 	local unlocked: number? = nil
 	local nextLevel = levelIndex + 1
 	if Config.Levels[nextLevel] and profile.Unlocked < nextLevel then
+		-- (progress is kept even if that chapter's event hasn't started: it is simply not open to play yet, see PushMeta)
 		profile.Unlocked = nextLevel
-		unlocked = nextLevel
+		if Config.LevelOpen(nextLevel) then
+			unlocked = nextLevel
+		end
 	end
 	profile.Stats.Runs += 1
-	if levelIndex == #Config.Levels and not profile.RebirthReady then
+	if levelIndex == Config.OpenLevels() and not profile.RebirthReady then
 		profile.RebirthReady = true
 		-- A few seconds later, so it lands after the results screen.
 		local message = if Config.ChapterFourAnnounced()
@@ -2218,6 +2223,79 @@ do
 	end
 	Players.PlayerRemoving:Connect(function(player)
 		restricted[player] = nil
+	end)
+end
+
+----------------------------------------------------------------------------------------------------
+-- Chapters opening. Config.LevelOpen says a chapter opens when its Roblox event starts (Chapter 4: Config.UpcomingEvents). Every
+-- server checks ITS clock every few seconds and publishes how many chapters are open as the ReplicatedStorage attribute
+-- "OpenLevels" (Config.OpenLevels and the whole client read that). The moment the number grows, everyone online gets a toast,
+-- players who had already cleared the chapter before it get it unlocked, and each player counts `chapter.open` once.
+-- DataService.SetChapterPreview(true / false / nil) forces every chapter open / shut / back to the real clock (Studio Test).
+----------------------------------------------------------------------------------------------------
+do
+	local preview: boolean? = nil
+	local published: number? = nil
+
+	local function openCount(): number
+		if preview == true then
+			return #Config.Levels
+		elseif preview == false then
+			local n = 0
+			for i, def in Config.Levels do
+				if (def :: any).OpensWith then
+					break
+				end
+				n = i
+			end
+			return n
+		end
+		return Config.OpenLevels(Config.Now())
+	end
+
+	local function refresh()
+		local open = openCount()
+		if open == published then
+			return
+		end
+		local before = published
+		published = open
+		ReplicatedStorage:SetAttribute("OpenLevels", open)
+		if before == nil then
+			return -- (the server has just started: nothing opened, this is simply how things stand)
+		end
+		for player, session in sessions do
+			local profile = session.Profile
+			if profile then
+				for level = before + 1, open do
+					-- the same repair as when a profile loads: whoever had cleared the chapter before it gets this one
+					if profile.Rebirths == 0 and (profile.BestTimes[level - 1] or 0) > 0 and profile.Unlocked < level then
+						profile.Unlocked = level
+					end
+					local def = Config.Levels[level]
+					queueNotice(session, string.format("%s CHAPTER %d IS HERE! %s is open now.", def.Icon, level, def.Name), "Good")
+					DataService.Track(player, "chapter.open")
+				end
+				DataService.PushMeta(player)
+			end
+		end
+	end
+
+	function DataService.SetChapterPreview(value: boolean?)
+		preview = value
+		refresh()
+	end
+	function DataService.ChapterPreview(): boolean?
+		return preview
+	end
+	DataService._RefreshChapters = refresh -- (for tests)
+
+	refresh()
+	task.spawn(function()
+		while true do
+			task.wait(5)
+			refresh()
+		end
 	end)
 end
 

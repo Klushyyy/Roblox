@@ -15,7 +15,7 @@
 local Config = {}
 
 Config.GameName = "Rinse Cycle"
-Config.Version = "2.22.0"
+Config.Version = "2.23.0"
 
 ----------------------------------------------------------------------------------------------------
 -- World
@@ -146,6 +146,13 @@ Config.GrimeTypes = {
 	TruffleGunk = { Name = "Truffle Gunk", HP = 10, Units = 3, Color = Color3.fromRGB(70, 60, 50), Material = Enum.Material.Mud, Size = { 1.4, 2.4 }, Shape = "Blob", MinTool = 1 },
 	CaviarSmear = { Name = "Caviar Smear", HP = 8, Units = 3, Color = Color3.fromRGB(25, 25, 35), Material = Enum.Material.Pebble, Size = { 1.2, 2.0 }, Shape = "Crumbs", MinTool = 1 },
 	AncientGravy = { Name = "Ancient Gravy", HP = 22, Units = 6, Color = Color3.fromRGB(90, 110, 50), Material = Enum.Material.Mud, Size = { 1.6, 2.6 }, Shape = "Streak", MinTool = 2 },
+
+	-- Chapter 4 (Cosmic Cafeteria)
+	AlienGoo = { Name = "Alien Goo", HP = 14, Units = 4, Color = Color3.fromRGB(96, 230, 120), Material = Enum.Material.Mud, Size = { 1.5, 2.5 }, Shape = "Blob", MinTool = 1 },
+	StarJelly = { Name = "Star Jelly", HP = 10, Units = 3, Color = Color3.fromRGB(255, 120, 205), Material = Enum.Material.Glass, Size = { 1.3, 2.2 }, Shape = "Blob", MinTool = 1 },
+	MoonCheese = { Name = "Moon Cheese", HP = 16, Units = 4, Color = Color3.fromRGB(238, 232, 168), Material = Enum.Material.Sand, Size = { 1.4, 2.4 }, Shape = "Crumbs", MinTool = 1 },
+	NebulaSludge = { Name = "Nebula Sludge", HP = 24, Units = 6, Color = Color3.fromRGB(150, 84, 224), Material = Enum.Material.Mud, Size = { 1.6, 2.6 }, Shape = "Streak", MinTool = 2 },
+	CometCrust = { Name = "Comet Crust", HP = 30, Units = 7, Color = Color3.fromRGB(58, 52, 74), Material = Enum.Material.Slate, Size = { 1.1, 1.9 }, Shape = "Crumbs", MinTool = 2 },
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -255,6 +262,43 @@ Config.Levels = {
 			Metal = Color3.fromRGB(230, 190, 90),
 			Tray = Color3.fromRGB(235, 195, 85),
 			Light = Color3.fromRGB(255, 225, 160),
+		},
+	},
+	{
+		Id = 4,
+		Name = "Cosmic Cafeteria",
+		Subtitle = "Alien goo, comet crust and a mess that is out of this world.",
+		Icon = "🚀",
+		Place = "Space Station",
+		-- Opens when this Roblox event (Config.UpcomingEvents) starts: see Config.LevelOpen. Until then it is a locked
+		-- "Chapter 4" card and everything else in the game behaves as if there were three chapters.
+		OpensWith = "Chapter4",
+		Toughness = 9,
+		Mult = 64,
+		ParTime = 2520,
+		Bubbles = 1900,
+		GoldenChance = 0.045,
+		Dishes = { Plate = 14, Tray = 8, Bowl = 10, Cup = 8, Glass = 4, Fork = 6, Knife = 6, Spoon = 5, Pan = 2, Pot = 2, Board = 0, Cutter = 2, Goblet = 8 },
+		Spots = { Plate = 7, Tray = 12, Bowl = 7, Cup = 5, Glass = 4, Fork = 3, Knife = 3, Spoon = 3, Pan = 15, Pot = 17, Board = 9, Cutter = 3, Goblet = 4 },
+		Grime = {
+			{ Type = "AlienGoo", Weight = 28 },
+			{ Type = "StarJelly", Weight = 22 },
+			{ Type = "MoonCheese", Weight = 20 },
+			{ Type = "NebulaSludge", Weight = 18 },
+			{ Type = "CometCrust", Weight = 12 },
+		},
+		Theme = {
+			Tub = Color3.fromRGB(60, 66, 84),
+			Rack = Color3.fromRGB(200, 210, 225),
+			Accent = Color3.fromRGB(110, 90, 255),
+			Plate = Color3.fromRGB(235, 238, 255),
+			PlateRim = Color3.fromRGB(110, 90, 255),
+			Bowl = Color3.fromRGB(150, 235, 230),
+			Cup = Color3.fromRGB(255, 120, 200),
+			Glass = Color3.fromRGB(190, 230, 255),
+			Metal = Color3.fromRGB(180, 190, 210),
+			Tray = Color3.fromRGB(120, 130, 160),
+			Light = Color3.fromRGB(170, 200, 255),
 		},
 	},
 }
@@ -566,6 +610,45 @@ end
 
 function Config.GetLevel(levelIndex: number)
 	return Config.Levels[levelIndex] or Config.Levels[1]
+end
+
+-- Can dishwasher `i` be played right now? A level with OpensWith (the key of an entry in Config.UpcomingEvents) opens the moment
+-- that event starts, and stays shut while the event has no date (Soon). The server works the answer out from ITS clock, publishes
+-- the number of open levels as the ReplicatedStorage attribute "OpenLevels" (DataService), and everyone else reads that, so a
+-- player's own clock can't open or hide a chapter. Pass `now` to ask about a given time instead (the server does).
+function Config.LevelOpen(i: number, now: number?): boolean
+	local def = Config.Levels[i] :: any
+	if not def then
+		return false
+	end
+	if not def.OpensWith then
+		return true
+	end
+	if now == nil then
+		local published = game:GetService("ReplicatedStorage"):GetAttribute("OpenLevels")
+		if type(published) == "number" then
+			return i &lt;= published
+		end
+	end
+	for _, e in Config.UpcomingEvents do
+		if e.Key == def.OpensWith then
+			return e.Soon ~= true and (now or Config.Now()) &gt;= e.Starts
+		end
+	end
+	return false
+end
+
+-- How many dishwashers are open (they open in order: 3 until Chapter 4's event starts, then 4).
+function Config.OpenLevels(now: number?): number
+	local n = 0
+	for i = 1, #Config.Levels do
+		if Config.LevelOpen(i, now) then
+			n = i
+		else
+			break
+		end
+	end
+	return n
 end
 
 function Config.GetUpgrade(upgradeId: string)
@@ -1418,8 +1501,8 @@ end
 -- "you finished all the chapters": the finale card and the Rebirth notice say "Chapter N cleared, Chapter 4 is coming".
 -- When Chapter 4 is added to Config.Levels the finale simply moves to it (it always belongs to the last level).
 function Config.ChapterFourAnnounced(now: number?): boolean
-	if #Config.Levels &gt;= 4 then
-		return false
+	if Config.LevelOpen(4, now) then
+		return false -- (it is here: the finale belongs to the last open chapter)
 	end
 	local t = now or os.time()
 	for _, e in Config.UpcomingEvents do
@@ -1546,6 +1629,7 @@ Config.Analytics = {
 		{ "run.launch", "Party launched (teleport started)" },
 		{ "run.fail", "Run could not start (teleport failed)" },
 		{ "run.misplaced", "Found at the lobby spawn in the middle of a run and put back in the dishwasher" },
+		{ "chapter.open", "Was online when a new chapter opened" },
 		{ "run.arrive", "Arrived in a dishwasher" },
 		{ "run.loaded", "Intro finished and clock started" },
 		{ "run.first", "Cleaned the first spot" },
@@ -1748,6 +1832,7 @@ Config.Badges = {
 	{ Key = "Level1", Id = 0, Name = "Family Dinner Cleared", Desc = "Clean every dish in level 1." },
 	{ Key = "Level2", Id = 0, Name = "Pizza Party Cleared", Desc = "Clean every dish in level 2." },
 	{ Key = "Level3", Id = 0, Name = "Royal Banquet Cleared", Desc = "Clean every dish in level 3." },
+	{ Key = "Level4", Id = 0, Name = "Cosmic Cafeteria Cleared", Desc = "Clean every dish in level 4." },
 	{ Key = "FirstPet", Id = 0, Name = "New Best Friend", Desc = "Hatch your first pet." },
 	{ Key = "GoldenPet", Id = 0, Name = "Golden Touch", Desc = "Merge a Golden pet." },
 	{ Key = "Rebirth", Id = 0, Name = "Born Again", Desc = "Rebirth for the first time." },
@@ -4123,7 +4208,7 @@ local ALL_COMMANDS = {
 -- enough" - a Developer or a Founder still gets nothing.
 -- Nothing is hidden behind Studio any more: every command belongs to a staff tier (below), and
 -- the owner-only ones (staff ranks, gifted passes, wiping the log) are only on the owner's list.
-local STUDIO_ONLY_COMMANDS = { "abuseshow", "abuselocal", "privatelobby", "abusefx", "abusedebug", "notifytest", "resetfirstrun", "clubreset", "paidtest" }
+local STUDIO_ONLY_COMMANDS = { "abuseshow", "abuselocal", "privatelobby", "abusefx", "abusedebug", "notifytest", "resetfirstrun", "clubreset", "paidtest", "chapter4" }
 
 -- Commands FOUNDER alone gets, on top of everything Developer has.
 --
@@ -8792,12 +8877,12 @@ function ServerList.Read()
 end
 
 -- The filters the server list cycles through (the arrows in the panel).
-ServerList.Filters = { "all", "lobby", "level1", "level2", "level3" }
+ServerList.Filters = { "all", "lobby", "level1", "level2", "level3", "level4" }
 local function levelName(level: number): string
 	local def = Config.Levels[level]
 	return if def then tostring(def.Name) else "?"
 end
--- The tab for a filter (the buttons along the top of the list): All servers, Lobbies, Chapter 1, Chapter 2, Chapter 3.
+-- The tab for a filter (the buttons along the top of the list): All servers, Lobbies, Chapter 1, Chapter 2, Chapter 3, Chapter 4.
 local function filterTab(filter: string): string
 	if filter == "lobby" then
 		return "Lobbies"
@@ -13217,6 +13302,17 @@ do
 		logCommand(admin, "paidtest", nil, if on then "on" else "off", admin.Name .. (if on then " pretended to be a restricted player" else " stopped pretending to be a restricted player"))
 	end
 
+	-- :chapter4 [on|off|reset] (Show Test tab, Studio only): opens Chapter 4 on this server before its event time, shuts it, or goes
+	-- back to the event's real start. Nothing is saved; the next server starts from the real time again.
+	Commands.chapter4 = function(admin, text)
+		local arg = string.lower(text:match("^%s*(%S*)") or "")
+		local value: boolean? = if arg == "on" then true elseif arg == "off" then false else nil
+		DataService.SetChapterPreview(value)
+		local open = Config.OpenLevels(Config.Now())
+		sendFeedback(admin, if value == true then "Chapter 4 is open on this server." elseif value == false then "Chapter 4 is shut on this server (even if its time has come)." else string.format("Back to the real time: %d chapters are open.", open), false)
+		logCommand(admin, "chapter4", nil, arg, admin.Name .. " set the Chapter 4 preview to " .. (if arg == "" then "reset" else arg))
+	end
+
 	Commands.abusedebug = function(admin, _text)
 		giantDebug = not giantDebug
 		sendFeedback(admin, if giantDebug then "Giant debug is ON (readout above him, prints in Output)." else "Giant debug is off.", false)
@@ -15239,6 +15335,19 @@ local ROOM_STYLES: { RoomStyle } = {
 		Lamp = Color3.fromRGB(255, 205, 140),
 		Bench = "Stone",
 	},
+	-- 4: Space station galley: brushed graphite panels, glowing seams, a viewport over the sink.
+	{
+		Floor = Color3.fromRGB(78, 84, 106), Floor2 = Color3.fromRGB(58, 63, 82), FloorMat = Enum.Material.Metal,
+		Wall = Color3.fromRGB(44, 50, 72), WallMat = Enum.Material.Metal,
+		Ceiling = Color3.fromRGB(28, 32, 48),
+		Cabinet = Color3.fromRGB(68, 74, 98), CabinetDoor = Color3.fromRGB(96, 104, 134), CabMat = Enum.Material.SmoothPlastic,
+		Counter = Color3.fromRGB(214, 222, 238), CounterMat = Enum.Material.Metal,
+		Tile = Color3.fromRGB(34, 40, 60), TileMat = Enum.Material.Metal,
+		Handle = Color3.fromRGB(90, 230, 255), HandleMat = Enum.Material.Neon,
+		Kick = Color3.fromRGB(22, 24, 38),
+		Lamp = Color3.fromRGB(190, 225, 255),
+		Bench = "Space",
+	},
 }
 
 -- A flat SurfaceGui text sign on a box. `face` is the side the text is on.
@@ -15364,6 +15473,12 @@ local function buildKitchen(b: Builder, k: RoomStyle)
 				end
 				local lid = cyl(b, "BarrelLid", 0.6, barrelD - 6, cx, by, cabFront - 29.4, Color3.fromRGB(150, 104, 62), Enum.Material.Wood, noCollide())
 				lid.CFrame = footprint(b.origin, cx, by, cabFront - 29.4) * CFrame.Angles(0, math.rad(90), 0)
+			elseif bench == "Space" then
+				-- Sleek galley units: a smooth panel, a glowing seam down the middle and a vent grille.
+				local y0, y1 = fy + 16, COUNTER_TOP_Y - 10
+				box(b, "SpacePanel", Vector3.new(doorW - 8, y1 - y0, 1.5), cx, (y0 + y1) / 2, cabFront - 0.75, k.CabinetDoor, k.CabMat)
+				box(b, "SpaceSeam", Vector3.new(2.4, y1 - y0 - 24, 0.6), cx + side * -(doorW / 2 - 14), (y0 + y1) / 2, cabFront - 1.7, k.Handle, k.HandleMat, noCollide())
+				box(b, "SpaceVent", Vector3.new(doorW - 40, 8, 0.6), cx, y0 + 14, cabFront - 1.7, Color3.fromRGB(30, 34, 50), Enum.Material.DiamondPlate, noCollide())
 			elseif bench == "Garden" then
 				-- Outdoor kitchen: plain wooden cupboard doors with a recessed panel and a handle.
 				local y0, y1 = fy + 16, COUNTER_TOP_Y - 10
@@ -15425,6 +15540,16 @@ local function buildKitchen(b: Builder, k: RoomStyle)
 			span(b, "Hood", seg[1], seg[2], upperY1 - 20, upperY1 + 20, ROOM_Z_BACK - 70, ROOM_Z_BACK, steel, Enum.Material.Metal, shadowless)
 			span(b, "HoodLip", seg[1], seg[2], upperY1 - 26, upperY1 - 20, ROOM_Z_BACK - 70, ROOM_Z_BACK - 64, Color3.fromRGB(150, 155, 162), Enum.Material.Metal, noCollide())
 			span(b, "HoodDuct", seg[1] + w / 2 - 30, seg[1] + w / 2 + 30, upperY1 + 20, KITCHEN_FLOOR_Y + ROOM_HEIGHT, ROOM_Z_BACK - 50, ROOM_Z_BACK, steel, Enum.Material.Metal, shadowless)
+		elseif bench == "Space" then
+			-- Wall lockers with a glowing status light each, over a strip of dark panelling.
+			span(b, "LockerBack", seg[1] + 6, seg[2] - 6, upperY0, upperY1, ROOM_Z_BACK - 40, ROOM_Z_BACK, k.Cabinet, k.CabMat, shadowless)
+			local n = math.floor(w / 70)
+			for i = 0, n - 1 do
+				local cx = seg[1] + w / n * (i + 0.5)
+				box(b, "LockerDoor", Vector3.new(w / n - 8, upperY1 - upperY0 - 12, 1.2), cx, (upperY0 + upperY1) / 2, ROOM_Z_BACK - 40.6, k.CabinetDoor, k.CabMat, noCollide())
+				box(b, "LockerLight", Vector3.new(6, 6, 0.8), cx, upperY1 - 16, ROOM_Z_BACK - 41.6, if (i + math.floor(seg[1] / 40)) % 3 == 0 then Color3.fromRGB(255, 120, 200) else Color3.fromRGB(90, 230, 255), Enum.Material.Neon, noCollide())
+				box(b, "LockerHandle", Vector3.new(2.5, 18, 2.5), cx + (w / n / 2 - 12), (upperY0 + upperY1) / 2, ROOM_Z_BACK - 42, k.Handle, k.HandleMat, noCollide())
+			end
 		elseif bench == "Stone" then
 			-- Oak plate racks holding pewter plates and tankards.
 			local oak = Color3.fromRGB(92, 58, 38)
@@ -15962,6 +16087,152 @@ local function castleProps(b: Builder, k: RoomStyle)
 	end
 end
 
+-- Level 4: the Cosmic Cafeteria, a space station galley. A panoramic viewport over the sink (stars and a ringed planet), glowing
+-- floor guide lines, light bars, a hatch, consoles, a hologram on the crew's dining table, and a food printer, ration pouches and a
+-- plant dome on the counter.
+local function spaceProps(b: Builder, k: RoomStyle)
+	local fy = KITCHEN_FLOOR_Y
+	local cyan = Color3.fromRGB(90, 230, 255)
+	local pink = Color3.fromRGB(255, 120, 200)
+	local violet = Color3.fromRGB(130, 100, 255)
+	local void = Color3.fromRGB(8, 10, 24)
+	local graphite = Color3.fromRGB(58, 64, 86)
+	local steel = Color3.fromRGB(200, 208, 224)
+
+	-- Light bars along the ceiling.
+	for _, x in { -240, 0, 240 } do
+		local bar = span(b, "LightBar", x - 9, x + 9, fy + ROOM_HEIGHT - 3, fy + ROOM_HEIGHT, ROOM_Z_FRONT + 40, ROOM_Z_BACK - 40, k.Lamp, Enum.Material.Neon, noCollide())
+		bar.CastShadow = false
+	end
+
+	-- Glowing guide lines in the floor, from the door out into the room, and a ring round the dining table.
+	for _, x in { -150, 150 } do
+		span(b, "FloorLine", x - 1.5, x + 1.5, fy, fy + 0.3, ROOM_Z_FRONT + 30, -125, cyan, Enum.Material.Neon, noCollide())
+	end
+	for _, z in { -200, -430 } do
+		span(b, "FloorCross", -150, 150, fy, fy + 0.3, z - 1.5, z + 1.5, violet, Enum.Material.Neon, noCollide())
+	end
+
+	-- Glowing strips and dark panel seams along the side walls (the walls are long and plain otherwise).
+	for _, side in { -1, 1 } do
+		for _, y in { fy + 60, fy + 440 } do
+			local strip = span(b, "WallStrip", side * (ROOM_HALF_X - 1.5), side * (ROOM_HALF_X - 3), y - 1.5, y + 1.5, ROOM_Z_FRONT + 20, ROOM_Z_BACK - 20, cyan, Enum.Material.Neon, noCollide())
+			strip.CastShadow = false
+		end
+		for z = ROOM_Z_FRONT + 80, ROOM_Z_BACK - 60, 130 do
+			span(b, "WallSeam", side * (ROOM_HALF_X - 1), side * (ROOM_HALF_X - 3), fy + 10, fy + ROOM_HEIGHT - 10, z - 1.5, z + 1.5, Color3.fromRGB(20, 24, 38), nil, noCollide())
+		end
+	end
+
+	-- The viewport over the sink: black space, stars, a ringed planet, a small moon, in a heavy frame.
+	local wx0, wx1 = -210, -50
+	local wy0, wy1 = COUNTER_TOP_Y + 90, COUNTER_TOP_Y + 260
+	local backZ = ROOM_Z_BACK
+	span(b, "Viewport", wx0, wx1, wy0, wy1, backZ - 0.5, backZ + 0.5, void, Enum.Material.SmoothPlastic, noCollide())
+	local seed = 7
+	local function rnd(): number
+		seed = (seed * 1103515245 + 12345) % 2147483648
+		return seed / 2147483648
+	end
+	for _ = 1, 44 do
+		local sx = wx0 + 6 + rnd() * (wx1 - wx0 - 12)
+		local sy = wy0 + 6 + rnd() * (wy1 - wy0 - 12)
+		local size = 0.8 + rnd() * 1.6
+		local star = box(b, "Star", Vector3.new(size, size, 0.4), sx, sy, backZ - 1, if rnd() &lt; 0.25 then cyan else Color3.new(1, 1, 1), Enum.Material.Neon, noCollide())
+		star.CastShadow = false
+	end
+	local px, py = -128, wy0 + 78
+	local planet = box(b, "Planet", Vector3.new(58, 58, 58), px, py, backZ - 4, Color3.fromRGB(70, 150, 220), Enum.Material.SmoothPlastic, noCollide())
+	planet.Shape = Enum.PartType.Ball
+	planet.CastShadow = false
+	local cap = box(b, "PlanetIce", Vector3.new(30, 30, 30), px - 6, py + 18, backZ - 6, Color3.fromRGB(235, 245, 255), Enum.Material.SmoothPlastic, noCollide())
+	cap.Shape = Enum.PartType.Ball
+	cap.CastShadow = false
+	local ring = cyl(b, "PlanetRing", 1.2, 112, px, py, backZ - 5, Color3.fromRGB(240, 205, 150), Enum.Material.SmoothPlastic, noCollide())
+	ring.CFrame = footprint(b.origin, px, py, backZ - 5) * CFrame.Angles(math.rad(62), 0, math.rad(-14)) * CFrame.Angles(0, 0, math.rad(90))
+	ring.CastShadow = false
+	local moon = box(b, "Moon", Vector3.new(16, 16, 16), wx1 - 28, wy1 - 30, backZ - 3, Color3.fromRGB(215, 215, 225), Enum.Material.SmoothPlastic, noCollide())
+	moon.Shape = Enum.PartType.Ball
+	moon.CastShadow = false
+	for _, x in { wx0, (wx0 + wx1) / 2, wx1 } do
+		span(b, "ViewportBar", x - 4, x + 4, wy0 - 4, wy1 + 4, backZ - 8, backZ, graphite, Enum.Material.Metal, noCollide())
+	end
+	for _, y in { wy0, wy1 } do
+		span(b, "ViewportBar", wx0 - 4, wx1 + 4, y - 4, y + 4, backZ - 8, backZ, graphite, Enum.Material.Metal, noCollide())
+	end
+	span(b, "ViewportGlow", wx0 + 4, wx1 - 4, wy0 + 4, wy0 + 6, backZ - 7, backZ - 6, cyan, Enum.Material.Neon, noCollide())
+	span(b, "ViewportSill", wx0 - 10, wx1 + 10, wy0 - 10, wy0 - 4, backZ - 14, backZ, steel, Enum.Material.Metal, noCollide())
+
+	-- The sink under the viewport.
+	local sinkX = (wx0 + wx1) / 2
+	span(b, "Sink", sinkX - 60, sinkX + 60, COUNTER_TOP_Y - 0.4, COUNTER_TOP_Y + 0.2, -10, 50, steel, Enum.Material.Metal, noCollide())
+	span(b, "SinkBasin", sinkX - 54, sinkX + 54, COUNTER_TOP_Y - 0.2, COUNTER_TOP_Y + 0.4, -4, 44, Color3.fromRGB(70, 78, 100), Enum.Material.Metal, noCollide())
+	cyl(b, "FaucetBase", 6, 10, sinkX, COUNTER_TOP_Y + 3, 60, steel, Enum.Material.Metal, noCollide())
+	cyl(b, "FaucetPipe", 60, 5, sinkX, COUNTER_TOP_Y + 33, 60, steel, Enum.Material.Metal, noCollide())
+	box(b, "FaucetSpout", Vector3.new(5, 5, 40), sinkX, COUNTER_TOP_Y + 62, 42, steel, Enum.Material.Metal, noCollide())
+	box(b, "FaucetGlow", Vector3.new(3, 3, 3), sinkX, COUNTER_TOP_Y + 59, 24, cyan, Enum.Material.Neon, noCollide())
+
+	-- On the right-hand counter: a food printer (with a glowing slot and a nozzle), a stack of ration pouches.
+	span(b, "PrinterBody", 200, 270, COUNTER_TOP_Y, COUNTER_TOP_Y + 52, 6, 56, steel, Enum.Material.Metal, noCollide())
+	span(b, "PrinterSlot", 208, 262, COUNTER_TOP_Y + 12, COUNTER_TOP_Y + 22, 5, 6, cyan, Enum.Material.Neon, noCollide())
+	cyl(b, "PrinterNozzle", 14, 8, 235, COUNTER_TOP_Y + 46, 0, graphite, Enum.Material.Metal, noCollide())
+	span(b, "PrinterTop", 196, 274, COUNTER_TOP_Y + 52, COUNTER_TOP_Y + 58, 2, 60, graphite, Enum.Material.Metal, noCollide())
+	for i = 0, 5 do
+		local pouch = box(b, "RationPouch", Vector3.new(26, 5, 18), 330 + (i % 2) * 3, COUNTER_TOP_Y + 3 + i * 5, 26, ({ pink, cyan, violet })[i % 3 + 1], Enum.Material.SmoothPlastic, noCollide())
+		pouch.CFrame = pouch.CFrame * CFrame.Angles(0, math.rad(i * 17), 0)
+	end
+
+	-- On the left-hand counter: a plant dome with a few leaves in it.
+	local domeX = -330
+	cyl(b, "DomeBase", 5, 62, domeX, COUNTER_TOP_Y + 2.5, 24, graphite, Enum.Material.Metal, noCollide())
+	for i, dx in { -9, 0, 10 } do
+		cyl(b, "PlantStem", 16 + i * 4, 2, domeX + dx, COUNTER_TOP_Y + 13 + i * 2, 24 + (i - 2) * 6, Color3.fromRGB(70, 180, 90), nil, noCollide())
+		local leaf = box(b, "PlantLeaf", Vector3.new(11, 2, 7), domeX + dx, COUNTER_TOP_Y + 24 + i * 4, 24 + (i - 2) * 6, Color3.fromRGB(100, 220, 110), nil, noCollide())
+		leaf.CFrame = leaf.CFrame * CFrame.Angles(0, math.rad(i * 40), math.rad(14))
+	end
+	local dome = box(b, "PlantDome", Vector3.new(54, 54, 54), domeX, COUNTER_TOP_Y + 5, 24, Color3.fromRGB(190, 230, 255), Enum.Material.Glass, { CanCollide = false, CastShadow = false, Transparency = 0.62 })
+	dome.Shape = Enum.PartType.Ball
+
+	-- An airlock hatch in the right-hand wall (a round door with a wheel and a warning light) ...
+	local hx, hz, hy = ROOM_HALF_X - 5, -190, fy + 150
+	local hatch = box(b, "Hatch", Vector3.new(6, 150, 150), hx, hy, hz, Color3.fromRGB(150, 158, 182), Enum.Material.Metal, noCollide())
+	hatch.Shape = Enum.PartType.Cylinder
+	local rim = box(b, "HatchRim", Vector3.new(4, 168, 168), hx + 1, hy, hz, graphite, Enum.Material.Metal, noCollide())
+	rim.Shape = Enum.PartType.Cylinder
+	local wheel = box(b, "HatchWheel", Vector3.new(4, 56, 56), hx - 5, hy, hz, steel, Enum.Material.Metal, noCollide())
+	wheel.Shape = Enum.PartType.Cylinder
+	for _, a in { 0, 60, 120 } do
+		local spoke = box(b, "HatchSpoke", Vector3.new(4, 4, 60), hx - 5, hy, hz, steel, Enum.Material.Metal, noCollide())
+		spoke.CFrame = footprint(b.origin, hx - 5, hy, hz) * CFrame.Angles(math.rad(a), 0, 0)
+	end
+	box(b, "HatchLight", Vector3.new(4, 14, 14), hx - 4, hy + 100, hz, pink, Enum.Material.Neon, noCollide())
+
+	-- ... and a row of consoles along the left-hand wall, each with a lit screen.
+	for i, z in { -440, -380, -320, -260, -200 } do
+		local x = -ROOM_HALF_X + 26
+		span(b, "ConsoleDesk", x - 22, x + 22, fy, fy + 70, z - 26, z + 26, graphite, Enum.Material.Metal)
+		local screen = box(b, "ConsoleScreen", Vector3.new(4, 38, 46), x - 18, fy + 92, z, Color3.fromRGB(14, 20, 38), Enum.Material.SmoothPlastic, noCollide())
+		screen.CFrame = screen.CFrame * CFrame.Angles(0, 0, math.rad(-12))
+		box(b, "ConsoleGlow", Vector3.new(1, 28, 36), x - 15.5, fy + 92, z, if i % 2 == 0 then cyan else violet, Enum.Material.Neon, noCollide())
+		for j = 0, 2 do
+			box(b, "ConsoleButton", Vector3.new(6, 3, 6), x + 6, fy + 71.5, z - 12 + j * 12, ({ cyan, pink, violet })[(i + j) % 3 + 1], Enum.Material.Neon, noCollide())
+		end
+	end
+
+	-- The crew's dining table in the middle of the room, with a hologram over it.
+	local tz = -330
+	local tyTop = diningSet(b, tz, 150, steel, Enum.Material.Metal, 2, violet)
+	for i = 0, 2 do
+		cyl(b, "TablePlate", 2, 60, -80 + i * 80, tyTop + 1, tz, Color3.new(1, 1, 1), nil, noCollide())
+		cyl(b, "TablePlate", 0.6, 36, -80 + i * 80, tyTop + 2.2, tz, cyan, Enum.Material.Neon, noCollide())
+	end
+	cyl(b, "HoloBase", 6, 36, 0, tyTop + 3, tz, graphite, Enum.Material.Metal, noCollide())
+	local holo = box(b, "HoloGlobe", Vector3.new(34, 34, 34), 0, tyTop + 36, tz, cyan, Enum.Material.Neon, { CanCollide = false, CastShadow = false, Transparency = 0.45 })
+	holo.Shape = Enum.PartType.Ball
+	local holoRing = cyl(b, "HoloRing", 1, 52, 0, tyTop + 36, tz, violet, Enum.Material.Neon, { CanCollide = false, CastShadow = false, Transparency = 0.3 })
+	holoRing.CFrame = footprint(b.origin, 0, tyTop + 36, tz) * CFrame.Angles(math.rad(70), 0, math.rad(20)) * CFrame.Angles(0, 0, math.rad(90))
+end
+
 -- Level 2 scenery: the backyard around the patio. Lawn, a ring of hills and mountains that closes
 -- the horizon all round, proper trees, the house, a picket fence, a BBQ, parasols and flower beds.
 -- Everything here is out of reach (the patio is walled by invisible barriers) so it's non-colliding.
@@ -16362,6 +16633,8 @@ local function buildRoom(b: Builder, levelIndex: number)
 		buildFaucet(b)
 	elseif levelIndex == 3 then
 		castleProps(b, style)
+	elseif levelIndex == 4 then
+		spaceProps(b, style)
 	else
 		familyProps(b, style)
 	end
@@ -17080,6 +17353,14 @@ function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeSc
 		theme.Light = Color3.fromRGB(255, 220, 160)
 		theme.Trough = true
 	end
+	if levelIndex == 4 then
+		-- The Cosmic Cafeteria's machine is a graphite sanitising pod with a violet glow.
+		theme.Tub = Color3.fromRGB(70, 76, 96)
+		theme.Rack = Color3.fromRGB(205, 215, 235)
+		theme.Metal = Color3.fromRGB(150, 160, 185)
+		theme.Accent = Color3.fromRGB(120, 100, 255)
+		theme.Light = Color3.fromRGB(190, 175, 255)
+	end
 	if levelIndex == 2 then
 		-- The Backyard's basin is a white porcelain sink.
 		theme.Tub = Color3.fromRGB(238, 240, 242)
@@ -17278,6 +17559,9 @@ local RULES: { [string]: (any) -&gt; boolean } = {
 	end,
 	Level3 = function(p)
 		return DataService.LevelsBeaten(p) &gt;= 3
+	end,
+	Level4 = function(p)
+		return DataService.LevelsBeaten(p) &gt;= 4 and (tonumber(p.BestTimes and p.BestTimes[4]) or 0) &gt; 0
 	end,
 	FirstPet = function(p)
 		return #(p.Pets or {}) &gt; 0 or ((p.Stats and p.Stats.EggsHatched) or 0) &gt; 0
@@ -20053,7 +20337,8 @@ local function sanitizeProfile(profile: Profile, player: Player)
 				unlocked = math.max(unlocked, math.min(i + 1, #Config.Levels))
 			end
 		end
-		if (times[#Config.Levels] or 0) &gt; 0 then
+		-- (the last chapter that is OPEN: Chapter 4 only counts once its event has started)
+		if (times[Config.OpenLevels()] or 0) &gt; 0 then
 			p.RebirthReady = true
 		end
 	end
@@ -20215,7 +20500,7 @@ local function buildMeta(player: Player, profile: Profile): Types.MetaState
 		Equipped = equipped,
 		PetSlots = Config.PetSlots(profile.Perks, slotPasses(player)),
 		MaxPets = Config.PetRules.MaxInventory,
-		Unlocked = profile.Unlocked,
+		Unlocked = math.min(profile.Unlocked, Config.OpenLevels()), -- (a chapter whose event hasn't started stays shut)
 		BestTimes = table.clone(profile.BestTimes),
 		Rebirths = profile.Rebirths,
 		RebirthReady = profile.RebirthReady,
@@ -21113,14 +21398,15 @@ function DataService.LevelsBeaten(profile: any): number
 	if not profile then
 		return 0
 	end
-	if (profile.Rebirths or 0) &gt; 0 then
-		return #Config.Levels
-	end
 	local best = 0
 	for i = 1, #Config.Levels do
 		if (tonumber(profile.BestTimes and profile.BestTimes[i]) or 0) &gt; 0 then
 			best = i
 		end
+	end
+	if (profile.Rebirths or 0) &gt; 0 then
+		-- (a rebirth meant every chapter there was: the first three, before Chapter 4 existed)
+		best = math.max(best, math.min(3, #Config.Levels))
 	end
 	return best
 end
@@ -21382,7 +21668,7 @@ function DataService.Rebirth(player: Player): (boolean, string?)
 		return false, "Your data is still loading."
 	end
 	if not profile.RebirthReady then
-		local last = Config.Levels[#Config.Levels]
+		local last = Config.Levels[math.max(1, Config.OpenLevels())]
 		return false, string.format("Clean %s %s first!", last.Icon, last.Name)
 	end
 	local cost = Config.RebirthCost(profile.Rebirths)
@@ -21524,11 +21810,14 @@ function DataService.RecordClear(player: Player, levelIndex: number, seconds: nu
 	local unlocked: number? = nil
 	local nextLevel = levelIndex + 1
 	if Config.Levels[nextLevel] and profile.Unlocked &lt; nextLevel then
+		-- (progress is kept even if that chapter's event hasn't started: it is simply not open to play yet, see PushMeta)
 		profile.Unlocked = nextLevel
-		unlocked = nextLevel
+		if Config.LevelOpen(nextLevel) then
+			unlocked = nextLevel
+		end
 	end
 	profile.Stats.Runs += 1
-	if levelIndex == #Config.Levels and not profile.RebirthReady then
+	if levelIndex == Config.OpenLevels() and not profile.RebirthReady then
 		profile.RebirthReady = true
 		-- A few seconds later, so it lands after the results screen.
 		local message = if Config.ChapterFourAnnounced()
@@ -21676,6 +21965,79 @@ do
 	end
 	Players.PlayerRemoving:Connect(function(player)
 		restricted[player] = nil
+	end)
+end
+
+----------------------------------------------------------------------------------------------------
+-- Chapters opening. Config.LevelOpen says a chapter opens when its Roblox event starts (Chapter 4: Config.UpcomingEvents). Every
+-- server checks ITS clock every few seconds and publishes how many chapters are open as the ReplicatedStorage attribute
+-- "OpenLevels" (Config.OpenLevels and the whole client read that). The moment the number grows, everyone online gets a toast,
+-- players who had already cleared the chapter before it get it unlocked, and each player counts `chapter.open` once.
+-- DataService.SetChapterPreview(true / false / nil) forces every chapter open / shut / back to the real clock (Studio Test).
+----------------------------------------------------------------------------------------------------
+do
+	local preview: boolean? = nil
+	local published: number? = nil
+
+	local function openCount(): number
+		if preview == true then
+			return #Config.Levels
+		elseif preview == false then
+			local n = 0
+			for i, def in Config.Levels do
+				if (def :: any).OpensWith then
+					break
+				end
+				n = i
+			end
+			return n
+		end
+		return Config.OpenLevels(Config.Now())
+	end
+
+	local function refresh()
+		local open = openCount()
+		if open == published then
+			return
+		end
+		local before = published
+		published = open
+		ReplicatedStorage:SetAttribute("OpenLevels", open)
+		if before == nil then
+			return -- (the server has just started: nothing opened, this is simply how things stand)
+		end
+		for player, session in sessions do
+			local profile = session.Profile
+			if profile then
+				for level = before + 1, open do
+					-- the same repair as when a profile loads: whoever had cleared the chapter before it gets this one
+					if profile.Rebirths == 0 and (profile.BestTimes[level - 1] or 0) &gt; 0 and profile.Unlocked &lt; level then
+						profile.Unlocked = level
+					end
+					local def = Config.Levels[level]
+					queueNotice(session, string.format("%s CHAPTER %d IS HERE! %s is open now.", def.Icon, level, def.Name), "Good")
+					DataService.Track(player, "chapter.open")
+				end
+				DataService.PushMeta(player)
+			end
+		end
+	end
+
+	function DataService.SetChapterPreview(value: boolean?)
+		preview = value
+		refresh()
+	end
+	function DataService.ChapterPreview(): boolean?
+		return preview
+	end
+	DataService._RefreshChapters = refresh -- (for tests)
+
+	refresh()
+	task.spawn(function()
+		while true do
+			task.wait(5)
+			refresh()
+		end
 	end)
 end
 
@@ -23547,9 +23909,13 @@ local function drawTimes()
 	local pages = board.Pages or { { Title = board.Title, List = board.List } }
 	for i, page in pages do
 		local level = Config.Levels[i]
-		if level then
+		if level and Config.LevelOpen(i) then
 			page.Title.Text = string.format("Fastest: %s", level.Name)
 			drawRows(page.List, timesTop[i] or {}, formatTenths, "No clears yet!")
+		elseif level then
+			-- (a chapter that hasn't opened yet: no name, nothing to rank)
+			page.Title.Text = string.format("Fastest: Chapter %d", i)
+			drawRows(page.List, {}, formatTenths, "Opens soon!")
 		end
 	end
 end
@@ -23893,7 +24259,11 @@ function LeaderboardService.BoardTitle(index: number): string
 	if stat then
 		return stat.Title
 	end
-	local level = Config.Levels[index - #STATS]
+	local number = index - #STATS
+	local level = Config.Levels[number]
+	if level and not Config.LevelOpen(number) then
+		return string.format("Fastest: Chapter %d", number)
+	end
 	return if level then "Fastest: " .. level.Name else "?"
 end
 
@@ -29068,7 +29438,7 @@ local function unlockedOf(player: Player): number
 	if type(unlocked) ~= "number" or unlocked ~= unlocked then
 		return 1
 	end
-	return math.clamp(math.floor(unlocked), 1, #Config.Levels)
+	return math.clamp(math.floor(unlocked), 1, math.max(1, Config.OpenLevels())) -- (a chapter whose event hasn't started is shut)
 end
 
 local function isInteger(value: any): boolean
@@ -32394,6 +32764,9 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 	if type(levelIndex) ~= "number" or levelIndex % 1 ~= 0 or not Config.Levels[levelIndex] then
 		return false, "That level doesn't exist."
 	end
+	if not Config.LevelOpen(levelIndex) then
+		return false, "That chapter isn't open yet."
+	end
 
 	local members: { Player } = {}
 	for _, p in players do
@@ -33588,7 +33961,7 @@ local function startRun()
 		return
 	end
 	-- Never deeper than anyone in the party has unlocked.
-	local level = math.clamp((plan :: Plan).Level, 1, math.min(best, #Config.Levels))
+	local level = math.clamp((plan :: Plan).Level, 1, math.max(1, math.min(best, Config.OpenLevels())))
 	local ok, result, err = pcall(RoundService.StartRound, ready, level)
 	if not ok or result ~= true then
 		warn("[RunServers] couldn't start the run: " .. tostring(if ok then err else result))
@@ -42261,7 +42634,7 @@ function HUD.Init()
 			resultsBubblesNV.Value = 0
 			UIKit.Tween(resultsBubblesNV, { Value = results.Bubbles }, 0.8)
 		end
-		local lastChapter = run.Level == #Config.Levels
+		local lastChapter = run.Level == Config.OpenLevels() -- (the last chapter that is open: Chapter 4 only once its event has started)
 		-- Once Admin Abuse has started, Chapter 4 is announced: this is not "all the chapters" any more.
 		if lastChapter then
 			if Config.ChapterFourAnnounced() then
@@ -43597,6 +43970,8 @@ return IconArt</ProtectedString></Properties></Item>
 	  3 Royal Banquet - the king on his throne, the queen and nobles feasting and toasting, a
 	    servant carrying the roast from the fire, a juggling jester who does cartwheels and guards
 	    on duty.
+	  4 Cosmic Cafeteria - an astronaut and an alien share noodles at the crew table while a
+	    cleaning robot washes up at the sink beside the dishwasher.
 
 	Everything is a pure function of time: the routines loop (every level has one loop length and
 	every character's plan fills it exactly), and the loop clock is the server's clock, so everyone
@@ -44149,6 +44524,59 @@ LOOKS.Jester = {
 			a:piece("Head", Vector3.new(0.32, 1.2, 0.32), CFrame.new(sd * 0.72, 0.8, 0.05) * CFrame.Angles(0, 0, -sd * 0.9), if sd &lt; 0 then rgb(250, 200, 40) else rgb(220, 40, 60), Enum.Material.Fabric)
 			a:piece("Head", Vector3.new(0.3, 0.3, 0.3), CFrame.new(sd * 1.22, 1.1, 0.05), rgb(250, 220, 90), Enum.Material.Metal, "Ball")
 		end
+	end,
+}
+
+LOOKS.Astronaut = {
+	Shirt = rgb(240, 242, 250), Pants = rgb(226, 230, 242), Shoes = rgb(120, 130, 165), ShirtMat = Enum.Material.Fabric,
+	Build = function(a)
+		hairShort(rgb(70, 46, 30))(a)
+		-- a bubble helmet, pushed up over the head, on a metal neck ring
+		local helmet = a:piece("Head", Vector3.new(1.62, 1.62, 1.62), CFrame.new(0, 0.12, 0.0), rgb(210, 235, 255), Enum.Material.Glass, "Ball")
+		helmet.Transparency = 0.72
+		a:piece("Head", Vector3.new(0.3, 1.5, 1.5), CFrame.new(0, -0.62, 0.05) * CFrame.Angles(0, 0, PI / 2), rgb(190, 196, 214), Enum.Material.Metal, "Cylinder")
+		-- chest box with lights, an orange stripe round each arm, a mission patch
+		a:piece("Torso", Vector3.new(1.0, 0.7, 0.12), CFrame.new(0, 0.3, -0.55), rgb(70, 78, 100), Enum.Material.Metal)
+		for i, c in { rgb(90, 230, 255), rgb(255, 120, 200), rgb(110, 240, 140) } do
+			a:piece("Torso", Vector3.new(0.18, 0.18, 0.06), CFrame.new(-0.3 + (i - 1) * 0.3, 0.32, -0.62), c, Enum.Material.Neon)
+		end
+		a:piece("Torso", Vector3.new(2.04, 0.16, 1.04), CFrame.new(0, -0.82, 0), rgb(255, 150, 60), Enum.Material.Fabric)
+		for _, side in { "L", "R" } do
+			a:piece("Arm" .. side, Vector3.new(1.04, 0.16, 1.04), CFrame.new(0, -0.2, 0), rgb(255, 150, 60), Enum.Material.Fabric)
+		end
+	end,
+}
+LOOKS.Alien = {
+	Skin = rgb(120, 220, 130), Shirt = rgb(150, 100, 235), Pants = rgb(62, 58, 100), Shoes = rgb(255, 120, 200), Sleeves = "short", ShirtMat = Enum.Material.Fabric,
+	Build = function(a)
+		-- a taller dome of a head, two antennae with glowing tips, a belt with a glowing buckle
+		a:piece("Head", Vector3.new(1.5, 1.0, 1.4), CFrame.new(0, 0.36, 0.04), rgb(120, 220, 130), nil, "Sphere")
+		for _, sd in { -1, 1 } do
+			a:piece("Head", Vector3.new(0.1, 0.9, 0.1), CFrame.new(sd * 0.32, 1.0, 0) * CFrame.Angles(0, 0, -sd * 0.4), rgb(96, 190, 108))
+			a:piece("Head", Vector3.new(0.3, 0.3, 0.3), CFrame.new(sd * 0.6, 1.5, 0), rgb(255, 120, 200), Enum.Material.Neon, "Ball")
+		end
+		belt(a, rgb(40, 34, 70), rgb(90, 230, 255))
+		collar(a, rgb(190, 150, 255))
+	end,
+}
+LOOKS.Robot = {
+	Skin = rgb(176, 186, 205), Shirt = rgb(120, 132, 164), Sleeve = rgb(150, 160, 188), Pants = rgb(96, 104, 132), Shoes = rgb(58, 62, 80),
+	ShirtMat = Enum.Material.Metal, PantsMat = Enum.Material.Metal,
+	Build = function(a)
+		-- a dark faceplate with a glowing visor strip (it covers the face), an antenna, a lit chest panel and round "ears"
+		a:piece("Head", Vector3.new(1.34, 0.96, 0.12), CFrame.new(0, 0.02, -0.62), rgb(22, 28, 46), Enum.Material.Metal)
+		a:piece("Head", Vector3.new(1.18, 0.2, 0.06), CFrame.new(0, 0.12, -0.7), rgb(90, 230, 255), Enum.Material.Neon)
+		a:piece("Head", Vector3.new(0.5, 0.06, 0.06), CFrame.new(0, -0.22, -0.7), rgb(255, 120, 200), Enum.Material.Neon)
+		a:piece("Head", Vector3.new(0.08, 0.5, 0.08), CFrame.new(0, 0.78, 0), rgb(130, 140, 165), Enum.Material.Metal)
+		a:piece("Head", Vector3.new(0.24, 0.24, 0.24), CFrame.new(0, 1.08, 0), rgb(255, 120, 200), Enum.Material.Neon, "Ball")
+		for _, sd in { -1, 1 } do
+			a:piece("Head", Vector3.new(0.2, 0.46, 0.46), CFrame.new(sd * 0.68, 0.02, 0.02) * CFrame.Angles(0, 0, PI / 2), rgb(120, 132, 164), Enum.Material.Metal, "Cylinder")
+		end
+		a:piece("Torso", Vector3.new(1.2, 0.8, 0.1), CFrame.new(0, 0.3, -0.54), rgb(34, 40, 62), Enum.Material.Metal)
+		for i = 0, 2 do
+			a:piece("Torso", Vector3.new(0.26, 0.26, 0.06), CFrame.new(-0.34 + i * 0.34, 0.3, -0.6), if i == 1 then rgb(255, 120, 200) else rgb(90, 230, 255), Enum.Material.Neon)
+		end
+		belt(a, rgb(60, 66, 90), rgb(90, 230, 255))
 	end,
 }
 
@@ -45929,7 +46357,98 @@ local function buildCastle(scene: any)
 	table.insert(scene.Plans, pb)
 end
 
-local BUILDERS = { buildFamily, buildPizzeria, buildCastle }
+-- Level 4: Cosmic Cafeteria ------------------------------------------------------------------------
+-- The crew table has its own chairs (the room's are hidden: too small for these two), the astronaut on the far side facing the dishwasher and
+-- the alien across from him. They share noodles and a drink; the cleaning robot washes up at the sink under the viewport, right beside the dishwasher.
+local function buildSpace(scene: any)
+	scene.Period = 60
+	scene.Hide = { "TablePlate", "ChairSeat", "ChairBack", "ChairLeg" }
+	local function place(name: string, kind: string, x: number, z: number, phi: number)
+		scene:prop(name, kind)
+		scene:place(name, 0, 60, rootCF(x, z, phi))
+	end
+	place("FurnChairAstro", "FurnChair", -80, -455, 0)
+	place("FurnChairAlien", "FurnChair", 0, -205, PI)
+	local astroSeat = seat(-80, -452, 0, 98)
+	local alienSeat = seat(0, -210, PI, 98)
+	local function atSeat(st: any, right: number, fwd: number, up: number?): CFrame
+		local cf = rootCF(st.X, st.Z, st.Phi) * CFrame.new(right, 0, -fwd)
+		return CFrame.new(cf.X, TOP + (up or 0), cf.Z) * cf.Rotation
+	end
+	for i, st in { astroSeat, alienSeat } do
+		scene:prop("Meal" .. i, "Spaghetti")
+		scene:place("Meal" .. i, 0, 60, atSeat(st, -4, 76))
+		scene:prop("Fork" .. i, "Fork")
+		scene:place("Fork" .. i, 0, 60, atSeat(st, 34, 72, 1) * CFrame.Angles(0, 0.2, 0))
+	end
+	local glassHold = { "R", off = CFrame.new(0, -9, 0) }
+
+	-- The astronaut: eats, tells a story, raises a glass, stretches.
+	local astro = scene:actor("Astronaut", "Astronaut")
+	local pa = newPlan(astro, 0, 0, 0)
+	seated(pa, astroSeat)
+	scene:prop("AstroGlass", "Glass")
+	scene:place("AstroGlass", 0, 60, atSeat(astroSeat, 30, 64))
+	pa:still(9, P.eat, { Fork1 = FORK_HOLD })
+	pa:still(6, P.talkTo(0.9))
+	pa:still(5, P.drink, { AstroGlass = glassHold })
+	pa:still(8, P.eat, { Fork1 = FORK_HOLD })
+	pa:still(4, P.wave)
+	pa:still(4, P.laugh)
+	pa:still(9, P.eat, { Fork1 = FORK_HOLD })
+	pa:still(4, P.stretch)
+	pa:still(5, P.talkTo(-0.8))
+	pa:finish(60, P.rest)
+	table.insert(scene.Plans, pa)
+
+	-- The alien: eats noodles, laughs at the story, claps, waves and laughs again.
+	local alien = scene:actor("Alien", "Alien")
+	local pl = newPlan(alien, 0, 0, 0)
+	seated(pl, alienSeat)
+	scene:prop("AlienGlass", "Glass")
+	scene:place("AlienGlass", 0, 60, atSeat(alienSeat, 30, 64))
+	pl:still(8, P.eat, { Fork2 = FORK_HOLD })
+	pl:still(4, P.laugh)
+	pl:still(5, P.drink, { AlienGlass = glassHold })
+	pl:still(6, P.talkTo(-0.9))
+	pl:still(4, P.clap)
+	pl:still(8, P.eat, { Fork2 = FORK_HOLD })
+	pl:still(4, P.wave)
+	pl:still(2, P.laugh)
+	pl:still(4, P.wave)
+	pl:still(5, P.talkTo(0.7))
+	pl:finish(60, P.eat)
+	pl.Steps[#pl.Steps].Hold = { Fork2 = FORK_HOLD }
+	table.insert(scene.Plans, pl)
+
+	-- The robot: washes up at the sink (a plate in the suds), now and then waves at the dishwasher.
+	local robot = scene:actor("Robot", "Robot")
+	local pr = newPlan(robot, -150, -102, 0)
+	scene:prop("WashPlate", "WashPlate")
+	local plate = { WashPlate = { "Lhand", off = CFrame.new(0, -4, -6) * CFrame.Angles(0, 0, PI / 2) } }
+	local function wash(u: number, ctx: any): Pose
+		local s = ctx.Actor.S
+		local c = math.sin(u * 5)
+		local d = math.cos(u * 5)
+		local out = (rootCF(ctx.X, ctx.Z, ctx.Phi)).RightVector
+		return {
+			lean = 0.3,
+			head = { pitch = -0.4, yaw = math.sin(u * 0.6) * 0.1 },
+			armL = { at = local3(ctx, -0.05 * s + c * 6, 176, 1.7 * s), pole = (ctx.Origin.Rotation * -out) + Vector3.new(0, -0.3, 0) },
+			armR = { at = local3(ctx, 0.35 * s + c * 12, 178 + d * 5, 1.65 * s + d * 8), pole = (ctx.Origin.Rotation * out) + Vector3.new(0, -0.3, 0) },
+		}
+	end
+	pr:still(13, wash, plate)
+	pr:still(4, P.wave)
+	pr:still(13, wash, plate)
+	pr:still(3, P.laugh)
+	pr:still(12, wash, plate)
+	pr:still(4, P.stretch)
+	pr:finish(60, P.rest)
+	table.insert(scene.Plans, pr)
+end
+
+local BUILDERS = { buildFamily, buildPizzeria, buildCastle, buildSpace }
 
 function LevelNPCs.Build(levelIndex: number, origin: CFrame, parent: Instance): any
 	local self = newScene(origin, parent)
@@ -45941,10 +46460,10 @@ end
 -- A test lineup of every look in a few poses (for screenshots).
 function LevelNPCs.Lineup(origin: CFrame, parent: Instance): any
 	local self = newScene(origin, parent)
-	local names = { "Dad", "Mum", "Kid", "Grandpa", "Chef", "Waiter", "Guest1", "Guest2", "King", "Queen", "Noble1", "Servant", "Guard", "Jester" }
+	local names = { "Dad", "Mum", "Kid", "Grandpa", "Chef", "Waiter", "Guest1", "Guest2", "King", "Queen", "Noble1", "Servant", "Guard", "Jester", "Astronaut", "Alien", "Robot" }
 	for i, n in names do
 		local a = self:actor(n, n)
-		local x = (i - 7.5) * 150
+		local x = (i - 9) * 150
 		local plan = newPlan(a, x, 0, 0)
 		plan:still(10, P.idle)
 		plan:finish(10, P.idle)
@@ -46411,7 +46930,7 @@ local function bestTime(levelIndex: number): number?
 	return if t and t &gt; 0 then t else nil
 end
 
-local LEVEL_EMOJI = { "🍝", "🍕", "👑" } -- one per level, on its card
+local LEVEL_EMOJI = { "🍝", "🍕", "👑", "🚀" } -- one per level, on its card
 
 -- "Map thumbnail" art for a dishwasher: a gradient in its theme colours, the level's emoji big on a
 -- soft glow, and a few bubbles. Built from UI only (no uploaded images).
@@ -46510,7 +47029,11 @@ local function renderLevelList()
 		end
 	end
 	local maxUnlocked = unlocked()
+	local openCount = Config.OpenLevels() -- (a chapter whose event hasn't started is not a card: just the "coming soon" one below)
 	for i, level in Config.Levels do
+		if i &gt; openCount then
+			break
+		end
 		local locked = i &gt; maxUnlocked
 		local selected = i == selLevel
 		local card = Instance.new("TextButton")
@@ -46568,8 +47091,11 @@ local function renderLevelList()
 			renderCreate()
 		end)
 	end
-	-- The next chapter, still being written.
-	local n = #Config.Levels + 1
+	-- The next chapter, still being written (gone once every chapter is open).
+	local n = openCount + 1
+	if n &gt; #Config.Levels then
+		return
+	end
 	local soon = Instance.new("TextButton")
 	soon.Name = "ComingSoon"
 	soon.LayoutOrder = n
@@ -47444,6 +47970,13 @@ function PartyUI.Init()
 
 	ClientState.Changed:Connect(function(kind)
 		if kind == "Party" or (kind == "Meta" and createScreen.Visible) then
+			render()
+		end
+	end)
+
+	-- A chapter opening (its event started) while the Create screen is up: its card replaces the "coming soon" one.
+	ReplicatedStorage:GetAttributeChangedSignal("OpenLevels"):Connect(function()
+		if createScreen.Visible then
 			render()
 		end
 	end)
@@ -51368,7 +51901,7 @@ local function render()
 		pct(rb.BubblesPer * (rebirths + 1)),
 		Config.RebirthGems(rebirths + 1)
 	)
-	local last = Config.Levels[#Config.Levels]
+	local last = Config.Levels[math.max(1, Config.OpenLevels())]
 	local levelDone = meta ~= nil and meta.RebirthReady == true
 	reqLevel.Text = string.format("%s  Clean %s", if levelDone then "Done:" else "To do:", last.Name)
 	reqLevel.TextColor3 = if levelDone then Colors.Good else Colors.Text
@@ -53650,6 +54183,8 @@ local FREE_KEYS = { Enum.KeyCode.LeftAlt, Enum.KeyCode.RightAlt, Enum.KeyCode.Le
 local FP_STEP = "RinseFirstPerson"
 local fpModal: TextButton? = nil -- invisible Modal button: while it is visible Roblox lets the mouse go
 local toldAboutMouse = false
+local LOBBY_ZOOM = 12.5 -- (Roblox's usual camera distance)
+local baseMinZoom = (tonumber(LocalPlayer.CameraMinZoomDistance) or 0.5) -- (how close the lobby camera may zoom in: Main sets 0.5)
 
 local function modalOpen(): boolean
 	local ok, value = pcall(function()
@@ -53780,6 +54315,16 @@ local function applyCameraMode()
 		mouseFree = false
 		pcall(function()
 			LocalPlayer.CameraMode = Enum.CameraMode.Classic
+		end)
+		-- (first person leaves the zoom at 0.5 and Classic keeps it, so without this the lobby would stay zoomed all the way in:
+		-- hold the minimum zoom at the usual 12.5 for a moment, which pulls the camera back out, then give the old minimum back)
+		pcall(function()
+			LocalPlayer.CameraMinZoomDistance = LOBBY_ZOOM
+			task.delay(0.4, function()
+				pcall(function()
+					LocalPlayer.CameraMinZoomDistance = baseMinZoom
+				end)
+			end)
 		end)
 		updateTouchUIVisibility()
 	end
@@ -61147,6 +61692,13 @@ end } } },
 		}
 	end } } },
 	{ Name = "abusedebug", Icon = "🐞", Label = "Giant debug", Desc = "Toggles a floating readout above the Admin Abuse giant (state, height, floor, feet) and prints it to the Output once a second. Use it to see where he sinks or stops.", Target = "none", Inputs = {} },
+	{ Name = "chapter4", Icon = "🚀", Label = "Chapter 4 preview", Desc = "Opens Chapter 4 on this server before its event time (or shuts it, or goes back to the event's real start). Nothing is saved.", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+		return {
+			{ Label = "Open Chapter 4 now", Value = "on" },
+			{ Label = "Shut Chapter 4", Value = "off" },
+			{ Label = "Back to the real time", Value = "reset" },
+		}
+	end } } },
 	{ Name = "paidtest", Icon = "🎲", Label = "Restricted test", Desc = "Treats YOU as a player Roblox does not let use paid random items: rank rolls, egg hatching and chest packs go off and their buttons grey out. Run it again with Back to normal to undo.", Toggle = true, Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		return { { Label = "Pretend I'm restricted", Value = "on" }, { Label = "Back to normal", Value = "off" } }
 	end } } },
@@ -61167,7 +61719,7 @@ local GROUPS = {
 	{ Name = "Global", Icon = "🌍", Blurb = "EVERY server at once: everyone online sees it.", Commands = { "globalannounce", "globalpassdrop", "globalpoll", "globalcountdown", "cancelcountdown", "globalgive", "globalboost", "serverlist" } },
 	{ Name = "Staff", Icon = "🛡️", Blurb = "Staff ranks and what every admin did.", Commands = { "setadminrank", "stafflist", "cmdlogs", "playerlogs", "wipelogs" } },
 	{ Name = "Studio Test", Icon = "🧪", Blurb = "Testing tools for your own account, and the analytics reports.", Commands = { "daily", "badges", "finishrun", "unlockall", "analytics", "resetfirstrun", "clubreset", "notifytest", "paidtest" } },
-	{ Name = "Show Test", Icon = "🎆", Blurb = "Try the Admin Abuse show and its pieces.", Commands = { "abusefx", "abuselocal", "abuseshow", "abusedebug", "privatelobby" } },
+	{ Name = "Show Test", Icon = "🎆", Blurb = "Try the Admin Abuse show and its pieces, and open Chapter 4 early.", Commands = { "abusefx", "abuselocal", "abuseshow", "abusedebug", "privatelobby", "chapter4" } },
 }
 local DURATIONS = { "1h", "6h", "24h", "3d", "7d", "30d" }
 local PRESETS = {
@@ -61810,6 +62362,7 @@ local function buildPanel(info: any)
 		level1 = Colors.Primary,
 		level2 = Colors.Warning,
 		level3 = Colors.Accent,
+		level4 = Colors.Bad,
 		game = Colors.TextDim,
 	}
 

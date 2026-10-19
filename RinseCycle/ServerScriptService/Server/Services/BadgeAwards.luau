@@ -55,6 +55,9 @@ local RULES: { [string]: (any) -> boolean } = {
 	Level3 = function(p)
 		return DataService.LevelsBeaten(p) >= 3
 	end,
+	Level4 = function(p)
+		return DataService.LevelsBeaten(p) >= 4 and (tonumber(p.BestTimes and p.BestTimes[4]) or 0) > 0
+	end,
 	FirstPet = function(p)
 		return #(p.Pets or {}) > 0 or ((p.Stats and p.Stats.EggsHatched) or 0) > 0
 	end,

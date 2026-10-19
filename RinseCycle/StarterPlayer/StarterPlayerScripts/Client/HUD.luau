@@ -1072,7 +1072,7 @@ function HUD.Init()
 			resultsBubblesNV.Value = 0
 			UIKit.Tween(resultsBubblesNV, { Value = results.Bubbles }, 0.8)
 		end
-		local lastChapter = run.Level == #Config.Levels
+		local lastChapter = run.Level == Config.OpenLevels() -- (the last chapter that is open: Chapter 4 only once its event has started)
 		-- Once Admin Abuse has started, Chapter 4 is announced: this is not "all the chapters" any more.
 		if lastChapter then
 			if Config.ChapterFourAnnounced() then

@@ -1867,6 +1867,13 @@ end } } },
 		}
 	end } } },
 	{ Name = "abusedebug", Icon = "🐞", Label = "Giant debug", Desc = "Toggles a floating readout above the Admin Abuse giant (state, height, floor, feet) and prints it to the Output once a second. Use it to see where he sinks or stops.", Target = "none", Inputs = {} },
+	{ Name = "chapter4", Icon = "🚀", Label = "Chapter 4 preview", Desc = "Opens Chapter 4 on this server before its event time (or shuts it, or goes back to the event's real start). Nothing is saved.", Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
+		return {
+			{ Label = "Open Chapter 4 now", Value = "on" },
+			{ Label = "Shut Chapter 4", Value = "off" },
+			{ Label = "Back to the real time", Value = "reset" },
+		}
+	end } } },
 	{ Name = "paidtest", Icon = "🎲", Label = "Restricted test", Desc = "Treats YOU as a player Roblox does not let use paid random items: rank rolls, egg hatching and chest packs go off and their buttons grey out. Run it again with Back to normal to undo.", Toggle = true, Target = "none", Inputs = { { Kind = "choice", Required = true, Options = function()
 		return { { Label = "Pretend I'm restricted", Value = "on" }, { Label = "Back to normal", Value = "off" } }
 	end } } },
@@ -1887,7 +1894,7 @@ local GROUPS = {
 	{ Name = "Global", Icon = "🌍", Blurb = "EVERY server at once: everyone online sees it.", Commands = { "globalannounce", "globalpassdrop", "globalpoll", "globalcountdown", "cancelcountdown", "globalgive", "globalboost", "serverlist" } },
 	{ Name = "Staff", Icon = "🛡️", Blurb = "Staff ranks and what every admin did.", Commands = { "setadminrank", "stafflist", "cmdlogs", "playerlogs", "wipelogs" } },
 	{ Name = "Studio Test", Icon = "🧪", Blurb = "Testing tools for your own account, and the analytics reports.", Commands = { "daily", "badges", "finishrun", "unlockall", "analytics", "resetfirstrun", "clubreset", "notifytest", "paidtest" } },
-	{ Name = "Show Test", Icon = "🎆", Blurb = "Try the Admin Abuse show and its pieces.", Commands = { "abusefx", "abuselocal", "abuseshow", "abusedebug", "privatelobby" } },
+	{ Name = "Show Test", Icon = "🎆", Blurb = "Try the Admin Abuse show and its pieces, and open Chapter 4 early.", Commands = { "abusefx", "abuselocal", "abuseshow", "abusedebug", "privatelobby", "chapter4" } },
 }
 local DURATIONS = { "1h", "6h", "24h", "3d", "7d", "30d" }
 local PRESETS = {
@@ -2530,6 +2537,7 @@ local function buildPanel(info: any)
 		level1 = Colors.Primary,
 		level2 = Colors.Warning,
 		level3 = Colors.Accent,
+		level4 = Colors.Bad,
 		game = Colors.TextDim,
 	}
 

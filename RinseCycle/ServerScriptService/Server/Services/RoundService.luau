@@ -1061,6 +1061,9 @@ function RoundService.StartRound(players: { Player }, levelIndex: number): (bool
 	if type(levelIndex) ~= "number" or levelIndex % 1 ~= 0 or not Config.Levels[levelIndex] then
 		return false, "That level doesn't exist."
 	end
+	if not Config.LevelOpen(levelIndex) then
+		return false, "That chapter isn't open yet."
+	end
 
 	local members: { Player } = {}
 	for _, p in players do

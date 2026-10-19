@@ -271,9 +271,13 @@ local abuse
 for _, e in Config.UpcomingEvents do if e.Key == "AdminAbuse" then abuse = e end end
 check("G", "before Admin Abuse starts it is still 'all the current chapters'", Config.ChapterFourAnnounced(abuse.Starts - 10) == false)
 check("G", "from the moment it starts Chapter 4 is announced", Config.ChapterFourAnnounced(abuse.Starts) == true and Config.ChapterFourAnnounced(abuse.Ends + 86400) == true)
-local fake = table.clone(Config.Levels[#Config.Levels])
-table.insert(Config.Levels, fake)
-check("G", "once Chapter 4 exists as a dishwasher the 'coming soon' wording is gone (the finale moves to it)", Config.ChapterFourAnnounced(abuse.Ends + 86400) == false)
-table.remove(Config.Levels)
+local ev4
+for _, e in Config.UpcomingEvents do if e.Key == "Chapter4" then ev4 = e end end
+check("G", "while Chapter 4's event has no date the 'coming soon' wording stays", Config.ChapterFourAnnounced(abuse.Ends + 86400) == true)
+ev4.Soon = false
+ev4.Starts = abuse.Ends + 100
+check("G", "once Chapter 4 is open the 'coming soon' wording is gone (the finale moves to it)", Config.ChapterFourAnnounced(ev4.Starts + 10) == false)
+ev4.Soon = true
+ev4.Starts = 4102444800
 
 out(string.format("== %d CHECKS: %d passed, %d FAILED", total, total - failed, failed))

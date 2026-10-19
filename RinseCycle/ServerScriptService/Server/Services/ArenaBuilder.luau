@@ -276,6 +276,19 @@ local ROOM_STYLES: { RoomStyle } = {
 		Lamp = Color3.fromRGB(255, 205, 140),
 		Bench = "Stone",
 	},
+	-- 4: Space station galley: brushed graphite panels, glowing seams, a viewport over the sink.
+	{
+		Floor = Color3.fromRGB(78, 84, 106), Floor2 = Color3.fromRGB(58, 63, 82), FloorMat = Enum.Material.Metal,
+		Wall = Color3.fromRGB(44, 50, 72), WallMat = Enum.Material.Metal,
+		Ceiling = Color3.fromRGB(28, 32, 48),
+		Cabinet = Color3.fromRGB(68, 74, 98), CabinetDoor = Color3.fromRGB(96, 104, 134), CabMat = Enum.Material.SmoothPlastic,
+		Counter = Color3.fromRGB(214, 222, 238), CounterMat = Enum.Material.Metal,
+		Tile = Color3.fromRGB(34, 40, 60), TileMat = Enum.Material.Metal,
+		Handle = Color3.fromRGB(90, 230, 255), HandleMat = Enum.Material.Neon,
+		Kick = Color3.fromRGB(22, 24, 38),
+		Lamp = Color3.fromRGB(190, 225, 255),
+		Bench = "Space",
+	},
 }
 
 -- A flat SurfaceGui text sign on a box. `face` is the side the text is on.
@@ -401,6 +414,12 @@ local function buildKitchen(b: Builder, k: RoomStyle)
 				end
 				local lid = cyl(b, "BarrelLid", 0.6, barrelD - 6, cx, by, cabFront - 29.4, Color3.fromRGB(150, 104, 62), Enum.Material.Wood, noCollide())
 				lid.CFrame = footprint(b.origin, cx, by, cabFront - 29.4) * CFrame.Angles(0, math.rad(90), 0)
+			elseif bench == "Space" then
+				-- Sleek galley units: a smooth panel, a glowing seam down the middle and a vent grille.
+				local y0, y1 = fy + 16, COUNTER_TOP_Y - 10
+				box(b, "SpacePanel", Vector3.new(doorW - 8, y1 - y0, 1.5), cx, (y0 + y1) / 2, cabFront - 0.75, k.CabinetDoor, k.CabMat)
+				box(b, "SpaceSeam", Vector3.new(2.4, y1 - y0 - 24, 0.6), cx + side * -(doorW / 2 - 14), (y0 + y1) / 2, cabFront - 1.7, k.Handle, k.HandleMat, noCollide())
+				box(b, "SpaceVent", Vector3.new(doorW - 40, 8, 0.6), cx, y0 + 14, cabFront - 1.7, Color3.fromRGB(30, 34, 50), Enum.Material.DiamondPlate, noCollide())
 			elseif bench == "Garden" then
 				-- Outdoor kitchen: plain wooden cupboard doors with a recessed panel and a handle.
 				local y0, y1 = fy + 16, COUNTER_TOP_Y - 10
@@ -462,6 +481,16 @@ local function buildKitchen(b: Builder, k: RoomStyle)
 			span(b, "Hood", seg[1], seg[2], upperY1 - 20, upperY1 + 20, ROOM_Z_BACK - 70, ROOM_Z_BACK, steel, Enum.Material.Metal, shadowless)
 			span(b, "HoodLip", seg[1], seg[2], upperY1 - 26, upperY1 - 20, ROOM_Z_BACK - 70, ROOM_Z_BACK - 64, Color3.fromRGB(150, 155, 162), Enum.Material.Metal, noCollide())
 			span(b, "HoodDuct", seg[1] + w / 2 - 30, seg[1] + w / 2 + 30, upperY1 + 20, KITCHEN_FLOOR_Y + ROOM_HEIGHT, ROOM_Z_BACK - 50, ROOM_Z_BACK, steel, Enum.Material.Metal, shadowless)
+		elseif bench == "Space" then
+			-- Wall lockers with a glowing status light each, over a strip of dark panelling.
+			span(b, "LockerBack", seg[1] + 6, seg[2] - 6, upperY0, upperY1, ROOM_Z_BACK - 40, ROOM_Z_BACK, k.Cabinet, k.CabMat, shadowless)
+			local n = math.floor(w / 70)
+			for i = 0, n - 1 do
+				local cx = seg[1] + w / n * (i + 0.5)
+				box(b, "LockerDoor", Vector3.new(w / n - 8, upperY1 - upperY0 - 12, 1.2), cx, (upperY0 + upperY1) / 2, ROOM_Z_BACK - 40.6, k.CabinetDoor, k.CabMat, noCollide())
+				box(b, "LockerLight", Vector3.new(6, 6, 0.8), cx, upperY1 - 16, ROOM_Z_BACK - 41.6, if (i + math.floor(seg[1] / 40)) % 3 == 0 then Color3.fromRGB(255, 120, 200) else Color3.fromRGB(90, 230, 255), Enum.Material.Neon, noCollide())
+				box(b, "LockerHandle", Vector3.new(2.5, 18, 2.5), cx + (w / n / 2 - 12), (upperY0 + upperY1) / 2, ROOM_Z_BACK - 42, k.Handle, k.HandleMat, noCollide())
+			end
 		elseif bench == "Stone" then
 			-- Oak plate racks holding pewter plates and tankards.
 			local oak = Color3.fromRGB(92, 58, 38)
@@ -999,6 +1028,152 @@ local function castleProps(b: Builder, k: RoomStyle)
 	end
 end
 
+-- Level 4: the Cosmic Cafeteria, a space station galley. A panoramic viewport over the sink (stars and a ringed planet), glowing
+-- floor guide lines, light bars, a hatch, consoles, a hologram on the crew's dining table, and a food printer, ration pouches and a
+-- plant dome on the counter.
+local function spaceProps(b: Builder, k: RoomStyle)
+	local fy = KITCHEN_FLOOR_Y
+	local cyan = Color3.fromRGB(90, 230, 255)
+	local pink = Color3.fromRGB(255, 120, 200)
+	local violet = Color3.fromRGB(130, 100, 255)
+	local void = Color3.fromRGB(8, 10, 24)
+	local graphite = Color3.fromRGB(58, 64, 86)
+	local steel = Color3.fromRGB(200, 208, 224)
+
+	-- Light bars along the ceiling.
+	for _, x in { -240, 0, 240 } do
+		local bar = span(b, "LightBar", x - 9, x + 9, fy + ROOM_HEIGHT - 3, fy + ROOM_HEIGHT, ROOM_Z_FRONT + 40, ROOM_Z_BACK - 40, k.Lamp, Enum.Material.Neon, noCollide())
+		bar.CastShadow = false
+	end
+
+	-- Glowing guide lines in the floor, from the door out into the room, and a ring round the dining table.
+	for _, x in { -150, 150 } do
+		span(b, "FloorLine", x - 1.5, x + 1.5, fy, fy + 0.3, ROOM_Z_FRONT + 30, -125, cyan, Enum.Material.Neon, noCollide())
+	end
+	for _, z in { -200, -430 } do
+		span(b, "FloorCross", -150, 150, fy, fy + 0.3, z - 1.5, z + 1.5, violet, Enum.Material.Neon, noCollide())
+	end
+
+	-- Glowing strips and dark panel seams along the side walls (the walls are long and plain otherwise).
+	for _, side in { -1, 1 } do
+		for _, y in { fy + 60, fy + 440 } do
+			local strip = span(b, "WallStrip", side * (ROOM_HALF_X - 1.5), side * (ROOM_HALF_X - 3), y - 1.5, y + 1.5, ROOM_Z_FRONT + 20, ROOM_Z_BACK - 20, cyan, Enum.Material.Neon, noCollide())
+			strip.CastShadow = false
+		end
+		for z = ROOM_Z_FRONT + 80, ROOM_Z_BACK - 60, 130 do
+			span(b, "WallSeam", side * (ROOM_HALF_X - 1), side * (ROOM_HALF_X - 3), fy + 10, fy + ROOM_HEIGHT - 10, z - 1.5, z + 1.5, Color3.fromRGB(20, 24, 38), nil, noCollide())
+		end
+	end
+
+	-- The viewport over the sink: black space, stars, a ringed planet, a small moon, in a heavy frame.
+	local wx0, wx1 = -210, -50
+	local wy0, wy1 = COUNTER_TOP_Y + 90, COUNTER_TOP_Y + 260
+	local backZ = ROOM_Z_BACK
+	span(b, "Viewport", wx0, wx1, wy0, wy1, backZ - 0.5, backZ + 0.5, void, Enum.Material.SmoothPlastic, noCollide())
+	local seed = 7
+	local function rnd(): number
+		seed = (seed * 1103515245 + 12345) % 2147483648
+		return seed / 2147483648
+	end
+	for _ = 1, 44 do
+		local sx = wx0 + 6 + rnd() * (wx1 - wx0 - 12)
+		local sy = wy0 + 6 + rnd() * (wy1 - wy0 - 12)
+		local size = 0.8 + rnd() * 1.6
+		local star = box(b, "Star", Vector3.new(size, size, 0.4), sx, sy, backZ - 1, if rnd() < 0.25 then cyan else Color3.new(1, 1, 1), Enum.Material.Neon, noCollide())
+		star.CastShadow = false
+	end
+	local px, py = -128, wy0 + 78
+	local planet = box(b, "Planet", Vector3.new(58, 58, 58), px, py, backZ - 4, Color3.fromRGB(70, 150, 220), Enum.Material.SmoothPlastic, noCollide())
+	planet.Shape = Enum.PartType.Ball
+	planet.CastShadow = false
+	local cap = box(b, "PlanetIce", Vector3.new(30, 30, 30), px - 6, py + 18, backZ - 6, Color3.fromRGB(235, 245, 255), Enum.Material.SmoothPlastic, noCollide())
+	cap.Shape = Enum.PartType.Ball
+	cap.CastShadow = false
+	local ring = cyl(b, "PlanetRing", 1.2, 112, px, py, backZ - 5, Color3.fromRGB(240, 205, 150), Enum.Material.SmoothPlastic, noCollide())
+	ring.CFrame = footprint(b.origin, px, py, backZ - 5) * CFrame.Angles(math.rad(62), 0, math.rad(-14)) * CFrame.Angles(0, 0, math.rad(90))
+	ring.CastShadow = false
+	local moon = box(b, "Moon", Vector3.new(16, 16, 16), wx1 - 28, wy1 - 30, backZ - 3, Color3.fromRGB(215, 215, 225), Enum.Material.SmoothPlastic, noCollide())
+	moon.Shape = Enum.PartType.Ball
+	moon.CastShadow = false
+	for _, x in { wx0, (wx0 + wx1) / 2, wx1 } do
+		span(b, "ViewportBar", x - 4, x + 4, wy0 - 4, wy1 + 4, backZ - 8, backZ, graphite, Enum.Material.Metal, noCollide())
+	end
+	for _, y in { wy0, wy1 } do
+		span(b, "ViewportBar", wx0 - 4, wx1 + 4, y - 4, y + 4, backZ - 8, backZ, graphite, Enum.Material.Metal, noCollide())
+	end
+	span(b, "ViewportGlow", wx0 + 4, wx1 - 4, wy0 + 4, wy0 + 6, backZ - 7, backZ - 6, cyan, Enum.Material.Neon, noCollide())
+	span(b, "ViewportSill", wx0 - 10, wx1 + 10, wy0 - 10, wy0 - 4, backZ - 14, backZ, steel, Enum.Material.Metal, noCollide())
+
+	-- The sink under the viewport.
+	local sinkX = (wx0 + wx1) / 2
+	span(b, "Sink", sinkX - 60, sinkX + 60, COUNTER_TOP_Y - 0.4, COUNTER_TOP_Y + 0.2, -10, 50, steel, Enum.Material.Metal, noCollide())
+	span(b, "SinkBasin", sinkX - 54, sinkX + 54, COUNTER_TOP_Y - 0.2, COUNTER_TOP_Y + 0.4, -4, 44, Color3.fromRGB(70, 78, 100), Enum.Material.Metal, noCollide())
+	cyl(b, "FaucetBase", 6, 10, sinkX, COUNTER_TOP_Y + 3, 60, steel, Enum.Material.Metal, noCollide())
+	cyl(b, "FaucetPipe", 60, 5, sinkX, COUNTER_TOP_Y + 33, 60, steel, Enum.Material.Metal, noCollide())
+	box(b, "FaucetSpout", Vector3.new(5, 5, 40), sinkX, COUNTER_TOP_Y + 62, 42, steel, Enum.Material.Metal, noCollide())
+	box(b, "FaucetGlow", Vector3.new(3, 3, 3), sinkX, COUNTER_TOP_Y + 59, 24, cyan, Enum.Material.Neon, noCollide())
+
+	-- On the right-hand counter: a food printer (with a glowing slot and a nozzle), a stack of ration pouches.
+	span(b, "PrinterBody", 200, 270, COUNTER_TOP_Y, COUNTER_TOP_Y + 52, 6, 56, steel, Enum.Material.Metal, noCollide())
+	span(b, "PrinterSlot", 208, 262, COUNTER_TOP_Y + 12, COUNTER_TOP_Y + 22, 5, 6, cyan, Enum.Material.Neon, noCollide())
+	cyl(b, "PrinterNozzle", 14, 8, 235, COUNTER_TOP_Y + 46, 0, graphite, Enum.Material.Metal, noCollide())
+	span(b, "PrinterTop", 196, 274, COUNTER_TOP_Y + 52, COUNTER_TOP_Y + 58, 2, 60, graphite, Enum.Material.Metal, noCollide())
+	for i = 0, 5 do
+		local pouch = box(b, "RationPouch", Vector3.new(26, 5, 18), 330 + (i % 2) * 3, COUNTER_TOP_Y + 3 + i * 5, 26, ({ pink, cyan, violet })[i % 3 + 1], Enum.Material.SmoothPlastic, noCollide())
+		pouch.CFrame = pouch.CFrame * CFrame.Angles(0, math.rad(i * 17), 0)
+	end
+
+	-- On the left-hand counter: a plant dome with a few leaves in it.
+	local domeX = -330
+	cyl(b, "DomeBase", 5, 62, domeX, COUNTER_TOP_Y + 2.5, 24, graphite, Enum.Material.Metal, noCollide())
+	for i, dx in { -9, 0, 10 } do
+		cyl(b, "PlantStem", 16 + i * 4, 2, domeX + dx, COUNTER_TOP_Y + 13 + i * 2, 24 + (i - 2) * 6, Color3.fromRGB(70, 180, 90), nil, noCollide())
+		local leaf = box(b, "PlantLeaf", Vector3.new(11, 2, 7), domeX + dx, COUNTER_TOP_Y + 24 + i * 4, 24 + (i - 2) * 6, Color3.fromRGB(100, 220, 110), nil, noCollide())
+		leaf.CFrame = leaf.CFrame * CFrame.Angles(0, math.rad(i * 40), math.rad(14))
+	end
+	local dome = box(b, "PlantDome", Vector3.new(54, 54, 54), domeX, COUNTER_TOP_Y + 5, 24, Color3.fromRGB(190, 230, 255), Enum.Material.Glass, { CanCollide = false, CastShadow = false, Transparency = 0.62 })
+	dome.Shape = Enum.PartType.Ball
+
+	-- An airlock hatch in the right-hand wall (a round door with a wheel and a warning light) ...
+	local hx, hz, hy = ROOM_HALF_X - 5, -190, fy + 150
+	local hatch = box(b, "Hatch", Vector3.new(6, 150, 150), hx, hy, hz, Color3.fromRGB(150, 158, 182), Enum.Material.Metal, noCollide())
+	hatch.Shape = Enum.PartType.Cylinder
+	local rim = box(b, "HatchRim", Vector3.new(4, 168, 168), hx + 1, hy, hz, graphite, Enum.Material.Metal, noCollide())
+	rim.Shape = Enum.PartType.Cylinder
+	local wheel = box(b, "HatchWheel", Vector3.new(4, 56, 56), hx - 5, hy, hz, steel, Enum.Material.Metal, noCollide())
+	wheel.Shape = Enum.PartType.Cylinder
+	for _, a in { 0, 60, 120 } do
+		local spoke = box(b, "HatchSpoke", Vector3.new(4, 4, 60), hx - 5, hy, hz, steel, Enum.Material.Metal, noCollide())
+		spoke.CFrame = footprint(b.origin, hx - 5, hy, hz) * CFrame.Angles(math.rad(a), 0, 0)
+	end
+	box(b, "HatchLight", Vector3.new(4, 14, 14), hx - 4, hy + 100, hz, pink, Enum.Material.Neon, noCollide())
+
+	-- ... and a row of consoles along the left-hand wall, each with a lit screen.
+	for i, z in { -440, -380, -320, -260, -200 } do
+		local x = -ROOM_HALF_X + 26
+		span(b, "ConsoleDesk", x - 22, x + 22, fy, fy + 70, z - 26, z + 26, graphite, Enum.Material.Metal)
+		local screen = box(b, "ConsoleScreen", Vector3.new(4, 38, 46), x - 18, fy + 92, z, Color3.fromRGB(14, 20, 38), Enum.Material.SmoothPlastic, noCollide())
+		screen.CFrame = screen.CFrame * CFrame.Angles(0, 0, math.rad(-12))
+		box(b, "ConsoleGlow", Vector3.new(1, 28, 36), x - 15.5, fy + 92, z, if i % 2 == 0 then cyan else violet, Enum.Material.Neon, noCollide())
+		for j = 0, 2 do
+			box(b, "ConsoleButton", Vector3.new(6, 3, 6), x + 6, fy + 71.5, z - 12 + j * 12, ({ cyan, pink, violet })[(i + j) % 3 + 1], Enum.Material.Neon, noCollide())
+		end
+	end
+
+	-- The crew's dining table in the middle of the room, with a hologram over it.
+	local tz = -330
+	local tyTop = diningSet(b, tz, 150, steel, Enum.Material.Metal, 2, violet)
+	for i = 0, 2 do
+		cyl(b, "TablePlate", 2, 60, -80 + i * 80, tyTop + 1, tz, Color3.new(1, 1, 1), nil, noCollide())
+		cyl(b, "TablePlate", 0.6, 36, -80 + i * 80, tyTop + 2.2, tz, cyan, Enum.Material.Neon, noCollide())
+	end
+	cyl(b, "HoloBase", 6, 36, 0, tyTop + 3, tz, graphite, Enum.Material.Metal, noCollide())
+	local holo = box(b, "HoloGlobe", Vector3.new(34, 34, 34), 0, tyTop + 36, tz, cyan, Enum.Material.Neon, { CanCollide = false, CastShadow = false, Transparency = 0.45 })
+	holo.Shape = Enum.PartType.Ball
+	local holoRing = cyl(b, "HoloRing", 1, 52, 0, tyTop + 36, tz, violet, Enum.Material.Neon, { CanCollide = false, CastShadow = false, Transparency = 0.3 })
+	holoRing.CFrame = footprint(b.origin, 0, tyTop + 36, tz) * CFrame.Angles(math.rad(70), 0, math.rad(20)) * CFrame.Angles(0, 0, math.rad(90))
+end
+
 -- Level 2 scenery: the backyard around the patio. Lawn, a ring of hills and mountains that closes
 -- the horizon all round, proper trees, the house, a picket fence, a BBQ, parasols and flower beds.
 -- Everything here is out of reach (the patio is walled by invisible barriers) so it's non-colliding.
@@ -1399,6 +1574,8 @@ local function buildRoom(b: Builder, levelIndex: number)
 		buildFaucet(b)
 	elseif levelIndex == 3 then
 		castleProps(b, style)
+	elseif levelIndex == 4 then
+		spaceProps(b, style)
 	else
 		familyProps(b, style)
 	end
@@ -2116,6 +2293,14 @@ function ArenaBuilder.Build(slot: number, levelIndex: number, options: { GrimeSc
 		theme.Accent = Color3.fromRGB(255, 205, 90)
 		theme.Light = Color3.fromRGB(255, 220, 160)
 		theme.Trough = true
+	end
+	if levelIndex == 4 then
+		-- The Cosmic Cafeteria's machine is a graphite sanitising pod with a violet glow.
+		theme.Tub = Color3.fromRGB(70, 76, 96)
+		theme.Rack = Color3.fromRGB(205, 215, 235)
+		theme.Metal = Color3.fromRGB(150, 160, 185)
+		theme.Accent = Color3.fromRGB(120, 100, 255)
+		theme.Light = Color3.fromRGB(190, 175, 255)
 	end
 	if levelIndex == 2 then
 		-- The Backyard's basin is a white porcelain sink.

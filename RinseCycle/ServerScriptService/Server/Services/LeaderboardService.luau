@@ -316,9 +316,13 @@ local function drawTimes()
 	local pages = board.Pages or { { Title = board.Title, List = board.List } }
 	for i, page in pages do
 		local level = Config.Levels[i]
-		if level then
+		if level and Config.LevelOpen(i) then
 			page.Title.Text = string.format("Fastest: %s", level.Name)
 			drawRows(page.List, timesTop[i] or {}, formatTenths, "No clears yet!")
+		elseif level then
+			-- (a chapter that hasn't opened yet: no name, nothing to rank)
+			page.Title.Text = string.format("Fastest: Chapter %d", i)
+			drawRows(page.List, {}, formatTenths, "Opens soon!")
 		end
 	end
 end
@@ -662,7 +666,11 @@ function LeaderboardService.BoardTitle(index: number): string
 	if stat then
 		return stat.Title
 	end
-	local level = Config.Levels[index - #STATS]
+	local number = index - #STATS
+	local level = Config.Levels[number]
+	if level and not Config.LevelOpen(number) then
+		return string.format("Fastest: Chapter %d", number)
+	end
 	return if level then "Fastest: " .. level.Name else "?"
 end
 
